@@ -478,6 +478,96 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '409':
           $ref: '#/components/responses/Conflict'
+  /topics/{topic_id}/title:
+    put:
+      operationId: setTopicTitle
+      tags:
+      - Topics
+      summary: Rename a topic
+      description: Console only. Saves the title a person typed. The title is trimmed and its runs of
+        whitespace (line breaks included) become single spaces; a blank title or one longer than 72
+        characters returns 400. The title counts as customized and moves title_revision on, so
+        first-message naming and a regeneration started earlier do not overwrite it. The icon is kept.
+        Reserved topics (default, _awareness, Agent Link and TODO item topics) return 400. JSON body
+        limit is 64 KiB.
+      parameters:
+      - name: topic_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+              required:
+              - title
+      responses:
+        '200':
+          description: The renamed topic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /topics/{topic_id}/title-suggestion:
+    post:
+      operationId: suggestTopicTitle
+      tags:
+      - Topics
+      summary: Generate a topic title without saving it
+      description: Console only. No request body. Generates a title and icon from the topic's history
+        the way regenerate-title does, but changes nothing, title_revision included; save a title with
+        PUT /topics/{topic_id}/title. A topic without conversation and reserved topics return 400.
+        Uses the configured LLM timeout rather than the proxy timeout.
+      parameters:
+      - name: topic_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: The suggestion.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  title:
+                    type: string
+                  icon:
+                    type: string
+                required:
+                - title
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /topics/{topic_id}/tags:
     put:
       operationId: setTopicTags

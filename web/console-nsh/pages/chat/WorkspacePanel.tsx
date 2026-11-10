@@ -1,6 +1,6 @@
-// The panel beside the conversation (a sheet on phones): the open topic (its title, regenerate and
-// delete, pin, tags, context window meter, dates) and its workspace (the attached directory, its
-// files as a tree, and what to do with the selected one).
+// The panel beside the conversation (a sheet on phones): the open topic (its title, rename or, for a
+// TODO item's topic, icon regeneration, delete, pin, tags, context window meter, dates) and its
+// workspace (the attached directory, its files as a tree, and what to do with the selected one).
 //
 // One layout throughout: a 16pt gutter that the tabs' icons, the title, the rows and the tree all
 // start on; properties as rows of a 12pt label in an 88pt column beside a value on one 20pt line;
@@ -114,19 +114,33 @@ function TopicTab(props: { c: ChatController }) {
         <Text class="flex-1 text-[15px] font-semibold leading-[22px] text-foreground line-clamp-2" role="header" testID="chat-topic-panel-title">
           {c.deskTitle()}
         </Text>
-        <If when={c.topicRegenerateAvailable()}>
+        <If when={c.topicRenameAvailable() || c.topicRegenerateAvailable()}>
           <View class="-mr-2 flex-row items-center">
-            <Button
-              variant="plain"
-              size="xs"
-              iconOnly
-              icon="PhMagicWand"
-              title={c.topicRegenerateLabel()}
-              loading={c.topicRegenerating()}
-              disabled={c.topicRegenerateDisabled()}
-              onPress={() => void c.regenerateTopicName()}
-              testID="chat-topic-regenerate"
-            />
+            <If when={c.topicRenameAvailable()}>
+              <Button
+                variant="plain"
+                size="xs"
+                iconOnly
+                icon="PhPencilSimple"
+                title={t("chat_topic_rename_action")}
+                disabled={c.topicRenameDisabled()}
+                onPress={() => c.openTopicRename()}
+                testID="chat-topic-rename"
+              />
+            </If>
+            <If when={c.topicRegenerateAvailable()}>
+              <Button
+                variant="plain"
+                size="xs"
+                iconOnly
+                icon="PhMagicWand"
+                title={c.topicRegenerateLabel()}
+                loading={c.topicRegenerating()}
+                disabled={c.topicRegenerateDisabled()}
+                onPress={() => void c.regenerateTopicName()}
+                testID="chat-topic-regenerate"
+              />
+            </If>
             <If when={c.topicDeleteAvailable()}>
               <Button
                 variant="ghost-danger"

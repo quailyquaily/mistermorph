@@ -1,5 +1,5 @@
 // Chat's topic list and topic panel: groups, opening a topic, activity marks, the TODO runs toggle,
-// tags, pin, regenerate and delete, and the failures of each.
+// tags, pin and delete, and the failures of each (renaming: chat-topic-rename.test.tsx).
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import { openConsole, type ApiRequest } from "./harness";

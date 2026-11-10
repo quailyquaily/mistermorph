@@ -418,6 +418,80 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			_ = json.NewEncoder(w).Encode(updated)
 			return
 		}
+		if strings.HasSuffix(suffix, "/title") {
+			if r.Method != http.MethodPut {
+				w.Header().Set("Allow", "PUT")
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			id := strings.TrimSuffix(suffix, "/title")
+			if id == "" || strings.Contains(id, "/") || !TopicRenamable(id) {
+				http.Error(w, "topic cannot be renamed", http.StatusBadRequest)
+				return
+			}
+			if opts.SetTopicTitle == nil {
+				http.Error(w, "topic rename is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			var req struct {
+				Title string `json:"title"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			renamed, err := opts.SetTopicTitle(id, req.Title)
+			if err != nil {
+				if errors.Is(err, ErrTopicNotFound) {
+					http.NotFound(w, r)
+					return
+				}
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(renamed)
+			return
+		}
+		if strings.HasSuffix(suffix, "/title-suggestion") {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			id := strings.TrimSuffix(suffix, "/title-suggestion")
+			if id == "" || strings.Contains(id, "/") || !TopicRenamable(id) {
+				http.Error(w, "topic cannot be renamed", http.StatusBadRequest)
+				return
+			}
+			if opts.SuggestTopicTitle == nil || topicReader == nil {
+				http.Error(w, "topic name generation is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			topic, ok := topicReader.GetTopic(id)
+			if !ok || topic == nil || topicDeleted(*topic) {
+				http.NotFound(w, r)
+				return
+			}
+			suggestion, err := opts.SuggestTopicTitle(r.Context(), id)
+			if err != nil {
+				status := http.StatusServiceUnavailable
+				if errors.Is(err, ErrTopicTitleBusy) {
+					status = http.StatusConflict
+				} else if _, ok := badRequestMessage(err); ok {
+					status = http.StatusBadRequest
+				}
+				http.Error(w, err.Error(), status)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(suggestion)
+			return
+		}
 		if strings.HasSuffix(suffix, "/tags") {
 			if r.Method != http.MethodPut {
 				w.Header().Set("Allow", "PUT")
