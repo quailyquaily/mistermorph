@@ -41,3 +41,12 @@ notes:
 - Installs: none. Worktree clean; no review code changes or commits. Go checks used GOFLAGS=-mod=mod, with no manifest changes.
 - Residual risks: no visual browser/desktop/Android inspection; failed/canceled coders with existing output lack dedicated coverage. Unknown/missing worker kind retains context as documented in the plan.
 - No linked GitHub issues or PRs. Ready for owner inspection and ship approval.
+
+## factory · 2026-11-11 08:46
+Shipped with owner approval in batch FT77, FT78, FT79, FT82.
+Merge: d122775a1398b4294ea364f229a852ce59f6c93b
+Tag: v0.3.94. Master and tag pushed atomically; final batch head d122775a.
+Claude Code integrated all four before combined validation as requested. FT78 conflict resolved preserving shared terminal styling and OverflowLine.
+Combined checks passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, all 535 Console tests (0 failed), nsh build. Tests used throwaway HOME and isolated XDG state. Manager verified command exit codes, logs, merge diff and clean worktree.
+No additional installs or linked issues/PRs. Native Android/desktop and visual inspection were not performed during this ship.
+Moved ready/ → done/.

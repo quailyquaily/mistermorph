@@ -38,3 +38,12 @@ notes:
 - No visual check in this review; desktop, Android and live workers were not checked. Headless tests verify wrapper and text styles, not the background colour itself.
 - Intentional regular-font styling matches progress; code/diff columns no longer align.
 - Moved review/ → ready/.
+
+## factory · 2026-11-11 08:46
+Shipped with owner approval in batch FT77, FT78, FT79, FT82.
+Merge: 8cd5691da570da3e3c23ca5db9af7d9df7533655
+Tag: v0.3.94. Master and tag pushed atomically; final batch head d122775a.
+Claude Code integrated all four before combined validation as requested. FT78 conflict resolved preserving shared terminal styling and OverflowLine.
+Combined checks passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, all 535 Console tests (0 failed), nsh build. Tests used throwaway HOME and isolated XDG state. Manager verified command exit codes, logs, merge diff and clean worktree.
+No additional installs or linked issues/PRs. Native Android/desktop and visual inspection were not performed during this ship.
+Moved ready/ → done/.

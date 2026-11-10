@@ -38,3 +38,12 @@ notes:
 - Validation: gofmt cleanliness, go vet ./..., and go test ./... passed with throwaway HOME. nsh check passed; nsh test --web-host tests/noHost.js passed, 524/524 tests. Manager checked saved test results and the diff; worktree is clean.
 - Installs: none reported. Live Console, Android device/emulator, and native desktop visual checks were not independently performed in this review.
 - Moved review/ → ready/; not merged or shipped. No linked GitHub issues or PRs to comment on.
+
+## factory · 2026-11-11 08:46
+Shipped with owner approval in batch FT77, FT78, FT79, FT82.
+Merge: 193f6072f5454d5790ec89c65e9823446b719a16
+Tag: v0.3.94. Master and tag pushed atomically; final batch head d122775a.
+Claude Code integrated all four before combined validation as requested. FT78 conflict resolved preserving shared terminal styling and OverflowLine.
+Combined checks passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, all 535 Console tests (0 failed), nsh build. Tests used throwaway HOME and isolated XDG state. Manager verified command exit codes, logs, merge diff and clean worktree.
+No additional installs or linked issues/PRs. Native Android/desktop and visual inspection were not performed during this ship.
+Moved ready/ → done/.
