@@ -28,3 +28,11 @@ Built and pushed 282f4b2f with Claude Code. Desktop tag-view topic rows now use 
 Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`, `nsh check`, and `nsh test --web-host tests/noHost.js` (410 passed). Seven new regression tests. Coder additionally reported a warning-free nsh build and visual checks in headless Chrome against a real console server covering feedback, persistence, duplicate, Escape and outside-list drops. Scripted tests used throwaway HOME directories.
 
 Installs: none. Limitations: no edge auto-scroll (mouse wheel works during drag); keyboard/screen-reader users retain the tag editor; Android/touch checked headlessly, not on physical hardware. No forbidden paths changed. Moved new/ → review/.
+
+## factory · review · 2026-11-10 10:22
+head: 282f4b2f3604a4d790fc50dc7cb086003b821b3c
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/chat/topicDrag.ts:196: The lifted row does not compensate for list scrolling during a drag. With the pointer fixed at y=420, scrolling down 120 points leaves translateY at 20 and moves the row to y=300, while the drop target still follows the pointer. Record initial scroll offset and add its delta to the lifted row translation. Codex verified the source function with gesture/reactivity stubs; not reproduced in a real window.
+
+Reviewed all five changed files in origin/master...HEAD with Codex. No P0/P1 findings; branch merges cleanly with master. Required gofmt/vet/Go tests passed; nsh check passed; nsh tests: 410 passed, 0 failed, including seven added regressions. Scripted tests used throwaway HOME directories. Installs: none. No code changes or commits by reviewer. Real browser, GPUI and touch hardware behavior was not verified in this review. Moved review/ → ready/; owner should inspect drag feedback while scrolling before shipping.
