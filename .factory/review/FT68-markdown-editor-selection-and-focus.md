@@ -1,3 +1,7 @@
+---
+branch: factory/FT68-markdown-editor-selection-and-focus
+round: 1
+---
 # Fix Markdown editor word selection and blank-area focus
 
 ## factory · 2026-11-10 14:14
@@ -36,3 +40,24 @@ Moved to backlog: the item has no section signed by configured owner lyric. Fact
 
 ## factory · 2026-11-10 21:35
 The owner explicitly confirmed authorship of FT68, FT71 and FT72 and requested recording their name. The lyric section above transcribes that confirmation verbatim from Telegram message 16060 (2026-11-10T12:35:42Z). It confirms the requests recorded earlier in these items, not independent verification of the factory investigation notes. Prior sections are preserved. Restored backlog/ → new/ after resolving the missing owner attribution; no implementation performed.
+
+## factory · plan · 2026-11-10 22:55
+Behaviour: preserve double-click word selection for copying/replacement and normal click/drag/keyboard selection. Focus and place the caret on empty documents, empty lines, right padding and below the final line; below-text clicks go to document end. Preserve preview, references, read-only and touch behaviour.
+Scope: compare plain nsh/base Editor and MarkdownEditor with identical props, then apply the smallest reliable integration workaround. Keep scrollBeyondLastLine=false and existing layout; no editor replacement or unrelated UI changes.
+Decisions: investigate click interception and hit geometry separately; prefer a narrow local workaround where nsh 0.4.0 exposes no direct fix.
+Checking: regression tests, real Chrome pointer comparisons, short/empty/multiline/scrolled content; required Go and nsh checks. Explicitly disclose unverified desktop and Android hosts.
+
+## factory · 2026-11-10 22:55
+Built and pushed 8e7a5086 on factory/FT68-markdown-editor-selection-and-focus. Moved new/ → review/; round 1.
+
+Claude Code compared plain Editor, matching-prop Editor, MarkdownEditor and AppMarkdownEditor in real Chrome. The global hover scrollbar theme creates an invisible scrollbar on the Editor's hidden caret input, intercepting the second click and drags from the caret. Separately, rows do not cover padding or below-text blank space with scrollBeyondLastLine=false. Interior empty lines and space right of text already worked in the reproduction.
+
+Implemented a wrapper press handler and bounded caret-position probing through EditorRef.rangeBounds: blank-space caret placement, double/triple selection, Shift extension and mouse dragging; touch handles taps rather than scroll starts. Kept editor/layout/dependency version unchanged and documented the workaround in PORTING.md. Added 13 regression tests.
+
+Tests: manager independently passed test -z "$(gofmt -l .)" && go vet ./... && go test ./..., nsh check, and nsh test --web-host tests/noHost.js (416/416). Scripted tests used absolute throwaway HOME. No unpinned installs. Only the five planned Console source/test/documentation files changed; no protected paths changed.
+
+Claude Code reports real Chrome before/after tests on Persona and comparison fixtures, including copy/replacement, double/triple click, blank-area focus, scrolling, dragging, preview and read-only cases. Native desktop not verified: no isolated display/Xvfb; live user windows were not touched. Android devices, actual mobile browsers, Safari/Firefox and live TODO/Skills/Setup editors not verified. Chrome touch emulation verified blank-area taps; tapping text itself does not accept typing both before and after this change (pre-existing issue, not fixed).
+
+Known limitations for review: blank-area-initiated drags do not auto-scroll beyond editor edges; rightmost 8pt is reserved for scrollbar even when absent. Browser verification is not native desktop verification.
+
+Initial branch push lacked credential repository path; one retry with command-local credential.useHttpPath=true succeeded. No source issue/PR linked.
