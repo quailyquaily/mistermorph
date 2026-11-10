@@ -27,3 +27,13 @@ Not checked: physical phones/tablets, iOS Safari, desktop native app and Android
 Installs: none.
 Recovery: preserved a pre-existing unpushed board commit in a refs/factory/stopped recovery ref and reset the local board to the remote before starting; its unrelated changes were not published.
 Moved new/ → review/ for independent review.
+
+## factory · review · 2026-11-10 09:20
+head: e13cf2a299d9cb2bae265f6895fd59c47f4acb33
+verdict: pass
+notes:
+- Independent Codex review of origin/master...HEAD found no verified introduced defects. Branch merges cleanly with current base.
+- Required gofmt, go vet ./... and go test ./... passed. Console nsh check passed; nsh test --web-host tests/noHost.js: 369 passed, 0 failed. Scripted tests used a throwaway HOME.
+- Chrome mouse and emulated tablet/phone touch checks passed for picker opening, assignment, save request, list refresh, tag/pin preservation, duplicates, failure rollback/error display and keyboard selection/deletion. API responses were mocked.
+- Limitations: browser checks also opened the picker on the old editor, so the original focus failure was not independently reproduced. Physical devices, iOS software keyboard and native clients remain unverified.
+- Installs: none. No tracked code changes. Moved review/ → ready/; awaiting owner approval before shipping.
