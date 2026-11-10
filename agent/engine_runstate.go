@@ -49,6 +49,9 @@ type resumeState struct {
 	// WorkerSeed is the seed the task's worker names and avatars come from, so workers
 	// started after the pause continue the same random order. Absent in older states.
 	WorkerSeed uint64 `json:"worker_seed,omitempty"`
+	// WorkerNameSet is the name set the task's workers come from, so workers started after
+	// the pause keep it even if the preference changed meanwhile. Absent in older states.
+	WorkerNameSet string `json:"worker_name_set,omitempty"`
 }
 
 type pendingToolSnapshot struct {

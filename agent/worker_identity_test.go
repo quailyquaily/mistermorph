@@ -68,7 +68,7 @@ func TestWorkerPermutation(t *testing.T) {
 // subagent, and a coder nested inside that subagent's run.
 func allocateTaskWorkers(t *testing.T, n int) []WorkerMetadata {
 	t.Helper()
-	ctx := llmstats.WithRunID(withWorkerScope(context.Background()), "root")
+	ctx := llmstats.WithRunID(withWorkerScope(context.Background(), DefaultWorkerNameSet), "root")
 	var out []WorkerMetadata
 	var child context.Context
 	for i := 0; len(out) < n; i++ {
@@ -111,7 +111,7 @@ func TestWorkerAllocationIsRandomUniqueAndSharedAcrossNestedWorkers(t *testing.T
 		if want := avatars[n%workerAvatarCount]; *worker.AvatarIndex != want {
 			t.Fatalf("worker %d avatar = %d, want %d", n, *worker.AvatarIndex, want)
 		}
-		if worker.Name != workerName(*worker.NameIndex) || seen[worker.Name] {
+		if worker.Name != workerName(DefaultWorkerNameSet, *worker.NameIndex) || seen[worker.Name] {
 			t.Fatalf("worker %d name = %q (seen %v)", n, worker.Name, seen[worker.Name])
 		}
 		seen[worker.Name] = true
@@ -186,9 +186,10 @@ func TestWorkerResumeKeepsTheTaskOrder(t *testing.T) {
 
 	t.Run("seeded", func(t *testing.T) {
 		newWorkerSeed = func() uint64 { t.Fatal("resume drew a new seed"); return 1 }
-		ctx := withResumedWorkerScope(context.Background(), 4, seed)
-		if allocated, gotSeed := workersAllocated(ctx); allocated != 4 || gotSeed != seed {
-			t.Fatalf("allocated %d seed %d", allocated, gotSeed)
+		// A state from before name sets continues with the scientists, whatever the preference.
+		ctx := withResumedWorkerScope(context.Background(), 4, seed, "", WorkerNameSetArtists)
+		if allocated, gotSeed, set := workersAllocated(ctx); allocated != 4 || gotSeed != seed || set != DefaultWorkerNameSet {
+			t.Fatalf("allocated %d seed %d set %q", allocated, gotSeed, set)
 		}
 		for n := 4; n < 9; n++ {
 			got := allocateWorker(ctx, fmt.Sprintf("after-%d", n)).snapshot()
@@ -199,7 +200,8 @@ func TestWorkerResumeKeepsTheTaskOrder(t *testing.T) {
 	})
 	t.Run("legacy state without a seed", func(t *testing.T) {
 		newWorkerSeed = func() uint64 { t.Fatal("legacy resume drew a new seed"); return 1 }
-		ctx := withResumedWorkerScope(context.Background(), 3, 0)
+		// The legacy sequential order, from the scientists despite the preference.
+		ctx := withResumedWorkerScope(context.Background(), 3, 0, "", WorkerNameSetArtists)
 		got := allocateWorker(ctx, "after").snapshot()
 		if got.ID != "worker-4" || got.Name != "Darwin" || *got.NameIndex != 3 || *got.AvatarIndex != 3 {
 			t.Fatalf("legacy continuation = %+v", got)
@@ -207,15 +209,15 @@ func TestWorkerResumeKeepsTheTaskOrder(t *testing.T) {
 	})
 	t.Run("nothing allocated before the pause", func(t *testing.T) {
 		useWorkerSeeds(t, 77)
-		ctx := withResumedWorkerScope(context.Background(), 0, 0)
-		if _, gotSeed := workersAllocated(ctx); gotSeed != 77 {
+		ctx := withResumedWorkerScope(context.Background(), 0, 0, "", DefaultWorkerNameSet)
+		if _, gotSeed, _ := workersAllocated(ctx); gotSeed != 77 {
 			t.Fatalf("seed = %d", gotSeed)
 		}
 	})
 	t.Run("an existing scope adopts the seed before its first worker", func(t *testing.T) {
 		useWorkerSeeds(t, 5)
-		ctx := withResumedWorkerScope(withWorkerScope(context.Background()), 2, seed)
-		if _, gotSeed := workersAllocated(ctx); gotSeed != seed {
+		ctx := withResumedWorkerScope(withWorkerScope(context.Background(), DefaultWorkerNameSet), 2, seed, "", DefaultWorkerNameSet)
+		if _, gotSeed, _ := workersAllocated(ctx); gotSeed != seed {
 			t.Fatalf("seed = %d", gotSeed)
 		}
 	})
@@ -268,7 +270,7 @@ func TestWorkerNamesAreScientists(t *testing.T) {
 		}
 	}
 	for index, want := range map[int]string{0: "Einstein", 4: "Noether", 31: "Archimedes", 32: "Einstein-2", 67: "Darwin-3"} {
-		if got := workerName(index); got != want {
+		if got := workerName(DefaultWorkerNameSet, index); got != want {
 			t.Fatalf("workerName(%d) = %q, want %q", index, got, want)
 		}
 	}
@@ -299,14 +301,35 @@ func TestWorkerPoolsMatchConsole(t *testing.T) {
 		}
 		return names
 	}
-	current, legacy := pools("WORKER_NAME_POOLS"), pools("LEGACY_WORKER_NAME_POOLS")
-	if got := pool(current, "en"); !slices.Equal(got, workerNames[:]) {
-		t.Fatalf("console English pool = %v", got)
-	}
-	for _, lang := range []string{"zh", "ja"} {
-		if got := pool(current, lang); len(got) != len(workerNames) {
-			t.Fatalf("%s pool has %d names", lang, len(got))
+	legacy := pools("LEGACY_WORKER_NAME_POOLS")
+	for set, name := range map[string]string{
+		WorkerNameSetScientists: "WORKER_NAME_POOLS",
+		WorkerNameSetMusicians:  "MUSICIAN_WORKER_NAME_POOLS",
+		WorkerNameSetArtists:    "ARTIST_WORKER_NAME_POOLS",
+	} {
+		console := pools(name)
+		if got := pool(console, "en"); !slices.Equal(got, workerNamePool(set)) {
+			t.Fatalf("console English %s pool = %v", set, got)
 		}
+		for _, lang := range []string{"zh", "ja"} {
+			got := pool(console, lang)
+			if len(got) != len(workerNames) {
+				t.Fatalf("%s %s pool has %d names", lang, set, len(got))
+			}
+			if len(slices.Compact(slices.Sorted(slices.Values(got)))) != len(got) {
+				t.Fatalf("%s %s pool repeats a name: %v", lang, set, got)
+			}
+		}
+	}
+	sets := regexp.MustCompile(`WORKER_NAME_SETS = Object\.freeze\(\[([^\]]*)\]\)`).FindSubmatch(source)
+	var consoleSets []string
+	if sets != nil {
+		for _, match := range quoted.FindAllSubmatch(sets[1], -1) {
+			consoleSets = append(consoleSets, string(match[1]))
+		}
+	}
+	if !slices.Equal(consoleSets, WorkerNameSets()) {
+		t.Fatalf("console name sets = %v, want %v", consoleSets, WorkerNameSets())
 	}
 	// Records written before the scientist pool keep their names; the Console tells them apart
 	// only because no scientist shares a name with the legacy pool.
@@ -314,9 +337,11 @@ func TestWorkerPoolsMatchConsole(t *testing.T) {
 	if len(oldNames) != len(workerNames) || oldNames[0] != "Milo" || oldNames[31] != "Zoe" {
 		t.Fatalf("console legacy pool = %v", oldNames)
 	}
-	for _, name := range workerNames {
-		if slices.Contains(oldNames, name) {
-			t.Fatalf("%s is in both pools", name)
+	for _, set := range WorkerNameSets() {
+		for _, name := range workerNamePool(set) {
+			if slices.Contains(oldNames, name) {
+				t.Fatalf("%s is in the %s and legacy pools", name, set)
+			}
 		}
 	}
 	styles := regexp.MustCompile(`WORKER_AVATAR_STYLES = Object\.freeze\(\[([^\]]*)\]\)`).FindSubmatch(source)
