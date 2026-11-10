@@ -126,6 +126,12 @@ Headless tests prove behaviour, not the look.
   from JS (`onTouchCancel`) once it drags. A released pull leaves the refresh on (the indicator's
   room kept above the content) until the app sets `refreshing` true and then false in a later
   turn. Topics' and Contacts' phone searches use it (`components/shared/pullSearch.ts`).
+- There is no DOM drag and drop: a drag inside the app is a `PanResponder` (`onMoveShouldSet…`
+  past a few points, so a click stays a press; taking the gesture cancels the press under it), and
+  where it is comes from `measure()` of the view whose children's `onLayout` frames are compared
+  (`pages/chat/topicDrag.ts`). A view added to an ancestor of the responder mid-gesture ends the
+  gesture silently (no more moves, no release, no terminate): draw drop marks in views that are
+  there from the start and only restyle them.
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
 
