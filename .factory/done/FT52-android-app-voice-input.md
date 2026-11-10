@@ -66,3 +66,8 @@ Confirmed: the [P2] from the 2026-11-10 03:33 review holds at 496fffd5. In voice
 Fix: local commit a44edbcc on factory/FT52-android-app-voice-input (not pushed). A new start now waits until the older unanswered start has settled and a late yes was let go; a cancel meanwhile means it never asks the host. Two regression tests in chat-voice-lifecycle.test.tsx (both failed before the fix).
 Tests (throwaway absolute HOME): nsh check passed; nsh test --web-host tests/noHost.js 361/361; gofmt check, go vet ./... and go test ./... passed (162 packages ok). Java host tests and the APK were not rerun: no Java/Android files changed.
 Not checked: real Android device, microphone, permission dialogs, browser getUserMedia prompt timing. A start the host never answers now keeps the next start waiting (mic shows recording, still cancellable).
+
+## factory · 2026-11-10 09:08
+Owner authorized merging the locally fixed items and tagging/pushing. Merged into master by 7ce12041; release head c89e4e14, tag v0.3.92. Master, tag and the four fixed feature branches pushed.
+Combined validation: gofmt/vet and Go tests passed (162 packages); nsh check passed; Console tests 403/403; web Console/backend build passed; Android Java tests 15/15 and manifest tests 3/3 passed. No new installs. FT54 merge resolved by Claude Code, retaining both keyboard and sidebar behavior.
+Not verified: real devices, actual keyboard/microphone/permission/lifecycle behavior, visual focus and transitions; no APK built. Previously documented residual limitations remain, including unanswered voice-start waiting and popup registry coverage. No linked issues or PRs to close. Moved ready/ → done/.

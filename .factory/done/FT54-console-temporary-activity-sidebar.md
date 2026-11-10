@@ -73,3 +73,8 @@ Fix: local commit 361286a9 on factory/FT54-console-temporary-activity-sidebar (n
 Tests added in chat-detail-panel.test.tsx: agent dialog Escape, suggestions Escape (both failed before), focus-return request (reactive test), phone exit guard.
 Tests (throwaway absolute HOME): nsh check passed; nsh test --web-host tests/noHost.js 360/360; gofmt check, go vet ./... and go test ./... passed (162 packages ok).
 Not checked: real keyboard focus (headless cannot query focus or press a focused button), the Agent menu in a real browser, the sheet's exit look on a device, desktop/Android hosts. Native popups that this registry does not cover (Popover, BottomSheet, raw Select/Sheet on other pages) still lose Escape to the panel if one is ever shown over it.
+
+## factory · 2026-11-10 09:08
+Owner authorized merging the locally fixed items and tagging/pushing. Merged into master by c89e4e14; release head c89e4e14, tag v0.3.92. Master, tag and the four fixed feature branches pushed.
+Combined validation: gofmt/vet and Go tests passed (162 packages); nsh check passed; Console tests 403/403; web Console/backend build passed; Android Java tests 15/15 and manifest tests 3/3 passed. No new installs. FT54 merge resolved by Claude Code, retaining both keyboard and sidebar behavior.
+Not verified: real devices, actual keyboard/microphone/permission/lifecycle behavior, visual focus and transitions; no APK built. Previously documented residual limitations remain, including unanswered voice-start waiting and popup registry coverage. No linked issues or PRs to close. Moved ready/ → done/.

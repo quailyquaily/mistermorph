@@ -49,3 +49,8 @@ Confirmed: the [P2] from the 2026-11-10 01:20 review holds at 72d42e47. On a wid
 Fix: local commit 044e57c0 on factory/FT48-console-mobile-send-dismiss-keyboard (not pushed). Send passes `onSubmit({ keyboardDismissed: true })` when it lowered the keyboard, and submitTask then skips the post-send refocus. Enter, Stop and the desktops are unchanged. Regression test: chat-composer.test.tsx "on a wide touch screen Send lowers the keyboard and the send does not raise it again" (failed before the fix, passes after).
 Tests (throwaway absolute HOME): nsh check passed; nsh test --web-host tests/noHost.js 349/349; gofmt check, go vet ./... and go test ./... passed (162 packages ok).
 Not checked: real Android/iOS devices or tablets, actual software keyboards, visuals. Headless focus checks only.
+
+## factory · 2026-11-10 09:08
+Owner authorized merging the locally fixed items and tagging/pushing. Merged into master by 80b5e927; release head c89e4e14, tag v0.3.92. Master, tag and the four fixed feature branches pushed.
+Combined validation: gofmt/vet and Go tests passed (162 packages); nsh check passed; Console tests 403/403; web Console/backend build passed; Android Java tests 15/15 and manifest tests 3/3 passed. No new installs. FT54 merge resolved by Claude Code, retaining both keyboard and sidebar behavior.
+Not verified: real devices, actual keyboard/microphone/permission/lifecycle behavior, visual focus and transitions; no APK built. Previously documented residual limitations remain, including unanswered voice-start waiting and popup registry coverage. No linked issues or PRs to close. Moved ready/ → done/.
