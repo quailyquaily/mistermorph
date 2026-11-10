@@ -157,6 +157,19 @@ Headless tests prove behaviour, not the look.
   (`pages/chat/topicDrag.ts`). A view added to an ancestor of the responder mid-gesture ends the
   gesture silently (no more moves, no release, no terminate): draw drop marks in views that are
   there from the start and only restyle them.
+- On a touch screen such a drag must not take a swipe from the list's scroll view, so it waits for
+  a finger to rest (`pages/chat/topicDrag.ts`: 450ms within 8pt). nsh/base's `Button` takes no
+  `onLongPress`, so the hold is timed in JS from the touch events of the view around the button
+  (`onTouchStart`/`Move`/`End`/`Cancel`, which every listening view hears, before the responder's
+  events of the same touch). Nothing can claim the responder between touch events: the claim is
+  the next move's `onMoveShouldSetPanResponder` after the hold, and the grant's block is what
+  stops the scroll view. On Android that block sets the `ScrollBox`'s `jsBlocked` (it neither
+  intercepts nor scrolls), a scroll view that starts to scroll first cancels the JS touches
+  (`onTouchCancel`, terminate), and its touch tracker sends a move only when a position changed.
+  The release after a hold still presses the button under it: the row's `onPress` asks the drag
+  whether the hold took that press. Headless runs cannot rest a finger and then move it in one
+  gesture (`dragAndHold` moves at once), so the steps are driven on the module
+  (`tests/chat-topic-touch-drag.test.tsx`).
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
 
