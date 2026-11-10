@@ -33,3 +33,15 @@ Installs: none.
 Not checked: live browser, desktop or Android UI; live model/provider and per-channel end-to-end delivery. Channels lack progress snapshots; Console late follow-up notices require history refresh. Agent Link late replies retain silent steering. Review should check these boundaries against the request, lifecycle races and UI ordering.
 Verification: both commits are scoped to this item; no forbidden paths changed. Initial Git push credential-path failure was resolved with command-local credential.useHttpPath=true; no persistent settings changed.
 Moved new/ → review/ for independent review; not shipped.
+
+## factory · review · 2026-11-11 01:13
+head: 639735ca2cb1d2ae4235217c03218a51f2a82545
+verdict: pass
+notes:
+- [P3] internal/runtimecontrol/steer_responder.go:191: a ticket dropped during reply delivery gets no not-applied follow-up because the watcher is started only for pending tickets. Verified with an overlay test whose delivery callback finishes the lease: only the initial promise arrives. Start the watcher for dropped tickets too, or send their notice immediately, and add this regression test.
+
+Reviewed by Claude Code: origin/master...HEAD, base 2b4c2ee1, all 42 changed files. No P0/P1 findings. Clean worktree and unchanged reviewed head confirmed by manager; branch merges cleanly with fetched base.
+Validation: required gofmt, go vet ./... and go test ./... passed (162 packages); nsh check passed; nsh test --web-host tests/noHost.js passed all 526 tests. Scripted tests used a throwaway HOME. Targeted delivery-race probe reproduced the P3 above; it is not a failure of the required suite.
+Installs: none.
+Residual risks: live model/provider, per-channel delivery and desktop/Android UI not exercised. Console late notices need history refresh; concurrent inbound Respond calls do not guarantee original arrival order. Review passes the configured P0/P1 gate, not a claim of zero defects.
+Moved review/ → ready/; not shipped. Owner should inspect the delivery-race note and live UI/channel behavior.
