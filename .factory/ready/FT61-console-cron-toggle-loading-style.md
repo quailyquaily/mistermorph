@@ -35,3 +35,13 @@ Verification: manager reran `test -z "$(gofmt -l .)" && go vet ./... && go test 
 Installs: none.
 
 Visual checks: coder captured before/after real TopicSidebar browser screenshots at desktop and phone widths across four states and inspected enlarged images. Native desktop, real Android hardware and dark themes were not checked. Browser reduced-motion emulation did not visibly stop the existing BusyBeam animation; reduced-motion test establishes presence only, not animation cessation. Behaviour tests do not independently prove the visual improvement.
+
+## factory · review · 2026-11-10 12:35
+head: 946b50bb35aae37fa60084a1316c65709b5733dc
+verdict: pass
+
+Reviewed all four changed files in origin/master...HEAD with Codex. No qualifying findings. Branch merges cleanly with current master. The toggle navigates between lists rather than submitting tasks; the border beam preserves navigation, dimensions, accessible count and tooltip.
+
+Validation: required gofmt, go vet and go test command passed; nsh check passed; nsh test --web-host tests/noHost.js passed 409/409. Tests used a throwaway HOME. No installs; review worktree unchanged.
+
+Residual risks: reviewer did not independently perform browser visual, dark-theme or physical-device checks. Reduced-motion coverage verifies indicator presence, not animation cessation. No linked GitHub issues or PRs.
