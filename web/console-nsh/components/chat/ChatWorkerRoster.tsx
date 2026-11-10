@@ -1,8 +1,8 @@
 // The subagents and coders a task started, below its status card: each a chip with its avatar,
 // name and state. A chip opens the worker in the temporary detail panel beside the conversation
-// (pages/chat/ActivityDetailPanel.tsx), which shows its PIDs and output (`ChatWorkerOutput`), not
-// inside the conversation. Which worker is open is the page's state (activityDetail.ts), since
-// rows recycle. Ported from web/console/src/components/ChatWorkerRoster.js.
+// (pages/chat/ActivityDetailPanel.tsx), which shows its PIDs and output (`ChatWorkerOutput`) on
+// the same dark terminal as the reply's progress, not inside the conversation. Which worker is open
+// is the page's state (activityDetail.ts), since rows recycle. Ported from web/console/src/components/ChatWorkerRoster.js.
 import type { ViewRef } from "nsh";
 import { effect, Image, Text, View } from "nsh";
 import { Tip, TipButton } from "../ui";
@@ -10,6 +10,7 @@ import { localeState } from "../../lib/core/context.js";
 import { rosterWorkers, workerProcessLabel } from "../../lib/core/chat-workers.js";
 import { workerAvatarURL } from "../../lib/core/worker-avatars.js";
 import { t } from "./i18n";
+import { TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
 
 function stateTone(state: string) {
   switch (state) {
@@ -98,37 +99,36 @@ export function ChatWorkerRoster(props: {
   );
 }
 
-/** A worker as the detail panel shows it: its kind, state and processes, then its output by
- *  section (the panel scrolls it and follows its end). */
+/** A worker as the detail panel shows it, on the panel's terminal (ChatTerminal) as its progress
+ *  is: its kind, state and processes, then its output by section (the panel scrolls it and follows
+ *  its end). */
 export function ChatWorkerOutput(props: { worker: any }) {
   const worker = () => props.worker;
   return (
-    <View class="gap-3" testID="chat-worker-output">
-      <View class="flex-row flex-wrap items-center gap-2">
-        <Text class="text-xs text-muted-foreground">{workerKindLabel(worker())}</Text>
-        <Text class="font-mono text-xs uppercase text-subtle">{workerStateLabel(worker().state)}</Text>
+    <View class="gap-2" testID="chat-worker-output">
+      <View class="flex-row flex-wrap items-baseline gap-1.5">
+        <Text class={TERMINAL_LABEL}>{workerKindLabel(worker())}</Text>
+        <Text class={`font-mono text-xs uppercase ${TERMINAL_VALUE}`}>{workerStateLabel(worker().state)}</Text>
         <Each
           of={Array.isArray(worker().processes) ? worker().processes : []}
           key={(process: any) => `${process.pid}:${process.program}:${process.activityId}`}
         >
-          {(process) => <Text class="font-mono text-xs text-muted-foreground">{workerProcessLabel(process())}</Text>}
+          {(process) => <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{workerProcessLabel(process())}</Text>}
         </Each>
       </View>
-      <If when={worker().sections.length > 0} else={<Text class="text-xs text-muted-foreground">{t("chat_worker_no_output")}</Text>}>
-        <View class="gap-3">
-          <Each of={worker().sections as any[]} key={(section) => section.kind}>
-            {(section) => (
-              <View class="gap-1">
-                <If when={worker().sections.length > 1}>
-                  <Text class="font-mono text-xs uppercase text-muted-foreground">{t(`chat_worker_section_${section().kind}`)}</Text>
-                </If>
-                <View selectable>
-                  <Text class={`font-mono text-xs ${section().kind === "error" ? "text-danger" : "text-foreground"}`}>{section().text}</Text>
-                </View>
+      <If when={worker().sections.length > 0} else={<Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_worker_no_output")}</Text>}>
+        <Each of={worker().sections as any[]} key={(section) => section.kind}>
+          {(section) => (
+            <View class="gap-1">
+              <If when={worker().sections.length > 1}>
+                <Text class={TERMINAL_LABEL}>{t(`chat_worker_section_${section().kind}`)}</Text>
+              </If>
+              <View selectable>
+                <Text class={terminalNoteClass(section().kind === "error")}>{section().text}</Text>
               </View>
-            )}
-          </Each>
-        </View>
+            </View>
+          )}
+        </Each>
       </If>
     </View>
   );
