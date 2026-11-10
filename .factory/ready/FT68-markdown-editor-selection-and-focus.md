@@ -61,3 +61,15 @@ Claude Code reports real Chrome before/after tests on Persona and comparison fix
 Known limitations for review: blank-area-initiated drags do not auto-scroll beyond editor edges; rightmost 8pt is reserved for scrollbar even when absent. Browser verification is not native desktop verification.
 
 Initial branch push lacked credential repository path; one retry with command-local credential.useHttpPath=true succeeded. No source issue/PR linked.
+
+## factory · review · 2026-11-10 23:14
+head: 8e7a508627d6cc66b9288fe6f5d40c8cab81afd9
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/shared/editorPresses.ts:185-195: dragAnchor survives a blank-area drag released outside the frame. A later drag entering from outside with the left button held resumes the stale selection; subsequent typing replaces unintended text. Verified in isolated Chrome: blank space below Zeta → drag outside and release → press outside and drag into Delta eps|ilon → type Q changes the suffix to Delta epsQ, removing ilon and Zeta. The native text-started drag control preserves text. Clear drag state on mouse leave or verified outside-release handling and add a regression test.
+
+Claude Code reviewed all five changed files against origin/master and the request/plan. No P0/P1 findings; moved review/ → ready/ under the factory threshold. P2 remains for owner attention before shipping. Branch merges cleanly with the fetched master.
+
+Validation: required gofmt, go vet ./..., go test ./... passed (EXIT=0); nsh check passed; nsh test --web-host tests/noHost.js passed 416/416. Scripted tests used throwaway HOME. Review worktree remained unchanged. No new installs. Isolated Chrome probes verified blank-area focus, word replacement, scrolled padding hit positions and touch tap/swipe behavior.
+
+Not verified: native desktop app, Android devices, real mobile browsers, Safari/Firefox, live TODO/Skills/Setup editors, slow-host or very-long-line performance. Existing limitations: blank-area drags lack auto-scroll; the rightmost 8pt is reserved for a scrollbar; pre-existing Chrome-emulated touch text focus issue remains. No linked GitHub issue or PR to comment on.
