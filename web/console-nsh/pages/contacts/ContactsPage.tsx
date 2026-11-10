@@ -437,6 +437,65 @@ export function ContactsPage() {
     </>
   );
 
+  // The phone's index. The list is always there, so a pull reaches the filter while it loads, fails
+  // or is empty too; the filter and an error head it and scroll with it, and stay the same views (a
+  // focused field keeps its focus) as matches come and go.
+  //
+  // Its `empty` view is an element made here, not a function: nsh 0.4.0 never disposes the scope a
+  // function `empty` slot renders in, so each list that went away (every Contacts page left, every
+  // contact opened on the phone) kept one, subscribed to the store and re-rendering its loading
+  // blocks into the dead list on every load, until the app hung for good: on the 10th Contacts /
+  // TODO round trip headless, after 14 in the Android report. Made in this component, it goes with
+  // the list (tests/contacts-todo-switch.test.tsx, tests/list-empty-slot.test.tsx).
+  function PhoneIndex() {
+    const empty = (
+      <If
+        when={store.loading}
+        else={
+          <Note
+            text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
+            class="mx-4 mt-1 leading-normal"
+            testID="contacts-empty"
+          />
+        }
+      >
+        <Blocks count={4} height={65} />
+      </If>
+    );
+    return (
+      <List
+        footer={MobileBarSpacer}
+        header={() => (
+          <View>
+            <If when={pull.shown()}>{filterField()}</If>
+            <If when={!store.loading && err()}>
+              <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
+            </If>
+            {/* With the list's 2pt gap, the 8pt the list keeps before its first row (as the
+                list's top padding did under the filter). */}
+            <View class="h-1.5" />
+          </View>
+        )}
+        empty={empty}
+        each={store.loading ? [] : filteredItems()}
+        keyExtractor={(item) => contactID(item)}
+        estimatedItemSize={67}
+        class="flex-1"
+        scrollbar={SCROLLBAR}
+        contentClass="gap-0.5 pb-4"
+        refreshIndicator={pull.indicator}
+        refreshing={pull.refreshing()}
+        onRefresh={pull.onRefresh}
+        onScrollDragStart={pull.onDragStart}
+        accessibilityActions={pull.actions()}
+        onAccessibilityAction={pull.onAction}
+        testID="contacts-list"
+      >
+        {(item) => contactRow(item)}
+      </List>
+    );
+  }
+
   return (
     <Page hideBar scroll={false} testID="contacts-page">
       <If when={mobileShowBack()}>
@@ -452,52 +511,7 @@ export function ContactsPage() {
             search={isMobile() ? undefined : filterField()}
           >
             <If when={isMobile()} else={desktopIndex()}>
-              {/* On a phone the list is always there, so a pull reaches the filter while it loads,
-                  fails or is empty too; the filter and an error head it and scroll with it, and stay
-                  the same views (a focused field keeps its focus) as matches come and go. */}
-              <List
-                footer={MobileBarSpacer}
-                header={() => (
-                  <View>
-                    <If when={pull.shown()}>{filterField()}</If>
-                    <If when={!store.loading && err()}>
-                      <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
-                    </If>
-                    {/* With the list's 2pt gap, the 8pt the list keeps before its first row (as the
-                        list's top padding did under the filter). */}
-                    <View class="h-1.5" />
-                  </View>
-                )}
-                empty={() => (
-                  <If
-                    when={store.loading}
-                    else={
-                      <Note
-                        text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
-                        class="mx-4 mt-1 leading-normal"
-                        testID="contacts-empty"
-                      />
-                    }
-                  >
-                    <Blocks count={4} height={65} />
-                  </If>
-                )}
-                each={store.loading ? [] : filteredItems()}
-                keyExtractor={(item) => contactID(item)}
-                estimatedItemSize={67}
-                class="flex-1"
-                scrollbar={SCROLLBAR}
-                contentClass="gap-0.5 pb-4"
-                refreshIndicator={pull.indicator}
-                refreshing={pull.refreshing()}
-                onRefresh={pull.onRefresh}
-                onScrollDragStart={pull.onDragStart}
-                accessibilityActions={pull.actions()}
-                onAccessibilityAction={pull.onAction}
-                testID="contacts-list"
-              >
-                {(item) => contactRow(item)}
-              </List>
+              <PhoneIndex />
             </If>
           </IndexColumn>
         </If>
