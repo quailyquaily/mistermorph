@@ -175,8 +175,10 @@ test("the phone's topic list keeps rows, marks and presses with long Chinese and
   // The long titles are drawn in pieces under the fade; the short one is one text.
   await app.waitUntil(() => !app.texts().includes(LONG_LATIN) && !app.texts().includes(LONG_CHINESE));
   expect(app.texts()).toContain("Recipes");
-  expect(app.texts().some((text) => text.length > 3 && LONG_CHINESE.startsWith(text))).toBe(true);
-  expect(app.texts().some((text) => text.length > 3 && LONG_LATIN.startsWith(text))).toBe(true);
+  // A head that ends at a space ends in a no-break space (drawnGlyph), wherever the row's width puts the cut.
+  const drawnHeadOf = (title: string) => app.texts().some((text) => text.length > 3 && title.startsWith(text.replace(/\u00a0/g, " ")));
+  expect(drawnHeadOf(LONG_CHINESE)).toBe(true);
+  expect(drawnHeadOf(LONG_LATIN)).toBe(true);
   // The rows read and press as before.
   expect(app.shows(`label:${LONG_CHINESE}`)).toBe(true);
   await app.press("id:chat-topic-topic-chinese");
