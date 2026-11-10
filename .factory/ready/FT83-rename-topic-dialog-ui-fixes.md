@@ -28,3 +28,12 @@ Installs: none.
 Tests: gofmt clean, go vet ./... and go test ./... pass, independently rerun by manager. nsh check passes, independently rerun. Coder reports full nsh test --web-host tests/noHost.js: 540 passed, 0 failed, with focused rename suites rerun after final commits. Added module, UI and desktop/Android-layout regressions.
 UI checked by coder in Chrome: hidden input no longer receives typing after Cancel/X/Save; accessible label and dimensions verified visually and by measurement. Not checked: real Android keyboard/device, native desktop app, live regenerate loading visuals (covered headlessly). Scrim/Escape not directly exercised headlessly; share close path.
 Initial branch push required credential.useHttpPath=true; retry succeeded without persisted configuration changes.
+
+## factory · review · 2026-11-11 08:38
+head: ef89c6fd2700147a63dd9971c9d43ca2b7514eef
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD against the request and plan: no findings. Branch merges cleanly with the fetched master.
+- Validation passed with a throwaway HOME: configured gofmt/vet/test gate; nsh check; nsh test --web-host tests/noHost.js (540 passed, 0 failed). Manager checked validation logs and confirmed the worktree and head were unchanged.
+- No additional installs reported. Real-device keyboard dismissal and native desktop interaction were not independently verified in this review.
+- Moved review/ → ready/. No linked GitHub issues or PRs.
