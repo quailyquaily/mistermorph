@@ -42,3 +42,14 @@ The coder measured the pre-change border switching from light to blue on focus i
 Tests: manager independently passed gofmt, go vet ./... and go test ./..., plus nsh check. Full nsh suite did NOT pass: initial coder run 403/404 (todo); manager run 403/404 (chat-voice); requested coder retry 402/404 (memories and settings-page-sections). Latest failure: `memories.test.tsx: no pressable view matches id:memories-journal`. The other latest failure could not find id:settings-channel-run-in-console-switch. Targeted chat-voice passed three times; latest two failing files each passed twice alone. Failures appear timing-related and outside changed files, but have NOT been confirmed against base; review must investigate, not assume a clean suite.
 
 Installs: none reported. No Android device/emulator, real mobile keyboard, native desktop app or dark-mode visual check. Browser screenshots/pixel measurements are not native-device verification.
+
+## factory · review · 2026-11-10 12:56
+head: 9ef9dc875df5a864c5455dcbbfec59268dc053cf
+verdict: pass
+notes:
+- Codex reviewed both changed files against origin/master (c89e4e143); no introduced defects found. The branch merges cleanly with base. Working tree and head remained unchanged.
+- Required Go formatting, vet and tests passed. nsh check passed; HEAD full nsh suite passed 404/404; nsh build passed using the existing nsh 0.4.0 runtime. No installs.
+- Base full nsh suite failed 3 contacts tests (400/403): `no pressable view matches id:contact-row:tg:1001; on screen: []`. Codex labeled this a P1 baseline test issue at contacts.test.tsx:67,94,121; these unchanged tests passed 9/9 when run separately on both base and HEAD. This is not an FT62 finding: HEAD required checks passed and the failing run was on base only. No unrelated test fix was made. Previous build failures in todo, chat-voice, memories and settings-page-sections did not recur in either full run; their exact cause remains unconfirmed.
+- Codex browser checks covered two widths and eight states per width: the light 1px border remained stable, including retained draft on send failure; baseline focus changed the border to blue.
+- Real mobile keyboards, native desktop and dark mode remain unverified. Owner should check the originally reported persistent post-send rendering on a real device.
+- review/ → ready/. No linked GitHub issue or PR.
