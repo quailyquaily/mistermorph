@@ -37,3 +37,14 @@ Installs: none.
 Tests: gofmt, go vet ./..., go test ./... passed. nsh check passed; manager reran nsh suite: 415 passed, 0 failed. First combined verification exceeded the command timeout during the nsh suite; standalone rerun passed.
 Coder verified actual console in headless Chrome at desktop 1280px and touch-mobile 390px: typing/deletion, Chinese, long strings, paste, newline, selection replacement, clear/send, resize/rotation, model picker and simulated IME composition; screenshots checked. Native desktop app, Android device/emulator, real IME and screen-reader behavior were not verified.
 Initial push credential lookup failed; command-local credential.useHttpPath=true resolved it on the single retry.
+
+## factory · review · 2026-11-10 19:29
+head: 79717c825b7833d7af7d2537ac62d0f9ea233c1e
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD; no qualifying P0–P3 findings. Branch merges cleanly with the reviewed base.
+- Required validation passed with a throwaway HOME: gofmt clean, go vet ./..., go test ./... (72 packages), nsh check, nsh test --web-host tests/noHost.js (415 passed, 0 failed).
+- Independent browser rendering verification was blocked: installed Chrome/Chromium did not connect to the local fixture server. Builder's browser results were not independently reproduced. Native desktop, Android, real IME and screen-reader behavior remain unverified.
+- Owner should check the narrow two-row transition on mobile with the model picker (builder measured 161px versus 336px) and the line-break shift when the text column widens. This is a product choice, not a verified defect.
+- Native hidden-field measurement, extremely narrow viewports and fixture-versus-production coverage remain residual risks, not confirmed findings.
+- Installs: none. No source edits or code commits during review. No linked GitHub issues or PRs.
