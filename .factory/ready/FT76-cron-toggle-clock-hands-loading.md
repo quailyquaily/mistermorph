@@ -46,3 +46,13 @@ Installs: none beyond pinned dependencies.
 IMPORTANT TEST ISOLATION INCIDENT: coder reported restarting test Console without throwaway HOME, writing test data to the real user state directory despite explicit isolation instructions. Reported effects: `_cron_slow-job` topic with five task records in task/stat projections, a test log, and agent.db/usage.db updates. No cleanup was attempted to avoid further unauthorized data changes. Owner notified; review should retain this warning. Subsequent test launcher reportedly refuses to start without isolated HOME.
 
 Recovery: preserved an older FT46 worktree's untracked scratch directory in a stash; no existing work discarded. Initial branch push failed because credential helper needed repository path; retried successfully with command-local credential.useHttpPath=true.
+
+## factory · review · 2026-11-11 04:26
+head: 7e36ad2f6df937742ecef609fde9b45365fe7d2b
+verdict: pass
+notes:
+- Claude Code reviewed all seven changed files in origin/master...HEAD, including the StatusDot prerequisite; no qualifying findings. The toggle is local navigation reflecting running TODO activity, not a pending network request.
+- Required Go formatting, vet and tests passed. nsh check passed; nsh test --web-host tests/noHost.js passed: 529 tests, zero failures. Review tests used isolated HOME and XDG directories; no installs or manifest changes.
+- Review did not independently inspect screenshots or native desktop/real Android appearance. Canvas active-colour repaint and runtime OS reduced-motion preference changes were not independently verified; reduced motion is sampled at mount, consistent with the existing component.
+- IMPORTANT: the build-stage test isolation incident remains unresolved. The build reported test data written into real user state (a test topic and five task records, a test log, agent.db/usage.db updates). Review did not inspect or clean private user data; owner attention remains necessary.
+- Worktree remained clean at the reviewed head. No linked issues or PRs were identified. review/ → ready/; not shipped.
