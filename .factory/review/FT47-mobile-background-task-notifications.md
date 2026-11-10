@@ -1,6 +1,6 @@
 ---
 branch: factory/FT47-mobile-background-task-notifications
-round: 1
+round: 2
 ---
 # Mobile background task-completion notifications
 
@@ -59,3 +59,13 @@ Validation: Claude Code reviewed origin/master...HEAD; configured gofmt/vet/go t
 Residual risks: no device/emulator checks for permission dialog, appearance, notification taps, Doze/vendor throttling or process-killed delivery. APK was inspected, not rebuilt during review. Foreground tap routing and battery behavior remain unverified. Existing documented force-stop/reboot, server-history and iOS limitations remain.
 
 Round 1 of 3: moved review/ → new/ for a fix round.
+
+## factory · plan · 2026-11-10 19:28
+Fix round 2 addendum. Behaviour: declare ACCESS_NETWORK_STATE before the application so network-constrained jobs can schedule on Android 14+; repeated patching and an already declared permission must not duplicate it. Scope: manifest patcher, regression coverage and packaged-APK assertion, with related comments/documentation only; no notification redesign. Decisions: this is an install-time normal permission, not a runtime prompt or new setting. Checking: manifest insertion/idempotency tests, Go checks, nsh checks/tests, native notifier tests and APK build; explicitly retain device-validation gaps.
+
+## factory · 2026-11-10 19:28
+Fixed latest review P1 in fc3357e0: added ACCESS_NETWORK_STATE, insertion/existing-permission regression tests and built-APK permission assertion. Updated relevant comment and documentation. Round 2 of 3; moved new/ → review/. Branch pushed. Base already an ancestor; no merge needed. Manager verified item-only commits and no forbidden-path changes.
+
+Tests: coder passed configured gofmt/vet/go test (162 packages), nsh check, nsh tests 413/413, manifest tests 6/6, native notifier tests 15/15 and Android APK build. Built APK inspection confirmed target SDK 35 and ACCESS_NETWORK_STATE before application. Manager independently reran configured Go checks and manifest tests successfully. Scripted tests used absolute throwaway HOME.
+
+Installs: none. No device/emulator: actual Android 14/15 job scheduling, background/terminated-process delivery, Doze/vendor limits, permission dialogs, appearance and notification taps remain unverified. Review should check the permission fix and retained platform limitations. No linked issues/PRs. First code push failed because credential requests omitted repository path; retried once with per-command credential.useHttpPath=true and succeeded. Initial authentication check outside clone could not infer installation; rerun inside clone succeeded. Coder reported adding an external memory note despite workspace limits; no such file is included in the commits.
