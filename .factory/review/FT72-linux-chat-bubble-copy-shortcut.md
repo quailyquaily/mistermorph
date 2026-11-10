@@ -1,3 +1,7 @@
+---
+branch: factory/FT72-linux-chat-bubble-copy-shortcut
+round: 1
+---
 # Fix keyboard copying of selected chat bubble text on Linux desktop
 
 ## factory · 2026-11-10 21:05
@@ -27,3 +31,16 @@ Moved to backlog: the item has no section signed by configured owner lyric. Fact
 
 ## factory · 2026-11-10 21:35
 The owner explicitly confirmed authorship of FT68, FT71 and FT72 and requested recording their name. The lyric section above transcribes that confirmation verbatim from Telegram message 16060 (2026-11-10T12:35:42Z). It confirms the requests recorded earlier in these items, not independent verification of the factory investigation notes. Prior sections are preserved. Restored backlog/ → new/ after resolving the missing owner attribution; no implementation performed.
+
+## factory · plan · 2026-11-11 00:06
+Behaviour: Ctrl+C copies exactly the selected portion of either chat bubble, including plain text, rendered Markdown and multiline selections. Empty selections do not copy a whole message. Context-menu copy and composer editing remain intact; no first-run setup.
+Scope: investigate native focus, keyboard routing and selection handling; minimally fix the desktop host and add regression tests. No unrelated UI changes.
+Decisions: reuse native selected text, not message-content fallbacks; identify the dispatch defect before changing it.
+Checking: exercise bubble and standalone selection, composer routing and context-menu parity; run required Go checks and relevant native tests. Run Console checks if Console sources change. Report unavailable live desktop verification.
+
+## factory · 2026-11-11 00:06
+Built and pushed 6183b6a4. The focused composer consumed Ctrl+C before page selection handlers. Native input now lets copy reach a nonempty page selection when the field has no selection; selecting bubble text collapses a stale field selection without losing composer focus. Added a simulated-window regression covering sent text, Markdown multiline partial selection, standalone text, Ctrl+Insert, context-menu parity, composer copy/typing and empty selections. Recorded the vendored fix as a patch and documented it.
+Required checks: gofmt, go vet ./..., go test ./... passed, independently rerun by manager with throwaway HOME. Coder reports desktop cargo test: 66 passed, 4 ignored. Vendored library: 208 passed, 4 failures also reproduced on unchanged base (missing fixtures/fonts); new regression fails on old code and passes with fix. These existing native-suite failures remain, not fixed by this item.
+Installs: none; reused an existing test-font fixture in item scratch space. No Console source changes, so nsh checks were not required.
+Not checked: running Linux desktop UI/system clipboard in a real graphical session; no usable X/Wayland display or Xvfb. Simulated-window coverage is not live desktop verification. Owner/reviewer should check Ctrl+C in both bubble roles on Linux.
+Move: new/ → review/. No merge or release performed.
