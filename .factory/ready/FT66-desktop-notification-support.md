@@ -39,3 +39,13 @@ Tests: manager independently passed gofmt cleanliness, go vet ./... and go test 
 Not checked: real desktop popup/window UI (no display or running notification service). Windows and macOS were not compiled or run; both retain assumed granted permission because the bridge cannot query OS-level disabling. Windows Action Center activation remains unverified; macOS activation brings the app forward without topic routing. Platform limitations documented in desktop/nsh/README.md.
 
 Initial branch push required command-local credential.useHttpPath=true; retry succeeded. No base branch or tags pushed.
+
+## factory · review · 2026-11-10 16:26
+head: faf3604fd6be5a7f4fccaea30803b59c5044095d
+verdict: pass
+
+Claude Code reviewed all 12 changed files against origin/master...HEAD. No confirmed P0/P1/P2/P3 findings. Branch merges cleanly with the checked base c89e4e14. Moved review/ → ready/.
+
+Validation: gofmt cleanliness, go vet ./... and go test ./... passed (162 packages); nsh check passed; nsh tests 416 passed, 0 failed; cargo test --offline 66 passed, 0 failed, 4 ignored. Private Linux session-bus tests passed for absent service and fake-service notification delivery/default-action navigation. Scripted tests used a throwaway HOME. No installs. Native builds used existing runtime libraries and the fontconfig dlopen option. Worktree remained clean; no code commits made.
+
+Residual risks: no real desktop popup/UI verification; Windows and macOS were not compiled or run. Windows body/Action Center activation remains unverified; macOS topic routing is unavailable as documented. Windows/macOS OS-level notification disabling is not detectable by this bridge. Hung or slow Linux notification service timeout behavior was not reproduced. Rust fmt/clippy for the pinned toolchain were unavailable and not run. Owner should check native notification delivery and activation on target desktop platforms before release.
