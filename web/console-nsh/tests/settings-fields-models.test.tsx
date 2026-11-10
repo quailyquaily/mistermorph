@@ -165,3 +165,34 @@ test("markdown editor: typing in the source reports the text", async () => {
   await app.type("id:md-source", "!");
   await app.waitUntil(() => out(app, "doc") === "!# Title\n\nHello");
 });
+
+// The Editor's rows are as tall as its text: a press in the room below it (the middle of this
+// 320pt editor) reaches the view around the Editor, which focuses it with the caret at the end.
+test("markdown editor: a press below the text focuses it at the end", async () => {
+  const { app } = await openFixture("/markdown");
+  await app.waitFor("id:md-frame");
+  await app.press("id:md-frame");
+  await app.keyboard.press("x");
+  await app.waitUntil(() => out(app, "doc") === "# Title\n\nHellox");
+  // The reference goes in at the caret the press placed.
+  await app.press("id:insert");
+  await app.waitUntil(() => out(app, "doc") === "# Title\n\nHellox [Bob](tg:7)");
+});
+
+test("markdown editor: a press below the text of a read-only editor changes nothing; the preview has none", async () => {
+  const { app } = await openFixture("/markdown");
+  await app.waitFor("id:md-frame");
+  await app.press("id:readonly");
+  await app.press("id:md-frame");
+  await app.keyboard.press("x");
+  await app.wait(100);
+  expect(out(app, "doc")).toBe("# Title\n\nHello");
+  await app.press("id:readonly");
+  await app.press("id:md-preview");
+  await app.waitFor("text:Title");
+  expect(app.shows("id:md-frame")).toBe(false);
+  await app.press("id:md-edit");
+  await app.press("id:md-frame");
+  await app.keyboard.press("y");
+  await app.waitUntil(() => out(app, "doc") === "# Title\n\nHelloy");
+});

@@ -113,6 +113,15 @@ Headless tests prove behaviour, not the look.
 - Canvases draw with animated values natively (`createAnimatedValue` in coordinates, alphas,
   dashes): the route map's draw-in and traffic run without JS per frame.
 - `position: "sticky"` works in a `Scroll`; the base `Editor` colours ranges through decorations.
+- The base `Editor`'s rows take presses only over the text: its `content` padding and, with
+  `scrollBeyondLastLine={false}`, the room below the last line take none (no focus, no caret). And
+  the app-wide hover-mode scroll bars (`Scrollbar.setTheme(SCROLLBAR)`) give its hidden one-point
+  caret field (a multiline input) a bar of its own: invisible, 8pt wide, over the 7pt left of the
+  caret, taking presses on the desktops, so the second click of a double click and a drag begun at
+  the caret go to it. `MarkdownEditor` puts a pressable view around the Editor that places the caret
+  for those presses (`components/shared/editorPresses.ts`); a new Editor elsewhere needs the same.
+- `role="none"` on a pressable view is still a `button` on the web (0.4.0): give a pressable that is
+  not a control `role="group"`.
 - Headless screenshots catch compositor fades part-way (a tooltip looks half transparent): run a
   `frames` step before the shot.
 - A multiline `Input` draws its first line at the top of its content box, and the height

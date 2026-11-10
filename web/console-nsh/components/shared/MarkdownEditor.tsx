@@ -6,18 +6,23 @@
 // ("[Alice](tg:42)") or a reference to a conversation ("[Team](tg:-100)"), each picked from a
 // filterable list; conversations split into a tab per channel once there are several.
 //
+// The Editor's rows take presses only over the text: a press beside it (the padding, the room below
+// the last line, the 8pt over the caret the console's scroll bars take on the desktops) reaches the
+// view around the Editor, which places the caret where the rows would have (`editorPresses.ts`).
+//
 // Vue to nsh: `modelValue` is `value`, `update:modelValue` is `onChange(value)`, `ariaLabel` is
 // `accessibilityLabel`, the `toolbar` slot is the `toolbar` prop, the `height` CSS string may also be
 // points, and the exposed `insertAtCursor` comes through `editorRef`.
 import type { EditorDecoration, EditorRef, EditorSelection } from "nsh/base";
 import type { JSX } from "nsh";
-import { batch, effect, Image, signal, Text, untracked, View } from "nsh";
+import { batch, effect, Image, platform, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton, Editor } from "nsh/base";
 import { activeChannelTab, channelTabs, itemsForChannelTab } from "../../lib/core/channel-tabs.js";
 import { endpointState, runtimeApiFetchForEndpoint, translate } from "../../lib/core/context.js";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import { Icon, Markdown, Modal, TextField, Tip, TipButton, type IconName } from "../ui";
 import { ContactAvatar } from "./ContactAvatar";
+import { createBesidePresses } from "./editorPresses";
 import discordLogo from "../../assets/images/channels/discord.svg";
 import larkLogo from "../../assets/images/channels/lark.svg";
 import lineLogo from "../../assets/images/channels/line.svg";
@@ -129,6 +134,11 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
   };
   props.editorRef?.(api);
 
+  // Presses beside the rows (see the top of the file): on the desktops as the mouse goes down, on
+  // touch screens as a tap (not the start of a scroll).
+  const desktop = platform.desktop;
+  const beside = createBesidePresses({ editor: () => editor, desktop, active: () => untracked(mode) === "edit" });
+
   // A new value from outside (another document) drops the remembered caret.
   let lastValue = untracked(() => props.value);
   effect(() => {
@@ -188,39 +198,51 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             </View>
           }
         >
-          <Editor
-            ref={(node: EditorRef) => {
-              editor = node;
-            }}
-            value={props.value ?? ""}
-            language="markdown"
-            decorations={props.decorations}
-            placeholder={props.placeholder || null}
-            readOnly={locked()}
-            lineNumbers={false}
-            softWrap
-            folding={false}
-            indentGuides={false}
-            activeLine={false}
-            autoClose={false}
-            scrollBeyondLastLine={false}
-            fontSize={14}
-            lineHeight={24}
-            accessibilityLabel={label()}
-            testID={props.testID ? `${props.testID}-source` : undefined}
-            class="flex-1"
-            classes={{ content: "px-4 py-3", placeholder: "text-placeholder" }}
-            onFocus={() => focused.set(true)}
-            onBlur={() => focused.set(false)}
-            onChange={({ value }) => {
-              if (untracked(locked)) return;
-              lastValue = value;
-              props.onChange?.(value);
-            }}
-            onSelectionChange={({ selections }) => {
-              lastSelections = selections;
-            }}
-          />
+          <View
+            class="flex-1 cursor-text"
+            // Not a control of its own: the Editor in it is (pressables are buttons by default).
+            role="group"
+            focusable={false}
+            onLayout={({ bounds }) => beside.layout(bounds.size.width)}
+            onPressDown={desktop ? (e) => void beside.pressDown(e) : undefined}
+            onPress={(e) => void beside.press(e)}
+            onMouseMove={desktop ? (e) => void beside.mouseMove(e) : undefined}
+            testID={props.testID ? `${props.testID}-frame` : undefined}
+          >
+            <Editor
+              ref={(node: EditorRef) => {
+                editor = node;
+              }}
+              value={props.value ?? ""}
+              language="markdown"
+              decorations={props.decorations}
+              placeholder={props.placeholder || null}
+              readOnly={locked()}
+              lineNumbers={false}
+              softWrap
+              folding={false}
+              indentGuides={false}
+              activeLine={false}
+              autoClose={false}
+              scrollBeyondLastLine={false}
+              fontSize={14}
+              lineHeight={24}
+              accessibilityLabel={label()}
+              testID={props.testID ? `${props.testID}-source` : undefined}
+              class="flex-1"
+              classes={{ content: "px-4 py-3", placeholder: "text-placeholder" }}
+              onFocus={() => focused.set(true)}
+              onBlur={() => focused.set(false)}
+              onChange={({ value }) => {
+                if (untracked(locked)) return;
+                lastValue = value;
+                props.onChange?.(value);
+              }}
+              onSelectionChange={({ selections }) => {
+                lastSelections = selections;
+              }}
+            />
+          </View>
         </If>
       </View>
       <If when={String(props.hint || "").trim()}>
