@@ -145,6 +145,10 @@ type TaskTopicRoutes struct {
 	// AnswerQuestion answers the question a running task waits on; nil when the runtime's tasks
 	// ask no questions.
 	AnswerQuestion AnswerQuestionFunc
+	// AwaitingAnswer reports whether a running task waits on the answer to a question it asked now,
+	// for the tasks' awaiting_answer and the topics' waiting status; nil when the runtime's tasks
+	// ask no questions.
+	AwaitingAnswer func(taskID string) bool
 	// AnswerElevation answers an approval card of a running task; nil when the runtime asks no
 	// client to approve.
 	AnswerElevation      AnswerElevationFunc

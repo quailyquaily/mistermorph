@@ -147,3 +147,21 @@ func answerLocked(entry *activeRun, answer Answer) {
 	entry.question.answer <- answer
 	entry.question = nil
 }
+
+// AwaitingAnswer reports whether the active run of runtime that runs taskID waits on the answer to
+// an open question now. It is false once the question is answered, expires or the run is stopped.
+func (c *RunControl) AwaitingAnswer(runtime string, taskID string) bool {
+	runtime = strings.TrimSpace(runtime)
+	taskID = strings.TrimSpace(taskID)
+	if c == nil || runtime == "" || taskID == "" {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, entry := range c.active {
+		if key.runtime == runtime && entry != nil && strings.TrimSpace(entry.TaskID) == taskID {
+			return entry.question != nil && !entry.stopRequested
+		}
+	}
+	return false
+}

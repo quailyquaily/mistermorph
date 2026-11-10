@@ -124,3 +124,38 @@ func TestConsoleAnswerQuestion(t *testing.T) {
 		t.Fatalf("answer to a closed question = %#v", resp)
 	}
 }
+
+// The task routes see a chat task's open question on the run control: waiting until it closes.
+func TestConsoleRoutesAwaitingAnswerFollowsTheOpenQuestion(t *testing.T) {
+	r := &consoleLocalRuntime{consoleExecutionState: &consoleExecutionState{runControl: runtimecontrol.New()}}
+	awaiting := r.routesOptions("token").TaskTopic.AwaitingAnswer
+	if awaiting == nil {
+		t.Fatal("AwaitingAnswer = nil")
+	}
+	lease, err := r.runControl.StartLease(context.Background(), 0, runtimecontrol.ActiveRun{
+		Runtime:         "console",
+		ConversationKey: "console:topic",
+		TaskID:          "task_1",
+	})
+	if err != nil {
+		t.Fatalf("StartLease() error = %v", err)
+	}
+	defer lease.Finish()
+	if awaiting("task_1") {
+		t.Fatal("waiting before any question")
+	}
+	question, err := lease.OpenQuestion("q1", []string{"A", "B"}, false)
+	if err != nil {
+		t.Fatalf("OpenQuestion() error = %v", err)
+	}
+	defer question.Close()
+	if !awaiting("task_1") || awaiting("task_2") {
+		t.Fatal("the open question is not the task's wait")
+	}
+	if resp, _ := r.answerQuestion(context.Background(), daemonruntime.AnswerQuestionRequest{TaskID: "task_1", QuestionID: "q1", Option: 0}); !resp.Answered {
+		t.Fatalf("answerQuestion() = %#v", resp)
+	}
+	if awaiting("task_1") {
+		t.Fatal("still waiting after the answer")
+	}
+}

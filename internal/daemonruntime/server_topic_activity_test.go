@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -102,7 +103,7 @@ func TestTopicActivityIncludesTheRuntimesOwnTopics(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := topicActivity(store)
+	got := topicActivity(store, nil)
 	want := []TopicActivity{
 		{ID: agentTopic, Status: "pending", Pending: 1},
 		{ID: ConsoleAwarenessTopicID, Status: "running", Running: 1},
@@ -125,13 +126,13 @@ func TestTopicActivityCompletionAndTaskHistory(t *testing.T) {
 			if err := store.Upsert(task); err != nil {
 				t.Fatal(err)
 			}
-			if got := topicActivity(store); len(got) != 1 || got[0].Status != "running" {
+			if got := topicActivity(store, nil); len(got) != 1 || got[0].Status != "running" {
 				t.Fatalf("running: %+v", got)
 			}
 			if err := store.Update(task.ID, func(info *TaskInfo) { info.Status = status; info.FinishedAt = &now }); err != nil {
 				t.Fatal(err)
 			}
-			got := topicActivity(store)
+			got := topicActivity(store, nil)
 			if len(got) != 1 || got[0].Status != "" {
 				t.Fatalf("terminal: %+v", got)
 			}
@@ -163,7 +164,7 @@ func TestTopicActivityPagesHistoryAndUsesCompletionOrder(t *testing.T) {
 	if err := store.Upsert(TaskInfo{ID: "queued", TopicID: "topic", CreatedAt: start, Status: TaskQueued}); err != nil {
 		t.Fatal(err)
 	}
-	got := topicActivity(store)
+	got := topicActivity(store, nil)
 	if len(got) != 1 || got[0].LatestDoneTaskID != "task-000" || !got[0].LatestDoneAt.Equal(finished) || got[0].Status != "running" || got[0].Running != 1 {
 		t.Fatalf("activity = %+v", got)
 	}
@@ -236,7 +237,7 @@ func TestTopicActivityCountsRunningTodoRuns(t *testing.T) {
 					}
 				}
 				got := map[string]int{}
-				for _, item := range topicActivity(store) {
+				for _, item := range topicActivity(store, nil) {
 					if item.CronRunning > 0 {
 						got[item.ID] = item.CronRunning
 					}
@@ -270,7 +271,7 @@ func TestTopicActivityCronRunningKeepsStatusAndClearsWhenRunsEnd(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := []TopicActivity{{ID: topic, Status: "running", Running: 3, CronRunning: 2}}
-			if got := topicActivity(store); !reflect.DeepEqual(got, want) {
+			if got := topicActivity(store, nil); !reflect.DeepEqual(got, want) {
 				t.Fatalf("running = %+v", got)
 			}
 			finish := func(id string) {
@@ -280,18 +281,18 @@ func TestTopicActivityCronRunningKeepsStatusAndClearsWhenRunsEnd(t *testing.T) {
 				}
 			}
 			finish("s1")
-			if got := topicActivity(store); len(got) != 1 || got[0].CronRunning != 1 || got[0].Running != 2 {
+			if got := topicActivity(store, nil); len(got) != 1 || got[0].CronRunning != 1 || got[0].Running != 2 {
 				t.Fatalf("one of two finished: %+v", got)
 			}
 			finish("s2")
-			if got := topicActivity(store); len(got) != 1 || got[0].CronRunning != 0 || got[0].Running != 1 || got[0].Status != "running" {
+			if got := topicActivity(store, nil); len(got) != 1 || got[0].CronRunning != 0 || got[0].Running != 1 || got[0].Status != "running" {
 				t.Fatalf("last finished: %+v", got)
 			}
 			// The queued run starting counts once it runs.
 			if err := store.RecordTaskUpdate("q", TaskTrigger{}, func(info *TaskInfo) { info.Status = TaskRunning }); err != nil {
 				t.Fatal(err)
 			}
-			if got := topicActivity(store); len(got) != 1 || got[0].CronRunning != 1 {
+			if got := topicActivity(store, nil); len(got) != 1 || got[0].CronRunning != 1 {
 				t.Fatalf("queued started: %+v", got)
 			}
 		})
@@ -317,7 +318,7 @@ func TestTopicActivityCronRunningPagesHistory(t *testing.T) {
 		}
 	}
 	var got int
-	for _, item := range topicActivity(store) {
+	for _, item := range topicActivity(store, nil) {
 		got += item.CronRunning
 	}
 	if got != 1 {
@@ -328,7 +329,113 @@ func TestTopicActivityCronRunningPagesHistory(t *testing.T) {
 	if err := memory.Upsert(TaskInfo{ID: "s", TopicID: CronTopicID("a"), Status: TaskRunning, CreatedAt: start}); err != nil {
 		t.Fatal(err)
 	}
-	if activity := topicActivity(memory); len(activity) != 1 || activity[0].CronRunning != 0 || activity[0].Running != 1 {
+	if activity := topicActivity(memory, nil); len(activity) != 1 || activity[0].CronRunning != 0 || activity[0].Running != 1 {
 		t.Fatalf("memory = %+v", activity)
+	}
+}
+
+// A running task whose run waits on the answer to its question is waiting, on the topic and on
+// the task itself; queued, pending and finished tasks never are, whatever the run says.
+func TestTopicActivityAndTasksShowAWaitingAnswer(t *testing.T) {
+	store := NewMemoryStore(100)
+	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	for i, task := range []TaskInfo{
+		{ID: "ask", TopicID: "alpha", Status: TaskRunning},
+		{ID: "work", TopicID: "alpha", Status: TaskRunning},
+		{ID: "queued", TopicID: "beta", Status: TaskQueued},
+		{ID: "ask2", TopicID: "gamma", Status: TaskRunning},
+		{ID: "approve", TopicID: "gamma", Status: TaskPending},
+		{ID: "done", TopicID: "delta", Status: TaskDone},
+		{ID: "failed", TopicID: "delta", Status: TaskFailed},
+		{ID: "canceled", TopicID: "delta", Status: TaskCanceled},
+	} {
+		task.CreatedAt = now.Add(time.Duration(i) * time.Second)
+		if err := store.Upsert(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// What the run control says: these runs wait on an answer (the stale ones are not running).
+	waiting := map[string]bool{"ask": true, "ask2": true, "queued": true, "approve": true, "done": true, "failed": true, "canceled": true}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{AuthToken: "token", TaskTopic: TaskTopicRoutes{
+		TaskReader:     store,
+		AwaitingAnswer: func(taskID string) bool { return waiting[taskID] },
+	}})
+	get := func(t *testing.T, path string, out any) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s: status %d: %s", path, rec.Code, rec.Body.String())
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), out); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var activity struct {
+		Topics []TopicActivity `json:"topics"`
+	}
+	get(t, "/topics/activity", &activity)
+	want := []TopicActivity{
+		{ID: "alpha", Status: "waiting", Running: 2, Waiting: 1},
+		{ID: "beta", Status: "running", Running: 1},
+		{ID: "delta"},
+		{ID: "gamma", Status: "pending", Running: 1, Pending: 1, Waiting: 1},
+	}
+	// delta's latest completion is the done task.
+	want[2].LatestDoneTaskID = "done"
+	doneAt := now.Add(5 * time.Second)
+	want[2].LatestDoneAt = &doneAt
+	if !reflect.DeepEqual(activity.Topics, want) {
+		t.Fatalf("topics = %+v", activity.Topics)
+	}
+
+	var list struct {
+		Items []TaskInfo `json:"items"`
+	}
+	get(t, "/tasks?limit=50", &list)
+	if len(list.Items) != 8 {
+		t.Fatalf("tasks = %+v", list.Items)
+	}
+	for _, task := range list.Items {
+		if want := task.ID == "ask" || task.ID == "ask2"; task.AwaitingAnswer != want {
+			t.Fatalf("task %s (%s) awaiting_answer = %v, want %v", task.ID, task.Status, task.AwaitingAnswer, want)
+		}
+	}
+	for id, want := range map[string]bool{"ask": true, "work": false, "queued": false, "approve": false, "done": false} {
+		var task TaskInfo
+		get(t, "/tasks/"+id, &task)
+		if task.AwaitingAnswer != want {
+			t.Fatalf("GET /tasks/%s awaiting_answer = %v, want %v", id, task.AwaitingAnswer, want)
+		}
+	}
+	// The answer came: the task runs on, and nothing of the wait was stored.
+	waiting["ask"] = false
+	var task TaskInfo
+	get(t, "/tasks/ask", &task)
+	if task.AwaitingAnswer || task.Status != TaskRunning {
+		t.Fatalf("answered task = %+v", task)
+	}
+	if stored, _ := store.Get("ask2"); stored.AwaitingAnswer {
+		t.Fatal("the store kept awaiting_answer")
+	}
+	activity.Topics = nil
+	get(t, "/topics/activity", &activity)
+	if got := activity.Topics[0]; got.ID != "alpha" || got.Status != "running" || got.Waiting != 0 {
+		t.Fatalf("alpha after the answer = %+v", got)
+	}
+
+	// Without the runtime's run control, nothing waits.
+	plain := http.NewServeMux()
+	RegisterRoutes(plain, RoutesOptions{AuthToken: "token", TaskTopic: TaskTopicRoutes{TaskReader: store}})
+	req := httptest.NewRequest(http.MethodGet, "/tasks/ask2", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	rec := httptest.NewRecorder()
+	plain.ServeHTTP(rec, req)
+	if body := rec.Body.String(); strings.Contains(body, "awaiting_answer") {
+		t.Fatalf("plain body = %s", body)
 	}
 }
