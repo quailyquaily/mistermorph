@@ -13,10 +13,11 @@
 // group to add that tag (./topicDrag.ts), the groups it can go to outlined meanwhile.
 import { Image, Scroll, signal, Text, token, View, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { BusyBeam, Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
+import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
+import { AdjustingClock, type ClockProbe } from "../../components/motion/AdjustingClock";
 import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdges";
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
 import { sagHalf, SagRule } from "../../components/motion/Sag";
@@ -29,11 +30,10 @@ import { createPullSearch } from "../../components/shared/pullSearch";
 import { createTopicDrag } from "./topicDrag";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
-// a blue tint. While TODO runs are running, the TODO toggle's own square carries the border beam
-// (design/ui-refresh.html §5, a plain button's: a faint hairline and the blue beam riding it), as
-// the composer does while its task runs. The 12pt running ring that sat off the icon's corner was
-// nearly the icon's size and stood out of the 38pt box. The beam lies on the box's outline,
-// so the toggle keeps its size and icon, and it stays enabled: running is a status, not a busy
+// a blue tint. While TODO runs are running, the TODO toggle's alarm clock has its hands turning, as
+// a clock's do while it is being set (components/motion/AdjustingClock.tsx), in place of a loading
+// look: no busy beam or hairline (the plain button's, FT61) and no ring off the icon's corner, so
+// the square keeps its size, fill and icon. It stays enabled: running is a status, not a pending
 // press (a press only switches the list, nothing is sent). The count is in its name and tooltip.
 // Exported for tests/fixtures/cron-toggle-app.tsx.
 export function ViewToggle(props: {
@@ -48,7 +48,10 @@ export function ViewToggle(props: {
   onCenter?: (x: number) => void;
   /** Its frame in the head (the sidebar's `onPartLayout`). */
   onFrame?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
+  /** Hears how to read the alarm clock's hands (tests). */
+  clockProbe?: (read: ClockProbe) => void;
 }) {
+  const color = () => (props.active ? "blue" : "subtle");
   return (
     <TipButton
       selected={props.active}
@@ -60,10 +63,20 @@ export function ViewToggle(props: {
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
-      class="relative size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-blue/12"
+      class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-blue/12"
     >
-      <Icon name={props.icon} size={14} color={props.active ? "blue" : "subtle"} />
-      <BusyBeam busy={!!props.running} variant="plain" testID="chat-cron-running" />
+      {props.icon === "PhAlarm" ? (
+        <AdjustingClock
+          adjusting={!!props.running}
+          size={14}
+          color={color()}
+          testID="chat-cron-clock"
+          adjustingTestID="chat-cron-running"
+          probe={props.clockProbe}
+        />
+      ) : (
+        <Icon name={props.icon} size={14} color={color()} />
+      )}
     </TipButton>
   );
 }
