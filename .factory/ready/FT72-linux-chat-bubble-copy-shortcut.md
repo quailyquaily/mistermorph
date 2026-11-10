@@ -44,3 +44,13 @@ Required checks: gofmt, go vet ./..., go test ./... passed, independently rerun 
 Installs: none; reused an existing test-font fixture in item scratch space. No Console source changes, so nsh checks were not required.
 Not checked: running Linux desktop UI/system clipboard in a real graphical session; no usable X/Wayland display or Xvfb. Simulated-window coverage is not live desktop verification. Owner/reviewer should check Ctrl+C in both bubble roles on Linux.
 Move: new/ → review/. No merge or release performed.
+
+## factory · review · 2026-11-11 00:21
+head: 6183b6a4fbd0c42fdac37617758ab75126f0131b
+verdict: pass
+
+Claude Code reviewed all eight changed files in origin/master...HEAD; no introduced P0/P1/P2/P3 defects found. Branch merges cleanly with base; worktree remained clean.
+Validation: required gofmt, go vet ./..., and go test ./... passed with throwaway HOME. Desktop cargo tests: 66 passed, 4 ignored. Vendored native tests: 208 passed, four missing-image/font-fixture failures reproduced on unchanged base. The new simulated-window regression passes on HEAD and fails on base (clipboard retained "-" instead of "alpha"). Patch reproduces vendored changes byte for byte. Additional scratch-only probes covered composer paste, undo, cut, select-all, copy precedence, double-click selection and selection clearing. No forbidden paths or Console sources changed; Console checks not applicable.
+Residual risks: no live Linux graphical session or real system clipboard verification; owner should check Ctrl+C for both bubble roles. Cross-code-block selections and streaming selections were not tested. Existing native fixture failures remain, unrelated to this change.
+Installs: none. No linked GitHub issues or PRs to comment on.
+Move: review/ → ready/. No merge or release performed.
