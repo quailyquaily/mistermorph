@@ -69,3 +69,15 @@ Fixed latest review P1 in fc3357e0: added ACCESS_NETWORK_STATE, insertion/existi
 Tests: coder passed configured gofmt/vet/go test (162 packages), nsh check, nsh tests 413/413, manifest tests 6/6, native notifier tests 15/15 and Android APK build. Built APK inspection confirmed target SDK 35 and ACCESS_NETWORK_STATE before application. Manager independently reran configured Go checks and manifest tests successfully. Scripted tests used absolute throwaway HOME.
 
 Installs: none. No device/emulator: actual Android 14/15 job scheduling, background/terminated-process delivery, Doze/vendor limits, permission dialogs, appearance and notification taps remain unverified. Review should check the permission fix and retained platform limitations. No linked issues/PRs. First code push failed because credential requests omitted repository path; retried once with per-command credential.useHttpPath=true and succeeded. Initial authentication check outside clone could not infer installation; rerun inside clone succeeded. Coder reported adding an external memory note despite workspace limits; no such file is included in the commits.
+
+## factory · review · 2026-11-10 19:45
+head: fc3357e088aa5507f6224243736d2259a14cefa0
+verdict: pass
+notes:
+- [P2] web/console-nsh/android/src/com/mistermorph/console/MorphApplication.java:138-141: A previously posted notification tapped while the main activity is already visible can leave its topic queued instead of navigating immediately: delivery is tied to onActivityStarted, not resume. Deliver queued taps on resume or directly to the attached view and add foreground-tap coverage. Example: completion posts while away; reopen via launcher, then tap the retained shade notification; navigation waits until a later background/foreground transition. This is a code/manifest lifecycle analysis, not a device reproduction.
+
+Previous P1 fixed: ACCESS_NETWORK_STATE is declared and confirmed in the built APK (target SDK 35); manifest regression tests and build assertions cover its presence. No P0/P1 findings; round 2 moved review/ → ready/ under the factory gate.
+
+Validation: Claude Code reviewed origin/master...HEAD and passed the configured gofmt/vet/go tests, nsh check, nsh tests 413/413, manifest tests 6/6, native VoiceController and TaskNotifier tests 15/15 each, and Android APK build/assertions. Scripted tests used an absolute throwaway HOME. Manager verified clean tracked worktree and unchanged head. No installs; existing JDK/SDK reused. No linked issues or PRs. Initial auth check outside clone failed installation discovery; rerun inside clone succeeded.
+
+Residual risks: no device/emulator checks for Android 14/15 scheduling, Doze/standby/vendor limits, process-killed delivery, permission dialogs, notification appearance/privacy or cold/background/foreground tap routing. Documented force-stop/reboot, in-memory history and iOS limitations remain. Owner should inspect the P2 tap-routing issue before shipping.
