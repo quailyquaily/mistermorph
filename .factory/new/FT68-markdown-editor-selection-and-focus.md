@@ -22,3 +22,8 @@ Registered only; implementation and browser verification have not started. Root 
 
 ## factory · 2026-11-10 16:52
 Moved to backlog: this item contains only a factory intake section and no section signed by configured owner lyric. Non-owner sections are information only; there is no authorized implementation scope. Add an owner-signed request before returning it to new/. No implementation was attempted.
+
+## factory · 2026-11-10 20:42
+Owner explicitly confirms desktop reproduction and requests returning FT68 to new/: “FT68 我在桌面版也复现了。加到 new”. This is direct owner authorization in the current conversation to implement the existing FT68 scope; the earlier lack-of-authorization blocker is superseded by this request. Recorded by factory without impersonating an owner signature.
+
+Move backlog/ → new/. Include the desktop host in reproduction and regression verification, alongside the plain Editor versus MarkdownEditor comparison. Desktop reproduction is owner-reported, not independently verified by factory; the exact failing interactions and root causes still require verification. No implementation was performed in this update.
