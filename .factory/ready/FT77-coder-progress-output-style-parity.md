@@ -27,3 +27,14 @@ Tests: nsh check and all 525 nsh tests passed; new regression test fails on old 
 Visual: coder checked progress plus populated, empty and failed coder detail panels in Chrome using a temporary fixture. Desktop, Android and live workers were not checked; automated chat tests use stub data.
 Installs: none.
 Push initially failed because credential requests lacked repository path; succeeded with per-command credential.useHttpPath=true.
+
+## factory · review · 2026-11-11 04:51
+head: 5063d39afa48d0ff97c9228cdd7837ac4a3b3582
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD; no findings. Branch merges cleanly with master.
+- Validation with throwaway HOME: gofmt clean, go vet ./... and go test ./... passed; nsh check passed; all 525 nsh tests passed.
+- No installs, manifest changes, or code changes during review.
+- No visual check in this review; desktop, Android and live workers were not checked. Headless tests verify wrapper and text styles, not the background colour itself.
+- Intentional regular-font styling matches progress; code/diff columns no longer align.
+- Moved review/ → ready/.
