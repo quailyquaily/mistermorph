@@ -100,6 +100,7 @@ import {
 } from "../../lib/core/context.js";
 import { agentLinkAvatarURL, agentLinkInstanceID } from "../../lib/core/agent-link-avatar.js";
 import { pushNotice } from "../../lib/core/notices.js";
+import { createTopicRename, type TopicRenameSession } from "./topicRename";
 import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile } from "../../lib/platform";
 import { currentRoute, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
@@ -727,7 +728,7 @@ export function createChatController() {
   };
   /** Whether one of the page's dialogs is open (Escape is theirs then, not the detail panel's). */
   const pageDialogOpen = () =>
-    rawDialogOpen() || filePreview().open || topicDeleteDialogOpen() || workspaceBrowserOpen();
+    rawDialogOpen() || filePreview().open || topicDeleteDialogOpen() || topicRename.open() || workspaceBrowserOpen();
   /** The reply the detail panel shows, read live from the history (null once it is gone). */
   const activityDetailItem = computed(() => findActivityDetailItem(chatHistoryItems(), activityDetail()));
   /** What a reply answers: the message before it, on one line. */
@@ -944,9 +945,12 @@ export function createChatController() {
   };
   const topicDeleteAvailable = () => Boolean(workspaceTopicID()) && !selectedTopicIsReserved();
   const topicDeleteDisabled = () => !topicDeleteAvailable() || topicDeleting();
-  // A TODO item's topic has no delete, but its generated icon can be redone; its title is the item's.
-  const topicRegenerateAvailable = () => topicDeleteAvailable() || (Boolean(workspaceTopicID()) && selectedTopicIsCron());
-  const topicRegenerateLabel = () => t(selectedTopicIsCron() ? "chat_topic_regenerate_icon_action" : "chat_topic_regenerate_action");
+  // A person's own topic is renamed through the rename dialog, which also offers a generated name.
+  // A TODO item's topic has no delete and no rename (its title is the item's), but its generated
+  // icon can be redone.
+  const topicRenameAvailable = () => topicDeleteAvailable();
+  const topicRegenerateAvailable = () => Boolean(workspaceTopicID()) && selectedTopicIsCron();
+  const topicRegenerateLabel = () => t("chat_topic_regenerate_icon_action");
   effect(() => {
     void workspaceTopicID();
     untracked(() => topicTagsError.set(""));
@@ -954,19 +958,39 @@ export function createChatController() {
   const topicNameRequestKey = () => JSON.stringify([submitEndpointRef(), selectedTopicID()]);
   const topicRegenerating = () => topicNameRequests().has(topicNameRequestKey());
   const topicRegenerateError = () => (topicNameFailure()?.key === topicNameRequestKey() ? topicNameFailure()!.message : "");
-  const topicRegenerateDisabled = () =>
-    !topicRegenerateAvailable() ||
-    topicDeleting() ||
-    topicRegenerating() ||
-    historyLoading() ||
-    (!historyNextCursor() &&
-      !chatHistoryItems().some(
+  /** Whether the open topic has something to name it from: a message that is not a command. */
+  const selectedTopicHasConversation = () =>
+    !historyLoading() &&
+    (Boolean(historyNextCursor()) ||
+      chatHistoryItems().some(
         (item) =>
           item.role === "user" &&
           item.topicID === selectedTopicID() &&
           String(item.text || "").trim() &&
           !String(item.text || "").trim().startsWith("/"),
       ));
+  const topicRegenerateDisabled = () => !topicRegenerateAvailable() || topicDeleting() || topicRegenerating() || !selectedTopicHasConversation();
+  const topicRename = createTopicRename({
+    suggest: (endpointRef, topicID) =>
+      runtimeApiFetchForEndpoint(endpointRef, `/topics/${encodeURIComponent(topicID)}/title-suggestion`, { method: "POST" }),
+    save: (endpointRef, topicID, title) =>
+      runtimeApiFetchForEndpoint(endpointRef, `/topics/${encodeURIComponent(topicID)}/title`, { method: "PUT", body: { title } }),
+    onSaved: (session, updated) => applyRenamedTopic(session, updated),
+    messages: () => ({ empty: t("chat_topic_rename_empty"), saveFailed: t("chat_topic_rename_failed"), suggestFailed: t("chat_topic_regenerate_failed") }),
+  });
+  const topicRenameDisabled = () => !topicRenameAvailable() || topicDeleting() || topicRename.open();
+  const topicRenameRegenerateDisabled = () =>
+    !topicRename.open() || topicRename.suggesting() || topicRename.saving() || !selectedTopicHasConversation();
+  // The dialog belongs to the topic and runtime it was opened for: it goes when either changes.
+  effect(() => {
+    const current = topicRename.session();
+    if (!current) return;
+    const endpointRef = submitEndpointRef();
+    const topicID = workspaceTopicID();
+    if (endpointRef !== current.endpointRef || topicID !== current.topicID || !topicRenameAvailable()) {
+      untracked(() => topicRename.close({ force: true }));
+    }
+  });
   const topicPropertyRows = () => {
     const topic = selectedTopic();
     if (!topic) return [];
@@ -2658,6 +2682,23 @@ export function createChatController() {
     }
   }
 
+  function openTopicRename() {
+    const topic = untracked(selectedTopic);
+    if (untracked(topicRenameDisabled) || !topic) return;
+    topicRename.start({ endpointRef: untracked(submitEndpointRef), topicID: untracked(workspaceTopicID), title: String(topic.title || "") });
+  }
+
+  function applyRenamedTopic(session: TopicRenameSession, updated: any) {
+    if (untracked(submitEndpointRef) !== session.endpointRef || !updated) return;
+    topics.update((list) =>
+      list.map((topic) =>
+        normalizeTopicID(topic.id) !== session.topicID || Number(topic.title_revision || 0) > Number(updated?.title_revision || 0)
+          ? topic
+          : { ...topic, ...updated },
+      ),
+    );
+  }
+
   function confirmDeleteTopic() {
     const topic = untracked(selectedTopic);
     if (!untracked(topicDeleteAvailable) || !topic) return;
@@ -3297,6 +3338,10 @@ export function createChatController() {
     topicDeleteAvailable,
     topicDeleteDisabled,
     topicDeleteDialogText,
+    topicRenameAvailable,
+    topicRenameDisabled,
+    topicRenameRegenerateDisabled,
+    topicRename,
     topicRegenerateAvailable,
     topicRegenerateLabel,
     topicRegenerating,
@@ -3368,6 +3413,7 @@ export function createChatController() {
     openWorkspaceSelection,
     downloadWorkspaceSelection,
     regenerateTopicName,
+    openTopicRename,
     confirmDeleteTopic,
     closeTopicDeleteDialog,
     deleteSelectedTopic,

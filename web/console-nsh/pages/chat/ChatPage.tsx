@@ -13,6 +13,7 @@ import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPi
 import { onSystemBack } from "../../lib/systemBack";
 import { createChatController, type ChatController } from "./chatController";
 import { FilePreviewDialog } from "./FilePreviewDialog";
+import { TopicRenameDialog } from "./TopicRenameDialog";
 import { TopicSidebar } from "./TopicSidebar";
 import { Entrance } from "../../components/motion";
 import { ActivityDetailPanel } from "./ActivityDetailPanel";
@@ -298,6 +299,7 @@ export function ChatPage() {
         />
         <FilePreviewDialog c={c} />
         <RawJsonDialog open={c.rawDialogOpen()} json={c.rawDialogJSON()} onClose={() => c.closeRawDialog()} testID="chat-raw-json" />
+        <TopicRenameDialog rename={c.topicRename} regenerateDisabled={c.topicRenameRegenerateDisabled()} />
         <MessageDialog
           open={c.topicDeleteDialogOpen()}
           onClose={() => c.closeTopicDeleteDialog()}
