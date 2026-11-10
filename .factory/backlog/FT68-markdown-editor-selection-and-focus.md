@@ -19,3 +19,6 @@ Acceptance criteria:
 - Add regression tests for the identified causes and exercise real browser pointer interactions; explicitly list any browser or Android host behavior not verified. If an upstream fix is required, document the dependency fix or minimal local workaround and its scope.
 
 Registered only; implementation and browser verification have not started. Root cause remains unconfirmed.
+
+## factory · 2026-11-10 16:52
+Moved to backlog: this item contains only a factory intake section and no section signed by configured owner lyric. Non-owner sections are information only; there is no authorized implementation scope. Add an owner-signed request before returning it to new/. No implementation was attempted.
