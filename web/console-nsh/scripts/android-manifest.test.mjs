@@ -1,7 +1,14 @@
 // node --test scripts/android-manifest.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { APPLICATION, PERMISSION_ACTIVITY, patchManifest } from "./android-manifest.mjs";
+import {
+  APPLICATION,
+  NOTIFICATION_OPEN_ACTIVITY,
+  NOTIFICATION_PERMISSION_ACTIVITY,
+  NOTIFIER_JOB,
+  PERMISSION_ACTIVITY,
+  patchManifest,
+} from "./android-manifest.mjs";
 
 // The manifest nsh 0.4.0 links for a packaged TSX app (nsh-cli's android.rs).
 const NSH_MANIFEST = `<?xml version="1.0" encoding="utf-8"?>
@@ -36,6 +43,24 @@ test("adds cleartext HTTP, the microphone, the Application and the permission ac
   assert.match(out, /VoicePermissionActivity" android:exported="false"/);
   assert.match(out, /Theme\.Translucent\.NoTitleBar/);
   assert.equal(out.split(APPLICATION).length, 2);
+});
+
+test("adds the notification permission, its activities and the watcher's job", () => {
+  const out = patchManifest(NSH_MANIFEST);
+  assert.match(out, /<uses-permission android:name="android\.permission\.POST_NOTIFICATIONS" \/>/);
+  assert.ok(out.indexOf("POST_NOTIFICATIONS") < out.indexOf("<application"));
+  for (const name of [NOTIFICATION_PERMISSION_ACTIVITY, NOTIFICATION_OPEN_ACTIVITY, NOTIFIER_JOB]) {
+    const at = out.indexOf(name);
+    assert.ok(at > out.indexOf("com.longbridge.nsh.AppActivity") && at < out.indexOf("</application>"), name);
+    assert.equal(out.split(name).length, 2, name);
+  }
+  // Only JobScheduler may bind the job, and nothing outside the app may start any of them.
+  assert.match(out, /TaskNotifierJob" android:exported="false"\s+android:permission="android\.permission\.BIND_JOB_SERVICE"/);
+  assert.match(out, /NotificationOpenActivity" android:exported="false"/);
+  assert.match(out, /NotificationPermissionActivity" android:exported="false"/);
+  assert.match(out, /Theme\.NoDisplay/);
+  // nsh's activity stays the only launcher.
+  assert.equal(out.split("android.intent.category.LAUNCHER").length, 2);
 });
 
 test("is idempotent and keeps what nsh already declares", () => {

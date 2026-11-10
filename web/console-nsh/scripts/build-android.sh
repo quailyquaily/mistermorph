@@ -4,7 +4,8 @@
 # login page (lib/mobileHost.ts). Needs the nsh 0.4.0 distribution (its Android runtime and
 # embed/android/nsh.aar), Node, a JDK and the Android SDK (build tools and `platforms;android-35`,
 # found through ANDROID_HOME); no NDK, no Gradle. The app's own Java (android/src: voice input's
-# recorder) goes into the runtime's classes.dex (scripts/android-host.sh).
+# recorder, the task notifications' background watcher) goes into the runtime's classes.dex
+# (scripts/android-host.sh).
 #
 #   scripts/build-android.sh [--out FILE] [--abi ABI]... [--format apk|aab] [--run]
 #                            [--keystore FILE --key-alias ALIAS]   (password: NSH_KEYSTORE_PASSWORD)
@@ -76,7 +77,8 @@ ln -s "$runtime/lib" "$shim/nsh-runtime/android/release/lib"
 # The manifest nsh links lacks what the app adds (scripts/android-manifest.mjs): cleartext HTTP (the
 # console server is usually plain http:// on the local network, nsh's Android runtime fetches through
 # HttpURLConnection, which enforces it, and `nsh package` declares it only for its development
-# builds), and voice input's permission, Application and permission activity. So nsh runs with an
+# builds), voice input's permission, Application and permission activity, and the task
+# notifications' permission, activities and job. So nsh runs with an
 # SDK whose aapt2 patches the manifest before linking it; everything else is the real SDK.
 tools="$shim/sdk/build-tools/$(basename "$build_tools")"
 mkdir -p "$tools"
@@ -110,8 +112,10 @@ rm -f "$built"
 
 if [[ "$format" == apk ]]; then
   manifest=$("$build_tools/aapt2" dump xmltree --file AndroidManifest.xml "$built")
-  for wanted in usesCleartextTraffic android.permission.RECORD_AUDIO \
-    com.mistermorph.console.MorphApplication com.mistermorph.console.VoicePermissionActivity; do
+  for wanted in usesCleartextTraffic android.permission.RECORD_AUDIO android.permission.POST_NOTIFICATIONS \
+    com.mistermorph.console.MorphApplication com.mistermorph.console.VoicePermissionActivity \
+    com.mistermorph.console.NotificationPermissionActivity com.mistermorph.console.NotificationOpenActivity \
+    com.mistermorph.console.TaskNotifierJob; do
     if ! grep -q "$wanted" <<<"$manifest"; then
       echo "the APK's manifest lacks $wanted: did nsh stop linking its manifest with aapt2?" >&2
       exit 1
