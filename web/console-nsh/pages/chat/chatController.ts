@@ -80,6 +80,7 @@ import {
   ordinaryTopicTags,
   sameTopicTags,
   splitPinnedTopics,
+  tagsAfterDrop,
   topicPinned,
   topicTags,
   withPinned,
@@ -817,6 +818,8 @@ export function createChatController() {
     !isCronTopicID(workspaceTopicID()) &&
     topics().some((topic) => normalizeTopicID(topic?.id) === normalizeTopicID(workspaceTopicID()));
   const topicTagsSaving = () => topicTagSaves().has(normalizeTopicID(workspaceTopicID()));
+  /** A save of this topic's tags is under way. */
+  const topicTagSaving = (topic: any) => topicTagSaves().has(normalizeTopicID(topic?.id));
 
   // The agents' and TODO items' lists are a look aside, so the next visit opens on the date or tag
   // list again.
@@ -830,8 +833,10 @@ export function createChatController() {
   const topicAgentAvatar = (topic: any) => agentLinkAvatarURL(topicAgentContact(topic), endpointState.items);
   const findTopic = (id: string) => untracked(topics).find((topic) => normalizeTopicID(topic?.id) === id) || null;
 
-  // Saves a topic's whole tag list: shown at once, back if the save fails; one save per topic.
-  async function saveTopicTags(rawTopicID: string, nextTags: string[]) {
+  // Saves a topic's whole tag list: shown at once, back if the save fails; one save per topic. With
+  // `confirmed` the list changes only once the runtime has saved it, and a failure is a notice
+  // whichever topic is open (a drop in the topic list, whose topic's panel may be closed).
+  async function saveTopicTags(rawTopicID: string, nextTags: string[], options: { confirmed?: boolean } = {}) {
     const topicID = normalizeTopicID(rawTopicID);
     const endpointRef = untracked(submitEndpointRef);
     const topic = findTopic(topicID);
@@ -839,7 +844,7 @@ export function createChatController() {
     const previous = topicTags(topic);
     const applyTags = (tags: string[]) =>
       topics.update((list) => list.map((item) => (normalizeTopicID(item?.id) === topicID ? { ...item, tags: [...tags] } : item)));
-    applyTags(nextTags);
+    if (!options.confirmed) applyTags(nextTags);
     topicTagSaves.update((saves) => new Set([...saves, topicID]));
     if (topicID === normalizeTopicID(untracked(workspaceTopicID))) topicTagsError.set("");
     try {
@@ -847,13 +852,14 @@ export function createChatController() {
         method: "PUT",
         body: { tags: nextTags },
       });
-      if (untracked(submitEndpointRef) === endpointRef) applyTags(topicTags(updated));
+      // The runtime answers with the topic as saved; one without its tags saved what was sent.
+      if (untracked(submitEndpointRef) === endpointRef) applyTags(Array.isArray(updated?.tags) ? topicTags(updated) : nextTags);
       return true;
     } catch (error) {
       if (untracked(submitEndpointRef) !== endpointRef) return false;
-      applyTags(previous);
+      if (!options.confirmed) applyTags(previous);
       const message = errorMessage(error, t("chat_topic_tags_failed"));
-      if (topicID === normalizeTopicID(untracked(workspaceTopicID))) topicTagsError.set(message);
+      if (!options.confirmed && topicID === normalizeTopicID(untracked(workspaceTopicID))) topicTagsError.set(message);
       else pushNotice({ type: "error", text: message });
       return false;
     } finally {
@@ -863,6 +869,25 @@ export function createChatController() {
         return next;
       });
     }
+  }
+
+  // Dragging a topic onto a tag group in the tag view adds that group's tag to the topic's own
+  // (pages/chat/topicDrag.ts). Only tag groups take a drop: not the pinned or untagged group, nor a
+  // group whose tag the topic has already, nor any while the topic has its most tags, is saving, or
+  // is an agent's or a TODO item's.
+  function topicDropTags(topic: any, group: any): string[] | null {
+    const id = normalizeTopicID(topic?.id);
+    if (topicSidebarView() !== "tags" || group?.drop?.kind !== "tag") return null;
+    if (!id || isAgentLinkTopicID(id) || isCronTopicID(id) || topicTagSaves().has(id)) return null;
+    const current = topics().find((item) => normalizeTopicID(item?.id) === id);
+    return current ? tagsAfterDrop(current, group.drop) : null;
+  }
+  const topicCanDrop = (topic: any, group: any) => topicDropTags(topic, group) !== null;
+  /** Drops the topic on the group: saves the tags it then has, and lists them once saved. */
+  function dropTopicOnGroup(topic: any, group: any) {
+    const next = untracked(() => topicDropTags(topic, group));
+    if (!next) return Promise.resolve(false);
+    return saveTopicTags(topic.id, next, { confirmed: true });
   }
 
   const saveSelectedTopicTags = (tags: string[]) => saveTopicTags(untracked(workspaceTopicID), withPinned(tags, untracked(selectedTopicPinned)));
@@ -3304,6 +3329,7 @@ export function createChatController() {
     topicRegenerateDisabled,
     topicTagsAvailable,
     topicTagsSaving,
+    topicTagSaving,
     selectedTopicOrdinaryTags,
     selectedTopicPinned,
     knownTags,
@@ -3372,6 +3398,8 @@ export function createChatController() {
     closeTopicDeleteDialog,
     deleteSelectedTopic,
     saveSelectedTopicTags,
+    topicCanDrop,
+    dropTopicOnGroup,
     setSelectedTopicPinned,
     openContextInspector,
     closeRawDialog,

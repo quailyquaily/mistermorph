@@ -9,7 +9,8 @@
 //
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
-// measure them and move with them.
+// measure them and move with them. On desktops a topic in the tag view can be dragged onto a tag
+// group to add that tag (./topicDrag.ts), the groups it can go to outlined meanwhile.
 import { Image, Scroll, signal, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
@@ -24,6 +25,7 @@ import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { createPullSearch } from "../../components/shared/pullSearch";
+import { createTopicDrag } from "./topicDrag";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
 // a blue tint. The TODO toggle carries the running mark off its icon's top right corner.
@@ -96,6 +98,12 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
     return active ? active.key : null;
   };
   const selection = createSlidingSelection(activeKey);
+  const drag = createTopicDrag({
+    rows: () => c.topicRows(),
+    enabled: () => view() === "tags",
+    canDrop: (topic, group) => c.topicCanDrop(topic, group),
+    drop: (topic, group) => void c.dropTopicOnGroup(topic, group),
+  });
   // Rows are 40pt (44 on phones, a touch target), 2pt apart.
   const rowHeight = () => (c.mobileMode() ? "min-h-11" : "min-h-10");
   // On a phone the topics are a page of their own and take the pages' phone gutter (Contacts, TODO):
@@ -123,52 +131,70 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
     />
   );
 
-  const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => (
-    <TipButton
-      selected={c.topicIsActive(row().topic)}
-      onPress={() => c.selectTopic(row().topic?.id)}
-      onLayout={selection.track(row().key)}
-      accessibilityLabel={c.topicTitle(row().topic)}
-      testID={`chat-topic-${normalizeTopicID(row().topic?.id)}`}
-      tooltip={c.topicTimeLabel(row().topic) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
-      class={`mt-0.5 ${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 ${rowPadding()} transition-colors duration-[180ms] hover:bg-hover-soft`}
-    >
-      <If
-        when={view() === "agents"}
-        else={
+  // A topic's row. The view around it takes the drag (desktops) and reports the frame the sliding
+  // selection and the drop zones are placed from; while dragged it follows the pointer on a card of
+  // its own, and while a dropped tag saves it is dimmed.
+  const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => {
+    const key = row().key;
+    const placeSelection = selection.track(key);
+    const placeDrop = drag.track(key);
+    return (
+      <View
+        {...drag.handlers(row)}
+        onLayout={(event) => {
+          placeSelection(event);
+          placeDrop(event);
+        }}
+        class={`mt-0.5 rounded-(--radius) ${drag.lifted(key) ? "bg-card shadow-md" : ""} ${c.topicTagSaving(row().topic) ? "opacity-60" : ""}`}
+        style={drag.liftStyle(key)}
+        testID={`chat-topic-row-${normalizeTopicID(row().topic?.id)}`}
+      >
+        <TipButton
+          selected={c.topicIsActive(row().topic)}
+          onPress={() => c.selectTopic(row().topic?.id)}
+          accessibilityLabel={c.topicTitle(row().topic)}
+          testID={`chat-topic-${normalizeTopicID(row().topic?.id)}`}
+          tooltip={c.topicTimeLabel(row().topic) && !drag.lifted(key) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
+          class={`${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 ${rowPadding()} transition-colors duration-[180ms] hover:bg-hover-soft`}
+        >
           <If
-            when={c.isCronTopicID(row().topic?.id) && !row().topic?.icon}
+            when={view() === "agents"}
             else={
-              <Image
-                src={c.topicIcon(row().topic)}
-                accessibilityElementsHidden
-                style={{ width: 20, height: 20, tintColor: token("subtle") as string }}
-              />
+              <If
+                when={c.isCronTopicID(row().topic?.id) && !row().topic?.icon}
+                else={
+                  <Image
+                    src={c.topicIcon(row().topic)}
+                    accessibilityElementsHidden
+                    style={{ width: 20, height: 20, tintColor: token("subtle") as string }}
+                  />
+                }
+              >
+                <Icon name="PhAlarm" size={20} color="subtle" />
+              </If>
             }
           >
-            <Icon name="PhAlarm" size={20} color="subtle" />
+            <ContactAvatar
+              item={c.topicAgentContact(row().topic)}
+              imageURL={c.topicAgentAvatar(row().topic)}
+              name={c.topicTitle(row().topic)}
+              endpointRef={c.submitEndpointRef()}
+              class="size-6"
+            />
           </If>
-        }
-      >
-        <ContactAvatar
-          item={c.topicAgentContact(row().topic)}
-          imageURL={c.topicAgentAvatar(row().topic)}
-          name={c.topicTitle(row().topic)}
-          endpointRef={c.submitEndpointRef()}
-          class="size-6"
-        />
-      </If>
-      <View class="flex-1 gap-px">
-        <FadeText text={c.topicTitle(row().topic)} class="text-sm leading-5 tracking-[-0.025em] text-foreground" noTooltip />
-        <If when={c.isCronTopicID(row().topic?.id)}>
-          <FadeText text={c.cronTopicModel(row().topic)} class="font-mono text-xs text-muted-foreground" noTooltip />
-        </If>
+          <View class="flex-1 gap-px">
+            <FadeText text={c.topicTitle(row().topic)} class="text-sm leading-5 tracking-[-0.025em] text-foreground" noTooltip />
+            <If when={c.isCronTopicID(row().topic?.id)}>
+              <FadeText text={c.cronTopicModel(row().topic)} class="font-mono text-xs text-muted-foreground" noTooltip />
+            </If>
+          </View>
+          <If when={c.topicActivityState(row().topic)}>
+            <StatusDot status={c.topicActivityState(row().topic)} label={c.topicActivityLabel(row().topic)} />
+          </If>
+        </TipButton>
       </View>
-      <If when={c.topicActivityState(row().topic)}>
-        <StatusDot status={c.topicActivityState(row().topic)} label={c.topicActivityLabel(row().topic)} />
-      </If>
-    </TipButton>
-  );
+    );
+  };
 
   // A group's heading: a small mono label in caps, then a hairline that runs out to the list's
   // edge, fading (the Vue console's `.workspace-sidebar-divider`). A foldable group's is a toggle
@@ -195,7 +221,33 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
     </>
   );
 
+  // While a topic is dragged, the outline round a group it can be dropped on (dashed), filled while
+  // it is over it (the Vue console's .is-drop-target and .is-drop-over): from the heading down to
+  // the next group's, 3pt in at the top and the foot so neighbours' outlines stay apart.
+  const DROP_OUTLINE = {
+    none: "border-transparent",
+    target: "border-dashed border-blue/45",
+    over: "border-blue/45 bg-blue/10",
+  } as const;
+  const dropOutline = (row: () => Extract<TopicRow, { kind: "group" }>) => (
+    <View
+      accessibilityElementsHidden
+      class={`absolute left-0 right-0 top-[3px] rounded-(--radius) border ${DROP_OUTLINE[drag.zoneState(row().group.key)]}`}
+      style={{ height: Math.max(0, drag.zoneHeight(row().group.key) - 6), pointerEvents: "none" }}
+      testID={
+        drag.zoneState(row().group.key) === "none" ? `chat-topic-drop-zone-${row().group.key}` : `chat-topic-drop-${drag.zoneState(row().group.key)}-${row().group.key}`
+      }
+    />
+  );
+
   const groupRow = (row: () => Extract<TopicRow, { kind: "group" }>) => (
+    <View onLayout={drag.track(row().key)}>
+      {dropOutline(row)}
+      {groupHeading(row)}
+    </View>
+  );
+
+  const groupHeading = (row: () => Extract<TopicRow, { kind: "group" }>) => (
     <If
       when={row().collapsible}
       else={<View class="flex-row items-center gap-2.5 pb-1 pl-3.5 pr-3.5 pt-2.5">{groupLabel(row)}</View>}
@@ -284,8 +336,14 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
       <Scroll
         class={`flex-1 ${c.topicsLoading() ? "opacity-70" : ""}`}
         testID="chat-topic-list"
-        onScroll={edges.handlers.onScroll}
-        onLayout={edges.handlers.onLayout}
+        onScroll={(event) => {
+          edges.handlers.onScroll(event);
+          drag.onScroll(event);
+        }}
+        onLayout={(event) => {
+          edges.handlers.onLayout(event);
+          drag.onViewportLayout(event);
+        }}
         scrollEventThrottle={edges.handlers.scrollEventThrottle}
         style={edges.style()}
         contentClass="grow"
@@ -301,7 +359,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             views inside the content rather than its padding: the content is at least the viewport's
             height, and padding on top of that made a list that fits scroll by its padding. Phones
             keep room under the floating New button. */}
-        <View class={`grow ${c.mobileMode() ? "" : "px-4"}`} onLayout={edges.onContentLayout}>
+        <View class={`grow ${c.mobileMode() ? "" : "px-4"}`} onLayout={edges.onContentLayout} ref={drag.contentRef}>
           {/* On a phone the search, once pulled down: the list's first view, scrolling with it, at
               the head's foot as on a desktop while the list is at its top. */}
           <If when={c.mobileMode() && pull.shown()}>{search()}</If>
