@@ -36,3 +36,12 @@ Tests: manager independently passed gofmt check, go vet ./..., go test ./... wit
 Visual checks: coder reports before/after Chrome screenshots at desktop 1280 and phone 390 with pixel measurements. Topic screenshot scratch copies required a fix from unmerged FT76 for the existing master 'Cannot redefine property: ref' crash; this unrelated fix was NOT included. These screenshots are not evidence of an unmodified branch working in Chrome. No live Console, GPUI desktop, or Android device/emulator checked; tablet checked by headless layout only. Review should examine desktop header spacing and the pre-existing browser runtime limitation.
 
 Branch push initially required credential.useHttpPath=true; retry succeeded. No base push or shipping performed.
+
+## factory · review · 2026-11-11 08:51
+head: ed1cb6dc90444c47350e1d3a627afb3864bcf73b
+verdict: pass
+notes:
+- Claude Code reviewed all eight changed files against origin/master and the request/plan; no introduced P0/P1/P2/P3 defects found. Desktop TODO header padding, responsive marker-center geometry, overlay scrollbars, status behavior and hit targets checked.
+- Validation: gofmt gate, go vet ./..., go test ./... and nsh check passed; nsh test --web-host tests/noHost.js passed 531 tests, zero failures, including twelve alignment cases. Scripted tests used an isolated HOME. Worktree remained clean at the reviewed head.
+- No unpinned installs or manifest changes. Only pinned nsh TypeScript cache restored.
+- Visual limitation: headless layout only; no live Console, Chrome, GPUI or Android validation. Existing browser StatusDot ref crash is not introduced here; FT76 contains its separate fix. Builder screenshots used a patched scratch copy and do not validate this exact branch. Owner should check real-browser rendering and desktop TODO header spacing when that fix is available.
