@@ -1,8 +1,11 @@
 import { effect, untracked } from "nsh";
 
 import {
+  API_BASE,
+  authState,
   authValid,
   BASE_PATH,
+  localeState,
   translate,
   buildConsoleNotificationURL,
   createConsoleStreamTicket,
@@ -16,7 +19,17 @@ import {
   showDesktopNotification,
 } from "./desktop-runtime";
 import { claimConsoleNotification, normalizeConsoleNotification } from "./system-notification-utils";
-import { localStore, notificationPermission, requestNotificationPermission, showNotification } from "../platform";
+import {
+  configureBackgroundTaskNotifications,
+  hasFeature,
+  localStore,
+  notificationPermission,
+  onNotificationOpened,
+  requestNotificationPermission,
+  showNotification,
+  takeOpenedNotification,
+} from "../platform";
+import { installBackgroundTaskNotifications } from "./background-task-notifications.js";
 
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "./endpoints";
 import { handleTopicTaskNotification, trackNotificationForeground } from "./topic-task-notifications";
@@ -30,6 +43,11 @@ let reconnectTimer = 0;
 let connectionGeneration = 0;
 
 export async function requestSystemNotificationPermission() {
+  // The phone app shows task completions only (background-task-notifications.js), not a TODO
+  // item's opt-in notifications: a TODO item cannot notify there.
+  if (hasFeature("backgroundTaskNotifications")) {
+    return "unsupported";
+  }
   if (isDesktopRuntime() && canUseDesktopNotifications()) {
     try {
       return (await requestDesktopNotificationPermission()) ? "granted" : "denied";
@@ -73,6 +91,21 @@ export function installSystemNotifications(router) {
   }
   installed = true;
   trackNotificationForeground();
+  if (hasFeature("backgroundTaskNotifications")) {
+    // The phone app: its native part tells of finished tasks while the app is away.
+    installBackgroundTaskNotifications({
+      configure: configureBackgroundTaskNotifications,
+      take: takeOpenedNotification,
+      onOpened: onNotificationOpened,
+      api: () => API_BASE,
+      token: () => authState.token,
+      signedIn: () => authValid.value,
+      language: () => localeState.lang,
+      translate,
+      topicExists: async (topicID) => Boolean(await localTopic(topicID)),
+      navigate: (path) => router.push(path),
+    });
+  }
   effect(() => {
     const valid = authValid.value;
     untracked(() => {
@@ -138,10 +171,13 @@ async function connectNotificationSocket(router) {
   };
 }
 
-// The name of a topic of the local Console, whose tasks these notifications are about.
+// A topic of the local Console, whose tasks these notifications are about.
+function localTopic(topicID) {
+  return runtimeApiFetchForEndpoint(CONSOLE_LOCAL_ENDPOINT_REF, `/topics/${encodeURIComponent(topicID)}`);
+}
+
 async function localTopicTitle(topicID) {
-  const topic = await runtimeApiFetchForEndpoint(CONSOLE_LOCAL_ENDPOINT_REF, `/topics/${encodeURIComponent(topicID)}`);
-  return topic?.title;
+  return (await localTopic(topicID))?.title;
 }
 
 function disconnectNotificationSocket() {

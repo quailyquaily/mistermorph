@@ -197,6 +197,10 @@ Console settings:
 - `POST /settings/auto-update/check`
 - `GET /settings/tools/schemas`: built-in tools' descriptions and parameter schemas, with channel tools per channel, for the Tools page.
 - `POST /system/restart` (`{"force": false}`): restarts this Console process; see [Restart](#restart).
+
+Notifications:
+- `GET /notifications/ws?ticket=…`: the live notification socket the web and desktop Console notify from (TODO items' opt-in notifications and topic task completions).
+- `GET /notifications/events`: the topic task completions of the last 24 hours (at most 256), for a client that was not connected when they happened: the Android app's background watcher. Query: `epoch` and `after` (the cursor of an earlier answer of this server start), else `since_ms` (how long the client has been away, by its own clock); `wait` (seconds, at most 50) holds an answer with no completion until the next one. Answers `{"epoch","cursor","active","events":[{"id","type","topic_id","status"}]}`, where `active` counts the chat tasks still queued or running. The same completions as the socket's: never a TODO item's run, Awareness, Agent Link or a steer; identifiers and status only. Needs a Console session.
 - `/auth/codex/*`
 - `/auth/xai/*`
 - `/auth/pro/*`

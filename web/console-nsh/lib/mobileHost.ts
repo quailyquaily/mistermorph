@@ -8,13 +8,20 @@
 //
 // What nsh 0.4.0 offers on Android shapes what works: saved values (`Storage`), the app's state
 // (`lifecycle`), the photo picker (`Picker.pickImages`; there is no picker for other files yet) and
-// `fetch` with `FormData` for uploads. There are no system notifications and no way to save a file,
-// so those report "unsupported" and the console hides or explains them.
+// `fetch` with `FormData` for uploads. There is no way to save a file, so that reports
+// "unsupported" and the console explains it.
 //
 // nsh records no audio, so voice input comes from the app's own native part (android/src, built
 // into the APK by scripts/build-android.sh): it answers `morph.voice.*` over nsh's host channel,
 // records with the system's microphone (asking for it at the first recording) and sends the
 // recording to the agent's /voice/transcribe itself. An APK without it has no voice input.
+//
+// nsh has no system notifications either, and the app's page (with the console's notification
+// socket) is suspended in the background, so the native part also tells of finished tasks
+// (`morph.notify.*`, android/src/.../TaskNotifier.java): it holds the notification permission, and
+// while the app is away a system job reads the server's recent completions and shows them. The
+// app configures it (`morph.notify.configure`: the server, the session, the texts) and takes the
+// topic of a pressed notification (`morph.notify.take`). An APK without it has no notifications.
 import { effect, host, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
 
 /** The saved address of the console server, `https://host[:port][/base]`. */
@@ -178,6 +185,26 @@ function voiceRelease(id: string) {
   return voiceCall("morph.voice.release", { id }).then(() => null);
 }
 
+/* ---------- task notifications (the native part) ---------- */
+
+// Whether the native part answers `morph.notify.*`: asked once at boot.
+let nativeNotify = false;
+
+async function probeNotify(): Promise<boolean> {
+  try {
+    await host.call("morph.notify.state", {});
+    return true;
+  } catch (error) {
+    console.warn("notifications: none in this app:", (error as Error)?.message || error);
+    return false;
+  }
+}
+
+function notifyCall(name: string, data: unknown = {}, fallback: unknown = null) {
+  if (!nativeNotify) return Promise.resolve(fallback);
+  return host.call(name, data, { timeout: 0 });
+}
+
 async function bootData() {
   const keys = await Storage.keys().catch(() => [] as string[]);
   const values: Record<string, string> = {};
@@ -189,6 +216,11 @@ async function bootData() {
   location = kv[LOCATION_KEY] || "/";
   const server = parseServer(kv[SERVER_KEY] || "");
   nativeVoice = await probeVoice();
+  nativeNotify = await probeNotify();
+  if (nativeNotify) {
+    // A pressed notification brought the app back: the console takes its topic.
+    host.on("morph.notify.opened", (data: unknown) => emit("morph.notify.opened", data));
+  }
   if (nativeVoice) {
     // The native part ended a recording by itself: the app left the foreground, or the recorder failed.
     host.on("morph.voice.ended", (data: unknown) => {
@@ -213,7 +245,11 @@ async function bootData() {
     session: { ...session },
     languages: [locale()],
     desktopVersion: "",
-    features: nativeVoice ? ["pickFile", "voiceRecord"] : ["pickFile"],
+    features: [
+      "pickFile",
+      ...(nativeVoice ? ["voiceRecord"] : []),
+      ...(nativeNotify ? ["backgroundTaskNotifications"] : []),
+    ],
     secureContext: server ? server.origin.startsWith("https:") : null,
   };
 }
@@ -305,10 +341,17 @@ export async function call(name: string, data?: unknown): Promise<unknown> {
     case "morph.desktop.ready":
       return null;
     case "morph.notify.state":
+      return notifyCall("morph.notify.state", {}, "unsupported");
     case "morph.notify.request":
-      return "unsupported";
+      return notifyCall("morph.notify.request", {}, "unsupported");
     case "morph.notify.show":
+      // Task completions are the native part's to show (it watches while the app is away);
+      // nothing else notifies in the phone app yet.
       return null;
+    case "morph.notify.configure":
+      return notifyCall("morph.notify.configure", args);
+    case "morph.notify.take":
+      return notifyCall("morph.notify.take");
     case "morph.file.pick":
       return pick(args);
     case "morph.file.upload":

@@ -183,8 +183,17 @@ part's tests run on the JDK alone: `web/console-nsh/scripts/android-host.sh test
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` secrets: Android only
 updates an app signed with the same key, so releases are never signed with a runner's debug key.
 
-Not available in the Android app yet: attaching files other than images, system notifications,
-changing avatars and saving files (log exports, downloads).
+Task notifications work as in the web console, with the same option: Settings → System → Topic task
+notifications. When a task in one of the person's topics finishes or fails while the app is not in the
+foreground, the app shows a notification with the topic's name and whether the task finished or
+failed, nothing of its text; TODO items' runs never notify. Pressing it opens the topic, or the chat
+when the topic is gone. The app asks for Android's notification permission only from that row's
+button (Android 13 and newer ask; older versions allow notifications unless they were turned off in
+the system settings). See [the feature notes](feat/feat_20261110_android_task_notifications.md) for how
+it works and its limits.
+
+Not available in the Android app yet: attaching files other than images, other system notifications
+(TODO items' opt-in notifications), changing avatars and saving files (log exports, downloads).
 
 ## Known Gaps
 

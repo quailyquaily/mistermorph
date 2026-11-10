@@ -13,8 +13,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `App.tsx` | Boot (host data, session, language), router start, the frame |
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
-| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker, voice input through the native part |
-| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) |
+| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker, voice input and task notifications through the native part |
+| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) and the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) |
 | `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
@@ -179,5 +179,7 @@ Headless tests prove behaviour, not the look.
   which then refuses `http://`: `scripts/build-android.sh` runs `nsh package` with an SDK whose
   `aapt2` adds it, for console servers on the local network.
 - 0.4.0 has the photo picker but no `Picker.pickFiles` and no `Notifications`: the Android app
-  attaches images only and shows no system notifications. Avatars (crop and re-encode) and saving
-  files are not available there yet; they say so.
+  attaches images only. Avatars (crop and re-encode) and saving files are not available there yet;
+  they say so. Task notifications come from the app's own Java (a JobScheduler job reading
+  `/api/notifications/events` while the app is away: the page, and its socket, are suspended then);
+  see `docs/feat/feat_20261110_android_task_notifications.md`.

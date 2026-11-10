@@ -2,6 +2,7 @@ import { endpointRoutePath } from "./endpoint-routes.js";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "./endpoints.js";
 import { isScheduledCronNotification } from "./system-notification-utils.js";
 import {
+  hasFeature,
   hasFocus,
   isVisible,
   localStore,
@@ -62,7 +63,10 @@ export async function handleTopicTaskNotification(raw, { scope, translate, navig
     typeof raw.topic_id !== "string" ||
     !raw.topic_id.trim() ||
     !["done", "failed"].includes(raw.status) ||
-    isScheduledCronNotification(raw)
+    isScheduledCronNotification(raw) ||
+    // The phone app's native part tells of them, also once the page is suspended: showing them
+    // here as well would tell some twice (lib/core/background-task-notifications.js).
+    hasFeature("backgroundTaskNotifications")
   ) {
     return false;
   }
