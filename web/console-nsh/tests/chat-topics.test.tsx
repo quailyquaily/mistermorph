@@ -87,6 +87,50 @@ test("activity marks follow the runtime, and the TODO toggle counts running runs
   await app.waitFor("Trip plans");
 });
 
+test("the TODO toggle's beam lasts as long as the runs, outlives a failed poll, and the toggle works meanwhile", async () => {
+  let cronRunning = 2;
+  let pollFails = false;
+  const { app } = await openConsole({
+    location: "/e/default/chat",
+    clock: true,
+    api: {
+      "GET /proxy:/topics": { body: { items: [...TOPICS, topic("_cron_job1", "Daily digest")] } },
+      "GET /proxy:/tasks": history,
+      "GET /proxy:/topics/activity": () =>
+        pollFails
+          ? { status: 503, body: { error: "runtime is restarting" } }
+          : { body: { topics: cronRunning ? [{ id: "_cron_job1", status: "running", running: 1, cron_running: cronRunning }] : [] } },
+      "GET /proxy:/todo/tasks": { body: { tasks: [{ id: "job1", llm_profile: "" }] } },
+    },
+  });
+  await app.waitFor("id:chat-cron-running");
+  expect(app.enabled("id:chat-topics-view-cron")).toBe(true);
+  // Running is a status, not a busy toggle: it opens the TODO list and back, one press each.
+  await app.press("id:chat-topics-view-cron");
+  await app.waitFor("Daily digest");
+  expect(app.shows("Trip plans")).toBe(false);
+  expect(app.count("id:chat-cron-running")).toBe(1);
+  await app.press("id:chat-topics-view-cron");
+  await app.waitFor("Trip plans");
+  // One of two ends: still running.
+  cronRunning = 1;
+  await app.clock!.runFor(5000);
+  await app.waitFor("label:TODO runs — 1 running");
+  expect(app.count("id:chat-cron-running")).toBe(1);
+  // A failed poll is not the end of the runs.
+  pollFails = true;
+  await app.clock!.runFor(5000);
+  expect(app.count("id:chat-cron-running")).toBe(1);
+  // The last one ends: the beam goes and the toggle is plain again.
+  pollFails = false;
+  cronRunning = 0;
+  await app.clock!.runFor(5000);
+  await app.waitFor("id:chat-cron-running", { state: "gone" });
+  await app.waitFor("label:TODO runs");
+  await app.press("id:chat-topics-view-cron");
+  await app.waitFor("Daily digest");
+});
+
 test("the TODO view says so when no item has run", async () => {
   const { app } = await openConsole({
     location: "/e/default/chat",

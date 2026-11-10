@@ -12,7 +12,7 @@
 // measure them and move with them.
 import { Image, Scroll, signal, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
+import { BusyBeam, Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
@@ -26,8 +26,14 @@ import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { createPullSearch } from "../../components/shared/pullSearch";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
-// a blue tint. The TODO toggle carries the running mark off its icon's top right corner.
-function ViewToggle(props: {
+// a blue tint. While TODO runs are running, the TODO toggle's own square carries the border beam
+// (design/ui-refresh.html §5, a plain button's: a faint hairline and the blue beam riding it), as
+// the composer does while its task runs. The 12pt running ring that sat off the icon's corner was
+// nearly the icon's size and stood out of the 38pt box. The beam lies on the box's outline,
+// so the toggle keeps its size and icon, and it stays enabled: running is a status, not a busy
+// press (a press only switches the list, nothing is sent). The count is in its name and tooltip.
+// Exported for tests/fixtures/cron-toggle-app.tsx.
+export function ViewToggle(props: {
   icon: "PhRobot" | "PhAlarm" | "PhTag";
   label: string;
   title: string;
@@ -46,14 +52,10 @@ function ViewToggle(props: {
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
-      class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-blue/12"
+      class="relative size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-blue/12"
     >
-      <View>
-        <Icon name={props.icon} size={14} color={props.active ? "blue" : "subtle"} />
-        <If when={props.running}>
-          <StatusDot status="running" label={props.label} class="absolute -right-2 -top-1" testID="chat-cron-running" />
-        </If>
-      </View>
+      <Icon name={props.icon} size={14} color={props.active ? "blue" : "subtle"} />
+      <BusyBeam busy={!!props.running} variant="plain" testID="chat-cron-running" />
     </TipButton>
   );
 }
