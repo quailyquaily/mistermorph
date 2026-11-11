@@ -7,6 +7,7 @@ import { Text, View } from "nsh";
 import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
+import { ChatLoadError } from "../../components/chat/ChatLoadError";
 import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
@@ -149,33 +150,63 @@ function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string
   );
 }
 
+function History(props: { c: ChatController; topInset: number }) {
+  const c = props.c;
+  return (
+    <ChatHistoryList
+      items={c.chatHistoryItems()}
+      loading={c.historySwitching()}
+      loadingText={t("chat_history_loading")}
+      emptyText={t("chat_empty")}
+      hasOlder={Boolean(c.historyNextCursor())}
+      loadingOlder={c.historyLoadingOlder()}
+      olderLabel={t("chat_history_load_older")}
+      onLoadOlder={() => void c.loadOlderHistory()}
+      ctx={c.rowContext}
+      onListRef={(list) => c.setHistoryList(list)}
+      onScrollFromEnd={(distance, viewport) => c.setHistoryScroll(distance, viewport)}
+      // The same room at the top whether the panel is open or not, so opening it never moves the
+      // conversation down or up.
+      topInset={props.topInset}
+    />
+  );
+}
+
+/** The conversation (or the topic list) failed to load: the panel in its place, or the strip over the composer. */
+function LoadError(props: { c: ChatController; compact?: boolean; testID: string }) {
+  const c = props.c;
+  return (
+    <ChatLoadError
+      compact={props.compact}
+      title={c.chatLoadErrorTitle()}
+      message={c.chatLoadErrorMessage()}
+      refreshLabel={t("action_refresh")}
+      busy={c.chatLoadBusy()}
+      onRefresh={() => void c.retryChatLoad()}
+      testID={props.testID}
+    />
+  );
+}
+
 function ChatMain(props: { c: ChatController }) {
   const c = props.c;
+  // A failed load with nothing to show takes the place of the landing (no topic) and the history.
+  const placeholder = () => c.showChatPlaceholder() && !c.chatLoadErrorFull();
   const dockVisible = () =>
-    c.consoleTopicsEnabled() && !c.showChatPlaceholder() && c.workspaceSidebarAvailable() && !c.mobileMode() && c.showChatPane();
+    c.consoleTopicsEnabled() && !placeholder() && c.workspaceSidebarAvailable() && !c.mobileMode() && c.showChatPane();
   return (
     <View class="flex-1" testID="chat-main">
       <If
-        when={c.showChatPlaceholder()}
+        when={placeholder()}
         else={
           <View class="flex-1">
-            <ChatHistoryList
-              items={c.chatHistoryItems()}
-              loading={c.historySwitching()}
-              loadingText={t("chat_history_loading")}
-              emptyText={t("chat_empty")}
-              hasOlder={Boolean(c.historyNextCursor())}
-              loadingOlder={c.historyLoadingOlder()}
-              olderLabel={t("chat_history_load_older")}
-              onLoadOlder={() => void c.loadOlderHistory()}
-              ctx={c.rowContext}
-              onListRef={(list) => c.setHistoryList(list)}
-              onScrollFromEnd={(distance, viewport) => c.setHistoryScroll(distance, viewport)}
-              // The same room at the top whether the panel is open or not, so opening it never
-              // moves the conversation down or up.
-              topInset={dockVisible() ? 64 : 20}
-            />
+            <If when={c.chatLoadErrorFull()} else={<History c={c} topInset={dockVisible() ? 64 : 20} />}>
+              <LoadError c={c} testID="chat-load-error" />
+            </If>
             <View class="w-full max-w-[832px] self-center" style={{ paddingLeft: chatGutter(), paddingRight: chatGutter() }}>
+              <If when={c.chatLoadErrorKind() !== "" && !c.chatLoadErrorFull()}>
+                <LoadError c={c} compact testID="chat-load-error-strip" />
+              </If>
               <If
                 when={c.selectedTopicIsAgent()}
                 else={

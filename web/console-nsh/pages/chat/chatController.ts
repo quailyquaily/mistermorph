@@ -425,6 +425,14 @@ export function createChatController() {
   const topicsLoading = signal(false);
   const topicsLoadingOlder = signal(false);
   const topicsNextCursor = signal("");
+  // Why the conversation or the topic list could not be loaded, shown in the chat view with a
+  // Refresh (ChatLoadError) rather than in the notice stack. A history failure belongs to the
+  // conversation it was for (its history scope); a topic list failure to the agent.
+  const historyLoadError = signal<{ scope: string; message: string } | null>(null);
+  const topicsLoadError = signal("");
+  // The conversation a Refresh is reloading (its history scope), while it does.
+  const chatLoadRetryScope = signal<string | null>(null);
+  let chatLoadRetrySeq = 0;
   // The topic the address names is selected at once, so returning to Chat shows it straight away;
   // loadTopics drops it if the agent has no such topic.
   const selectedTopicID = signal(untracked(routeTopicID));
@@ -2279,6 +2287,7 @@ export function createChatController() {
       topicDeleteTarget.set(null);
       topicDeleting.set(false);
       topicDeleteError.set("");
+      topicsLoadError.set("");
       resetWorkspaceState();
     });
     syncMobileTopicView({ preferTopics: true });
@@ -2315,6 +2324,7 @@ export function createChatController() {
       batch(() => {
         topics.set(items);
         topicsNextCursor.set(String(data?.next_cursor || "").trim());
+        topicsLoadError.set("");
       });
       if (preferredTopicID && items.some((topic) => normalizeTopicID(topic?.id) === preferredTopicID)) {
         batch(() => {
@@ -2359,7 +2369,9 @@ export function createChatController() {
       return true;
     } catch (error) {
       if (draftKey !== composerFileDraftKey(untracked(composerDraftScope))) return false;
-      err.set(errorMessage(error, t("msg_load_failed")));
+      // The topics already listed stay; the chat view says the list failed and offers a Refresh.
+      console.warn("chat: topics", errorMessage(error, ""));
+      topicsLoadError.set(errorMessage(error, t("msg_load_failed")));
       if (!preserveSelection) {
         batch(() => {
           selectedTopicID.set("");
@@ -2453,6 +2465,7 @@ export function createChatController() {
         replaceHistoryItems([]);
         historyItemsScope.set(scope);
         historyLoading.set(false);
+        historyLoadError.set(null);
       });
       return true;
     }
@@ -2460,7 +2473,10 @@ export function createChatController() {
     try {
       if (untracked(consoleTopicsEnabled) && (untracked(creatingTopic) || !normalizeTopicID(untracked(selectedTopicID)))) {
         applyComposerTopicLLMProfile("");
-        replaceHistoryItems([]);
+        batch(() => {
+          replaceHistoryItems([]);
+          historyLoadError.set(null);
+        });
         return true;
       }
       const path = historyPath();
@@ -2474,15 +2490,23 @@ export function createChatController() {
         current,
         keepLiveTaskState(current, taskListHistoryItems(tasks, t, { agentName: untracked(activeAgentName), endpointRef, locale: currentLocale() })),
       );
-      replaceHistoryItems(next.length > 0 ? next : [emptyHistoryItem()]);
+      batch(() => {
+        replaceHistoryItems(next.length > 0 ? next : [emptyHistoryItem()]);
+        historyLoadError.set(null);
+      });
       scrollHistoryToBottom({ force: true });
       void loadApprovalDetails(endpointRef, version);
       followRunningTasks(endpointRef, false);
       return true;
     } catch (error) {
       if (viewActive && version === historyLoadVersion) {
-        if (!options.preserveCurrent) replaceHistoryItems([]);
-        err.set(errorMessage(error, t("msg_load_failed")));
+        // Another conversation's messages go; this one's, already on screen, stay (a reload that
+        // failed), and the chat view says it failed with a Refresh (ChatLoadError).
+        console.warn("chat: history", errorMessage(error, ""));
+        batch(() => {
+          if (!options.preserveCurrent && untracked(historyItemsScope) !== scope) replaceHistoryItems([]);
+          historyLoadError.set({ scope, message: errorMessage(error, t("msg_load_failed")) });
+        });
       }
       return false;
     } finally {
@@ -2559,7 +2583,7 @@ export function createChatController() {
     }
   }
 
-  async function refreshChatData(options: { preferredTopicID?: string; preserveSelection?: boolean } = {}) {
+  async function refreshChatData(options: { preferredTopicID?: string; preserveSelection?: boolean; preserveDraft?: boolean } = {}) {
     let topicsLoaded = true;
     const preferred = normalizeTopicID(options.preferredTopicID);
     if (untracked(consoleTopicsEnabled) && preferred && normalizeTopicID(untracked(selectedTopicID)) === preferred) {
@@ -2575,6 +2599,53 @@ export function createChatController() {
     else resetTopicState();
     // The Vue page cleared a failed topic load's error here at once; it stays until the next load.
     await loadHistory({ keepError: !topicsLoaded });
+  }
+
+  /* ---------- a failed load, and its Refresh ---------- */
+
+  // What could not be loaded for the conversation on screen: its history, else the topic list.
+  const chatLoadErrorKind = (): "" | "history" | "topics" => {
+    const history = historyLoadError();
+    if (history && history.scope === currentHistoryScope()) return "history";
+    return consoleTopicsEnabled() && topicsLoadError() ? "topics" : "";
+  };
+  const chatLoadErrorMessage = () => {
+    const kind = chatLoadErrorKind();
+    if (kind === "history") return historyLoadError()?.message || "";
+    return kind === "topics" ? topicsLoadError() : "";
+  };
+  const chatLoadErrorTitle = () => (chatLoadErrorKind() === "topics" ? t("chat_topics_load_failed") : t("chat_history_load_failed"));
+  // Nothing of the conversation to show: the error panel takes its place. With messages on screen
+  // (a reload failed, or a message sent since), they stay and a strip above the composer says so.
+  const chatLoadErrorFull = () => chatLoadErrorKind() !== "" && chatHistoryItems().length === 0;
+  // The phone's topic list (or a desktop's, while the conversation shows another failure) says
+  // the list failed itself; otherwise the conversation's panel or strip does.
+  const topicsLoadErrorInSidebar = () => topicsLoadError() !== "" && (mobileTopicSplitEnabled() || chatLoadErrorKind() !== "topics");
+  const chatLoadRetrying = () => chatLoadRetryScope() === currentHistoryScope();
+  // A load is under way (a Refresh, a topic switch, the first load): the Refresh waits for it.
+  const chatLoadBusy = () => chatLoadRetrying() || topicsLoading() || historyLoading();
+
+  // Refresh: the conversation on screen again, and the topic list too when that failed. One at a
+  // time; what a load answers for a conversation no longer on screen is dropped (loadHistory's
+  // version, loadTopics' draft scope).
+  async function retryChatLoad() {
+    if (!viewActive || untracked(chatLoadBusy)) return;
+    const topicsFailed = untracked(consoleTopicsEnabled) && untracked(topicsLoadError) !== "";
+    if (!topicsFailed && untracked(chatLoadErrorKind) === "") return;
+    const seq = ++chatLoadRetrySeq;
+    chatLoadRetryScope.set(historyScope());
+    try {
+      if (topicsFailed) {
+        // As the first load: the selected topic stays (and opens), a new chat being written stays,
+        // and with neither a phone goes to the topic list once it comes.
+        const topicID = normalizeTopicID(untracked(selectedTopicID));
+        await refreshChatData({ preferredTopicID: topicID, preserveSelection: Boolean(topicID), preserveDraft: true });
+      } else {
+        await loadHistory();
+      }
+    } finally {
+      if (seq === chatLoadRetrySeq) chatLoadRetryScope.set(null);
+    }
   }
 
   async function syncTopicFromRoute(options: { force?: boolean } = {}) {
@@ -3329,6 +3400,14 @@ export function createChatController() {
     showTopicSidebar,
     showChatPane,
     showChatPlaceholder,
+    chatLoadErrorKind,
+    chatLoadErrorMessage,
+    chatLoadErrorTitle,
+    chatLoadErrorFull,
+    chatLoadBusy,
+    topicsLoadError,
+    topicsLoadErrorInSidebar,
+    retryChatLoad,
     chatPlaceholderHint,
     deskTitle,
     hasSidebarTopics,

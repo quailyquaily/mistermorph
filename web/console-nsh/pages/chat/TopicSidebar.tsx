@@ -22,6 +22,7 @@ import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdge
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
 import { sagHalf, SagRule } from "../../components/motion/Sag";
 import { t } from "../../components/chat/i18n";
+import { ChatLoadError } from "../../components/chat/ChatLoadError";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -483,6 +484,18 @@ export function TopicSidebar(props: {
             <View testID="chat-topics-loading">
               <Spinner class="items-center py-3" />
             </View>
+          </If>
+          {/* The list failed to load (or to refresh: the topics already listed stay below). */}
+          <If when={c.topicsLoadErrorInSidebar()}>
+            <ChatLoadError
+              compact
+              title={t("chat_topics_load_failed")}
+              message={c.topicsLoadError()}
+              refreshLabel={t("action_refresh")}
+              busy={c.chatLoadBusy()}
+              onRefresh={() => void c.retryChatLoad()}
+              testID="chat-topics-load-error"
+            />
           </If>
           {/* The list's gutter (16pt; none on a phone, where rows run edge to edge as Contacts' do) as
               views inside the content rather than its padding: the content is at least the viewport's
