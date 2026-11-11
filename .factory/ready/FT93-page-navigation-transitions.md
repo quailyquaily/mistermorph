@@ -48,3 +48,17 @@ Tests: configured gofmt/vet/go test command passed both coder and independent ma
 Visual checks reported by coder: mobile web Chrome 390x844 and desktop web Chrome 1280x800, with sampled animation frames and screenshots. Android device/emulator and desktop GPUI window NOT visually checked (unavailable); Android headless tests only. One headless Android voice test tap on a final transition frame needed waiting; Chrome taps at 0–400ms worked. Review should scrutinize transition-time input handling. FT91 integration not visually checked.
 
 Manager verified clean worktree, item-only commits and no forbidden-path changes. Branch push succeeded after retry with command-local credential.useHttpPath=true. Moved new/ → review/, round 1.
+
+
+## factory · review · 2026-11-11 20:50
+head: 4d6266895e96ec5db353c4d7e1bd33eb3db6b925
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/settings/SettingsPage.tsx:135-144: Android Back resets the route to /settings before the outgoing section is held for exit, so System is replaced by Persona during its slide. Reproduced with headless Android: open Settings, open System, press Back; outgoing panel shows settings-persona rather than settings-open-logs. Hold the outgoing section content until its exit completes.
+- [P3] web/console-nsh/components/frame/PageStack.tsx:120-125: retained outgoing pages keep active system-back handlers. In a slowed-transition headless Android probe, open Skills weather, switch to Todo, press Back during exit: the outgoing Skills handler consumes Back and the route remains Todo; after exit Back correctly returns to Skills weather. Disable outgoing system-back registrations, not just pointer input.
+
+Validation: Claude Code reviewed origin/master...HEAD. Configured gofmt/vet/go test passed (GATE_EXIT=0); nsh check passed; nsh test --web-host tests/noHost.js passed 653/653. Tests used absolute throwaway HOME. No installs. Review worktree remained clean. The initial coder tool response lost its report, so Claude Code repeated the read-only review and reused completed test logs.
+
+Residual risks: rapid successive slides may expose a blank strip when the obsolete outgoing layer is removed; not reproduced, so not recorded as a confirmed finding. Real Android device/emulator, desktop GPUI and FT91 dialog integration were not visually checked in review. Async outgoing callbacks and duplicate browser-history entries need further coverage. Owner should inspect the two confirmed non-blocking defects and the scope choices: wide layouts retain rise motion and nested opens within 500ms skip their slide.
+
+No P0/P1 findings; moved review/ → ready/ under the configured factory review gate. This is not a claim of no defects. No linked GitHub issues or PRs.
