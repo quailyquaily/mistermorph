@@ -17,3 +17,6 @@ Execution constraint:
 - Current factory.toml lists `.github/workflows/` in `never`. This task is registered in new at the owner's request, but the factory must not bypass that restriction or edit its own configuration. Before implementation, the owner must adjust the restriction or arrange a separately authorized workflow change outside the factory build process.
 
 Implementation: Claude Code only; do not use Codex.
+
+## factory · 2026-11-11 20:33
+Cannot build under the current factory configuration: upgrading CI actions requires changes under `.github/workflows/`, which is explicitly forbidden by `never`. Moved to backlog pending an owner configuration change or separately authorized work outside this factory. No workflow or configuration changes made.
