@@ -56,3 +56,13 @@ notes:
 - Review did not independently inspect screenshots or native desktop/real Android appearance. Canvas active-colour repaint and runtime OS reduced-motion preference changes were not independently verified; reduced motion is sampled at mount, consistent with the existing component.
 - IMPORTANT: the build-stage test isolation incident remains unresolved. The build reported test data written into real user state (a test topic and five task records, a test log, agent.db/usage.db updates). Review did not inspect or clean private user data; owner attention remains necessary.
 - Worktree remained clean at the reviewed head. No linked issues or PRs were identified. review/ → ready/; not shipped.
+
+
+## factory · 2026-11-11 11:55
+Shipped with owner authorization; ready/ → done/. Merge commit: 6621328382c49466484c486c03c2d611a39ea8f7. Tag: v0.3.95. Published master: fff6c8e23373119ee1ea60f05bee0a711fb334a0 (starting base d122775a1398b4294ea364f229a852ce59f6c93b). Remote master and annotated tag target verified. No linked issues or PRs to close.
+
+Configured Go formatting/vet/tests and full Console check/tests passed after each approved merge and on the final tree. Final: 162 Go packages passed (19 without tests), Console 576/576, core Node 259/259, Android manifest 6/6; web build passed. All scripted checks used an absolute throwaway HOME and isolated runtime/cache directories with an environment whitelist. No installs, deployment, or intentional user-settings changes.
+
+FT84 integration resolved TopicSidebar clock-versus-layout-probe conflict while preserving both approved changes. A separate test-only fix fff6c8e2 supplies FT71 runID/stopping fields to FT84 fixtures after an initial typecheck failure; all gates then passed. Initial offline module restoration also failed for unused uncached modules; dependency-targeted restoration succeeded.
+
+Validation limits: no live browser/native desktop/Android or real keyboard checks, no live model-driven naming sessions, and no repeated race suite in this ship. Existing review caveats remain, including FT71 OpenAPI omission/one-time behavior and FT76's earlier unresolved real-state pollution. Coder reported contemporaneous real-HOME Go cache/telemetry writes of unknown attribution; ship checks used sandbox paths. No private user data cleanup attempted.

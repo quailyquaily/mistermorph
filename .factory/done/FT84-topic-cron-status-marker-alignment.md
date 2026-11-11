@@ -45,3 +45,13 @@ notes:
 - Validation: gofmt gate, go vet ./..., go test ./... and nsh check passed; nsh test --web-host tests/noHost.js passed 531 tests, zero failures, including twelve alignment cases. Scripted tests used an isolated HOME. Worktree remained clean at the reviewed head.
 - No unpinned installs or manifest changes. Only pinned nsh TypeScript cache restored.
 - Visual limitation: headless layout only; no live Console, Chrome, GPUI or Android validation. Existing browser StatusDot ref crash is not introduced here; FT76 contains its separate fix. Builder screenshots used a patched scratch copy and do not validate this exact branch. Owner should check real-browser rendering and desktop TODO header spacing when that fix is available.
+
+
+## factory · 2026-11-11 11:55
+Shipped with owner authorization; ready/ → done/. Merge commit: 4d435d85d62149652dacbb134de8e68dc4d9590f. Tag: v0.3.95. Published master: fff6c8e23373119ee1ea60f05bee0a711fb334a0 (starting base d122775a1398b4294ea364f229a852ce59f6c93b). Remote master and annotated tag target verified. No linked issues or PRs to close.
+
+Configured Go formatting/vet/tests and full Console check/tests passed after each approved merge and on the final tree. Final: 162 Go packages passed (19 without tests), Console 576/576, core Node 259/259, Android manifest 6/6; web build passed. All scripted checks used an absolute throwaway HOME and isolated runtime/cache directories with an environment whitelist. No installs, deployment, or intentional user-settings changes.
+
+FT84 integration resolved TopicSidebar clock-versus-layout-probe conflict while preserving both approved changes. A separate test-only fix fff6c8e2 supplies FT71 runID/stopping fields to FT84 fixtures after an initial typecheck failure; all gates then passed. Initial offline module restoration also failed for unused uncached modules; dependency-targeted restoration succeeded.
+
+Validation limits: no live browser/native desktop/Android or real keyboard checks, no live model-driven naming sessions, and no repeated race suite in this ship. Existing review caveats remain, including FT71 OpenAPI omission/one-time behavior and FT76's earlier unresolved real-state pollution. Coder reported contemporaneous real-HOME Go cache/telemetry writes of unknown attribution; ship checks used sandbox paths. No private user data cleanup attempted.

@@ -47,3 +47,13 @@ notes:
 - Not checked in this review: live model-driven spawn/coder sessions, visual browser/native desktop/Android UI, and a complete runtime-generation rebuild following a settings save. Engine tests cover both consumers and approval-resume identity stability.
 - Final tree passes; the first two intermediate commits fail the cross-language pool test individually, as already recorded in the build report.
 - Moved review/ → ready/. No linked GitHub issues or PRs to comment on.
+
+
+## factory · 2026-11-11 11:55
+Shipped with owner authorization; ready/ → done/. Merge commit: be889431f9720924825561111592b2d5c1fc46fc. Tag: v0.3.95. Published master: fff6c8e23373119ee1ea60f05bee0a711fb334a0 (starting base d122775a1398b4294ea364f229a852ce59f6c93b). Remote master and annotated tag target verified. No linked issues or PRs to close.
+
+Configured Go formatting/vet/tests and full Console check/tests passed after each approved merge and on the final tree. Final: 162 Go packages passed (19 without tests), Console 576/576, core Node 259/259, Android manifest 6/6; web build passed. All scripted checks used an absolute throwaway HOME and isolated runtime/cache directories with an environment whitelist. No installs, deployment, or intentional user-settings changes.
+
+FT84 integration resolved TopicSidebar clock-versus-layout-probe conflict while preserving both approved changes. A separate test-only fix fff6c8e2 supplies FT71 runID/stopping fields to FT84 fixtures after an initial typecheck failure; all gates then passed. Initial offline module restoration also failed for unused uncached modules; dependency-targeted restoration succeeded.
+
+Validation limits: no live browser/native desktop/Android or real keyboard checks, no live model-driven naming sessions, and no repeated race suite in this ship. Existing review caveats remain, including FT71 OpenAPI omission/one-time behavior and FT76's earlier unresolved real-state pollution. Coder reported contemporaneous real-HOME Go cache/telemetry writes of unknown attribution; ship checks used sandbox paths. No private user data cleanup attempted.
