@@ -6,7 +6,7 @@ import { Image, keymap, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { endpointApiFetch } from "../../../lib/core/context.js";
 import { CHANNEL_TRIGGER_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
-import { Button, DropdownMenu, Kicker, SelectField, SidePane, TextField } from "../../../components/ui";
+import { Button, DropdownMenu, Kicker, MenuIconTrigger, SelectField, SidePane, TextField } from "../../../components/ui";
 import { SCROLLBAR } from "../../../components/motion";
 import { ConfigSettingsPanel, type ConfigGroup } from "../../../components/settings/ConfigSettingsPanel";
 import { EnvManagedField } from "../../../components/settings/EnvManagedField";
@@ -381,17 +381,8 @@ function ChannelPaneHeader(props: { s: SettingsStore }) {
       actions={
         <>
           <DropdownMenu
-            trigger={
-              <Button
-                variant="plain"
-                size="xs"
-                iconOnly
-                icon="PhDotsThree"
-                title={t("todo_action_more")}
-                disabled={s.consoleLoading() || s.consoleSaving()}
-                testID="settings-channel-menu"
-              />
-            }
+            disabled={s.consoleLoading() || s.consoleSaving()}
+            trigger={<MenuIconTrigger label={t("todo_action_more")} testID="settings-channel-menu" />}
             items={s.channelActionMenuItems(id())}
           />
           <Button variant="plain" size="xs" iconOnly icon="PhX" title={t("settings_channel_close")} onPress={() => s.closeChannelPane()} testID="settings-channel-close" />

@@ -3,7 +3,7 @@
 import { signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { LLM_SYSTEM_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
-import { Button, DropdownMenu, Icon, SelectField, TextField } from "../../../components/ui";
+import { Button, DropdownMenu, Icon, MenuIconTrigger, SelectField, TextField } from "../../../components/ui";
 import { ConfigSettingsPanel, type ConfigGroup } from "../../../components/settings/ConfigSettingsPanel";
 import { InlineNotice } from "../../../components/settings/DialogShell";
 import { ProviderLogo } from "../../../components/settings/InferenceProviderPicker";
@@ -72,9 +72,8 @@ export function AgentSection(props: { s: SettingsStore }) {
         meta={s.selectedSection()?.meta}
         actions={
           <DropdownMenu
-            trigger={
-              <Button variant="plain" size="xs" iconOnly icon="PhDotsThree" title={t("todo_action_more")} disabled={busy()} testID="settings-llm-menu" />
-            }
+            disabled={busy()}
+            trigger={<MenuIconTrigger label={t("todo_action_more")} testID="settings-llm-menu" />}
             items={s.llmActionMenuItems()}
           />
         }

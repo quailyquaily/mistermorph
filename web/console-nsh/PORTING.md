@@ -134,6 +134,12 @@ Headless tests prove behaviour, not the look.
 - nsh/base's `Button` drops the `tooltip` prop: a button with a tooltip is `TipButton` (ui.tsx),
   which puts the tooltip on a view around it and gives that view the button's placement classes
   and `onLayout`.
+- nsh/base's `Menu` (and so `DropdownMenu`) opens on a press of its trigger's outer view. A
+  `Button`/`TipButton` trigger keeps every press for its inner button, and the menu never opens
+  (seen headless on desktop and Android, and in Chrome): give menus a plain `role="button"` view
+  (`MenuIconTrigger`, ui.tsx) and pass `disabled` to the `DropdownMenu`. On the web Enter/Space on
+  a focused trigger open it and Escape closes it with the focus back on the trigger, but its items
+  take no arrow keys.
 - nsh/base's `Select` opens its list over the field on the web (`placement` is ignored there):
   `SelectField` is a `Menu` below the field, as Vue's dropdown; only the searchable one is a Select.
 - A `TextView` table can't be narrower than column floors nsh estimates from character counts
