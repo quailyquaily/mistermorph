@@ -12,7 +12,7 @@ import { previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
-import { Button, confirm, Icon, type IconName, MessageDialog, Page } from "../../components/ui";
+import { BackButton, confirm, Icon, type IconName, MessageDialog, Page } from "../../components/ui";
 import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
 import { SettingsCanBrowsePaths } from "../../components/settings/SettingFields";
@@ -444,15 +444,7 @@ export function SettingsPage() {
               leading={
                 <View class="flex-row items-center gap-2">
                   <If when={mobileShowBack()}>
-                    <Button
-                      variant="plain"
-                      size="xs"
-                      iconOnly
-                      icon="PhArrowLeft"
-                      title={t("settings_title")}
-                      onPress={() => mobilePanelVisible.set(false)}
-                      testID="settings-back"
-                    />
+                    <BackButton title={t("settings_title")} onPress={() => mobilePanelVisible.set(false)} testID="settings-back" />
                   </If>
                   <Text class="text-xl leading-[22.8px] tracking-[-0.03em] text-foreground line-clamp-1" role="header">
                     {barTitle()}

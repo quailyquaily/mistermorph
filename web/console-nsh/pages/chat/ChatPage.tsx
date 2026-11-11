@@ -4,7 +4,7 @@
 // list and the conversation are separate views, and the panel is a sheet. The behaviour is in
 // chatController.
 import { Text, View } from "nsh";
-import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
+import { BackButton, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -260,7 +260,7 @@ export function ChatPage() {
   const mobileLeading = () => (
     <View class="flex-1 flex-row items-center gap-2">
       <If when={c.mobileShowBack()}>
-        <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("chat_topics_title")} onPress={() => c.mobileBack()} testID="chat-back" />
+        <BackButton title={t("chat_topics_title")} onPress={() => c.mobileBack()} testID="chat-back" />
       </If>
       <Text class="flex-1 text-xl leading-6 tracking-[-0.03em] text-foreground line-clamp-1" role="header">
         {c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")}

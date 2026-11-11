@@ -6,7 +6,7 @@ import { batch, computed, effect, keymap, LayoutAnimation, reduceMotion, signal,
 import { Button as BaseButton, Sheet } from "nsh/base";
 import { Blocks, gutterX, gutterY, Note, ROW_TRANSITION, SearchField, t, WorkspaceTitle } from "../../components/knowledge/parts";
 import { EdgeScroll, MOTION_SLOW } from "../../components/motion";
-import { Button, Icon, Page } from "../../components/ui";
+import { BackButton, Button, Icon, Page } from "../../components/ui";
 import { endpointApiFetch, endpointState, formatBytes, runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -210,15 +210,23 @@ export function SkillStorePage() {
       testID="store-page"
       leading={
         <View class="flex-row items-center gap-2">
-          <BaseButton
-            onPress={backToSkills}
-            accessibilityLabel={t("skills_title")}
-            testID="store-back"
-            class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press"
-            style={ROW_TRANSITION}
+          {/* A phone's bar takes the shared back arrow; a desktop's keeps its small 13pt one. */}
+          <If
+            when={isMobile()}
+            else={
+              <BaseButton
+                onPress={backToSkills}
+                accessibilityLabel={t("skills_title")}
+                testID="store-back"
+                class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press"
+                style={ROW_TRANSITION}
+              >
+                <Icon name="PhArrowLeft" size={13} color="subtle" />
+              </BaseButton>
+            }
           >
-            <Icon name="PhArrowLeft" size={13} color="subtle" />
-          </BaseButton>
+            <BackButton title={t("skills_title")} onPress={backToSkills} testID="store-back" />
+          </If>
           <WorkspaceTitle text={t("skills_store_title")} />
         </View>
       }

@@ -18,7 +18,7 @@ import { translate } from "../../lib/core/context.js";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
 import { gutterX, gutterY, listTitleSize } from "../frame/metrics";
 import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR } from "../motion";
-import { Button, Icon, StatusMark } from "../ui";
+import { BAR_BUTTON_SIZE, Button, Icon, StatusMark } from "../ui";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
 
@@ -37,7 +37,7 @@ export const TODO_HEAD_HEIGHT = 57;
 // half the slot and the 1pt border). On a desktop the rows keep the list's 26pt gutter and 13pt
 // padding (the marks' axis 48pt in) and the head's right padding puts the icon there (29pt).
 // Centres, not edges: the mark is 7pt, the button 38.
-/** The head's buttons (`Button` sm, icon only). */
+/** The head's buttons (`Button` sm, icon only; the calendar toggle is BAR_BUTTON_SIZE, as the phone bars' back arrows). */
 export const TODO_HEAD_BUTTON = 38;
 /** The marker's slot at an item's end (RunMarker), the mark in its middle. */
 export const TODO_MARKER_SLOT = 16;
@@ -196,6 +196,7 @@ export function TodoIndex(props: {
         <View {...parts.probe(() => (props.mobile ? "head-action" : null))}>
           <Button
             variant="plain"
+            size={BAR_BUTTON_SIZE}
             iconOnly
             icon="PhCalendarBlank"
             title={t("todo_view_calendar")}

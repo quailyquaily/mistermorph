@@ -6,7 +6,7 @@ import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
-import { Button, Fab, type MessageAction, MessageDialog, Page, PageTitle } from "../../components/ui";
+import { BackButton, Button, Fab, type MessageAction, MessageDialog, Page, PageTitle } from "../../components/ui";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import { TodoHeartbeatEditor } from "../../components/todo/TodoHeartbeatEditor";
@@ -197,15 +197,7 @@ export function TodoPage() {
       testID="todo-page"
       leading={
         <View class="flex-1 flex-row items-center gap-2">
-          <Button
-            variant="plain"
-            size="xs"
-            iconOnly
-            icon="PhArrowLeft"
-            title={t("todo_nav_title")}
-            testID="todo-back"
-            onPress={state.showIndexView}
-          />
+          <BackButton title={t("todo_nav_title")} testID="todo-back" onPress={state.showIndexView} />
           <PageTitle text={state.mobileBarTitle()} />
         </View>
       }

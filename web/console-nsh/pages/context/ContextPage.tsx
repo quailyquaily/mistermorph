@@ -6,7 +6,7 @@
 // item's text; Back steps up a level before it leaves for the topic.
 import { batch, Canvas, computed, effect, platform, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Page, Spinner, Tip } from "../../components/ui";
+import { BackButton, Icon, Page, Spinner, Tip } from "../../components/ui";
 import { t } from "../../components/chat/i18n";
 import { contextCellGrid, contextRing } from "../../lib/core/context-inspector.js";
 import { currentLocale, endpointState, runtimeApiFetch } from "../../lib/core/context.js";
@@ -440,7 +440,7 @@ export function ContextPage() {
       testID="context-page"
       leading={
         <View class="flex-1 flex-row items-center gap-2">
-          <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("context_inspector_back")} onPress={back} testID="context-back" />
+          <BackButton title={t("context_inspector_back")} onPress={back} desktopSize="xs" testID="context-back" />
           <Text class="flex-1 text-lg font-semibold text-foreground line-clamp-1" role="header" testID="context-bar-title">
             {barTitle()}
           </Text>
