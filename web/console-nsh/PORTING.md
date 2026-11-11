@@ -157,7 +157,18 @@ Headless tests prove behaviour, not the look.
   (Shift+Tab reached them), while `visibility: hidden` keeps the layout and drops the focus. Two
   inputs laid out together report `onContentSizeChange` one after the other (a microtask between
   them does not merge them), before the next frame is drawn. Headless runs measure a line break
-  as no break.
+  as no break. `onContentSizeChange` fires only when the size changes, so a report alone cannot
+  say which value it measured: tag each with the value, take the heights as current a couple of
+  frames after a value that reported nothing, and keep the layout while they are older than the
+  value (`composerRows.ts`). Two inputs measuring one value report it one after the other: the
+  first report is not the value's last, so treat the value as settled only after those frames.
+- `LayoutAnimation.configureNext` on the web eases each view's `left`/`top`/`width`/`height`, so an
+  `Input` whose width eases reflows its text on the way (it shows the widths in between). Let a
+  change of width snap and ease only heights. The ease takes every frame change of the next commit,
+  including ones the code did not mean to animate: a layout the core has not drawn yet (a snapped
+  change made a frame earlier), or a resize's widths when the eased change answers a resize. Ease
+  only changes an edit made, once the previous change has been drawn (`followComposerLayout` in
+  `components/chat/composerRows.ts`).
 - A pull down from a list's top is the scroll view's own pull-to-refresh (`onRefresh` with
   `refreshIndicator={{ height }}`: no spinner, the platform decides the gesture, short and empty
   lists included). Touch handlers on the list would not do: the scroll view takes the touches over
