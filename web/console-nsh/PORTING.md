@@ -90,7 +90,11 @@ Headless tests prove behaviour, not the look.
   hung the Android app after about ten Contacts / TODO round trips. Give `empty` an element made in
   the component that renders the list (`pages/contacts/ContactsPage.tsx` `IndexList`): it goes with
   the list and still comes and goes as the list empties (`tests/list-empty-slot.test.tsx`). `header`,
-  `footer` and the rows are disposed as they should be.
+  `footer` and the rows are disposed as they should be. Do not switch views with an `If` inside
+  that element: once the list has hidden it (rows came) and shown it again, the `If` no longer
+  switches, so a reload that ended empty kept the loading blocks instead of the note. Keep the views
+  in it and hide the ones not wanted with a wrapping `View`'s `hidden`; their props still update
+  (`tests/contacts-empty-reload.test.tsx`).
 - On an inverted `List`, `scrollToEnd()` goes to the oldest item (nsh 0.4.0): use
   `scrollToIndex({ index: 0 })` to show the newest.
 - `List` tells the items of `each` apart by identity (`===`), not by `keyExtractor`: an item

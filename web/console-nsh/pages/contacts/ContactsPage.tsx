@@ -410,21 +410,24 @@ export function ContactsPage() {
   // contact opened on the phone) kept one, subscribed to the store and re-rendering its loading
   // blocks into the dead list on every load, until the app hung for good: on the 10th Contacts /
   // TODO round trip headless, after 14 in the Android report. Made in this component, it goes with
-  // the list (tests/contacts-todo-switch.test.tsx, tests/list-empty-slot.test.tsx).
+  // the list (tests/contacts-todo-switch.test.tsx, tests/list-empty-slot.test.tsx). The loading
+  // blocks and the note are both always in it, one of them hidden: an `If` there stopped switching
+  // once the list had hidden the element and shown it again, so a reload that left the list empty
+  // (the last contact deleted) kept the blocks for good (tests/contacts-empty-reload.test.tsx).
   function IndexList() {
     const empty = (
-      <If
-        when={store.loading}
-        else={
+      <View>
+        <View class={store.loading ? "" : "hidden"}>
+          <Blocks count={4} height={65} class={isMobile() ? undefined : "px-4"} />
+        </View>
+        <View class={store.loading ? "hidden" : ""}>
           <Note
             text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
             class="mx-4 mt-1 leading-normal"
             testID="contacts-empty"
           />
-        }
-      >
-        <Blocks count={4} height={65} class={isMobile() ? undefined : "px-4"} />
-      </If>
+        </View>
+      </View>
     );
     return (
       <List
