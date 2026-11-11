@@ -395,13 +395,4 @@ func TestFeedbackHelpersUsePlainState(t *testing.T) {
 	if got := StopFeedback(true); got != FeedbackStopped {
 		t.Fatalf("StopFeedback(true) = %q", got)
 	}
-	if got := SteerFeedback(false, false); got != FeedbackNoActiveRun {
-		t.Fatalf("SteerFeedback(false, false) = %q", got)
-	}
-	if got := SteerFeedback(true, false); got != FeedbackSteerUnavailable {
-		t.Fatalf("SteerFeedback(true, false) = %q", got)
-	}
-	if got := SteerFeedback(true, true); got != FeedbackSteerAccepted {
-		t.Fatalf("SteerFeedback(true, true) = %q", got)
-	}
 }

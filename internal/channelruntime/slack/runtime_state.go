@@ -84,6 +84,7 @@ type slackRuntimeState struct {
 	inboundAdapter                *slackbus.InboundAdapter
 	deliveryAdapter               *slackbus.DeliveryAdapter
 	runControl                    *runtimecontrol.RunControl
+	steerReplies                  *runtimecontrol.SteerResponder
 	untriggeredRecorder           *runtimecore.UntriggeredRecorder
 	taskTimeout                   time.Duration
 	groupTriggerMode              string
@@ -161,6 +162,7 @@ func newSlackRuntimeState(config slackRuntimeStateConfig) (*slackRuntimeState, e
 		inboundAdapter:                config.inboundAdapter,
 		deliveryAdapter:               config.deliveryAdapter,
 		runControl:                    runtimecontrol.New(),
+		steerReplies:                  runtimecore.NewGenerationSteerResponder(workersCtx, config.runtimeGenerations, logger),
 		taskTimeout:                   config.options.TaskTimeout,
 		groupTriggerMode:              groupTriggerMode,
 		fileCacheDir:                  strings.TrimSpace(config.options.FileCacheDir),

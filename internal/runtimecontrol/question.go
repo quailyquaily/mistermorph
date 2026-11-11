@@ -29,6 +29,8 @@ type openQuestion struct {
 	id          string
 	options     []string
 	answer      chan Answer
+	// prompt is the question's text, for the reply to a typed answer.
+	prompt string
 }
 
 // OpenQuestion is a question open on a run: the next message steered into the run, or a Choose or
@@ -42,6 +44,12 @@ type OpenQuestion struct {
 // OpenQuestion opens question id, with the labels of its choices, on the lease's run. Open it
 // before showing it, so no answer comes too early; Close it when done waiting.
 func (l *RunLease) OpenQuestion(id string, options []string, choicesOnly bool) (*OpenQuestion, error) {
+	return l.OpenQuestionText(id, "", options, choicesOnly)
+}
+
+// OpenQuestionText is OpenQuestion for a question whose text is known: a reply to a typed answer
+// is written with it.
+func (l *RunLease) OpenQuestionText(id string, text string, options []string, choicesOnly bool) (*OpenQuestion, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, ErrQuestionMissingID
@@ -54,7 +62,7 @@ func (l *RunLease) OpenQuestion(id string, options []string, choicesOnly bool) (
 	if err != nil {
 		return nil, err
 	}
-	question := &openQuestion{id: id, options: append([]string(nil), options...), choicesOnly: choicesOnly, answer: make(chan Answer, 1)}
+	question := &openQuestion{id: id, options: append([]string(nil), options...), choicesOnly: choicesOnly, answer: make(chan Answer, 1), prompt: strings.TrimSpace(text)}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry := c.active[key]

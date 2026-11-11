@@ -114,9 +114,12 @@ jq -n --arg topic "$MORPH_TOPIC_ID" \
 ```
 
 In Console, text submitted while that topic has an active run may become
-steering input for that run. The response records a separate completed task
-for the acknowledgement. When `steer_target_task_id` is present, follow that
-target for the main result. This path applies to plain text without file
+steering input for that run. The response records a separate task, `running`
+until the model has written a reply to the message from the run's task,
+conversation and progress; it then finishes `done` with that reply as its
+output. When the message could not reach the run (it is stopping or finishing,
+or too many messages wait), or no reply could be written, the output says so.
+When `steer_target_task_id` is present, follow that target for the main result. This path applies to plain text without file
 references after runtime command handling; commands and file-bearing messages
 can follow different execution paths. There is no separate HTTP steer route.
 

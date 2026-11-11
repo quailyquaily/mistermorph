@@ -87,6 +87,7 @@ type telegramRuntimeState struct {
 	pairManager         *agentpair.Manager
 	workspaceStore      *workspace.Store
 	runControl          *runtimecontrol.RunControl
+	steerReplies        *runtimecontrol.SteerResponder
 	untriggeredRecorder *runtimecore.UntriggeredRecorder
 	allowedChatIDs      map[int64]bool
 	botUser             string
@@ -165,6 +166,7 @@ func newTelegramRuntimeState(config telegramRuntimeStateConfig) (*telegramRuntim
 		pairManager:        config.pairManager,
 		workspaceStore:     config.workspaceStore,
 		runControl:         runtimecontrol.New(),
+		steerReplies:       runtimecore.NewGenerationSteerResponder(workersCtx, config.runtimeGenerations, logger),
 		allowedChatIDs:     allowedChatIDs,
 		botUser:            strings.TrimSpace(config.botUser),
 		botID:              config.botID,

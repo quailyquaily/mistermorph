@@ -617,6 +617,13 @@ function insightMessages(insights) {
   return (normalizeInsights(insights) || []).map((text, index) => ({ key: `insight:${index}`, text }));
 }
 
+// A message steered into a running task gets a reply of its own, written while the task runs. A
+// steered message from before such replies has only an acknowledgement, which stays hidden.
+function steerTaskHasReply(task) {
+  if (!isTerminalStatus(normalizeTaskStatus(task?.status))) return true;
+  return String(task?.result?.steer_reply_status || "").trim() !== "";
+}
+
 function taskListHistoryItems(tasks, t, options = {}) {
   const sortedTasks = Array.isArray(tasks) ? [...tasks] : [];
   sortedTasks.sort((left, right) => {
@@ -631,7 +638,7 @@ function taskListHistoryItems(tasks, t, options = {}) {
     items.push(
       ...taskHistoryItems(task, t, {
         ...options,
-        includeAgent: !targetTaskID,
+        includeAgent: !targetTaskID || steerTaskHasReply(task),
       })
     );
   }

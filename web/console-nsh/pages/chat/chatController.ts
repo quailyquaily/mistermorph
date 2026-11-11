@@ -2091,18 +2091,29 @@ export function createChatController() {
     return item.id;
   }
 
-  function placeSteeredAgentAfterUser(userHistoryID: string, provisionalID: string, targetTaskID: string) {
+  // A steered message's reply shows in replyHistoryID, below the message; the steered task's own
+  // reply moves below it. When this device has no bubble for the task yet, one is added there.
+  function placeSteeredAgentAfterReply(replyHistoryID: string, targetTaskID: string) {
     const targetID = String(targetTaskID || "").trim();
     const items = untracked(chatHistoryItems);
-    const target = items.find((item) => item.id !== provisionalID && String(item?.role || "") === "agent" && String(item?.taskId || "").trim() === targetID);
+    const target = items.find((item) => item.id !== replyHistoryID && String(item?.role || "") === "agent" && String(item?.taskId || "").trim() === targetID);
     if (!target) {
-      patchHistoryItem(provisionalID, { taskId: targetID, status: "running", rawJSON: "" });
-      return { historyID: provisionalID, needsTracking: true };
+      const seed = newHistoryID();
+      const historyID = pushHistoryItem({
+        role: "agent",
+        text: buildPollingHint(untracked(activeAgentName), t, seed),
+        awaiting: true,
+        status: "running",
+        timeText: "",
+        pendingSeed: seed,
+      });
+      patchHistoryItem(historyID, { taskId: targetID, status: "running", rawJSON: "" });
+      return { historyID, needsTracking: true };
     }
-    const next = items.filter((item) => item.id !== provisionalID && item.id !== target.id);
-    const userIndex = next.findIndex((item) => item.id === userHistoryID);
-    if (userIndex < 0) next.push(target);
-    else next.splice(userIndex + 1, 0, target);
+    const next = items.filter((item) => item.id !== target.id);
+    const replyIndex = next.findIndex((item) => item.id === replyHistoryID);
+    if (replyIndex < 0) next.push(target);
+    else next.splice(replyIndex + 1, 0, target);
     replaceHistoryItems(next);
     return { historyID: target.id, needsTracking: false };
   }
@@ -2994,18 +3005,17 @@ export function createChatController() {
       if (composerFileDraftKey(submittedScope) !== composerFileDraftKey(untracked(composerDraftScope))) return;
       if (!steerTargetTaskID) applyComposerTopicLLMProfile(llmProfile);
       patchHistoryItem(userHistoryID, { taskId: taskID, files: normalizeHistoryFileReferences(fileReferences), endpointRef, topicID: submittedTopicID });
-      let trackedTaskID = taskID;
-      let trackedHistoryID = agentHistoryID;
-      let needsTracking = true;
+      let targetHistoryID = "";
+      let targetNeedsTracking = false;
+      const existing = untracked(chatHistoryItems).find((item) => item.id === agentHistoryID) || null;
+      // A steered message's own task holds the reply to it, written while the steered task runs.
+      patchHistoryItem(agentHistoryID, { taskId: taskID, status, pendingSeed: historyPendingSeed(existing, pendingSeed), rawJSON: "" });
       if (steerTargetTaskID) {
-        const placement = placeSteeredAgentAfterUser(userHistoryID, agentHistoryID, steerTargetTaskID);
-        trackedTaskID = steerTargetTaskID;
-        trackedHistoryID = placement.historyID;
-        needsTracking = placement.needsTracking;
-        if (needsTracking) void startTaskStream(trackedTaskID, trackedHistoryID, endpointRef);
+        const placement = placeSteeredAgentAfterReply(agentHistoryID, steerTargetTaskID);
+        targetHistoryID = placement.historyID;
+        targetNeedsTracking = placement.needsTracking;
+        if (targetNeedsTracking) void startTaskStream(steerTargetTaskID, targetHistoryID, endpointRef);
       } else {
-        const existing = untracked(chatHistoryItems).find((item) => item.id === agentHistoryID) || null;
-        patchHistoryItem(agentHistoryID, { taskId: taskID, status, pendingSeed: historyPendingSeed(existing, pendingSeed), rawJSON: "" });
         void startTaskStream(taskID, agentHistoryID, endpointRef);
       }
       if (usesTopics) {
@@ -3026,10 +3036,7 @@ export function createChatController() {
         if (endpointRef !== untracked(submitEndpointRef) || normalizeTopicID(untracked(selectedTopicID)) !== topicID) return;
         await syncChatRoute(topicID, { replace: true });
       }
-      if (steerTargetTaskID) {
-        if (needsTracking) await pollTask(trackedTaskID, trackedHistoryID, endpointRef);
-        return;
-      }
+      if (steerTargetTaskID && targetNeedsTracking) void pollTask(steerTargetTaskID, targetHistoryID, endpointRef);
       await pollTask(taskID, agentHistoryID, endpointRef);
     } catch (error) {
       const message = errorMessage(error, t("msg_load_failed"));

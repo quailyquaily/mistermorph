@@ -171,9 +171,15 @@ func (s *slackRuntimeState) enqueueInbound(ctx context.Context, msg busruntime.B
 			controlKey = msg.ConversationKey
 		}
 		if result := s.runControl.Steer("slack", controlKey, text); result.Found {
-			correlationID := fmt.Sprintf("slack:steer:%s:%s", inbound.ChannelID, inbound.MessageTS)
-			_, publishErr := publishSlackBusOutbound(ctx, s.inprocBus, inbound.TeamID, inbound.ChannelID, runtimecontrol.SteerFeedback(result.Found, result.Queued), inbound.ThreadTS, correlationID)
-			return publishErr
+			teamID, channelID, threadTS, messageTS := inbound.TeamID, inbound.ChannelID, inbound.ThreadTS, inbound.MessageTS
+			return s.steerReplies.Respond(result, func(replyCtx context.Context, reply runtimecontrol.SteerReply) error {
+				correlationID := fmt.Sprintf("slack:steer:%s:%s", channelID, messageTS)
+				if reply.Followup {
+					correlationID += ":followup"
+				}
+				_, publishErr := publishSlackBusOutbound(replyCtx, s.inprocBus, teamID, channelID, reply.Text, threadTS, correlationID)
+				return publishErr
+			})
 		}
 	}
 	// A group message the decision route already judged arrives decided; others addressed to the

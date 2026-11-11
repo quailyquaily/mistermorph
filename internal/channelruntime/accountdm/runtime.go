@@ -121,6 +121,7 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 	defer generations.Close()
 	runControl := runtimecontrol.New()
 	workersCtx, stopWorkers := context.WithCancel(context.WithoutCancel(ctx))
+	steerReplies := runtimecore.NewGenerationSteerResponder(workersCtx, generations, logger)
 	sem := make(chan struct{}, opts.MaxConcurrency)
 	env := taskEnv{
 		channel: channel, bus: bus, receipts: receipts, logger: logger, promptBlocks: opts.PromptBlocks,
@@ -161,6 +162,7 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 		}
 		lease, err := runControl.StartLease(workerCtx, opts.TaskTimeout, runtimecontrol.ActiveRun{
 			Runtime: name, ConversationKey: conversationKey, TopicID: j.PeerID, TaskID: j.TaskID, RunID: j.TaskID,
+			Task: j.Text, Conversation: runtimecore.SteerConversation(prior),
 		})
 		if err != nil {
 			markTaskFailed(logger, daemonStore, j.TaskID, err.Error(), false)
@@ -378,7 +380,14 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 		}
 		if !compactOnly {
 			if result := runControl.Steer(name, conversationKey, text); result.Found {
-				return answer(runtimecontrol.SteerFeedback(result.Found, result.Queued), "steer:"+in.MessageID)
+				accountID, peerID, messageID := in.AccountID, in.PeerID, in.MessageID
+				return steerReplies.Respond(result, func(replyCtx context.Context, steerReply runtimecontrol.SteerReply) error {
+					correlationID := "steer:" + messageID
+					if steerReply.Followup {
+						correlationID += ":followup"
+					}
+					return reply(replyCtx, accountID, peerID, steerReply.Text, messageID, correlationID)
+				})
 			}
 		}
 		// These channels have no reactions, so an emoji reply is sent as a message.

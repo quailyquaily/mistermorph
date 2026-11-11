@@ -95,6 +95,8 @@ func (s *slackRuntimeState) runJob(workerCtx context.Context, conversationKey st
 		TopicID:         slackContextTopicID(job),
 		TaskID:          job.TaskID,
 		RunID:           job.TaskID,
+		Task:            job.Text,
+		Conversation:    runtimecore.SteerConversation(history),
 	})
 	if err != nil {
 		if stateErr := runtimecore.MarkTaskFailed(s.taskStore, job.TaskID, strings.TrimSpace(err.Error()), false); stateErr != nil {

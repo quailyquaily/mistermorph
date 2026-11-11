@@ -104,9 +104,10 @@ paths:
       tags:
       - Tasks
       summary: Submit task text or a runtime command
-      description: Returns HTTP 200 after submission, not the final agent result. Some commands and steering
-        acknowledgements finish synchronously. Console may steer an active task in the same topic when
-        no file references are supplied. Follow steer_target_task_id when present. A runtime without Submit
+      description: Returns HTTP 200 after submission, not the final agent result. Some commands finish
+        synchronously. Console may steer an active task in the same topic when no file references are
+        supplied; the steer's own task runs until the model's reply to the message is written. Follow
+        steer_target_task_id when present. A runtime without Submit
         returns 405. No idempotency key or automatic retry guarantee. The JSON decoder reads up to 1 MiB.
       requestBody:
         required: true
@@ -831,7 +832,7 @@ components:
         steer_target_task_id:
           type: string
           description: When present, this submission records steering input for this active task. Continue
-            tracking that task for the main result.
+            tracking that task for the main result; this submission's own task holds the reply to the input.
       required:
       - id
       - status

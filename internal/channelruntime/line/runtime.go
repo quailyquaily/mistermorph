@@ -219,6 +219,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 	maxConcurrency := opts.MaxConcurrency
 	sem := make(chan struct{}, maxConcurrency)
 	workersCtx, stopWorkers := newLineOwnedContext(ctx)
+	steerReplies := runtimecore.NewGenerationSteerResponder(workersCtx, runtimeGenerations, logger)
 	allowedGroups := toAllowlist(opts.AllowedGroupIDs)
 
 	serverListen := strings.TrimSpace(opts.ServerListen)
@@ -327,6 +328,8 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				TopicID:         job.ChatID,
 				TaskID:          job.TaskID,
 				RunID:           job.TaskID,
+				Task:            job.Text,
+				Conversation:    runtimecore.SteerConversation(h),
 			})
 			if err != nil {
 				if cancelLineTaskOnWorkerShutdown(workerCtx, logger, daemonStore, job) {
@@ -596,9 +599,17 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		}
 		if !contextCompactionOnly && !inbound.ImagePending && len(inbound.ImageAttachments) == 0 {
 			if result := runControl.Steer("line", msg.ConversationKey, text); result.Found {
-				correlationID := fmt.Sprintf("line:steer:%s:%s", inbound.ChatID, inbound.MessageID)
-				_, publishErr := publishLineBusOutbound(ctx, inprocBus, inbound.ChatID, runtimecontrol.SteerFeedback(result.Found, result.Queued), inbound.ReplyToken, correlationID)
-				return publishErr
+				chatID, messageID, replyToken := inbound.ChatID, inbound.MessageID, inbound.ReplyToken
+				return steerReplies.Respond(result, func(replyCtx context.Context, reply runtimecontrol.SteerReply) error {
+					correlationID := fmt.Sprintf("line:steer:%s:%s", chatID, messageID)
+					token := replyToken
+					if reply.Followup {
+						// The reply token was spent on the reply.
+						correlationID, token = correlationID+":followup", ""
+					}
+					_, publishErr := publishLineBusOutbound(replyCtx, inprocBus, chatID, reply.Text, token, correlationID)
+					return publishErr
+				})
 			}
 		}
 		if !lightweightDecided && !contextCompactionOnly && runtimecore.LightweightPrecheckApplies(text, inbound.ImagePending || len(inbound.ImageAttachments) > 0) {

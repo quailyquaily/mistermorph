@@ -19,6 +19,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -223,12 +224,27 @@ func TestLocalChatCreatesAndContinuesSharedHistory(t *testing.T) {
 	if boundary != chathistory.BoundaryForItem(chathistory.TaskInbound(second)) {
 		t.Fatal("chat and Web use different checkpoint boundaries")
 	}
-	active := &activeChatTurn{sharedTask: &second, steerQueue: runtimecontrol.NewSteerQueue(1)}
-	if err := sess.queueLocalSteer(active, "follow this instruction"); err != nil {
+	var steerRequest runtimecontrol.SteerReplyRequest
+	sess.steerReplier = func(_ context.Context, req runtimecontrol.SteerReplyRequest) (string, error) {
+		steerRequest = req
+		return "I'll follow that instruction for the rest of this answer.", nil
+	}
+	active := &activeChatTurn{sharedTask: &second, steerQueue: runtimecontrol.NewSteerQueue(1), runInput: "continue in chat", runID: second.ID}
+	sess.attachTurnSteering(context.Background(), active, active.steerQueue, nil, history, llmutil.ResolvedRoute{}, "test-model")
+	var shown []string
+	show := func(text string) { shown = append(shown, text) }
+	if err := sess.steerActiveTurn(active, "follow this instruction", show); err != nil {
 		t.Fatal(err)
 	}
-	if err := sess.queueLocalSteer(active, "queue is full"); err == nil {
-		t.Fatal("accepted full queue")
+	if err := sess.steerActiveTurn(active, "queue is full", show); err != nil {
+		t.Fatal(err)
+	}
+	active.steering.replies.Wait()
+	if len(shown) != 2 || shown[0] != "I'll follow that instruction for the rest of this answer." || !strings.Contains(shown[1], "not added") {
+		t.Fatalf("shown replies = %q", shown)
+	}
+	if steerRequest.Task != "continue in chat" || steerRequest.Input != "follow this instruction" || len(steerRequest.Conversation) != len(history) {
+		t.Fatalf("steer reply request = %+v", steerRequest)
 	}
 	if got := active.steerQueue.Drain(); len(got) != 1 || got[0] != "follow this instruction" {
 		t.Fatalf("steer queue: %v", got)
@@ -236,10 +252,11 @@ func TestLocalChatCreatesAndContinuesSharedHistory(t *testing.T) {
 	var steered bool
 	for _, task := range web.List(daemonruntime.TaskListOptions{TopicID: second.TopicID, Limit: 20}) {
 		if task.Task == "follow this instruction" {
-			steered = task.SteerTargetTaskID == second.ID && task.Status == daemonruntime.TaskDone
+			steered = task.SteerTargetTaskID == second.ID && task.Status == daemonruntime.TaskDone &&
+				chathistory.TaskResultOutput(task.Result) == "I'll follow that instruction for the rest of this answer."
 		}
-		if task.Task == "queue is full" && task.Status == daemonruntime.TaskDone {
-			t.Fatal("failed steer recorded as accepted")
+		if task.Task == "queue is full" && (task.SteerTargetTaskID != "" || !strings.Contains(chathistory.TaskResultOutput(task.Result), "not added")) {
+			t.Fatalf("failed steer recorded as accepted: %+v", task)
 		}
 	}
 	if !steered {

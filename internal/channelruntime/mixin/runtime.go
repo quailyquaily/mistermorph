@@ -176,6 +176,7 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 	defer generations.Close()
 	runControl := runtimecontrol.New()
 	workersCtx, stopWorkers := context.WithCancel(context.WithoutCancel(ctx))
+	steerReplies := runtimecore.NewGenerationSteerResponder(workersCtx, generations, logger)
 	sem := make(chan struct{}, opts.MaxConcurrency)
 
 	var daemonServer *http.Server
@@ -212,6 +213,7 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		}
 		lease, err := runControl.StartLease(workerCtx, opts.TaskTimeout, runtimecontrol.ActiveRun{
 			Runtime: "mixin", ConversationKey: conversationKey, TopicID: job.ConversationID, TaskID: job.TaskID, RunID: job.TaskID,
+			Task: job.Text, Conversation: runtimecore.SteerConversation(prior),
 		})
 		if err != nil {
 			markMixinTaskFailed(logger, daemonStore, job.TaskID, err.Error(), false)
@@ -464,8 +466,15 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		}
 		if !chatcommands.IsContextCompactCommand(text) {
 			if result := runControl.Steer("mixin", conversationKey, text); result.Found {
-				_, err := publishMixinBusOutbound(handlerCtx, bus, inbound.ConversationID, mixinReplyRecipient(inbound.ChatType, inbound.FromUserID), runtimecontrol.SteerFeedback(result.Found, result.Queued), inbound.MessageID, "mixin:steer:"+inbound.MessageID)
-				return err
+				conversationID, recipient, messageID := inbound.ConversationID, mixinReplyRecipient(inbound.ChatType, inbound.FromUserID), inbound.MessageID
+				return steerReplies.Respond(result, func(replyCtx context.Context, reply runtimecontrol.SteerReply) error {
+					correlationID := "mixin:steer:" + messageID
+					if reply.Followup {
+						correlationID += ":followup"
+					}
+					_, err := publishMixinBusOutbound(replyCtx, bus, conversationID, recipient, reply.Text, messageID, correlationID)
+					return err
+				})
 			}
 		}
 		// Mixin has no reactions, so an emoji reply is sent as a message.

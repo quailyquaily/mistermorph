@@ -28,6 +28,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/processsignal"
+	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
@@ -41,12 +42,14 @@ import (
 )
 
 type chatSession struct {
-	version                string
-	cmd                    *cobra.Command
-	rootContext            context.Context
-	logger                 *slog.Logger
-	logWriter              *programWriter
-	taskRuntime            *taskruntime.Runtime
+	version     string
+	cmd         *cobra.Command
+	rootContext context.Context
+	logger      *slog.Logger
+	logWriter   *programWriter
+	taskRuntime *taskruntime.Runtime
+	// steerReplier writes replies to messages steered into a turn; nil uses the turn's model.
+	steerReplier           runtimecontrol.SteerReplyFunc
 	imageScopeKey          string
 	mainCfg                llmconfig.ClientConfig
 	runtimeToolsCfg        toolsutil.RuntimeToolsRegisterConfig
