@@ -2,19 +2,18 @@
 // new value, each on its own wheel, instead of jumping (the Vue console's RollingNumber).
 //
 // A wheel turns the short way round, like a counter's: 9 to 0 is one step on, 2 to 8 four steps
-// back. Its strip holds the digits three times; the wheel steps from where it stands and, once it
-// settles, re-centres on the middle run without motion, so it never runs out. Digits keep their
-// wheel from the right, so 999 becomes 1,000 by turning the three and adding the one. Figures are
-// tabular, so wheels never change width as they turn. Reduced motion makes them jump.
+// back. At rest a wheel is just its digit. Only while it turns does it hold a strip, of the digits
+// it passes (six at most), moving from the old one to the new: a page shows dozens of these
+// numbers, and a strip of every digit kept under each wheel made thousands of text views that
+// were laid out on every change (the usage page's hosts: 22,000 views, 150ms a commit). Digits
+// keep their wheel from the right, so 999 becomes 1,000 by turning the three and adding the one.
+// Figures are tabular, so wheels never change width as they turn. Reduced motion makes them jump.
 //
 // The text style (size, weight, color) comes from `class`, applied to every glyph. Screen readers
 // and tests get the plain value.
-import { batch, cleanup, computed, effect, reduceMotion, signal, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, reduceMotion, signal, Text, untracked, View } from "nsh";
 import { wheelStep } from "../../lib/core/rolling-wheel.js";
 
-const RUNS = 3;
-const MIDDLE = 10;
-const STRIP = Array.from({ length: RUNS * 10 }, (_, i) => ({ i, n: i % 10 }));
 // Vue's --motion-slow, with its cubic-bezier(0.2, 0.7, 0.1, 1).
 const TURN_MS = 260;
 
@@ -23,6 +22,19 @@ interface Glyph {
   ch: string;
   digit: number;
 }
+
+/** A wheel turning: the strip holds the digits at positions `lo` to `hi` (position p shows p mod
+ * 10), and moves from `from` to `to`; `running` is false for the first frame, which places the
+ * strip at `from` without motion. */
+interface Turn {
+  lo: number;
+  hi: number;
+  from: number;
+  to: number;
+  running: boolean;
+}
+
+const digitAt = (position: number) => ((position % 10) + 10) % 10;
 
 export interface RollingNumberProps {
   /** The formatted value; its digits roll, everything else is shown as it is. */
@@ -44,53 +56,59 @@ export function RollingNumber(props: RollingNumberProps) {
     });
   });
 
-  // Where each wheel stands on its strip (0 to 29), and which are re-centring without motion.
-  // Kept by glyph key, outside the rows, as data.
-  let stops: Record<string, number> = {};
-  const stopsSignal = signal<Record<string, number>>({});
-  const still = signal<Record<string, boolean>>({});
+  // The digit each wheel last showed, by glyph key (data, outside the rows), and the wheels
+  // turning now.
+  let shown: Record<string, number> = {};
+  const turns = signal<Record<string, Turn>>({});
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   cleanup(() => timers.forEach((id) => clearTimeout(id)));
-
-  const settle = (key: string) => {
-    timers.delete(key);
-    const at = stops[key];
-    if (at === undefined || (at >= MIDDLE && at < MIDDLE + 10)) return;
-    stops = { ...stops, [key]: MIDDLE + (at % 10) };
-    batch(() => {
-      still.update((s) => ({ ...s, [key]: true }));
-      stopsSignal.set(stops);
-    });
-    setTimeout(() => still.update((s) => ({ ...s, [key]: false })), 32);
+  const later = (key: string, ms: number, run: () => void) => {
+    clearTimeout(timers.get(key));
+    timers.set(
+      key,
+      setTimeout(() => {
+        timers.delete(key);
+        run();
+      }, ms),
+    );
   };
+  const endTurn = (key: string) =>
+    turns.update((all) => {
+      const { [key]: _done, ...rest } = all;
+      return rest;
+    });
 
-  // Steps every wheel to its new digit when the value changes.
+  // The height of one digit, measured from a wheel's digit; no turning until it is known.
+  const digitHeight = signal(0);
+
+  // Turns every wheel whose digit changed. A wheel turning already starts again from the digit it
+  // was turning to.
   effect(() => {
     const next = glyphs();
     untracked(() => {
-      const updated = { ...stops };
+      const started: Record<string, Turn> = {};
+      const animate = !reduceMotion() && digitHeight() > 0;
       for (const glyph of next) {
         if (glyph.digit < 0) continue;
-        const at = updated[glyph.key];
-        if (at === undefined) {
-          updated[glyph.key] = MIDDLE + glyph.digit;
-          continue;
-        }
-        const step = wheelStep(at, glyph.digit);
-        if (step === 0) continue;
-        updated[glyph.key] = at + step;
-        const key = glyph.key;
-        clearTimeout(timers.get(key));
-        timers.set(key, setTimeout(() => settle(key), reduceMotion() ? 0 : TURN_MS + 20));
+        const from = shown[glyph.key];
+        shown[glyph.key] = glyph.digit;
+        if (from === undefined || from === glyph.digit || !animate) continue;
+        const to = from + wheelStep(from, glyph.digit);
+        started[glyph.key] = { lo: Math.min(from, to), hi: Math.max(from, to), from, to, running: false };
       }
-      stops = updated;
-      stopsSignal.set(updated);
+      const keys = Object.keys(started);
+      if (keys.length === 0) return;
+      turns.update((all) => ({ ...all, ...started }));
+      for (const key of keys) {
+        // The strip is placed at the old digit for a frame, then moves; once it has stopped the
+        // wheel is its digit again.
+        later(key, 32, () => {
+          turns.update((all) => (all[key] ? { ...all, [key]: { ...all[key], running: true } } : all));
+          later(key, TURN_MS + 20, () => endTurn(key));
+        });
+      }
     });
   });
-  const stopOf = (key: string) => stopsSignal()[key] ?? MIDDLE;
-
-  // The height of one digit, measured from the ghost of the first wheel; until then the ghosts show.
-  const digitHeight = signal(0);
 
   return (
     <View class="relative flex-row" accessibilityLabel={text()} testID={props.testID}>
@@ -108,34 +126,38 @@ export function RollingNumber(props: RollingNumberProps) {
             }
           >
             <View class="relative overflow-hidden" accessibilityElementsHidden>
+              {/* The digit: the wheel at rest, and its box (and the height of a strip's cell) while
+                  the strip turns over it. */}
               <Text
                 class={`tabular-nums ${props.class ?? ""}`}
-                style={{ ...props.style, opacity: digitHeight() > 0 ? 0 : 1 }}
+                style={{ ...props.style, opacity: turns()[glyph().key] ? 0 : 1 }}
                 onLayout={({ bounds }) => {
                   if (bounds.size.height > 0 && Math.abs(bounds.size.height - untracked(digitHeight)) > 0.5) digitHeight.set(bounds.size.height);
                 }}
               >
                 {String(glyph().digit)}
               </Text>
-              <View
-                class="absolute left-0 right-0 top-0"
-                style={{
-                  opacity: digitHeight() > 0 ? 1 : 0,
-                  transform: [{ translateY: -stopOf(glyph().key) * digitHeight() }],
-                  transitionProperty: "transform",
-                  transitionDuration: still()[glyph().key] || reduceMotion() ? 0 : TURN_MS,
-                  transitionTimingFunction: "cubic-bezier(0.2, 0.7, 0.1, 1)",
-                }}
-              >
-                <Each of={STRIP} key={(cell) => cell.i}>
-                  {(cell) => (
-                    <Text class={`text-center tabular-nums ${props.class ?? ""}`} style={{ ...props.style, height: digitHeight() || undefined }}>
-
-                      {String(cell().n)}
-                    </Text>
-                  )}
-                </Each>
-              </View>
+              <If when={turns()[glyph().key]}>
+                {(turn) => (
+                  <View
+                    class="absolute left-0 right-0 top-0"
+                    style={{
+                      transform: [{ translateY: -((turn().running ? turn().to : turn().from) - turn().lo) * digitHeight() }],
+                      transitionProperty: "transform",
+                      transitionDuration: turn().running ? TURN_MS : 0,
+                      transitionTimingFunction: "cubic-bezier(0.2, 0.7, 0.1, 1)",
+                    }}
+                  >
+                    <Each of={Array.from({ length: turn().hi - turn().lo + 1 }, (_, i) => turn().lo + i)}>
+                      {(position) => (
+                        <Text class={`text-center tabular-nums ${props.class ?? ""}`} style={{ ...props.style, height: digitHeight() }}>
+                          {String(digitAt(position()))}
+                        </Text>
+                      )}
+                    </Each>
+                  </View>
+                )}
+              </If>
             </View>
           </If>
         )}
