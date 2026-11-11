@@ -37,6 +37,7 @@ import {
   subjectsOf,
 } from "../../lib/core/memories-view.js";
 import { currentRoute, navigate } from "../../lib/router";
+import { createPaneStack } from "../../components/motion/PaneStack";
 import { isMobile } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -139,6 +140,10 @@ export function MemoriesPage() {
   effect(() => {
     if (!isMobile()) untracked(() => mobileDetailVisible.set(false));
   });
+  // On phones the index (0) and a subject or the journal (1) are levels of the page that slide
+  // (PaneStack); the detail keeps its bar while it goes out.
+  const panes = createPaneStack(() => (isMobile() ? (mobileDetailVisible() ? 1 : 0) : null));
+  const heldBarTitle = panes.held(1, mobileBarTitle);
 
   const showIndexView = () => mobileDetailVisible.set(false);
   function pickSubject(value: string) {
@@ -584,15 +589,14 @@ export function MemoriesPage() {
 
   return (
     <Page hideBar scroll={false} testID="memories-page">
-      <If when={mobileShowBack()}>
-        <MobileBar title={mobileBarTitle()} backLabel={t("memories_title")} onBack={showIndexView} />
-      </If>
       <View class="flex-1 flex-row">
-        <If when={showIndexPane()}>
+        <If when={panes.shown(0, showIndexPane())}>
           <IndexColumn
             title={t("memories_title")}
             label={t("memories_index_label")}
             fill={isMobile()}
+            style={panes.style(0)}
+            hidden={panes.hidden(0)}
             testID="memories-index"
             top={
               <SearchField
@@ -632,173 +636,183 @@ export function MemoriesPage() {
           </IndexColumn>
         </If>
 
-        <If when={showMainPane()}>
-          <EdgeScroll
+        <If when={panes.shown(1, showMainPane())}>
+          <View
             class="flex-1"
-            contentClass="gap-5"
-            style={
-              isMobile()
-                ? { paddingLeft: gutterX(), paddingRight: gutterX(), paddingTop: 16 }
-                : { paddingLeft: 20, paddingRight: gutterX(), paddingTop: 18, marginLeft: 4 }
-            }
-            testID="memories-main"
+            style={panes.style(1)}
+            accessibilityElementsHidden={panes.hidden(1) || undefined}
+            importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
           >
-            <If when={err()}>
-              <InlineNotice type="error" text={err()} testID="memories-error" />
+            <If when={isMobile()}>
+              <MobileBar title={heldBarTitle()} backLabel={t("memories_title")} onBack={panes.hidden(1) ? undefined : showIndexView} />
             </If>
-            <If
-              when={!onJournal()}
-              else={
-                <View class="gap-4">
-                  <View class="flex-row flex-wrap items-center gap-2.5">
-                    <TextField
-                      value={journalQuery()}
-                      onChange={(value) => journalQuery.set(value)}
-                      onSubmit={searchJournal}
-                      placeholder={t("memories_journal_search")}
-                      accessibilityLabel={t("memories_journal_search")}
-                      leadingIcon="PhMagnifyingGlass"
-                      size="sm"
-                      testID="journal-search"
-                      class="min-w-65 flex-[2]"
-                    />
-                    <SinceField value={journalSince()} onChange={(value) => journalSince.set(value)} />
-                    <Button variant="outlined" size="sm" label={t("memories_journal_go")} loading={journalLoading()} onPress={searchJournal} testID="journal-go" />
-                  </View>
-
-                  <If when={sourcesOf()}>
-                    {(item) => (
-                      <Banner label={t("memories_sources_title")} text={t("memories_sources_for", { value: item().description })}>
-                        <Button variant="outlined" size="sm" label={t("memories_back_to_memory")} onPress={backToMemory} testID="journal-back-to-memory" />
-                        <Button variant="plain" size="sm" label={t("memories_show_all")} onPress={clearSources} testID="journal-show-all" />
-                      </Banner>
-                    )}
-                  </If>
-
-                  <If when={!journalSearched()}>
-                    <Note text={t("memories_journal_meta")} class="max-w-[620px] leading-normal" />
-                  </If>
-                  <If when={journalSearched() && !days().length}>
-                    <View class="items-center px-4 py-10">
-                      <Text class="text-center text-sm leading-normal text-muted-foreground">{t("memories_journal_empty")}</Text>
+            <EdgeScroll
+              class="flex-1"
+              contentClass="gap-5"
+              style={
+                isMobile()
+                  ? { paddingLeft: gutterX(), paddingRight: gutterX(), paddingTop: 16 }
+                  : { paddingLeft: 20, paddingRight: gutterX(), paddingTop: 18, marginLeft: 4 }
+              }
+              testID="memories-main"
+            >
+              <If when={err()}>
+                <InlineNotice type="error" text={err()} testID="memories-error" />
+              </If>
+              <If
+                when={!onJournal()}
+                else={
+                  <View class="gap-4">
+                    <View class="flex-row flex-wrap items-center gap-2.5">
+                      <TextField
+                        value={journalQuery()}
+                        onChange={(value) => journalQuery.set(value)}
+                        onSubmit={searchJournal}
+                        placeholder={t("memories_journal_search")}
+                        accessibilityLabel={t("memories_journal_search")}
+                        leadingIcon="PhMagnifyingGlass"
+                        size="sm"
+                        testID="journal-search"
+                        class="min-w-65 flex-[2]"
+                      />
+                      <SinceField value={journalSince()} onChange={(value) => journalSince.set(value)} />
+                      <Button variant="outlined" size="sm" label={t("memories_journal_go")} loading={journalLoading()} onPress={searchJournal} testID="journal-go" />
                     </View>
-                  </If>
-                  <Each of={days()} key={(day) => day.label}>
-                    {(day) => (
-                      <SectionCard title={day().label} meta={countText("memories_count_event", day().events.length)}>
-                        <Each of={day().events} key={(event) => String(event.seq ?? event.id)}>
-                          {(event, index) => (
-                            <View
-                              class={`flex-row items-start gap-4 px-4 py-3 ${index() === 0 ? "" : "border-t border-line-soft"} ${sourcesOf() ? "bg-[#dc892014]" : ""}`}
-                              testID={`journal-event:${event().id}`}
-                            >
-                              <Text class="w-[72px] pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">{event().clock}</Text>
-                              <If when={!isMobile()}>
-                                <JournalAudience kind={event().audienceKind} text={event().audienceText} />
-                              </If>
-                              <View class="flex-1 gap-1.5">
-                                <If when={isMobile()}>
+
+                    <If when={sourcesOf()}>
+                      {(item) => (
+                        <Banner label={t("memories_sources_title")} text={t("memories_sources_for", { value: item().description })}>
+                          <Button variant="outlined" size="sm" label={t("memories_back_to_memory")} onPress={backToMemory} testID="journal-back-to-memory" />
+                          <Button variant="plain" size="sm" label={t("memories_show_all")} onPress={clearSources} testID="journal-show-all" />
+                        </Banner>
+                      )}
+                    </If>
+
+                    <If when={!journalSearched()}>
+                      <Note text={t("memories_journal_meta")} class="max-w-[620px] leading-normal" />
+                    </If>
+                    <If when={journalSearched() && !days().length}>
+                      <View class="items-center px-4 py-10">
+                        <Text class="text-center text-sm leading-normal text-muted-foreground">{t("memories_journal_empty")}</Text>
+                      </View>
+                    </If>
+                    <Each of={days()} key={(day) => day.label}>
+                      {(day) => (
+                        <SectionCard title={day().label} meta={countText("memories_count_event", day().events.length)}>
+                          <Each of={day().events} key={(event) => String(event.seq ?? event.id)}>
+                            {(event, index) => (
+                              <View
+                                class={`flex-row items-start gap-4 px-4 py-3 ${index() === 0 ? "" : "border-t border-line-soft"} ${sourcesOf() ? "bg-[#dc892014]" : ""}`}
+                                testID={`journal-event:${event().id}`}
+                              >
+                                <Text class="w-[72px] pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">{event().clock}</Text>
+                                <If when={!isMobile()}>
                                   <JournalAudience kind={event().audienceKind} text={event().audienceText} />
                                 </If>
-                                <View selectable>
-                                  <Text class="text-sm leading-[17.1px] text-foreground" style={{ numberOfLines: 4 }}>
-                                    {event().text || t("memories_journal_no_text")}
-                                  </Text>
-                                </View>
-                                <View class="flex-row flex-wrap items-center gap-x-4 gap-y-1">
-                                  <If when={event().chatPath}>
-                                    <Text
-                                      role="link"
-                                      class="font-mono text-[11px] text-muted-foreground hover:text-foreground"
-                                      onPress={() => void navigate(event().chatPath)}
-                                    >
-                                      {`${event().trace?.task_id || t("memories_open_chat")} ↗`}
+                                <View class="flex-1 gap-1.5">
+                                  <If when={isMobile()}>
+                                    <JournalAudience kind={event().audienceKind} text={event().audienceText} />
+                                  </If>
+                                  <View selectable>
+                                    <Text class="text-sm leading-[17.1px] text-foreground" style={{ numberOfLines: 4 }}>
+                                      {event().text || t("memories_journal_no_text")}
                                     </Text>
-                                  </If>
-                                  <If when={!event().chatPath && event().trace?.task_id}>
-                                    <Text class="font-mono text-[11px] text-muted-foreground">{event().trace?.task_id ?? ""}</Text>
-                                  </If>
-                                  <If when={event().memory}>
-                                    {(memory) => (
-                                      <Text role="button" class="text-xs text-blue underline hover:text-ink" onPress={() => openMemory(memory())}>
-                                        {t("memories_remembered_as", { value: memory().description })}
+                                  </View>
+                                  <View class="flex-row flex-wrap items-center gap-x-4 gap-y-1">
+                                    <If when={event().chatPath}>
+                                      <Text
+                                        role="link"
+                                        class="font-mono text-[11px] text-muted-foreground hover:text-foreground"
+                                        onPress={() => void navigate(event().chatPath)}
+                                      >
+                                        {`${event().trace?.task_id || t("memories_open_chat")} ↗`}
                                       </Text>
-                                    )}
-                                  </If>
+                                    </If>
+                                    <If when={!event().chatPath && event().trace?.task_id}>
+                                      <Text class="font-mono text-[11px] text-muted-foreground">{event().trace?.task_id ?? ""}</Text>
+                                    </If>
+                                    <If when={event().memory}>
+                                      {(memory) => (
+                                        <Text role="button" class="text-xs text-blue underline hover:text-ink" onPress={() => openMemory(memory())}>
+                                          {t("memories_remembered_as", { value: memory().description })}
+                                        </Text>
+                                      )}
+                                    </If>
+                                  </View>
                                 </View>
                               </View>
-                            </View>
+                            )}
+                          </Each>
+                        </SectionCard>
+                      )}
+                    </Each>
+                    <If when={journalMore()}>
+                      <Note text={t("memories_journal_more")} class="max-w-[620px] leading-normal" />
+                    </If>
+                  </View>
+                }
+              >
+                <If when={!(loading() && !loaded())} else={<Blocks count={3} height={96} />}>
+                  <View class="gap-0.5">
+                    {/* The phone's page bar names the subject already. */}
+                    <If when={!isMobile()}>
+                      <View selectable>
+                        <Text class="text-lg font-semibold leading-normal tracking-[-0.01em] text-foreground" role="header">
+                          {subject() ? subjectTitle(subject()) : t("memories_all_subjects")}
+                        </Text>
+                      </View>
+                    </If>
+                    <Text class="max-w-[520px] text-xs leading-normal text-muted-foreground">{subjectLine(subject())}</Text>
+                  </View>
+
+                  <If when={!items().length}>
+                    <View class="items-center gap-2.5 px-4 py-14" testID="memories-empty">
+                      <Icon name="PhBrain" size={28} color="muted-foreground" />
+                      <Text class="max-w-[360px] text-center text-sm leading-normal text-muted-foreground">{t("memories_empty")}</Text>
+                    </View>
+                  </If>
+                  <If when={items().length > 0 && !sections().length}>
+                    <View class="items-center gap-2.5 px-4 py-10">
+                      <Text class="text-center text-sm leading-normal text-muted-foreground">{t("memories_no_match")}</Text>
+                      <If when={filterActive()}>
+                        <Button variant="outlined" size="sm" label={t("logs_clear_filters")} onPress={clearFilters} testID="memories-clear-filters" />
+                      </If>
+                    </View>
+                  </If>
+
+                  <Each of={sections()} key={(section) => section.key}>
+                    {(section) => (
+                      <SectionCard title={section().title} meta={section().meta} literal={section().literal}>
+                        <Each of={section().items} key={(item) => item.id}>
+                          {(item, index) => (
+                            <MemoryRow
+                              item={item()}
+                              first={index() === 0}
+                              open={expanded() === item().id}
+                              busy={visibilityBusy() === item().id}
+                              confirmingPublic={publicTarget() === item().id}
+                              claimText={isClaim(item()) ? t("memories_says", { value: contactName(item().told_by || "") }) : ""}
+                              learnedText={learnedText(item())}
+                              sourceLabel={sourceLabel(item())}
+                              toldByName={item().told_by ? contactName(item().told_by!) : ""}
+                              onToggle={() => toggle(item())}
+                              onVisibility={(value) => void setVisibility(item(), value)}
+                              onCancelPublic={() => publicTarget.set("")}
+                              onSources={() => showSources(item())}
+                              onEdit={() => startEdit(item())}
+                              onForget={() => confirmDelete(item())}
+                            />
                           )}
                         </Each>
                       </SectionCard>
                     )}
                   </Each>
-                  <If when={journalMore()}>
-                    <Note text={t("memories_journal_more")} class="max-w-[620px] leading-normal" />
-                  </If>
-                </View>
-              }
-            >
-              <If when={!(loading() && !loaded())} else={<Blocks count={3} height={96} />}>
-                <View class="gap-0.5">
-                  {/* The phone's page bar names the subject already. */}
-                  <If when={!isMobile()}>
-                    <View selectable>
-                      <Text class="text-lg font-semibold leading-normal tracking-[-0.01em] text-foreground" role="header">
-                        {subject() ? subjectTitle(subject()) : t("memories_all_subjects")}
-                      </Text>
-                    </View>
-                  </If>
-                  <Text class="max-w-[520px] text-xs leading-normal text-muted-foreground">{subjectLine(subject())}</Text>
-                </View>
-
-                <If when={!items().length}>
-                  <View class="items-center gap-2.5 px-4 py-14" testID="memories-empty">
-                    <Icon name="PhBrain" size={28} color="muted-foreground" />
-                    <Text class="max-w-[360px] text-center text-sm leading-normal text-muted-foreground">{t("memories_empty")}</Text>
-                  </View>
                 </If>
-                <If when={items().length > 0 && !sections().length}>
-                  <View class="items-center gap-2.5 px-4 py-10">
-                    <Text class="text-center text-sm leading-normal text-muted-foreground">{t("memories_no_match")}</Text>
-                    <If when={filterActive()}>
-                      <Button variant="outlined" size="sm" label={t("logs_clear_filters")} onPress={clearFilters} testID="memories-clear-filters" />
-                    </If>
-                  </View>
-                </If>
-
-                <Each of={sections()} key={(section) => section.key}>
-                  {(section) => (
-                    <SectionCard title={section().title} meta={section().meta} literal={section().literal}>
-                      <Each of={section().items} key={(item) => item.id}>
-                        {(item, index) => (
-                          <MemoryRow
-                            item={item()}
-                            first={index() === 0}
-                            open={expanded() === item().id}
-                            busy={visibilityBusy() === item().id}
-                            confirmingPublic={publicTarget() === item().id}
-                            claimText={isClaim(item()) ? t("memories_says", { value: contactName(item().told_by || "") }) : ""}
-                            learnedText={learnedText(item())}
-                            sourceLabel={sourceLabel(item())}
-                            toldByName={item().told_by ? contactName(item().told_by!) : ""}
-                            onToggle={() => toggle(item())}
-                            onVisibility={(value) => void setVisibility(item(), value)}
-                            onCancelPublic={() => publicTarget.set("")}
-                            onSources={() => showSources(item())}
-                            onEdit={() => startEdit(item())}
-                            onForget={() => confirmDelete(item())}
-                          />
-                        )}
-                      </Each>
-                    </SectionCard>
-                  )}
-                </Each>
               </If>
-            </If>
-            <View style={{ height: gutterY() }} />
-            <MobileBarSpacer />
-          </EdgeScroll>
+              <View style={{ height: gutterY() }} />
+              <MobileBarSpacer />
+            </EdgeScroll>
+          </View>
         </If>
       </View>
 

@@ -83,7 +83,8 @@ test("Back from an open topic goes to the topic list, also when the app reopened
   await app.waitFor("id:chat-back");
   await app.back();
   await app.waitFor("id:chat-topic-sidebar");
-  expect(app.shows("id:chat-back")).toBe(false);
+  // The conversation slides out to the right, its bar with it, then goes.
+  await app.waitFor("id:chat-back", { state: "gone" });
   await app.waitUntil(() => location(app) === "/e/default/chat");
   await expectSystemBack(app);
 

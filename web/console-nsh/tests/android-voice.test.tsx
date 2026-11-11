@@ -178,8 +178,10 @@ test("another conversation ends the recording; the words go into the draft they 
   await app.type("id:chat-composer-input", "first draft");
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
-  // Back to the topics, into another one: the recording is thrown away, nothing is sent.
+  // Back to the topics, into another one: the recording is thrown away, nothing is sent. (The
+  // conversation slides out first; headless, a press during that slide's last frame is lost.)
   await app.back();
+  await app.waitFor("id:chat-conversation-pane", { state: "gone" });
   await app.press("Other");
   await app.waitFor("id:chat-composer-input");
   await app.waitFor("label:Voice input");
@@ -192,6 +194,7 @@ test("another conversation ends the recording; the words go into the draft they 
   await app.press("label:Stop and transcribe");
   await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
   await app.back();
+  await app.waitFor("id:chat-conversation-pane", { state: "gone" });
   await app.press("Voice");
   await app.waitUntil(() => app.value("id:chat-composer-input") === "first draft");
 });

@@ -3212,6 +3212,12 @@ export function createChatController() {
     });
   });
 
+  // Resolves once the phone's conversation has slid out to the topic list (ChatPage's panes).
+  let conversationExit: (() => Promise<void>) | null = null;
+  function setConversationExit(next: (() => Promise<void>) | null) {
+    conversationExit = next;
+  }
+
   let lastRouteTopic: string | undefined;
   effect(() => {
     const topicID = routeTopicID();
@@ -3223,7 +3229,29 @@ export function createChatController() {
       if (lastRouteTopic === topicID) return;
       lastRouteTopic = topicID;
       topicSidebarView.set(topicSidebarViewFor(topicID, topicSidebarView()) as SidebarView);
-      void syncTopicFromRoute().finally(focusComposerOnDesktop);
+      // Back to the topic list on a phone (the bar's arrow, Android's Back, the browser's back): the
+      // list comes back at once and the conversation slides out still showing its topic (ChatPage's
+      // panes), which it lets go once it has gone.
+      const leaving =
+        !topicID &&
+        mobileTopicSplitEnabled() &&
+        hasSidebarTopics() &&
+        Boolean(normalizeTopicID(selectedTopicID()) || creatingTopic()) &&
+        conversationExit !== null;
+      if (leaving) syncMobileTopicView({ preferTopics: true });
+      const exit = leaving ? conversationExit?.() : null;
+      if (!exit) {
+        void syncTopicFromRoute().finally(focusComposerOnDesktop);
+        return;
+      }
+      // Unless the user went on meanwhile (another topic, a new chat): that sync is theirs.
+      const heldTopic = normalizeTopicID(selectedTopicID());
+      const heldCreating = creatingTopic();
+      void exit.then(() => {
+        if (!viewActive || untracked(routeTopicID) !== topicID || untracked(mobileTopicView) !== "topics") return;
+        if (normalizeTopicID(untracked(selectedTopicID)) !== heldTopic || untracked(creatingTopic) !== heldCreating) return;
+        void syncTopicFromRoute().finally(focusComposerOnDesktop);
+      });
     });
   });
 
@@ -3259,6 +3287,7 @@ export function createChatController() {
   });
 
   return {
+    setConversationExit,
     // state
     mobileMode,
     chatHistoryItems,

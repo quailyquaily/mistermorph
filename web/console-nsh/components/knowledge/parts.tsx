@@ -216,6 +216,9 @@ export function IndexColumn(props: {
   headRight?: "gutter" | "none";
   /** Classes of the list's content (default: 16pt all round, 2pt between rows). */
   listClass?: string;
+  /** Its motion as a phone's pane (components/motion/PaneStack.tsx), and whether it is going out. */
+  style?: Record<string, unknown>;
+  hidden?: boolean;
 }) {
   const edges = createScrollEdges({ start: false });
   const hasTop = () => Boolean(props.top || props.search);
@@ -225,6 +228,9 @@ export function IndexColumn(props: {
       testID={props.testID}
       accessibilityLabel={props.label ?? props.title}
       class={props.fill ? "flex-1" : "w-[310px] min-w-55"}
+      style={props.style}
+      accessibilityElementsHidden={props.hidden || undefined}
+      importantForAccessibility={props.hidden ? "no-hide-descendants" : undefined}
     >
       <View
         class="h-[57px] flex-row items-center justify-between gap-3 border-b"

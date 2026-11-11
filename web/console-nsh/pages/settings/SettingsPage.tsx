@@ -12,6 +12,7 @@ import { previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
+import { createPaneStack } from "../../components/motion/PaneStack";
 import { Button, confirm, Icon, type IconName, MessageDialog, Page } from "../../components/ui";
 import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
@@ -126,6 +127,8 @@ export function SettingsPage() {
   const showIndexPane = () => !mobile() || !mobilePanelVisible();
   const showPanelPane = () => !mobile() || mobilePanelVisible();
   const mobileShowBack = () => mobile() && mobilePanelVisible();
+  // On phones the sections (0) and a section (1) are levels of the page that slide (PaneStack).
+  const panes = createPaneStack(() => (mobile() ? (mobilePanelVisible() ? 1 : 0) : null));
   // Android's Back from a section goes to the sections, as the bar's back arrow does. A section
   // opened from the sections also goes back to their address, so the next Back leaves Settings
   // instead of only changing the address under the same screen.
@@ -284,7 +287,13 @@ export function SettingsPage() {
   const searchFocused = signal(false);
   let searchInput: InputRef | undefined;
   const index = () => (
-    <View class={mobile() ? "flex-1" : "w-[310px]"} testID="settings-index">
+    <View
+      class={mobile() ? "flex-1" : "w-[310px]"}
+      style={panes.style(0)}
+      accessibilityElementsHidden={panes.hidden(0) || undefined}
+      importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
+      testID="settings-index"
+    >
       <View
         class={`mx-4 mb-2 mt-4 h-[34px] flex-row items-center gap-2 rounded-(--radius) border bg-card px-2.5 ${
           searchFocused() ? "border-subtle" : "border-line"
@@ -462,8 +471,17 @@ export function SettingsPage() {
             >
               <View class="flex-1">
                 <View class={`flex-1 flex-row ${mobile() ? "" : "gap-1"}`}>
-                  <If when={showIndexPane()}>{index()}</If>
-                  <If when={showPanelPane()}>{content()}</If>
+                  <If when={panes.shown(0, showIndexPane())}>{index()}</If>
+                  <If when={panes.shown(1, showPanelPane())}>
+                    <View
+                      class="flex-1"
+                      style={panes.style(1)}
+                      accessibilityElementsHidden={panes.hidden(1) || undefined}
+                      importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
+                    >
+                      {content()}
+                    </View>
+                  </If>
                   <If when={showPanelPane() && !mobile()}>
                     <PaneOutlet target={pane} />
                   </If>

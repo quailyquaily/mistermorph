@@ -123,7 +123,8 @@ test("on a phone the topic list and the conversation are separate views", async 
   await app.press("id:chat-topic-topic-1");
   await app.waitFor("text:Built.");
   await app.waitFor("id:chat-back");
-  expect(app.shows("id:chat-topic-sidebar")).toBe(false);
+  // The conversation slides in over the list, which goes once the slide has ended.
+  await app.waitFor("id:chat-topic-sidebar", { state: "gone" });
   await app.press("id:chat-back");
   await app.waitFor("id:chat-topic-sidebar");
   // The floating button starts a new topic.

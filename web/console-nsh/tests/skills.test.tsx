@@ -332,7 +332,8 @@ test("on a phone the list and a skill take turns, with a back button", async () 
   expect(app.shows("id:skills-fab")).toBe(true);
   await app.press("id:skill-row:weather");
   await app.waitFor("id:skill-detail");
-  expect(app.shows("id:skill-row:weather")).toBe(false);
+  // The skill slides in over the list, which goes once the slide has ended.
+  await app.waitFor("id:skill-row:weather", { state: "gone" });
   await app.press("label:Back");
   await app.waitFor("id:skill-row:weather");
 });
