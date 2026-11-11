@@ -31,3 +31,13 @@ Tests: Manager independently passed gofmt cleanliness, go vet ./..., go test ./.
 Installs: None.
 Visual checks: Coder checked the web view in headless Chrome. Android was covered by headless tests only, not visually checked on a device or emulator. Desktop app was not visually checked.
 Branch pushed; moved to review/ for independent review.
+
+## factory · review · 2026-11-11 16:18
+head: ce066a7104d8e3866abfc549fba18a8f41496574
+verdict: pass
+notes:
+- Claude Code independently reviewed all six changed files against origin/master (7a63c01ab829d9dd3b0946b380153166e6c89906); no actionable introduced defects found.
+- Validation passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, and nsh test --web-host tests/noHost.js (626 passed, 0 failed). Tests used a throwaway HOME. No installs; worktree unchanged.
+- Visual limits: review used headless web/Android tests; actual icon colour was not visually checked in a browser, Android device/emulator, or desktop app. Android visual verification remains outstanding.
+- Existing behaviour, not introduced here: recording state begins while microphone permission is pending; denial restores idle. Delayed permission responses are not covered by the new immediate-response hosts.
+- Moved to ready/; not merged or released.
