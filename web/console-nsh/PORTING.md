@@ -167,6 +167,11 @@ Headless tests prove behaviour, not the look.
   (`pages/chat/topicDrag.ts`). A view added to an ancestor of the responder mid-gesture ends the
   gesture silently (no more moves, no release, no terminate): draw drop marks in views that are
   there from the start and only restyle them.
+- On the web every nsh `Scroll` contains its overscroll (`.nsh-scroll`: `overscroll-behavior:
+  contain`, no prop to change it), even one that cannot scroll: a vertical touch swipe that starts
+  on a sideways scroller inside a vertical one does not scroll the outer one (chat code blocks do
+  this). Progress and coder runs that do not wrap are a plain row while they fit and a sideways
+  scroller only while they overflow (`components/chat/OverflowLine.tsx`).
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
 
