@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/agentlink"
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
@@ -74,7 +75,7 @@ func (r *consoleLocalRuntime) deliverAgentLinkLateReply(ctx context.Context, rep
 	if peer == "" {
 		peer = reply.ContactID
 	}
-	task := fmt.Sprintf("[Agent Link] %s (%s) answered the message you sent it:\n\n%s", peer, reply.ContactID, strings.TrimSpace(reply.Message.Envelope.Text))
+	task := fmt.Sprintf("[Agent Link] %s (%s) answered the message you sent it:\n\n%s", peer, reply.ContactID, agentlink.TextWithAttachmentNotes(reply.Message))
 	if result := r.trySteerConsoleRun(task, topicID); result.Found {
 		return nil
 	}

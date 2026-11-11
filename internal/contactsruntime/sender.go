@@ -360,9 +360,6 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 		}
 		return s.publishAccountDM(ctx, channel, peerID, decision)
 	case contacts.ChannelAgentLink:
-		if decision.File != nil {
-			return false, false, fmt.Errorf("agent link does not support file delivery")
-		}
 		return s.sendAgentLink(ctx, contact, decision)
 	default:
 		return false, false, fmt.Errorf("unsupported delivery channel: %s", channel)

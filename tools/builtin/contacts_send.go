@@ -66,7 +66,7 @@ func (t *ContactsSendTool) Description() string {
 		IF sending to multiple contacts THEN pass comma-separated contact_id values.
 	  Message routes automatically across Slack, Telegram, LINE, Lark, and Mixin based on chat_id/contact reachability.
 		To send a file, pass its path; message_text becomes an optional caption. One file per call, at most 20 MiB.
-		Files can be sent on Telegram, Slack, Lark, Discord, Mixin, WeChat and WhatsApp, not LINE.
+		Files can be sent on Telegram, Slack, Lark, Discord, Mixin, WeChat, WhatsApp and Agent Link (at most 2 MiB there), not LINE.
 		The file must be under file_cache_dir or workspace_dir; copy a file from anywhere else into file_cache_dir first.
 		NEVER send message to people who is talking with you, or the people in the chat history.`
 }
@@ -142,8 +142,10 @@ type contactSendExecutionPolicy struct {
 	activeAgentIDs           map[string]struct{}
 	// waitForReplies makes a send over Agent Link wait for the agent's answer.
 	waitForReplies bool
-	stateDir       string
-	replyTimeout   time.Duration
+	// agentLinkFilesOnly sends files over Agent Link only.
+	agentLinkFilesOnly bool
+	stateDir           string
+	replyTimeout       time.Duration
 }
 
 var contactsSendPolicy = contactSendExecutionPolicy{
@@ -191,6 +193,11 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 	policy.replyTimeout = opts.AgentLinkReplyTimeout
 	if policy.replyTimeout <= 0 {
 		policy.replyTimeout = configdefaults.DefaultAgentLinkReplyTimeout
+	}
+	if policy.agentLinkFilesOnly {
+		if out, handled, err := attachToAgentLinkReply(ctx, params, contactIDs, file, policy); handled {
+			return out, err
+		}
 	}
 
 	sender, err := contactsruntime.NewRoutingSender(ctx, contactsruntime.SenderOptions{
@@ -250,6 +257,11 @@ func executeContactsSendResolved(
 	recipients, err := resolveContactsSendRecipients(ctx, svc, contactIDs, policy)
 	if err != nil {
 		return "", err
+	}
+	for _, recipient := range recipients {
+		if err := checkFileRecipient(policy, recipient.ContactID, recipient.Contact, chatID, file); err != nil {
+			return "", err
+		}
 	}
 	for _, recipient := range recipients {
 		if policy.skipsAgentSendCooldown(ctx, recipient.Contact, chatID) {
@@ -317,7 +329,7 @@ func executeContactsSendResolved(
 			return "", err
 		}
 		if ask != nil {
-			ask.sent(ctx, item.Text(baseText))
+			ask.sent(ctx, item.Text(baseText), file)
 		}
 		asks = append(asks, ask)
 		result := map[string]any{
@@ -368,6 +380,9 @@ func executeContactsSendSingle(
 			return "", err
 		}
 	}
+	if err := checkFileRecipient(policy, contactID, contact, resolvedChatID, file); err != nil {
+		return "", err
+	}
 	if !policy.skipsAgentSendCooldown(ctx, contact, resolvedChatID) {
 		if err := checkAgentSendCooldown(policy.toolName, contactID, contact, now); err != nil {
 			return "", err
@@ -410,7 +425,7 @@ func executeContactsSendSingle(
 	}
 	if ask != nil {
 		text, _ := sendParams["message_text"].(string)
-		ask.sent(ctx, strings.TrimSpace(text))
+		ask.sent(ctx, strings.TrimSpace(text), file)
 		result["reply"] = waitAgentLinkReplies(ctx, []*agentLinkAsk{ask}, policy.replyTimeout)[0]
 	}
 	if file != nil {

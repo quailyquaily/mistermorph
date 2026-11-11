@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,8 @@ import (
 const (
 	helloTimeout   = 10 * time.Second
 	deliverTimeout = 20 * time.Second
+	// attachmentDeliverExtra is the extra time a delivery with files gets to cross a slow link.
+	attachmentDeliverExtra = 60 * time.Second
 )
 
 // errSendQueueFull ends a connection whose runtime reads frames slower than the relay sends them.
@@ -31,6 +34,9 @@ type Relay struct {
 	mu      sync.Mutex
 	members map[string]*relayMember
 	pending map[string]*pendingDelivery
+	// fileBytes is the attachment bytes of the pending deliveries, at most maxFileBytes.
+	fileBytes    int64
+	maxFileBytes int64
 }
 
 type relayMember struct {
@@ -63,6 +69,8 @@ type pendingDelivery struct {
 	target  *relayMember
 	leaseID string
 	timer   *time.Timer
+	// fileBytes is the attachment bytes the delivery carries.
+	fileBytes int64
 }
 
 // NewRelay returns an empty relay.
@@ -74,6 +82,8 @@ func NewRelay(logger *slog.Logger) *Relay {
 		logger:  logger.With("component", "agentlink_relay"),
 		members: make(map[string]*relayMember),
 		pending: make(map[string]*pendingDelivery),
+
+		maxFileBytes: maxRelayAttachmentBytes,
 	}
 }
 
@@ -121,7 +131,10 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 		return fmt.Errorf("agent link hello: invalid frame")
 	}
 	member := &relayMember{
-		peer:   Peer{InstanceID: strings.TrimSpace(hello.InstanceID), AgentName: strings.TrimSpace(hello.AgentName)},
+		peer: Peer{
+			InstanceID: strings.TrimSpace(hello.InstanceID), AgentName: strings.TrimSpace(hello.AgentName),
+			Capabilities: knownCapabilities(hello.Capabilities),
+		},
 		label:  label,
 		ctx:    ctx,
 		cancel: cancel,
@@ -186,11 +199,14 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 			member.send(Frame{Type: FramePong})
 		case FramePong:
 		case FrameHello:
-			// The agent was renamed; reconnecting is not needed to update the roster.
+			// The agent was renamed, or its capabilities changed; reconnecting is not needed to
+			// update the roster.
 			name := strings.TrimSpace(frame.AgentName)
+			capabilities := knownCapabilities(frame.Capabilities)
 			r.mu.Lock()
-			if member.peer.AgentName != name {
+			if member.peer.AgentName != name || !slices.Equal(member.peer.Capabilities, capabilities) {
 				member.peer.AgentName = name
+				member.peer.Capabilities = capabilities
 				r.broadcastRosterLocked()
 			}
 			r.mu.Unlock()
@@ -214,11 +230,9 @@ func (r *Relay) removeMember(member *relayMember, reason string) {
 		case p.target == member:
 			unreachable = append(unreachable, p)
 			unreachableIDs = append(unreachableIDs, id)
-			delete(r.pending, id)
-			p.timer.Stop()
+			r.dropPendingLocked(id, p)
 		case p.source == member:
-			delete(r.pending, id)
-			p.timer.Stop()
+			r.dropPendingLocked(id, p)
 		}
 	}
 	r.mu.Unlock()
@@ -244,6 +258,8 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		result(StatusRejected, ReasonInvalid)
 		return
 	}
+	fileBytes := attachmentBytes(msg.Attachments)
+	timeout := deliverTimeout
 	r.mu.Lock()
 	target := r.members[msg.To]
 	if target == nil {
@@ -251,17 +267,47 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		result(StatusUnreachable, "")
 		return
 	}
+	if len(msg.Attachments) > 0 {
+		if !hasCapability(target.peer.Capabilities, CapabilityFiles) {
+			r.mu.Unlock()
+			r.logger.Info("agentlink_files_unsupported", "message_id", msg.MessageID, "from", msg.From, "to", msg.To)
+			result(StatusRejected, ReasonFilesUnsupported)
+			return
+		}
+		held := r.fileBytes
+		if previous := r.pending[msg.MessageID]; previous != nil {
+			held -= previous.fileBytes
+		}
+		if held+fileBytes > r.maxFileBytes {
+			// Too many files in flight; the sender retries later.
+			r.mu.Unlock()
+			result(StatusUnreachable, "")
+			return
+		}
+		timeout += attachmentDeliverExtra
+	}
 	if previous := r.pending[msg.MessageID]; previous != nil {
 		// The sender's lease ran out and it sent again through this Console; answer the new lease.
-		previous.timer.Stop()
+		r.dropPendingLocked(msg.MessageID, previous)
 	}
-	p := &pendingDelivery{source: source, target: target, leaseID: frame.LeaseID}
-	p.timer = time.AfterFunc(deliverTimeout, func() { r.expireDelivery(msg.MessageID, p) })
+	p := &pendingDelivery{source: source, target: target, leaseID: frame.LeaseID, fileBytes: fileBytes}
+	p.timer = time.AfterFunc(timeout, func() { r.expireDelivery(msg.MessageID, p) })
 	r.pending[msg.MessageID] = p
+	r.fileBytes += fileBytes
 	r.mu.Unlock()
 	if !target.send(Frame{Type: FrameDeliver, MessageID: msg.MessageID, Message: &msg}) {
 		r.expireDelivery(msg.MessageID, p)
 	}
+}
+
+// dropPendingLocked forgets a pending delivery and the file bytes it held.
+func (r *Relay) dropPendingLocked(messageID string, p *pendingDelivery) {
+	if r.pending[messageID] == p {
+		delete(r.pending, messageID)
+	}
+	p.timer.Stop()
+	r.fileBytes -= p.fileBytes
+	p.fileBytes = 0
 }
 
 func (r *Relay) expireDelivery(messageID string, p *pendingDelivery) {
@@ -270,9 +316,8 @@ func (r *Relay) expireDelivery(messageID string, p *pendingDelivery) {
 		r.mu.Unlock()
 		return
 	}
-	delete(r.pending, messageID)
+	r.dropPendingLocked(messageID, p)
 	r.mu.Unlock()
-	p.timer.Stop()
 	p.source.send(Frame{Type: FrameSendResult, LeaseID: p.leaseID, MessageID: messageID, Status: StatusUnreachable})
 }
 
@@ -284,9 +329,8 @@ func (r *Relay) completeDelivery(target *relayMember, frame Frame) {
 		r.mu.Unlock()
 		return
 	}
-	delete(r.pending, id)
+	r.dropPendingLocked(id, p)
 	r.mu.Unlock()
-	p.timer.Stop()
 	status := frame.Status
 	switch status {
 	case StatusAccepted:

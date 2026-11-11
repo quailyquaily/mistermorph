@@ -55,8 +55,8 @@ JSON frames:
 
 | Direction | Frame | Purpose |
 |---|---|---|
-| runtime → Console | `hello {instance_id, agent_name}` | Identifies the runtime; sent again after a rename |
-| Console → runtime | `roster {agents: [{instance_id, agent_name}]}` | Full list of reachable agents, sent on connect and on every change |
+| runtime → Console | `hello {instance_id, agent_name, capabilities?}` | Identifies the runtime; sent again after a rename or a change of capabilities |
+| Console → runtime | `roster {agents: [{instance_id, agent_name, capabilities?}]}` | Full list of reachable agents, sent on connect and on every change |
 | runtime → Console | `send {lease_id, message}` | Asks the Console to deliver one queued message |
 | Console → runtime | `send_result {lease_id, message_id, status, reason?}` | `delivered`, `rejected` (target refused it, e.g. hop limit) or `unreachable` |
 | Console → runtime | `deliver {message}` | Hands an incoming message to the target runtime |
@@ -72,9 +72,12 @@ JSON frames:
   "from": "inst_…",
   "to": "inst_…",
   "hop": 1,
-  "envelope": { "message_id": "msg_…", "text": "…", "sent_at": "…", "session_id": "…", "reply_to": "…" }
+  "envelope": { "message_id": "msg_…", "text": "…", "sent_at": "…", "session_id": "…", "reply_to": "…" },
+  "attachments": [{ "filename": "…", "media_type": "…", "size": 0, "sha256": "…", "data": "<base64>" }]
 }
 ```
+
+`attachments` is optional; see `feat_20261111_agentlink_file_transfer.md`.
 
 Relaying one message, from A to B:
 
@@ -100,7 +103,7 @@ Relaying one message, from A to B:
 - `contacts.ResolveDecisionChannel` resolves `mm:` contact IDs and chat IDs to `agentlink`. A contact on a platform channel resolves Agent Link last, so contacts that already work don't change behaviour.
 - The sync (§2) creates a separate `mm:` contact, so an agent that is also reachable on a platform has two contacts, one per route. Merging them is left for later.
 - `contactsruntime.RoutingSender` gets an Agent Link sender that writes to the queue in §4.
-- Agent Link carries text only (as `agent_send` does). `contacts_send` with a file to an `mm:` contact is rejected.
+- Agent Link carried text only in v1. Files were added later: see `feat_20261111_agentlink_file_transfer.md`.
 
 ### 6. Incoming messages become channel tasks
 
@@ -172,7 +175,7 @@ The Console needs no new keys: `console.endpoints` already defines the members.
 
 ## Out of scope
 
-- Files over Agent Link.
+- Files over Agent Link (added later in `feat_20261111_agentlink_file_transfer.md`).
 - Choosing which Console delivers a message.
 - Relays other than a Console (hosted mailboxes, direct runtime-to-runtime connections).
 - Agents connected to no Console.

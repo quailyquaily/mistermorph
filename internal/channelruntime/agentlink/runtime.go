@@ -25,6 +25,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
+	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/personautil"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
@@ -226,7 +227,14 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 			return
 		}
 		// A paired agent is a contact in a private conversation, never the owner.
-		result, runErr := runTask(audience.NewContext(lease.Context, audience.Contact(j.contactID())), bundle.TaskRuntime, logger, j, prior, lease.SteerQueue)
+		var replyFiles *link.ReplyFiles
+		taskCtx := audience.NewContext(lease.Context, audience.Contact(j.contactID()))
+		if !j.isReply() {
+			// agent_send to the asking agent with a file attaches it to the answer.
+			replyFiles = link.NewReplyFiles(j.Message.From)
+			taskCtx = link.WithReplyFiles(taskCtx, replyFiles)
+		}
+		result, runErr := runTask(taskCtx, bundle.TaskRuntime, logger, j, prior, lease.SteerQueue)
 		lease.Finish()
 		if runErr != nil {
 			displayErr := depsutil.FormatRuntimeError(runErr)
@@ -240,18 +248,14 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 			return
 		}
 		output := strings.TrimSpace(outputfmt.FormatFinalOutput(result.Final))
-		if output != "" && !j.isReply() {
-			reply := busruntime.MessageEnvelope{
-				Text:      output,
-				SessionID: j.Message.Envelope.SessionID,
-				ReplyTo:   j.Message.MessageID,
-			}
-			res, err := node.Send(workerCtx, j.Message.From, reply, j.Message.Hop+1, 0)
+		attachments := replyFiles.Attachments()
+		if (output != "" || len(attachments) > 0) && !j.isReply() {
+			res, err := sendReply(workerCtx, node, j, output, attachments, logger)
 			if err != nil {
 				markTaskFailed(logger, taskStore, j.TaskID, "send agent link reply: "+err.Error())
 				return
 			}
-			logger.Info("agentlink_reply_queued", "task_id", j.TaskID, "to", j.Message.From, "message_id", res.MessageID)
+			logger.Info("agentlink_reply_queued", "task_id", j.TaskID, "to", j.Message.From, "message_id", res.MessageID, "attachments", len(attachments))
 		}
 		if err := runtimecore.MarkTaskDone(taskStore, j.TaskID, output); err != nil {
 			logger.Error("task_state_write_error", "task_id", j.TaskID, "error", err.Error())
@@ -277,6 +281,17 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 		stopWorkers()
 		runner.WaitClosed()
 	}()
+
+	if cacheDir := receivedFilesDir(d, opts); cacheDir != "" {
+		restoreFiles, err := node.EnableFiles(cacheDir, func(ctx context.Context, from string) error {
+			return authorizeFiles(ctx, contactsStore, from)
+		})
+		if err != nil {
+			logger.Warn("agentlink_files_unavailable", "error", err.Error())
+		} else {
+			defer restoreFiles()
+		}
+	}
 
 	handle := func(handlerCtx context.Context, msg link.Message) error {
 		conversationKey := conversationKey(msg)
@@ -323,7 +338,7 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 		}
 		createdAt := time.Now().UTC()
 		if err := recordAgentTask(taskStore, daemonruntime.TaskInfo{
-			ID: taskID, Status: daemonruntime.TaskQueued, Task: textutil.TruncateRunes(msg.Envelope.Text, 2000),
+			ID: taskID, Status: daemonruntime.TaskQueued, Task: textutil.TruncateRunes(link.TextWithAttachmentNotes(msg), 2000),
 			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, TopicID: daemonruntime.AgentLinkTopicID(msg.From),
 			Conversation: runtimecore.ConversationWithAudience(runtimecore.BuildTaskConversation(conversationKey, "private", j.contactID(), peerName, "", nil), audience.Contact(j.contactID())),
 			Result:       map[string]any{"source": mode, "agentlink_from": msg.From, "agentlink_message_id": msg.MessageID, "agentlink_hop": msg.Hop},
@@ -369,7 +384,8 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, logger *slog.Logger, 
 	ctx = link.WithIncomingHop(ctx, j.Message.Hop)
 	// The answer goes back as the reply; contacts_send must not message the same agent too.
 	ctx = builtin.WithContactsSendRuntimeContext(ctx, builtin.ContactsSendRuntimeContext{ForbiddenTargetIDs: []string{j.contactID()}})
-	route, err := rt.ResolveTaskRouteForRun(llmstats.WithRunID(ctx, j.TaskID), j.Message.Envelope.Text)
+	task := link.TextWithAttachmentNotes(j.Message)
+	route, err := rt.ResolveTaskRouteForRun(llmstats.WithRunID(ctx, j.TaskID), task)
 	if err != nil {
 		return taskruntime.RunResult{}, err
 	}
@@ -385,7 +401,7 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, logger *slog.Logger, 
 		"agentlink_hop":        j.Message.Hop,
 	}, taskruntime.ObservationMetaIDs{TaskID: j.TaskID, TraceID: j.TaskID, TopicID: j.Message.From, OriginEventID: j.Message.MessageID})
 	return rt.Run(ctx, taskruntime.RunRequest{
-		Task:           j.Message.Envelope.Text,
+		Task:           task,
 		Model:          strings.TrimSpace(route.ClientConfig.Model),
 		Route:          &route,
 		Scene:          mode + ".loop",
@@ -405,6 +421,53 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, logger *slog.Logger, 
 		HistoryBoundaries:      checkpoint.HistoryBoundaries,
 		CurrentMessageBoundary: checkpoint.CurrentMessageBoundary,
 	})
+}
+
+// sendReply sends a task's answer back with the files the task attached. When the files cannot go,
+// the answer goes without them and says so, rather than dropping them silently.
+func sendReply(ctx context.Context, node *link.Node, j job, output string, attachments []link.Attachment, logger *slog.Logger) (link.SendResult, error) {
+	reply := busruntime.MessageEnvelope{
+		Text:      output,
+		SessionID: j.Message.Envelope.SessionID,
+		ReplyTo:   j.Message.MessageID,
+	}
+	if len(attachments) == 0 {
+		return node.Send(ctx, j.Message.From, reply, j.Message.Hop+1, 0)
+	}
+	res, err := node.SendWithAttachments(ctx, j.Message.From, reply, attachments, j.Message.Hop+1, 0)
+	if err == nil {
+		return res, nil
+	}
+	logger.Warn("agentlink_reply_files_failed", "task_id", j.TaskID, "to", j.Message.From, "error", err.Error())
+	names := make([]string, 0, len(attachments))
+	for _, a := range attachments {
+		names = append(names, fmt.Sprintf("%q", a.Filename))
+	}
+	note := fmt.Sprintf("[Agent Link] %d file(s) could not be attached to this answer (%s): %s", len(attachments), strings.Join(names, ", "), err.Error())
+	if reply.Text == "" {
+		reply.Text = note
+	} else {
+		reply.Text += "\n\n" + note
+	}
+	return node.Send(ctx, j.Message.From, reply, j.Message.Hop+1, 0)
+}
+
+// receivedFilesDir is file_cache_dir, where files other agents send are saved.
+func receivedFilesDir(d depsutil.CommonDependencies, opts Options) string {
+	return pathutil.ExpandHomePath(firstNonEmpty(opts.EngineToolsConfig.PathRoots.FileCacheDir, d.RuntimeToolsConfig.Image.FileCacheDir, d.RuntimePaths.CacheDir))
+}
+
+// authorizeFiles refuses files from an agent whose contact a person deactivated. An agent the
+// contact sync made inactive, or one without a contact yet, may send them.
+func authorizeFiles(ctx context.Context, store *contacts.DBStore, from string) error {
+	status, by, found, err := store.ContactStatus(ctx, link.ContactID(from))
+	if err != nil {
+		return err
+	}
+	if found && status == contacts.StatusInactive && by != contacts.DeactivatedByAgentLink {
+		return fmt.Errorf("contact %s is deactivated", link.ContactID(from))
+	}
+	return nil
 }
 
 func peerPrompt(j job) string {
@@ -511,7 +574,7 @@ func inboundHistoryItem(j job) chathistory.ChatHistoryItem {
 		ReplyToMessageID: j.Message.Envelope.ReplyTo,
 		SentAt:           sentAt.UTC(),
 		Sender:           chathistory.ChatHistorySender{UserID: j.contactID(), Nickname: display, IsBot: true, DisplayRef: display},
-		Text:             strings.TrimSpace(j.Message.Envelope.Text),
+		Text:             link.TextWithAttachmentNotes(j.Message),
 	}
 }
 

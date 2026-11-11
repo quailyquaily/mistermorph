@@ -2,6 +2,7 @@ package contactsruntime
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -27,15 +28,66 @@ func (s *RoutingSender) sendAgentLink(ctx context.Context, contact contacts.Cont
 	if !ok || s.agentLinkStateDir == "" {
 		return false, false, fmt.Errorf("agent link is not running in this process")
 	}
+	var envelope busruntime.MessageEnvelope
+	if decision.File != nil {
+		// A file's caption may be empty, which the text envelope does not allow.
+		envelope, err := agentLinkFileEnvelope(decision, time.Now().UTC())
+		if err != nil {
+			return false, false, err
+		}
+		return s.sendAgentLinkEnvelope(ctx, node, instanceID, decision, envelope)
+	}
 	raw, err := buildEnvelopePayload(decision, decision.ContentType, decision.PayloadBase64, time.Now().UTC())
 	if err != nil {
 		return false, false, err
 	}
-	var envelope busruntime.MessageEnvelope
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return false, false, fmt.Errorf("decode envelope payload: %w", err)
 	}
-	result, err := node.Send(ctx, instanceID, envelope, agentlink.OutgoingHop(ctx), agentLinkSendWait)
+	return s.sendAgentLinkEnvelope(ctx, node, instanceID, decision, envelope)
+}
+
+// agentLinkFileEnvelope is the envelope of a file decision: its optional caption, session and
+// reply_to.
+func agentLinkFileEnvelope(decision contacts.ShareDecision, now time.Time) (busruntime.MessageEnvelope, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(decision.PayloadBase64))
+	if err != nil {
+		return busruntime.MessageEnvelope{}, fmt.Errorf("decode payload_base64: %w", err)
+	}
+	var payload struct {
+		Text      string `json:"text"`
+		SessionID string `json:"session_id"`
+		ReplyTo   string `json:"reply_to"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return busruntime.MessageEnvelope{}, fmt.Errorf("decode message envelope: %w", err)
+	}
+	sessionID := strings.TrimSpace(payload.SessionID)
+	if sessionID == "" {
+		return busruntime.MessageEnvelope{}, fmt.Errorf("session_id is required for dialogue topics")
+	}
+	if err := validateSessionID(sessionID); err != nil {
+		return busruntime.MessageEnvelope{}, err
+	}
+	return busruntime.MessageEnvelope{
+		MessageID: strings.TrimSpace(decision.ItemID),
+		Text:      strings.TrimSpace(payload.Text),
+		SentAt:    now.Format(time.RFC3339),
+		SessionID: sessionID,
+		ReplyTo:   strings.TrimSpace(payload.ReplyTo),
+	}, nil
+}
+
+func (s *RoutingSender) sendAgentLinkEnvelope(ctx context.Context, node *agentlink.Node, instanceID string, decision contacts.ShareDecision, envelope busruntime.MessageEnvelope) (bool, bool, error) {
+	var attachments []agentlink.Attachment
+	if decision.File != nil {
+		attachment, err := readAgentLinkAttachment(decision)
+		if err != nil {
+			return false, false, err
+		}
+		attachments = []agentlink.Attachment{attachment}
+	}
+	result, err := node.SendWithAttachments(ctx, instanceID, envelope, attachments, agentlink.OutgoingHop(ctx), agentLinkSendWait)
 	if err != nil {
 		return false, false, err
 	}
@@ -49,6 +101,23 @@ func (s *RoutingSender) sendAgentLink(ctx context.Context, contact contacts.Cont
 		if reason == "" {
 			reason = result.Status
 		}
+		if reason == agentlink.ReasonFilesUnsupported {
+			return false, false, fmt.Errorf("agent link %s: %s: %w", result.Status, reason, agentlink.ErrFilesUnsupported)
+		}
 		return false, false, fmt.Errorf("agent link %s: %s", result.Status, reason)
 	}
+}
+
+// readAgentLinkAttachment reads the decision's file, checked again as it is read, as the bytes an
+// Agent Link message carries. The display name is the one the tool resolved, before sanitizing.
+func readAgentLinkAttachment(decision contacts.ShareDecision) (agentlink.Attachment, error) {
+	file, _, err := prepareFileSend(decision, agentlink.MaxAttachmentBytes)
+	if err != nil {
+		return agentlink.Attachment{}, err
+	}
+	name := strings.TrimSpace(file.DisplayName)
+	if name == "" {
+		name = file.Filename
+	}
+	return agentlink.ReadAttachmentFile(file.Path, name, file.Size, file.SHA256)
 }
