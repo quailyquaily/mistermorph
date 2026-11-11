@@ -4,8 +4,9 @@
 // back arrow, whose first tap with the keyboard up only lowers it.
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
+import { LayoutAnimation, signal } from "nsh";
 import { COMPOSER_LINE_HEIGHT } from "../components/chat/composerField";
-import { composerLayout, ONE_ROW, type ComposerLayout } from "../components/chat/composerRows";
+import { composerLayout, followComposerLayout, ONE_ROW, type ComposerLayout } from "../components/chat/composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "../components/chat/composerSheets";
 import { softKeyboardUp } from "../lib/softKeyboard";
 import { bottomSheetInsets } from "../lib/systemInsets";
@@ -222,6 +223,84 @@ test("the way back is the way there: the same draft and widths give the same lay
   }
   // Cleared or sent: one row at once, before the copies have measured the empty field.
   expect(composerLayout("", measured("a long draft", 5 * LINE, 4 * LINE), TWO(4 * LINE))).toEqual(ONE_ROW);
+});
+
+/** followComposerLayout over a draft and its measures, with LayoutAnimation.configureNext counted
+ *  and display frames run by hand (`frames`), from a two-row layout settled for `draft`. */
+function followed(draft: string, height: number) {
+  const ease = LayoutAnimation.configureNext;
+  const raf = globalThis.requestAnimationFrame;
+  const caf = globalThis.cancelAnimationFrame;
+  let eased = 0;
+  let queued = new Map<number, () => void>();
+  let id = 0;
+  (LayoutAnimation as { configureNext: unknown }).configureNext = () => {
+    eased += 1;
+  };
+  globalThis.requestAnimationFrame = (run: (time: number) => void) => {
+    id += 1;
+    queued.set(id, () => run(0));
+    return id;
+  };
+  globalThis.cancelAnimationFrame = (frame?: number) => void queued.delete(frame ?? 0);
+  const layout = signal<ComposerLayout>(ONE_ROW);
+  const text = signal(draft);
+  const measures = signal(measured(draft, height + LINE, height));
+  followComposerLayout(layout, text, measures);
+  const frames = () => {
+    for (let frame = 0; frame < 4; frame += 1) {
+      const due = queued;
+      queued = new Map();
+      for (const run of due.values()) run();
+    }
+  };
+  frames();
+  expect(layout()).toEqual(TWO(height));
+  eased = 0;
+  return {
+    layout,
+    text,
+    measures,
+    frames,
+    eased: () => eased,
+    restore() {
+      (LayoutAnimation as { configureNext: unknown }).configureNext = ease;
+      globalThis.requestAnimationFrame = raf;
+      globalThis.cancelAnimationFrame = caf;
+    },
+  };
+}
+
+test("above the controls a resize snaps the height, even right after an edit that kept it", () => {
+  const composer = followed("a long draft", 2 * LINE);
+  try {
+    // A character that leaves both heights as they were, measured for the new draft.
+    composer.text.set("a long draft!");
+    composer.measures.set(measured("a long draft!", 3 * LINE, 2 * LINE));
+    expect(composer.layout()).toEqual(TWO(2 * LINE));
+    // The window narrows: the same draft is a line taller across the row. A new width, not an edit.
+    composer.measures.set(measured("a long draft!", 4 * LINE, 3 * LINE));
+    expect(composer.layout()).toEqual(TWO(3 * LINE));
+    expect(composer.eased()).toBe(0);
+  } finally {
+    composer.restore();
+  }
+});
+
+test("above the controls an edit's height eases once measured, past the earlier draft's measures", () => {
+  const composer = followed("a long draft", 2 * LINE);
+  try {
+    // Typed: the copies' heights are still the earlier draft's, so nothing moves yet.
+    composer.text.set("a long draft that grows");
+    expect(composer.measures().text).toBe("a long draft");
+    expect(composer.layout()).toEqual(TWO(2 * LINE));
+    // The copies report the new draft a line taller: that height is the edit's, and eases.
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 3 * LINE));
+    expect(composer.layout()).toEqual(TWO(3 * LINE));
+    expect(composer.eased()).toBe(1);
+  } finally {
+    composer.restore();
+  }
 });
 
 // On phones the add menu and the model picker are sheets at the bottom of the screen, under the

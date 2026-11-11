@@ -88,7 +88,12 @@ export function followComposerLayout(layout: Signal<ComposerLayout>, text: Acces
     untracked(() => {
       const current = layout();
       const next = composerLayout(draft, measured, current);
-      if (sameComposerLayout(current, next)) return;
+      if (sameComposerLayout(current, next)) {
+        // Measured for this draft and unchanged, the layout shown is this draft's: a height that
+        // comes next is a new width's. Heights from an earlier draft leave it with that draft.
+        if (measured.text === draft) shownFor = draft;
+        return;
+      }
       if (next.rows !== current.rows) {
         if (rowsMoving) cancelAnimationFrame(rowsMoving);
         // Two frames: the one that lays the new rows out, and the one that draws them.
