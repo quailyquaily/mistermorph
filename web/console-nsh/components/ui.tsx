@@ -888,7 +888,14 @@ export function bottomSheetStyle<S extends object>(
   return insets ? { ...(options.style ?? ({} as S)), ...insets } : options.style;
 }
 
-/** A menu of commands opened from a trigger (the Vue console's AppMenu and dropdown menus). */
+/**
+ * A menu of commands opened from a trigger (the Vue console's AppMenu and dropdown menus).
+ *
+ * nsh's Menu opens on a press of the trigger's own outer view, so the trigger must not hold a
+ * pressable of its own: a `Button` (a `TipButton`: a tooltip view around nsh/base's Button) takes
+ * every press and the menu never opens. Give it a plain view (`MenuIconTrigger`, `role="button"`)
+ * and pass `disabled` here, not to the trigger.
+ */
 export function DropdownMenu(props: {
   trigger: JSX.Element;
   items: MenuEntry[];
@@ -948,6 +955,26 @@ export function DropdownMenu(props: {
       </Each>
     </Menu>
     </If>
+  );
+}
+
+/**
+ * A `DropdownMenu`'s icon trigger that looks like a plain xs icon-only `Button` (32pt square, the
+ * subtle icon, a soft fill on hover, a tooltip naming it), but is a plain view: the menu takes its
+ * presses, taps and Enter/Space (see `DropdownMenu`). Disabled is the menu's `disabled`.
+ */
+export function MenuIconTrigger(props: { icon?: IconName; label: string; testID?: string }) {
+  return (
+    <View
+      role="button"
+      accessibilityLabel={props.label}
+      testID={props.testID}
+      tooltip={<Tip text={props.label} />}
+      class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press aria-expanded:bg-hover"
+      style={{ transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease-out" }}
+    >
+      <Icon name={props.icon ?? "PhDotsThree"} size={16} color="subtle" />
+    </View>
   );
 }
 
