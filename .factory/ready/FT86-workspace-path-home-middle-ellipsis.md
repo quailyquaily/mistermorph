@@ -34,3 +34,16 @@ Verification: Manager reran the configured gofmt check, go vet ./..., go test ./
 Visual checks: Coder checked the live web Console in headless Chrome across 390–1600pt widths, including home/sibling/nonhome paths, resize and topic switching. Android device/emulator rendering and native desktop rendering were NOT checked; Android coverage is a headless platform fixture only.
 Push initially failed because the credential helper lacked the repository path; retried successfully with command-scoped credential.useHttpPath=true.
 Moved new/ → review/. Owner/reviewer: inspect path rendering and selection-copy behavior; Android visual verification remains outstanding.
+
+## factory · review · 2026-11-11 15:08
+head: a118745bf6fa139205e9669aba7d16f78840e542
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/WorkspacePathLine.tsx:124-126: Selection-copy now copies the displayed shortened path rather than the original filesystem path. Example: selecting a narrow non-home path copies its literal middle `...`, which cannot identify the original directory; the previous selectable text retained the full path. Preserve raw-path copying with an explicit copy action or selection-copy handling.
+- [P3] web/console-nsh/components/chat/workspacePath.ts:138: Cutting by code points can separate a combining accent from its base letter. Verified example: fitting the home-abbreviated `/Users/me/Projets/re\u0301sume\u0301-de\u0301taille\u0301-final` at 13 units returns `~/P...\u0301-final`, attaching the retained accent to the ellipsis. Cut at grapheme boundaries instead.
+
+Reviewed by Claude Code against origin/master...HEAD; no P0/P1 findings. Factory pass means no blocking P0/P1, not absence of defects. No merge conflict with current base; working tree unchanged.
+Validation: configured gofmt check, go vet ./..., go test ./... passed (exit 0); nsh check passed; nsh test --web-host tests/noHost.js passed, 657 tests, zero failures. Tests used an isolated absolute throwaway HOME. Manager inspected validation logs and reproduced the combining-character example.
+Installs: none reported.
+Residual risks: this review did not verify live web, Android device/emulator, or native desktop rendering. Owner should inspect raw-path copying and remaining visual coverage before shipping.
+Moved review/ → ready/ under the configured P0/P1 gate. No linked issue or PR to comment on.
