@@ -34,3 +34,13 @@ Tests: manager independently passed gofmt cleanliness, go vet ./..., and go test
 Installs: none; no dependency or manifest changes.
 Not checked: actual Android/iOS devices or emulator, real mobile browser, virtual keyboard, desktop application build, APK rebuild. Keyboard clearance relies on existing frame padding. Very short keyboard-open/landscape layouts may overflow because the centered form is not scrollable; review should examine this against acceptance criteria. Existing global error notices may overlap nav and were left outside scope.
 First branch push lacked credential repository-path context; retry with command-local credential.useHttpPath succeeded. No recovery or numbering changes were needed.
+
+## factory · review · 2026-11-11 15:36
+head: cb68d0e8fb179a902c15dae8e0ac79eab2c8102a
+verdict: pass
+notes:
+- Claude Code reviewed all four changed files against origin/master...HEAD; no verified introduced findings. Branch merges cleanly with master.
+- Validation: gofmt cleanliness, go vet ./..., go test ./..., and nsh check passed; nsh tests: 626 passed, 0 failed, including all five regression tests. Scripted tests used a throwaway HOME. Worktree remained clean.
+- Installs: none.
+- Residual risks: no real-device, emulator, real mobile browser or virtual-keyboard validation in this review. Headless tests do not measure occlusion. Very short keyboard-open/landscape layouts remain non-scrollable and may clip the form; global error notices may overlap navigation. No verified newly introduced defect established for these cases. Owner should check keyboard-open narrow/landscape layouts before shipping.
+- Moved review/ → ready/. No linked GitHub issues or PRs.
