@@ -511,8 +511,11 @@ export function ChatComposer(props: ChatComposerProps) {
 
   // The mic, an icon button drawn as the add and send controls are (a 38-point square, a 14-point
   // glyph) whose presses count 3 points around it: a 44-point target for a finger. While it records
-  // it is selected and shows Stop; while the recording is transcribed it is a busy plain button
-  // (BusyBeam, busyLook): its disabled microphone with the beam round it.
+  // it is selected and its microphone turns red (pressing it still stops); while the recording is
+  // transcribed it is a busy plain button (BusyBeam, busyLook): its disabled microphone with the
+  // beam round it. The glyph's testID names its tint, for tests (no headless image query).
+  const voiceTint = () =>
+    props.voiceState === "transcribing" ? busyLook("plain").text : props.voiceState === "recording" ? "danger" : "subtle";
   const voiceControl = () => (
     <TipButton
       onPress={() => props.onVoice?.()}
@@ -526,11 +529,7 @@ export function ChatComposer(props: ChatComposerProps) {
         props.voiceState === "transcribing" ? "" : "disabled:opacity-45"
       }`}
     >
-      <Icon
-        name={props.voiceState === "recording" ? "PhStop" : "PhMicrophone"}
-        size={14}
-        color={props.voiceState === "transcribing" ? busyLook("plain").text : props.voiceState === "recording" ? "ink" : "subtle"}
-      />
+      <Icon name="PhMicrophone" size={14} color={voiceTint()} testID={`chat-composer-voice-icon.PhMicrophone.${voiceTint()}`} />
       <BusyBeam busy={props.voiceState === "transcribing"} variant="plain" short testID="chat-composer-voice-beam" />
     </TipButton>
   );

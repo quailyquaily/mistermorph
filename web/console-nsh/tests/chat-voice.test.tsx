@@ -263,3 +263,55 @@ test("a recording under way keeps its stop when the route check fails; a new one
   await app.waitFor("id:chat-composer-voice", { state: "gone" });
   expect(starts()).toBe(2);
 });
+
+// The mic's glyph carries a testID naming its icon and tint (tests/chat-voice-icon.test.tsx).
+const MIC = "id:chat-composer-voice-icon.PhMicrophone.subtle";
+const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.danger";
+
+test("the mic turns red while it records and back once the recording ends, is discarded or fails", async () => {
+  let upload: unknown = { ok: true, status: 200, statusText: "OK", body: JSON.stringify({ text: "book a table" }) };
+  const { app } = await openRecording(READY, { host: { "morph.file.upload": () => upload } });
+  await app.waitFor(MIC);
+  expect(app.count(RED_MIC)).toBe(0);
+  // Recording: the red microphone on the button that stops it.
+  await app.press("label:Voice input");
+  await app.waitFor(RED_MIC);
+  expect(app.count(MIC)).toBe(0);
+  expect(app.count("id:chat-composer-voice-icon.PhStop.ink")).toBe(0);
+  expect(app.enabled("label:Stop and transcribe")).toBe(true);
+  // Stopped and transcribed.
+  await app.press("label:Stop and transcribe");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
+  await app.waitFor(MIC);
+  expect(app.count(RED_MIC)).toBe(0);
+  // Discarded.
+  await app.press("label:Voice input");
+  await app.waitFor(RED_MIC);
+  await app.press("label:Discard recording");
+  await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
+  await app.waitFor(MIC);
+  expect(app.count(RED_MIC)).toBe(0);
+  // A transcription that fails.
+  upload = { ok: false, status: 502, statusText: "Bad Gateway", body: JSON.stringify({ error: "upstream down" }) };
+  await app.press("label:Voice input");
+  await app.waitFor(RED_MIC);
+  await app.press("label:Stop and transcribe");
+  await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
+  await app.waitFor(MIC);
+  expect(app.count(RED_MIC)).toBe(0);
+  expect(app.count("label:Voice input")).toBe(1);
+  expect(app.value("id:chat-composer-input")).toBe("book a table");
+});
+
+test("a recorder that cannot start never shows the red mic", async () => {
+  const { app } = await openRecording(READY, {
+    runtime: "desktop",
+    features: ["pickFile", "saveFile", "voiceRecord"],
+    host: { "morph.voice.start": { ok: false, error: "audio-capture", message: "pw-record: no target" } },
+  });
+  await app.press("label:Voice input");
+  await app.waitUntil(() => app.texts().some((text) => text.startsWith("No microphone was found")));
+  expect(app.count(RED_MIC)).toBe(0);
+  expect(app.count(MIC)).toBe(1);
+  expect(app.count("label:Voice input")).toBe(1);
+});
