@@ -33,3 +33,14 @@ Outstanding limitation for review: keyboard arrow navigation and Tab do not reac
 Not checked: physical Android or emulator (only simulated nsh Android tests), desktop app, real mobile browser, live disabled/loading appearance. Profile-picker behavior was preserved rather than changed.
 Installs: none. Initial branch push failed because the credential helper lacked a repository path; retry with command-local credential.useHttpPath=true succeeded.
 Moved new/ → review/ for review, including the keyboard limitation.
+
+## factory · review · 2026-11-11 18:15
+head: ddb84d765715d5b4f8b2ddf98e0097c342f27a35
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/ui.tsx:966-976: During Models or Channels loading/saving, MenuIconTrigger retains role=button without disabled accessibility state and retains hover/active fill. Example: agentSaving=true renders an opacity-only disabled wrapper around an apparently enabled More button. Propagate accessibilityState.disabled and suppress interactive fills while disabled.
+- Claude Code reviewed all seven changed files on origin/master...HEAD; no P0/P1 findings. Branch merges cleanly with the fetched master.
+- Validation: gofmt cleanliness, go vet ./..., go test ./... passed; nsh check passed; all 631 nsh tests passed. Manager independently reran the exact gofmt gate. Scripted tests used absolute throwaway HOME directories. Installs: none.
+- Keyboard-only selection remains unavailable: bare nsh Menu and this trigger both fail Down+Enter/Tab+Enter selection in headless probes. This is existing library behavior, not a newly introduced regression; full keyboard acceptance remains incomplete and needs follow-up.
+- No real desktop/mobile browser, desktop app, physical Android device or emulator was checked in this review. Headless Linux and simulated Android evidence only; build-stage browser checks were not repeated.
+- No linked GitHub issues or PRs. Review-only worktree remained clean. Moved review/ → ready/ under the no-P0/P1 gate; not shipped.
