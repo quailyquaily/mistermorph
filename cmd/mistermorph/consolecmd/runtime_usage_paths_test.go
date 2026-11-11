@@ -97,6 +97,29 @@ func TestConsoleTopicMetadataUsesCapturedTopicContextPath(t *testing.T) {
 	}
 }
 
+func TestTopicMetadataReportsTheRuntimeHomeDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	workspaceDir := filepath.Join(home, "project")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	runtime := &consoleLocalRuntime{
+		workspaceStore: workspace.NewStore(filepath.Join(t.TempDir(), "workspace_attachments.json")),
+	}
+	metadata, err := runtime.topicMetadataForTopic(context.Background(), "topic-a", filepath.Join(t.TempDir(), "topic_context.json"), workspaceDir)
+	if err != nil {
+		t.Fatalf("topicMetadataForTopic() error = %v", err)
+	}
+	if metadata.Workspace.HomeDir != filepath.Clean(home) {
+		t.Fatalf("workspace.home_dir = %q, want %q", metadata.Workspace.HomeDir, filepath.Clean(home))
+	}
+	if metadata.Workspace.WorkspaceDir != workspaceDir {
+		t.Fatalf("workspace.workspace_dir = %q, want the raw %q", metadata.Workspace.WorkspaceDir, workspaceDir)
+	}
+}
+
 func consoleUsagePathTestReader(stateDir string) *viper.Viper {
 	reader := viper.New()
 	configdefaults.Apply(reader)
