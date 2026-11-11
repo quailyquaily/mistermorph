@@ -100,7 +100,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		handleTodoTaskRun(w, r, paths.cronPath, cronRun)
+		handleTodoTaskAction(w, r, paths.cronPath, cronRun)
 	})
 
 	mux.HandleFunc("/contacts/chat-profile", func(w http.ResponseWriter, r *http.Request) {
