@@ -41,3 +41,7 @@ notes:
 - Visual limits: review used headless web/Android tests; actual icon colour was not visually checked in a browser, Android device/emulator, or desktop app. Android visual verification remains outstanding.
 - Existing behaviour, not introduced here: recording state begins while microphone permission is pending; denial restores idle. Delayed permission responses are not covered by the new immediate-response hosts.
 - Moved to ready/; not merged or released.
+
+## factory · 2026-11-11 20:54
+Shipped with owner authorization using Claude Code. Merged into master: f33f3a6133127cdefa7bf95452f9a982d4052088. Pushed master through b541d3f4. No tag created or pushed, as explicitly requested.
+Validation: Go formatting, go vet ./..., go test ./..., nsh check and Console suite passed after each merge; final suite 646 passed, 0 failed. FT89 suite required rerun after external termination; FT90 drag test timed out once, then passed five isolated runs and the full rerun. No installs. No device/emulator or browser visual checks during shipping. Existing FT90 keyboard-selection and disabled-trigger limitations remain follow-ups. No linked issues or PRs to close. Moved ready/ → done/.

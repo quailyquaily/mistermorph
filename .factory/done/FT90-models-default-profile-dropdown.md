@@ -44,3 +44,7 @@ notes:
 - Keyboard-only selection remains unavailable: bare nsh Menu and this trigger both fail Down+Enter/Tab+Enter selection in headless probes. This is existing library behavior, not a newly introduced regression; full keyboard acceptance remains incomplete and needs follow-up.
 - No real desktop/mobile browser, desktop app, physical Android device or emulator was checked in this review. Headless Linux and simulated Android evidence only; build-stage browser checks were not repeated.
 - No linked GitHub issues or PRs. Review-only worktree remained clean. Moved review/ → ready/ under the no-P0/P1 gate; not shipped.
+
+## factory · 2026-11-11 20:54
+Shipped with owner authorization using Claude Code. Merged into master: b541d3f4b5856258c16889f8e9045f94f5befdfe. Pushed master through b541d3f4. No tag created or pushed, as explicitly requested.
+Validation: Go formatting, go vet ./..., go test ./..., nsh check and Console suite passed after each merge; final suite 646 passed, 0 failed. FT89 suite required rerun after external termination; FT90 drag test timed out once, then passed five isolated runs and the full rerun. No installs. No device/emulator or browser visual checks during shipping. Existing FT90 keyboard-selection and disabled-trigger limitations remain follow-ups. No linked issues or PRs to close. Moved ready/ → done/.

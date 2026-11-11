@@ -44,3 +44,7 @@ notes:
 - No installs. Code HEAD unchanged and worktree clean after review.
 - Review did not inspect real browser, desktop app, Android device/emulator rendering, or measure touch target dimensions; Android coverage is headless simulation only.
 - Moved review/ → ready/; not merged or released.
+
+## factory · 2026-11-11 20:54
+Shipped with owner authorization using Claude Code. Merged into master: 0bf210b86dd598878e16a23fe7bd52d3084a1eb2. Pushed master through b541d3f4. No tag created or pushed, as explicitly requested.
+Validation: Go formatting, go vet ./..., go test ./..., nsh check and Console suite passed after each merge; final suite 646 passed, 0 failed. FT89 suite required rerun after external termination; FT90 drag test timed out once, then passed five isolated runs and the full rerun. No installs. No device/emulator or browser visual checks during shipping. Existing FT90 keyboard-selection and disabled-trigger limitations remain follow-ups. No linked issues or PRs to close. Moved ready/ → done/.

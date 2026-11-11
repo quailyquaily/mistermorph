@@ -44,3 +44,7 @@ notes:
 - Installs: none.
 - Residual risks: no real-device, emulator, real mobile browser or virtual-keyboard validation in this review. Headless tests do not measure occlusion. Very short keyboard-open/landscape layouts remain non-scrollable and may clip the form; global error notices may overlap navigation. No verified newly introduced defect established for these cases. Owner should check keyboard-open narrow/landscape layouts before shipping.
 - Moved review/ → ready/. No linked GitHub issues or PRs.
+
+## factory · 2026-11-11 20:54
+Shipped with owner authorization using Claude Code. Merged into master: cd3ecd28bfff9b84a3052dcf1e4231b57175cd93. Pushed master through b541d3f4. No tag created or pushed, as explicitly requested.
+Validation: Go formatting, go vet ./..., go test ./..., nsh check and Console suite passed after each merge; final suite 646 passed, 0 failed. FT89 suite required rerun after external termination; FT90 drag test timed out once, then passed five isolated runs and the full rerun. No installs. No device/emulator or browser visual checks during shipping. Existing FT90 keyboard-selection and disabled-trigger limitations remain follow-ups. No linked issues or PRs to close. Moved ready/ → done/.
