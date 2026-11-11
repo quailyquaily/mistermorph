@@ -485,6 +485,8 @@ export interface TextFieldProps {
   value: string;
   onChange?: (value: string) => void;
   onSubmit?: (text: string) => void;
+  /** What Enter does in a one-line field: `blurAndSubmit` (the default: submits and lets go of the focus) or `submit` (keeps the focus, for a form that stays open when its submit fails). */
+  submitBehavior?: "submit" | "blurAndSubmit";
   onKeyPress?: (key: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -557,6 +559,7 @@ export function TextField(props: TextFieldProps) {
           value={props.value}
           onChange={({ value }) => props.onChange?.(value)}
           onSubmit={({ text }) => props.onSubmit?.(text)}
+          submitBehavior={props.multiline ? undefined : props.submitBehavior}
           onKeyPress={props.onKeyPress ? ({ key }) => props.onKeyPress?.(key) : undefined}
           onFocus={props.onFocus}
           onBlur={props.onBlur}

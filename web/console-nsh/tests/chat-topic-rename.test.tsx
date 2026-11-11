@@ -1,8 +1,11 @@
 // Renaming a topic from the topic panel: Rename opens a dialog with the topic's name in a field,
 // Regenerate puts a generated name in the field without saving it, and Save renames the topic
 // everywhere it shows. Cancel and the close button leave the name; blank names, failed suggestions
-// and failed saves keep the dialog and what was typed. A TODO item's topic keeps its icon
-// regeneration and has no rename. Late answers are covered on the module (topic-rename.test.tsx).
+// and failed saves keep the dialog, what was typed and the field's focus. Regenerate is an icon with
+// its name kept for assistive tech. Each opening focuses the field, and every closing leaves no
+// field focused (what happens while the dialog goes out: dialog-field-focus.test.tsx). A TODO
+// item's topic keeps its icon regeneration and has no rename. Late answers are covered on the
+// module (topic-rename.test.tsx).
 import { expect, test } from "nsh/test";
 import { openConsole, type ApiRequest } from "./harness";
 
@@ -112,6 +115,25 @@ test("Regenerate puts a generated name in the field without saving it; the edit 
   await app.waitFor("id:chat-topic-rename-dialog", { state: "gone" });
   expect(calls.filter((call) => isRename(call)).map((call) => call.json)).toEqual([{ title: "Miso soup ideas for winter" }]);
   await app.waitFor("id:chat-topic-topic-2 >> text:Miso soup ideas for winter");
+});
+
+test("Regenerate shows its icon alone and keeps its name for assistive tech, in each language", async () => {
+  for (const [language, name] of [
+    ["en", "Regenerate"],
+    ["zh", "重新生成"],
+  ]) {
+    const { api } = runtime();
+    const { app, calls } = await openConsole({ location: "/e/default/chat/topic-2", kv: { ...PANEL_OPEN, "quail-language": language }, api });
+    await openRename(app);
+    expect(app.shows(`id:chat-topic-rename-regenerate >> text:${name}`)).toBe(false);
+    expect(app.texts().includes(name)).toBe(false);
+    expect(app.shows(`label:${name}`)).toBe(true);
+    // It still regenerates.
+    await app.press(`label:${name}`);
+    await app.waitUntil(() => app.value("id:chat-topic-rename-input") === "Miso soup ideas");
+    expect(calls.filter(isSuggestion).length).toBe(1);
+    await app.dispose();
+  }
 });
 
 test("Cancel and the close button leave the name, and reopening starts from it again", async () => {
@@ -246,4 +268,74 @@ test("Back on an Android phone closes the rename dialog without saving", async (
   await app.waitFor("id:chat-topic-rename-dialog", { state: "gone" });
   expect(app.shows("id:chat-topic-panel")).toBe(true);
   expect(calls.some((call) => isRename(call))).toBe(false);
+});
+
+/** Where a typed key lands: the name field, the composer, or nowhere (no field has the focus). */
+async function keyLands(app: Awaited<ReturnType<typeof openConsole>>["app"]) {
+  const field = app.value("id:chat-topic-rename-input");
+  const composer = app.value("id:chat-composer-input") ?? "";
+  await app.keyboard.press("`");
+  const landed =
+    field !== null && app.value("id:chat-topic-rename-input") !== field ? "field" : (app.value("id:chat-composer-input") ?? "") !== composer ? "composer" : "nowhere";
+  // Take the probe back out.
+  if (landed !== "nowhere") await app.keyboard.press("backspace");
+  return landed;
+}
+
+for (const item of [
+  { name: "Cancel", close: (app: any) => app.press("id:chat-topic-rename-cancel") },
+  { name: "the close button", close: (app: any) => app.press("id:chat-topic-rename-dialog-close") },
+  { name: "Save", close: (app: any) => app.press("id:chat-topic-rename-save") },
+  { name: "Enter", close: (app: any) => app.submit("id:chat-topic-rename-input") },
+]) {
+  test(`the name field has the focus on each opening, and ${item.name} closes the dialog with no field focused`, async () => {
+    const { api } = runtime();
+    const { app } = await openConsole({ location: "/e/default/chat/topic-2", kv: PANEL_OPEN, api });
+    for (let round = 0; round < 2; round += 1) {
+      await openRename(app);
+      expect(await keyLands(app)).toBe("field");
+      expect(app.value("id:chat-topic-rename-input")).toBe("Recipes");
+      await item.close(app);
+      await app.waitFor("id:chat-topic-rename-dialog", { state: "gone" });
+      expect(await keyLands(app)).toBe("nowhere");
+    }
+  });
+}
+
+test("a blank Enter and a failed save keep the dialog usable, its field focused", async () => {
+  const { state, api } = runtime();
+  const { app } = await openConsole({ location: "/e/default/chat/topic-2", kv: PANEL_OPEN, api });
+  await openRename(app);
+  await app.clear("id:chat-topic-rename-input");
+  await app.submit("id:chat-topic-rename-input");
+  await app.waitFor("id:chat-topic-rename-error");
+  expect(await keyLands(app)).toBe("field");
+  await app.type("id:chat-topic-rename-input", "Soups");
+  state.saveFail = "store is down";
+  await app.submit("id:chat-topic-rename-input");
+  await app.waitFor("store is down");
+  expect(app.shows("id:chat-topic-rename-dialog")).toBe(true);
+  expect(await keyLands(app)).toBe("field");
+  expect(app.value("id:chat-topic-rename-input")).toBe("Soups");
+  state.saveFail = "";
+  await app.submit("id:chat-topic-rename-input");
+  await app.waitFor("id:chat-topic-rename-dialog", { state: "gone" });
+  expect(await keyLands(app)).toBe("nowhere");
+});
+
+test("on an Android phone Back and Save close the rename dialog with no field focused", async () => {
+  const { api } = runtime();
+  const { app } = await openConsole({ platform: "android", location: "/e/default/chat/topic-2", api });
+  await app.waitFor("id:chat-workspace-toggle");
+  await app.press("id:chat-workspace-toggle");
+  await openRename(app);
+  expect(await keyLands(app)).toBe("field");
+  await app.back();
+  await app.waitFor("id:chat-topic-rename-dialog", { state: "gone" });
+  expect(await keyLands(app)).toBe("nowhere");
+  await openRename(app);
+  expect(await keyLands(app)).toBe("field");
+  await app.press("id:chat-topic-rename-save");
+  await app.waitFor("id:chat-topic-rename-dialog", { state: "gone" });
+  expect(await keyLands(app)).toBe("nowhere");
 });
