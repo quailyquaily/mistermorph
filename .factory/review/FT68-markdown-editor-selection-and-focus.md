@@ -1,6 +1,6 @@
 ---
 branch: factory/FT68-markdown-editor-selection-and-focus
-round: 1
+round: 2
 ---
 # Fix Markdown editor word selection and blank-area focus
 
@@ -73,3 +73,9 @@ Claude Code reviewed all five changed files against origin/master and the reques
 Validation: required gofmt, go vet ./..., go test ./... passed (EXIT=0); nsh check passed; nsh test --web-host tests/noHost.js passed 416/416. Scripted tests used throwaway HOME. Review worktree remained unchanged. No new installs. Isolated Chrome probes verified blank-area focus, word replacement, scrolled padding hit positions and touch tap/swipe behavior.
 
 Not verified: native desktop app, Android devices, real mobile browsers, Safari/Firefox, live TODO/Skills/Setup editors, slow-host or very-long-line performance. Existing limitations: blank-area drags lack auto-scroll; the rightmost 8pt is reserved for a scrollbar; pre-existing Chrome-emulated touch text focus issue remains. No linked GitHub issue or PR to comment on.
+
+## factory · 2026-11-11 10:14
+
+Owner requested Claude Code fixes for the two previously identified P2 findings. Fixed on the existing branch, merged origin/master d122775a without conflicts. Fix commit a07dbd99; head a07dbd992376c36522d4bf5498aeb1cf62fee1a0. Blank-area drag state now ends on mouse leave; pending old drag updates are cancelled on a new press. Regression reproduces stale selection before fix and passes after. Isolated Chrome before/after confirms the reported unintended replacement is prevented, with ordinary inside and native text drags preserved.
+
+Trade-off: a blank-area drag that leaves and re-enters while held stops at the exit position. Native desktop, Android, real mobile browsers, Safari/Firefox and live editor pages remain unverified. Claude Code reports gofmt cleanliness, go vet ./..., go test ./... (162 packages), nsh check, full nsh tests 550/550 passed with throwaway HOME. No installs. Manager inspected commits, source diff and clean worktree; did not independently rerun the full suites. Moved ready/ → review/ for fresh independent review; not shipped.

@@ -1,6 +1,6 @@
 ---
 branch: factory/FT74-composer-multiline-full-width
-round: 1
+round: 2
 ---
 # Composer multiline mode must immediately use the full multiline text width
 
@@ -51,3 +51,9 @@ Validation: Claude Code reviewed all seven changed files against origin/master..
 Residual risks: No independent real-browser animation or native GPUI, Android or Mobile Safari validation in this review. Headless geometry cannot verify actual wrapping/animation timing; native delayed measurement behavior remains unverified. Build-stage Chrome checks are recorded above, not claimed as independent review checks.
 
 Moved review/ → ready/ under the factory rule allowing P2 notes; owner should inspect the resize animation finding before shipping. No linked GitHub issue or PR.
+
+## factory · 2026-11-11 10:14
+
+Owner requested Claude Code fixes for the two previously identified P2 findings. Fixed on existing branch: 49bbc7f0; merged origin/master d122775a without conflicts, head e1865a42. Unchanged-layout early return now updates shownFor only for the matching draft measurement. Added type-then-resize regression (fails before fix, passes after) and stale-measurement guard (rejects unconditional shownFor update).
+
+Claude Code reports targeted composer 25/25 and geometry 21/21, gofmt cleanliness, go vet ./..., go test ./... (162 packages), nsh check and full nsh tests 540/540 passing with throwaway HOME. No installs. Manager inspected commits, source diff and clean worktree; did not independently rerun full suites. Actual visual animation, Chrome, native GPUI, Android and Mobile Safari not verified this round. Moved ready/ → review/ for fresh independent review; not shipped.
