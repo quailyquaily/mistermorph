@@ -14,7 +14,8 @@ type FileSend struct {
 	Filename   string   `json:"filename"`
 	Size       int64    `json:"size"`
 	SHA256     string   `json:"sha256"`
-	// Status is "sent", "partial" (the file went out, its text did not) or "failed".
+	// Status is "sent", "partial" (the file went out, its text did not), "failed", or "attached"
+	// (the file goes with the task's answer to an Agent Link agent).
 	Status string `json:"status"`
 }
 

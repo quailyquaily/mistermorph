@@ -102,10 +102,14 @@ type ShareDecision struct {
 type ShareFile struct {
 	// Path is the file's resolved absolute path.
 	Path string `json:"path"`
-	// Filename is the display filename the recipient sees.
+	// Filename is the display filename the recipient sees, sanitized for channels that need a
+	// plain name.
 	Filename string `json:"filename"`
-	Size     int64  `json:"size"`
-	SHA256   string `json:"sha256"`
+	// DisplayName is the display filename as given, for a channel that carries any name (Agent
+	// Link); the recipient treats it as untrusted.
+	DisplayName string `json:"display_name,omitempty"`
+	Size        int64  `json:"size"`
+	SHA256      string `json:"sha256"`
 }
 
 type ShareOutcome struct {

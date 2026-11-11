@@ -140,33 +140,28 @@ func TestParseContactsSendFileWithoutWorkspace(t *testing.T) {
 	}
 }
 
-func TestAgentSendRejectsFileParams(t *testing.T) {
+func TestTextOnlyPolicyRejectsFileParams(t *testing.T) {
 	f := newContactsSendFileFixture(t)
-	agentPolicy := contactSendExecutionPolicy{toolName: "agent_send", activeAgentsOnly: true}
+	textOnly := contactSendExecutionPolicy{toolName: "some_send", activeAgentsOnly: true}
 	for _, params := range []map[string]any{
 		{"path": "reports/weekly.pdf"},
 		{"filename": "x.pdf"},
 	} {
-		_, err := parseContactsSendFile(context.Background(), params, f.roots, agentPolicy)
-		if err == nil || !strings.Contains(err.Error(), "agent_send sends text only") {
+		_, err := parseContactsSendFile(context.Background(), params, f.roots, textOnly)
+		if err == nil || !strings.Contains(err.Error(), "some_send sends text only") {
 			t.Fatalf("error = %v, want text-only rejection", err)
 		}
 	}
-	var schema map[string]any
-	if err := json.Unmarshal([]byte(NewAgentSendTool(ContactsSendToolOptions{}).ParameterSchema()), &schema); err != nil {
-		t.Fatal(err)
-	}
-	props := schema["properties"].(map[string]any)
-	if _, ok := props["path"]; ok {
-		t.Fatalf("agent_send schema has path")
-	}
-	if err := json.Unmarshal([]byte(NewContactsSendTool(ContactsSendToolOptions{}).ParameterSchema()), &schema); err != nil {
-		t.Fatal(err)
-	}
-	props = schema["properties"].(map[string]any)
-	for _, key := range []string{"path", "filename"} {
-		if _, ok := props[key]; !ok {
-			t.Fatalf("contacts_send schema lacks %s", key)
+	for _, tool := range []interface{ ParameterSchema() string }{NewAgentSendTool(ContactsSendToolOptions{}), NewContactsSendTool(ContactsSendToolOptions{})} {
+		var schema map[string]any
+		if err := json.Unmarshal([]byte(tool.ParameterSchema()), &schema); err != nil {
+			t.Fatal(err)
+		}
+		props := schema["properties"].(map[string]any)
+		for _, key := range []string{"path", "filename"} {
+			if _, ok := props[key]; !ok {
+				t.Fatalf("schema lacks %s", key)
+			}
 		}
 	}
 }

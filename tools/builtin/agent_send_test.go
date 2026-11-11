@@ -25,10 +25,16 @@ func TestAgentSendToolUsesContactsSendParameters(t *testing.T) {
 	if err := json.Unmarshal([]byte(agentTool.ParameterSchema()), &agentSchema); err != nil {
 		t.Fatal(err)
 	}
-	// agent_send is contacts_send without the file parameters.
+	// agent_send is contacts_send with the file parameters described for Agent Link.
 	contactsProps := contactsSchema["properties"].(map[string]any)
-	delete(contactsProps, "path")
-	delete(contactsProps, "filename")
+	agentProps := agentSchema["properties"].(map[string]any)
+	for _, key := range []string{"path", "filename"} {
+		if _, ok := agentProps[key]; !ok {
+			t.Fatalf("agent_send schema lacks %s", key)
+		}
+		delete(contactsProps, key)
+		delete(agentProps, key)
+	}
 	contactsRaw, _ := json.Marshal(contactsSchema)
 	agentRaw, _ := json.Marshal(agentSchema)
 	if string(agentRaw) != string(contactsRaw) {

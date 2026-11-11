@@ -577,6 +577,9 @@ contacts:
     # How long agent_send waits for an Agent Link agent's answer. A later answer arrives in the
     # conversation that asked as a new message.
     reply_timeout: "2m"
+    # Files over Agent Link (agent_send with path) have fixed limits: 2 MiB per message, 16 MiB
+    # waiting in the queue; received files are kept under file_cache_dir/agentlink/ for 7 days,
+    # at most 256 files and 64 MiB. See docs/feat/feat_20261111_agentlink_file_transfer.md.
 
 # Memories: facts the agent saves on purpose, such as a correction, who someone is, or a deadline
 # (docs/memories.md). They live in <file_state_dir>/memory.db. A run sees only the memories its

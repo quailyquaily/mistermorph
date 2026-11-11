@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/agentlink"
 	"github.com/quailyquaily/mistermorph/internal/filecache"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
@@ -68,10 +70,11 @@ func parseContactsSendFile(ctx context.Context, params map[string]any, roots pat
 		filename = filepath.Base(path)
 	}
 	return &contacts.ShareFile{
-		Path:     path,
-		Filename: filecache.SanitizeFilename(filename),
-		Size:     size,
-		SHA256:   digest,
+		Path:        path,
+		Filename:    filecache.SanitizeFilename(filename),
+		DisplayName: agentlink.CleanAttachmentName(filename),
+		Size:        size,
+		SHA256:      digest,
 	}, nil
 }
 
@@ -209,4 +212,87 @@ func auditContactsSendFile(ctx context.Context, toolName string, file *contacts.
 		SHA256:     file.SHA256,
 		Status:     status,
 	})
+}
+
+// checkFileRecipient checks, before anything is sent, that a file can go to contact: over Agent
+// Link, within its size limit and to an agent that takes files. agent_send sends files over Agent
+// Link only.
+func checkFileRecipient(policy contactSendExecutionPolicy, contactID string, contact contacts.Contact, chatID string, file *contacts.ShareFile) error {
+	if file == nil {
+		return nil
+	}
+	node, instanceID, ok := agentLinkInstanceFor(policy.stateDir, contact, chatID)
+	if !ok {
+		if policy.agentLinkFilesOnly {
+			return fmt.Errorf("%s sends files only to Agent Link agents (mm: contacts) while Agent Link runs; %q is not one, use contacts_send for other channels", policy.toolName, strings.TrimSpace(contactID))
+		}
+		return nil
+	}
+	if file.Size > agentlink.MaxAttachmentBytes {
+		return fmt.Errorf("file too large for Agent Link (%d bytes; at most %d): %s", file.Size, agentlink.MaxAttachmentBytes, file.Path)
+	}
+	if node.Reachable(instanceID) && !node.SupportsFiles(instanceID) {
+		return fmt.Errorf("%s: %q cannot take files: %w (its runtime or the Console that reaches it is too old); send text only", policy.toolName, strings.TrimSpace(contactID), agentlink.ErrFilesUnsupported)
+	}
+	return nil
+}
+
+// attachToAgentLinkReply handles a file a task answering an Agent Link message sends to the agent
+// that asked: the file goes with the task's answer, which is the reply. It reports whether the call
+// was such a file.
+func attachToAgentLinkReply(ctx context.Context, params map[string]any, contactIDs []string, file *contacts.ShareFile, policy contactSendExecutionPolicy) (string, bool, error) {
+	replyFiles, ok := agentlink.ReplyFilesFromContext(ctx)
+	if !ok || file == nil {
+		return "", false, nil
+	}
+	toAsker := false
+	for _, contactID := range contactIDs {
+		if instanceID, ok := agentlink.InstanceIDFromContactID(contactID); ok && strings.EqualFold(instanceID, replyFiles.Peer()) {
+			toAsker = true
+		}
+	}
+	if !toAsker {
+		return "", false, nil
+	}
+	if len(contactIDs) > 1 {
+		return "", true, fmt.Errorf("a file for your answer to %s goes on its own %s call, with only that contact_id", agentlink.ContactID(replyFiles.Peer()), policy.toolName)
+	}
+	if file.Size > agentlink.MaxAttachmentBytes {
+		return "", true, fmt.Errorf("file too large for Agent Link (%d bytes; at most %d): %s", file.Size, agentlink.MaxAttachmentBytes, file.Path)
+	}
+	if node, ok := agentlink.Lookup(policy.stateDir); ok && node.Reachable(replyFiles.Peer()) && !node.SupportsFiles(replyFiles.Peer()) {
+		return "", true, fmt.Errorf("%s: %q cannot take files: %w (its runtime or the Console that reaches it is too old); answer in text only", policy.toolName, contactIDs[0], agentlink.ErrFilesUnsupported)
+	}
+	name := file.DisplayName
+	if name == "" {
+		name = file.Filename
+	}
+	attachment, err := agentlink.ReadAttachmentFile(file.Path, name, file.Size, file.SHA256)
+	if err != nil {
+		return "", true, err
+	}
+	if err := replyFiles.Add(attachment); err != nil {
+		return "", true, err
+	}
+	result := map[string]any{
+		"status":     "attached_to_reply",
+		"contact_id": strings.TrimSpace(contactIDs[0]),
+		"attachment": attachment.Meta(),
+		"note":       "The file goes back with your final answer, which is the reply text. Do not send it again.",
+	}
+	if err := guard.AuditFileSend(ctx, policy.toolName, guard.FileSend{
+		Recipients: []string{strings.TrimSpace(contactIDs[0])},
+		Path:       file.Path,
+		Filename:   attachment.Filename,
+		Size:       attachment.Size,
+		SHA256:     attachment.SHA256,
+		Status:     "attached",
+	}); err != nil {
+		result["audit_error"] = err.Error()
+	}
+	if text, _ := params["message_text"].(string); strings.TrimSpace(text) != "" {
+		result["note"] = "The file goes back with your final answer, which is the reply text; message_text is not sent, so say it in your final answer. Do not send the file again."
+	}
+	out, _ := json.MarshalIndent(result, "", "  ")
+	return string(out), true, nil
 }

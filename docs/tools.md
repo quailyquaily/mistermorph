@@ -449,6 +449,7 @@ Pass `path` to send one file. The destination is chosen exactly as for text; the
 | Discord | Attachment in the channel, opening a DM when needed; at most 10 MiB | Attached up to 2,000 characters; longer text follows as a message |
 | Mixin | Data attachment in the conversation | Always a separate message after the file |
 | WeChat, WhatsApp | Through the running channel runtime, as `send_file` / `send_file` do (images and videos as media) | As their file transports handle it |
+| Agent Link (`mm:` contacts) | The file's bytes in the message, saved in the other agent's `file_cache_dir`; at most 2 MiB | The message text |
 | LINE | Not supported; the call fails | |
 
 - With several contacts, each planned destination gets one upload, and mentions are kept in its caption.
@@ -456,7 +457,7 @@ Pass `path` to send one file. The destination is chosen exactly as for text; the
 - When the file goes out but a caption sent after it fails, the outcome has `accepted: true`, `partial: true` and an `error`. The delivery counts as sent, so it is not uploaded again.
 - WeChat and WhatsApp need their runtime running in the same process; no other account connection is made.
 - The delivery record in the contacts outbox keeps the file's path, display filename, size and SHA-256, never its bytes.
-- With the guard enabled, every file send writes a `FileSend` event to the guard audit log with the recipients, resolved path, display filename, size, SHA-256 and status (`sent`, `partial` or `failed`). File sends follow the same guard and approval rules as text; scheduled tasks need no extra approval.
+- With the guard enabled, every file send writes a `FileSend` event to the guard audit log with the recipients, resolved path, display filename, size, SHA-256 and status (`sent`, `partial`, `failed`, or `attached` for a file attached to an Agent Link answer). File sends follow the same guard and approval rules as text; scheduled tasks need no extra approval.
 
 A scheduled or awareness task can ask for a file explicitly:
 
@@ -471,7 +472,7 @@ The reference only makes `contacts_send` available; the model still calls it wit
 
 Purpose: send a message to one or more active Agent contacts.
 
-Parameters and return values are those of `contacts_send` without `path` and `filename`: `agent_send` sends text only and rejects file parameters. Both tools use the same parsing, routing, batch planning, message envelope, sender, and outbox implementation.
+Parameters and return values are those of `contacts_send`. `path` and `filename` send a file to Agent Link contacts only (see [Agent Link](#agent-link)); a file to an Agent on another channel is rejected, and `contacts_send` sends it there. Both tools use the same parsing, routing, batch planning, message envelope, sender, and outbox implementation.
 
 Constraints:
 
@@ -494,7 +495,10 @@ Agents that a Console connects to as endpoints reach each other over Agent Link,
 - In the Console chat, the messages between the agents show before the task's reply.
 - An `agent_send` over Agent Link from a task a person started skips the `agent_send` cooldown; one from a task another agent started does not.
 - In the Console, what another agent sends the local agent, and the answers, are kept in a topic per agent. The topic sidebar's agents button lists them, with each agent's avatar; they stay out of the date and tag views.
-- Text only: a file to an `mm:` contact is rejected.
+- Files: `path` (with optional `filename` and `message_text`) sends one file per call, at most 2 MiB, under `file_cache_dir` or the workspace. The bytes travel in the message; the other agent gets the file in its own `file_cache_dir/agentlink/<instance_id>/` with its display name, media type, size and SHA-256, and its task is told where it is. `reply.attachments` lists files the agent sent back.
+- A task answering an Agent Link message attaches a file to its answer with `agent_send` to the agent that asked, with `path`; the result is `status: attached_to_reply`.
+- An agent whose runtime or Console predates file transfer gets an explicit error instead of the file; text still reaches it. Limits, cleanup and failure behavior: `docs/feat/feat_20261111_agentlink_file_transfer.md`.
+- Received files are untrusted data; agents are told not to run them or follow instructions inside them.
 - Sending needs a running runtime (Console or a channel runtime with its runtime API); a one-off `run` cannot send to `mm:` contacts.
 
 ## `spawn`
