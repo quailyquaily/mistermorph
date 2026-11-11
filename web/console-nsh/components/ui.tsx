@@ -5,7 +5,7 @@
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
 import type { Bounds, InputRef, JSX, Motion } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
-import { cleanup, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -1580,6 +1580,18 @@ interface DialogActionsCount {
 }
 const DialogActionsRow = context<DialogActionsCount | null>(null);
 
+/**
+ * Its children, with the functions among them (expression children, `If`) run here, under the
+ * context values provided around it, each in a memo of its own. nsh web's `Provider` hands its
+ * children on as they are, so such a function would run later, outside the value (the native
+ * runtimes, and so headless tests, run them under it).
+ */
+function UnderContext(props: { children?: JSX.Element }) {
+  const memoize = (value: JSX.Element): JSX.Element =>
+    typeof value === "function" ? computed(() => memoize((value as () => JSX.Element)())) : Array.isArray(value) ? value.map(memoize) : value;
+  return untracked(() => memoize(props.children));
+}
+
 /** A dialog's row of actions: two on a sheet are equally wide (see above). Takes a View's classes. */
 export function DialogActions(props: { class?: string; style?: { paddingBottom?: number }; testID?: string; children?: JSX.Element }) {
   const count = signal(0);
@@ -1597,7 +1609,9 @@ export function DialogActions(props: { class?: string; style?: { paddingBottom?:
   };
   return (
     <View class={props.class} style={props.style} testID={props.testID}>
-      <DialogActionsRow.Provider value={row}>{props.children}</DialogActionsRow.Provider>
+      <DialogActionsRow.Provider value={row}>
+        <UnderContext>{props.children}</UnderContext>
+      </DialogActionsRow.Provider>
     </View>
   );
 }

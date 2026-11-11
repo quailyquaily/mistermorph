@@ -203,6 +203,11 @@ Headless tests prove behaviour, not the look.
   on a sideways scroller inside a vertical one does not scroll the outer one (chat code blocks do
   this). Progress and coder runs that do not wrap are a plain row while they fit and a sideways
   scroller only while they overflow (`components/chat/OverflowLine.tsx`).
+- On the web, nsh's context `Provider` hands its children on unresolved: a function among them (an
+  expression child in a fragment, an `If`) runs later, outside the provided value, and a context
+  read there gets the default. Native runtimes, and so headless tests, resolve them under the
+  value. A provider whose children read it at creation resolves them itself (`UnderContext` in
+  `components/ui.tsx`, under `DialogActions`); prove such a context in Chrome.
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
