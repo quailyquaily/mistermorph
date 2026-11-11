@@ -33,6 +33,8 @@ import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/m
 import { bottomSheetInsets, dialogLayerInsets } from "../lib/systemInsets";
 import { MOTION_EASE, MOTION_EASE_CSS, MOTION_NORMAL, MOTION_SLOW, motionMs } from "./motion/tokens";
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
+import { createPartProbe, type PartLayoutListener } from "./shared/partProbe";
+import { isMobile } from "../lib/shell";
 
 export type { IconName };
 
@@ -1783,6 +1785,42 @@ export function PageTitle(props: { text: string; class?: string }) {
       role="header"
       class={`flex-1 pb-[2.4px] pt-[0.4px] text-xl font-normal leading-[22.8px] tracking-[-0.6px] text-foreground ${props.class ?? ""}`}
     />
+  );
+}
+
+/**
+ * The size of a phone bar's icon buttons: Todo's calendar toggle and every back arrow. The
+ * Button's default, a 38pt square with a 16pt icon.
+ */
+export const BAR_BUTTON_SIZE: ButtonSize = "sm";
+
+/**
+ * A page bar's back arrow: a plain icon-only Button. On a phone it is the size of the bar's other
+ * icon buttons (BAR_BUTTON_SIZE, as Todo's calendar toggle); a bar that also shows on wide windows
+ * keeps its `desktopSize` there. Like the calendar toggle it sits in a wrapper that the bar's row
+ * centres. `title` is its tooltip and accessible name.
+ */
+export function BackButton(props: {
+  title: string;
+  onPress: () => void;
+  testID?: string;
+  desktopSize?: ButtonSize;
+  /** Hears its frame on the page as `back` (tests). */
+  onPartLayout?: PartLayoutListener;
+}) {
+  const parts = createPartProbe(() => props.onPartLayout);
+  return (
+    <View {...parts.probe(() => "back")}>
+      <Button
+        variant="plain"
+        size={isMobile() ? BAR_BUTTON_SIZE : (props.desktopSize ?? BAR_BUTTON_SIZE)}
+        iconOnly
+        icon="PhArrowLeft"
+        title={props.title}
+        testID={props.testID}
+        onPress={() => props.onPress()}
+      />
+    </View>
   );
 }
 

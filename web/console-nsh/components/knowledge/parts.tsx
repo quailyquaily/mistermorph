@@ -17,7 +17,8 @@ import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
-import { Icon, TextField, type IconName } from "../ui";
+import { BackButton, Icon, TextField, type IconName } from "../ui";
+import type { PartLayoutListener } from "../shared/partProbe";
 import { MobileBarSpacer } from "../frame/mobileBar";
 import { listTitleSize } from "../frame/metrics";
 
@@ -482,10 +483,18 @@ export function LinkText(props: { text: string; onPress: () => void; testID?: st
 }
 
 /**
- * The phone's page bar while one item is open: back, then its title (the workspace title face).
- * Android's Back does what its back arrow does while it shows.
+ * The phone's page bar while one item is open: back (the shared BackButton, as big as Todo's
+ * calendar toggle), then its title (the workspace title face). Android's Back does what its back
+ * arrow does while it shows.
  */
-export function MobileBar(props: { title: string; backLabel: string; onBack?: () => void; actions?: JSX.Element }) {
+export function MobileBar(props: {
+  title: string;
+  backLabel: string;
+  onBack?: () => void;
+  actions?: JSX.Element;
+  /** Hears where the back arrow lies on the page as `back` (tests). */
+  onPartLayout?: PartLayoutListener;
+}) {
   onSystemBack(
     () => Boolean(props.onBack),
     () => props.onBack?.(),
@@ -493,15 +502,7 @@ export function MobileBar(props: { title: string; backLabel: string; onBack?: ()
   return (
     <View class="h-[57px] flex-row items-center gap-2 border-b border-line-soft" style={{ paddingLeft: gutterX(), paddingRight: gutterX() }}>
       <If when={props.onBack}>
-        <BaseButton
-          onPress={() => props.onBack?.()}
-          accessibilityLabel={props.backLabel}
-          testID="mobile-back"
-          class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press"
-          style={ROW_TRANSITION}
-        >
-          <Icon name="PhArrowLeft" size={13} color="subtle" />
-        </BaseButton>
+        <BackButton title={props.backLabel} onPress={() => props.onBack?.()} testID="mobile-back" onPartLayout={props.onPartLayout} />
       </If>
       <View class="flex-1">
         <WorkspaceTitle text={props.title} />
