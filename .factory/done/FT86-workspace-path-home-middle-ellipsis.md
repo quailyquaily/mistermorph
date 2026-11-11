@@ -47,3 +47,8 @@ Validation: configured gofmt check, go vet ./..., go test ./... passed (exit 0);
 Installs: none reported.
 Residual risks: this review did not verify live web, Android device/emulator, or native desktop rendering. Owner should inspect raw-path copying and remaining visual coverage before shipping.
 Moved review/ → ready/ under the configured P0/P1 gate. No linked issue or PR to comment on.
+
+## factory · 2026-11-11 22:57
+Shipped in owner-authorized batch FT80, FT85, FT86, FT91, FT92, FT93, merged in numeric order. Merge: c89927bf11a3cb39cd365198b875d34522c34b1a. Base master successfully pushed at d18743b3dfda935288e1a8fc4f739008ac14ed49 before this move. No tag created or pushed, per owner instruction.
+Claude Code handled all fixes/review/conflicts; manager verified six merge parents, 11 item commits and 72 changed paths, with no forbidden paths or unrelated items. Targeted checks after this merge: 88/88 Console tests and nsh check passed; FT86 affected Go checks also passed. Final configured Go formatting/vet/tests passed (162 packages); nsh check and full Console suite passed 766/766. FT93 fix head 1666f8b4 was reviewed before shipment.
+No linked GitHub issue/PR to close. Branch retained; no clean action requested. No unpinned installs or manifest changes; routine pinned TypeScript 7.0.2 cache restored. All scripted tests used absolute isolated HOME. No actual Android/emulator, iOS, native desktop or combined live-browser visual verification; existing nonblocking notes remain unchanged. Moved ready/ → done/ only after successful master push.

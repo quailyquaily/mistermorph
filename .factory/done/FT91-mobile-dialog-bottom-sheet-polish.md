@@ -45,3 +45,8 @@ Validation: Claude Code reviewed origin/master...HEAD; no P0/P1. Required gofmt,
 Installs: no new unpinned tools or dependencies reported; existing Go cache and nsh 0.4.0 used, with routine nsh cache creation.
 Not checked: physical Android/emulator, real iOS, native desktop, real software keyboard and device touch/scroll/swipe. Host probes do not establish device visual behavior.
 Moved review/ → ready/ under the factory rule (no P0/P1); owner should inspect the P2 reopen-motion defect before shipping. No linked issue or PR.
+
+## factory · 2026-11-11 22:57
+Shipped in owner-authorized batch FT80, FT85, FT86, FT91, FT92, FT93, merged in numeric order. Merge: 470946b7d0bfaf13c9f5714727cf53fc6805b02f. Base master successfully pushed at d18743b3dfda935288e1a8fc4f739008ac14ed49 before this move. No tag created or pushed, per owner instruction.
+Claude Code handled all fixes/review/conflicts; manager verified six merge parents, 11 item commits and 72 changed paths, with no forbidden paths or unrelated items. Targeted checks after this merge: 148/148 Console tests and nsh check passed; FT86 affected Go checks also passed. Final configured Go formatting/vet/tests passed (162 packages); nsh check and full Console suite passed 766/766. FT93 fix head 1666f8b4 was reviewed before shipment.
+No linked GitHub issue/PR to close. Branch retained; no clean action requested. No unpinned installs or manifest changes; routine pinned TypeScript 7.0.2 cache restored. All scripted tests used absolute isolated HOME. No actual Android/emulator, iOS, native desktop or combined live-browser visual verification; existing nonblocking notes remain unchanged. Moved ready/ → done/ only after successful master push.

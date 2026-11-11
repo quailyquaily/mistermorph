@@ -48,3 +48,8 @@ Reviewed by Claude Code against origin/master...HEAD. No P0/P1 findings; moved r
 Validation: required gofmt/vet/go test command passed; nsh check passed; nsh test --web-host tests/noHost.js passed (619 tests, 0 failures). Additional throwaway probes verified the sending/Refresh defect and single-request guarding during a held-open retry. Tests used an isolated HOME. Installs: none.
 
 Limits: no real-browser visual review, actual Android APK/device, native desktop, Firefox, Safari or iOS check in this review; Android was headless harness only. No linked GitHub issues or PRs in the item.
+
+## factory · 2026-11-11 22:57
+Shipped in owner-authorized batch FT80, FT85, FT86, FT91, FT92, FT93, merged in numeric order. Merge: 228488fc4dcec370017628dcf4bf97fc342e4179. Base master successfully pushed at d18743b3dfda935288e1a8fc4f739008ac14ed49 before this move. No tag created or pushed, per owner instruction.
+Claude Code handled all fixes/review/conflicts; manager verified six merge parents, 11 item commits and 72 changed paths, with no forbidden paths or unrelated items. Targeted checks after this merge: 271/271 Console tests and nsh check passed; FT86 affected Go checks also passed. Final configured Go formatting/vet/tests passed (162 packages); nsh check and full Console suite passed 766/766. FT93 fix head 1666f8b4 was reviewed before shipment.
+No linked GitHub issue/PR to close. Branch retained; no clean action requested. No unpinned installs or manifest changes; routine pinned TypeScript 7.0.2 cache restored. All scripted tests used absolute isolated HOME. No actual Android/emulator, iOS, native desktop or combined live-browser visual verification; existing nonblocking notes remain unchanged. Moved ready/ → done/ only after successful master push.
