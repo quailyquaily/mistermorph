@@ -79,3 +79,15 @@ Not verified: native desktop app, Android devices, real mobile browsers, Safari/
 Owner requested Claude Code fixes for the two previously identified P2 findings. Fixed on the existing branch, merged origin/master d122775a without conflicts. Fix commit a07dbd99; head a07dbd992376c36522d4bf5498aeb1cf62fee1a0. Blank-area drag state now ends on mouse leave; pending old drag updates are cancelled on a new press. Regression reproduces stale selection before fix and passes after. Isolated Chrome before/after confirms the reported unintended replacement is prevented, with ordinary inside and native text drags preserved.
 
 Trade-off: a blank-area drag that leaves and re-enters while held stops at the exit position. Native desktop, Android, real mobile browsers, Safari/Firefox and live editor pages remain unverified. Claude Code reports gofmt cleanliness, go vet ./..., go test ./... (162 packages), nsh check, full nsh tests 550/550 passed with throwaway HOME. No installs. Manager inspected commits, source diff and clean worktree; did not independently rerun the full suites. Moved ready/ → review/ for fresh independent review; not shipped.
+
+## factory · review · 2026-11-11 10:39
+head: a07dbd992376c36522d4bf5498aeb1cf62fee1a0
+verdict: pass
+
+Claude Code independently reviewed origin/master d122775a...HEAD: all five changed files, request and plan, and the previous P2 fix. No qualifying findings. The branch merges cleanly with the fetched base. Moved review/ → ready/; not shipped.
+
+The stale blank-area drag P2 is fixed. Regression tests fail twice with the pre-fix implementation and pass 13/13 at head. Isolated headless Chrome verified the previous outside-release/re-entry scenario no longer replaces unintended text, blank-to-text and inside drags, edge exit, double-click word replacement, and below-text focus. No page errors.
+
+Validation reported by Claude Code: mandatory gofmt cleanliness, go vet ./..., go test ./... exited 0; nsh check exited 0; full nsh tests passed 550/550. Scripted tests used an absolute throwaway HOME. Manager verified unchanged worktree and matching remote head; did not independently rerun the suites. No installs; existing nsh 0.4.0 tool installation used for browser fixture build. No linked GitHub issue or PR.
+
+Not verified: native desktop, Android, actual mobile browsers, Safari/Firefox, live TODO/Skills/Setup editors, and the case where the pointer is already over the editor when it appears (leave tracking depends on a recorded enter). Known trade-offs remain: blank-area drag stops on exit even if re-entered while held, no edge auto-scroll for blank-area drags, and rightmost 8pt reserved for scrollbar.
