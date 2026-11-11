@@ -68,3 +68,12 @@ No P0/P1 findings; moved review/ → ready/ under the configured factory review 
 
 ## factory · 2026-11-11 21:50
 Fix round 2 completed with Claude Code, head 1666f8b4. Fixed both confirmed review notes: retain outgoing Settings section on Android Back; disable outgoing pages system-back handlers via scoped registration. Added five tests, including slowed-slide full-console Android-host regressions; four regression cases fail with fixes reverted. Updated one existing dismissal test to wait for exit. Configured Go gate passed (162 packages); nsh check passed; full Console suite 658/658 passed. First attempt found a missing pinned cached module and an outdated immediate-dismiss assertion; both resolved and full gate rerun. No unpinned installs. Actual Android/emulator, native desktop and live browser visuals not checked. No unrelated P2 fixes. Moved new/ → review/.
+
+## factory · review · 2026-11-11 22:08
+head: 1666f8b497ab9ab18b78244c3a07de5c58fbb48a
+verdict: pass
+notes:
+- Claude Code re-reviewed the complete fix and affected callers; original review covers remaining round-1 changes. Both confirmed findings fixed; no new findings.
+- Re-ran configured Go gate (162 packages), nsh check, full Console suite 658/658; all passed, clean worktree, no installs.
+- No real Android/emulator, native desktop, live browser or FT91 integration visual verification. Timing-based host regressions are not device verification. Earlier speculative rapid-slide/async/history risks remain unconfirmed.
+- Moved review/ → ready/ for owner-authorized six-item no-tag batch.
