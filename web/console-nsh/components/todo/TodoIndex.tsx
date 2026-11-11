@@ -15,7 +15,7 @@ import { createAnimatedValue, effect, reduceMotion, Scroll, Text, untracked, Vie
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
-import { gutterX, gutterY } from "../frame/metrics";
+import { gutterX, gutterY, listTitleSize } from "../frame/metrics";
 import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR } from "../motion";
 import { Button, Icon, StatusMark } from "../ui";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
@@ -84,9 +84,14 @@ function IndexItem(props: {
     >
       <View class="absolute inset-0 rounded-(--radius)" style={{ backgroundColor: tint.color, pointerEvents: "none" }} />
       {/* nsh draws a line no shorter than its font (17.3pt here, where the Vue title's line is
-          16.1): 3pt between the lines and 10.3 below keep the row at the Vue row's 61.3pt. */}
+          16.1): 3pt between the lines and 10.3 below keep the row at the Vue row's 61.3pt. On mobile
+          the title is 15pt on a 17.3pt line. */}
       <View class="flex-1 gap-[3px]">
-        <Text class="text-sm font-normal leading-[16.1px] tracking-[-0.35px] text-foreground line-clamp-2">{props.title}</Text>
+        <Text
+          class={`${listTitleSize(!!props.mobile)} font-normal ${props.mobile ? "leading-[17.3px]" : "leading-[16.1px]"} tracking-[-0.35px] text-foreground line-clamp-2`}
+        >
+          {props.title}
+        </Text>
         <Text
           class={`font-mono text-xs leading-[16.2px] line-clamp-2 ${props.active ? "text-subtle" : "text-muted-foreground"}`}
         >

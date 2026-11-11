@@ -6,7 +6,7 @@
 //
 // It is a List row: it is made once per cell and shows whatever item the cell holds now, so every
 // value is read from `props.item` in a binding and per-item state lives in ChatRowContext.
-import type { JSX } from "nsh";
+import type { JSX, ViewRef } from "nsh";
 import {
   Canvas,
   cleanup,
@@ -27,7 +27,7 @@ import { Button as BaseButton } from "nsh/base";
 import { ICONS } from "../icons";
 import { Button, Icon, StatusMark, Tip, TipButton } from "../ui";
 import { approvalParameterEntries, skillInstallApproval } from "../../lib/core/chat-approvals.js";
-import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../../lib/core/chat-task-history.js";
+import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord, taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
 import { activityDetailKey, activityDetailWorkerID, type ActivityDetailRef } from "./activityDetail";
 import type { ArtifactPreviews } from "./ArtifactPreviewCard";
 import { ChatAgentLinkExchange } from "./ChatAgentLinkExchange";
@@ -203,7 +203,25 @@ function CopyButton(props: { copied: boolean; copySeq: number; label: string; on
   );
 }
 
-export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext; arriving?: (id: string) => boolean }) {
+/** Under the open question, while the run waits for its answer: the orange mark of a task waiting
+ *  for the person and the words, mono 11 caps like the card's labels, in the place of the word the
+ *  reply shows while it works. */
+function WaitingForAnswer() {
+  return (
+    <View class="h-5 flex-row items-center gap-2" role="text" accessibilityLabel={t("chat_question_waiting")} testID="chat-waiting-answer">
+      <StatusMark state="pending" size={7} />
+      <Text class="font-mono text-[11px] leading-4 uppercase tracking-[0.04em] text-muted-foreground">{t("chat_question_waiting")}</Text>
+    </View>
+  );
+}
+
+export function ChatHistoryItem(props: {
+  item: HistoryItem;
+  ctx: ChatRowContext;
+  arriving?: (id: string) => boolean;
+  /** The row's view, once (ChatHistoryList's `onRowRef`). */
+  rowRef?: (ref: ViewRef) => void;
+}) {
   const item = () => props.item;
   const ctx = props.ctx;
   // A message that just joined the thread: a sent one rises from the composer (14pt), a reply
@@ -233,8 +251,12 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
   const stepMessages = () => (isAgent() ? [...insightMessages(item()?.insights), ...planStepMessages(item()?.plan)] : []);
   const questions = (): any[] => (isAgent() && Array.isArray(item()?.questions) ? item().questions : []);
   const elevations = (): any[] => (isAgent() && Array.isArray(item()?.elevations) ? item().elevations : []);
+  // The run waits for the person's answer to its question (ask_user): it says so, not that it works.
+  const waitingForAnswer = () => isAgent() && taskWaitingForAnswer(item());
   const questionOpen = () =>
-    questions().some((question) => question.status === "open") || elevations().some((elevation) => elevation.status === "open");
+    waitingForAnswer() ||
+    questions().some((question) => question.status === "open") ||
+    elevations().some((elevation) => elevation.status === "open");
   const reasoningVisible = () => String(item()?.reasoning || "").trim() !== "";
   const activityEntries = (): any[] => {
     const activity = item()?.activity;
@@ -385,6 +407,9 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
           />
         )}
       </Each>
+      <If when={waitingForAnswer()}>
+        <WaitingForAnswer />
+      </If>
       <Each of={elevations()} key={(elevation) => elevation.id}>
         {(elevation) => (
           <ChatElevationCard
@@ -538,6 +563,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
       class="group w-full max-w-[832px] gap-[7px] self-center"
       style={{ ...arrival.style, paddingLeft: role() === "user" ? sideRoom() : 0, paddingRight: isAgent() ? sideRoom() : 0 }}
       testID={`chat-item-${role() || "system"}`}
+      ref={(ref: ViewRef) => props.rowRef?.(ref)}
     >
       <If when={retryNotices().length}>
         <View class="gap-1.5" accessibilityLabel="Retry updates">

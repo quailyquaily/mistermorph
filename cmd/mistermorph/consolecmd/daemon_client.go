@@ -102,7 +102,8 @@ func (c *daemonTaskClient) Proxy(ctx context.Context, method, endpointPath strin
 
 	client := c.client
 	proxyPath, _, _ := strings.Cut(endpointPath, "?")
-	if req.Method == http.MethodPost && strings.HasPrefix(proxyPath, "/topics/") && strings.HasSuffix(proxyPath, "/regenerate-title") {
+	if req.Method == http.MethodPost && strings.HasPrefix(proxyPath, "/topics/") &&
+		(strings.HasSuffix(proxyPath, "/regenerate-title") || strings.HasSuffix(proxyPath, "/title-suggestion")) {
 		// Naming uses the runtime's configured LLM timeout and retries. The
 		// ordinary proxy timeout must not cut that work short; caller cancellation
 		// still propagates through the request context.

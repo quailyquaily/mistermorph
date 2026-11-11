@@ -7,7 +7,7 @@ starts with a comment on why it is built the way it is; keep that when changing 
 | Helper | What it does | Usage |
 | --- | --- | --- |
 | `createSlidingSelection(selected)` | One highlight behind a list that glides (FLIP: transform only) from the selected item to the next; items report their frames with `onLayout`. Vue: `v-sliding-selection` (nav, Topics, Settings index, Skills, Contacts, TODO). | `const sel = createSlidingSelection(() => activeId());` then in the items' parent: `<sel.Highlight class="bg-selection" />` first, and `onLayout={sel.track(item.id)}` on each item (items drop their own selected fill; keep a hover fill). Rows of a virtualized `List`: report boxes with `sel.place(id, { x, y, w, h })`. |
-| `FadeText` | A one-line text that fades over its last letters when cut (and only then), with the full text as its tooltip. Vue: `v-fade-truncate`. | `<FadeText text={title()} class="flex-1 text-sm text-foreground" />` (in place of `line-clamp-1` / `truncate` on names). On the desktop, the shell's patched GPUI backend fades the glyphs under the mask. |
+| `FadeText` | A one-line text that fades over its last letters when cut (and only then), with the full text as its tooltip. Vue: `v-fade-truncate`. | `<FadeText text={title()} class="flex-1 text-sm text-foreground" />` (in place of `line-clamp-1` / `truncate` on names). On the desktop, the shell's patched GPUI backend fades the glyphs under the mask; on Android (no masks) the letters under the fade are drawn one by one at the mask's alpha, from their measured widths (`glyphFade.ts`). |
 | `EdgeScroll` / `createScrollEdges()` | A scroller whose hidden edges fade (a mask that switches at once, never animates). Vue: `v-scroll-edges`. | `<EdgeScroll class="flex-1" contentClass="gap-2 p-4">…</EdgeScroll>`; on your own `Scroll`: `const edges = createScrollEdges();` `<Scroll {...edges.handlers} style={edges.style()}><View onLayout={edges.onContentLayout}>…</View></Scroll>`. `start={false}` under a pinned head. On the desktop the text fades; row fills stay whole. |
 | `SCROLLBAR` | The console's thin hover-only scroll bars (base.css). `EdgeScroll` uses it. | `<Scroll scrollbar={SCROLLBAR}>` / `<List scrollbar={SCROLLBAR}>` |
 | `Entrance` | Content that rises 6pt into place and fades in when `watch` changes (not on first render). Vue: `core/page-transitions.js`. The shell already does this for top-level pages. | `<Entrance watch={key()} class="flex-1">…</Entrance>` |
@@ -55,5 +55,6 @@ starts with a comment on why it is built the way it is; keep that when changing 
 - `SelectField`: `size` (`md` 44, `sm` 38, `xs` 32).
 - `Markdown`: `classes` / `styles` by part (TextView's).
 - `FadeText`: one unbroken line, cut mid-word under the fade (not at the last word that fits).
+  `onGlyphFade` reports how Android draws the fade (for tests).
 - Line heights: give points (`leading-[22.8px]`), not multiples (`leading-[1.14]`); opacity
   modifiers on theme colours (`bg-paper/70`) are not resolved: use a token (`bg-paper-soft`).

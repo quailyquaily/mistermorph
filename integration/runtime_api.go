@@ -140,13 +140,14 @@ func (a *runtimeAPI) routes() daemonruntime.RoutesOptions {
 		HealthEnabled: true,
 		Overview:      a.overview,
 		TaskTopic: daemonruntime.TaskTopicRoutes{
-			TaskReader:   a.store,
-			TopicReader:  a.store,
-			TopicDeleter: a.store,
-			CreateTopic:  a.store.CreateNamedTopic,
-			SetTopicTags: a.store.SetTopicTags,
-			Submit:       a.submit,
-			Stop:         a.stop,
+			TaskReader:    a.store,
+			TopicReader:   a.store,
+			TopicDeleter:  a.store,
+			CreateTopic:   a.store.CreateNamedTopic,
+			SetTopicTags:  a.store.SetTopicTags,
+			SetTopicTitle: a.store.RenameTopic,
+			Submit:        a.submit,
+			Stop:          a.stop,
 		},
 	}
 }

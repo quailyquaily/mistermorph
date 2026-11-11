@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { activelyViewedTopic, createTopicActivityTracker, cronRunningCount, normalizeTopicActivity, topicActivitySignature } from "./topic-activity.js";
+import {
+  activelyViewedTopic,
+  createTopicActivityTracker,
+  cronRunningCount,
+  normalizeTopicActivity,
+  topicActivitySignature,
+  TOPIC_ACTIVITY_WAITING,
+} from "./topic-activity.js";
 
 test("normalizeTopicActivity keys running and pending topics by ID", () => {
   const activity = normalizeTopicActivity([
@@ -13,9 +20,9 @@ test("normalizeTopicActivity keys running and pending topics by ID", () => {
     null,
   ]);
   assert.deepEqual([...activity.keys()], ["alpha", "beta", "delta"]);
-  assert.deepEqual(activity.get("alpha"), { status: "running", running: 2, pending: 0, cronRunning: 0 });
-  assert.deepEqual(activity.get("beta"), { status: "pending", running: 1, pending: 1, cronRunning: 0 });
-  assert.deepEqual(activity.get("delta"), { status: "running", running: 0, pending: 0, cronRunning: 0 });
+  assert.deepEqual(activity.get("alpha"), { status: "running", running: 2, pending: 0, waiting: 0, cronRunning: 0 });
+  assert.deepEqual(activity.get("beta"), { status: "pending", running: 1, pending: 1, waiting: 0, cronRunning: 0 });
+  assert.deepEqual(activity.get("delta"), { status: "running", running: 0, pending: 0, waiting: 0, cronRunning: 0 });
   assert.equal(normalizeTopicActivity(undefined).size, 0);
   assert.equal(normalizeTopicActivity({ topics: [] }).size, 0);
 });
@@ -29,6 +36,19 @@ test("topicActivitySignature ignores order and changes with counts and status", 
   assert.equal(topicActivitySignature(new Map()), "");
 });
 
+test("normalizeTopicActivity keeps a topic whose task waits for an answer apart from running ones", () => {
+  const activity = normalizeTopicActivity([
+    { id: "ask", status: "waiting", running: 1, pending: 0, waiting: 1 },
+    { id: "work", status: "running", running: 1, pending: 0 },
+    { id: "odd", status: "waiting", running: 1, waiting: "x" },
+  ]);
+  assert.deepEqual(activity.get("ask"), { status: TOPIC_ACTIVITY_WAITING, running: 1, pending: 0, waiting: 1, cronRunning: 0 });
+  assert.deepEqual(activity.get("work"), { status: "running", running: 1, pending: 0, waiting: 0, cronRunning: 0 });
+  assert.equal(activity.get("odd").waiting, 0);
+  // The answer came: the same topic runs again, and the list sees the change.
+  const answered = normalizeTopicActivity([{ id: "ask", status: "running", running: 1, pending: 0 }]);
+  assert.notEqual(topicActivitySignature(normalizeTopicActivity([{ id: "ask", status: "waiting", running: 1, waiting: 1 }])), topicActivitySignature(answered));
+});
 
 // Exercise the same tracker used by ChatView; acknowledgements never mutate API rows.
 const done = (task = "a", at = "2026-11-05T09:00:00Z", id = "topic") => ({
@@ -196,7 +216,7 @@ test("replayed and duplicate activity never inflates the TODO running count", ()
   for (let i = 0; i < 3; i++) assert.equal(cronCount(state, rows), 2);
   // A topic listed twice counts once, as its last row says.
   assert.equal(cronCount(state, [cronRow("_cron_a", 1), cronRow("_cron_a", 1)]), 1);
-  assert.equal(topicActivitySignature(state.snapshot()), "_cron_a:running:1:0:1");
+  assert.equal(topicActivitySignature(state.snapshot()), "_cron_a:running:1:0:0:1");
 });
 
 test("the TODO running count survives errors and stale replies, and clears with the endpoint", () => {

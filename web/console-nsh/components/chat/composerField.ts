@@ -11,6 +11,8 @@
 export const COMPOSER_LINE_HEIGHT = 22.12;
 /** The add button and Send: 38pt squares (`size-[38px]` in ChatComposer). */
 export const COMPOSER_CONTROL_SIZE = 38;
+/** The field's text: its font and size (also the hidden copies' in ComposerMeasure.tsx). */
+export const COMPOSER_FIELD_TEXT = "font-mono text-sm";
 const DEFAULT_MAX_ROWS = 24;
 
 /** One row: add, the field, actions. Two rows: the field above a row of the controls. */
@@ -47,8 +49,12 @@ export function composerFrameBorder(mobile: boolean): "border-line" | "border-in
   return mobile ? "border-line" : "border-input";
 }
 
-/** The composer's frame. Only the border's colour differs between a phone and a desktop: its width,
- *  radius and the focus look are the same, so switching never moves anything. */
+/** The composer's frame. Only the border's colour differs between a phone and a desktop: its width
+ *  and radius are the same, so switching never moves anything. The border is the same in every
+ *  state: idle, focused, typing, sending, running (the beam rides it), after a send and with a kept
+ *  draft. Focus shows as the shadow alone. A focus colour (it was `border-blue/45`) replaced the
+ *  light border while the field had the focus, and the frame only got it back when it lost the
+ *  focus. Only the shadow eases (`transition-shadow`), so the border never animates. */
 export function composerFrameClass(mobile: boolean): string {
-  return `relative rounded-(--radius) border ${composerFrameBorder(mobile)} bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md`;
+  return `relative rounded-(--radius) border ${composerFrameBorder(mobile)} bg-field transition-shadow duration-[260ms] focus-within:shadow-md`;
 }

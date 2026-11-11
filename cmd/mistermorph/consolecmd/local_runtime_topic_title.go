@@ -54,6 +54,43 @@ func (r *consoleLocalRuntime) regenerateTopicTitle(ctx context.Context, generati
 	return r.store.CompleteTopicTitleRegeneration(topicID, started.TitleRevision, title.Title, title.Icon)
 }
 
+// suggestTopicTitle generates a title for one of a person's topics from its conversation, the way
+// regenerateTopicTitle does, and saves nothing: the rename dialog puts it in its field as a draft,
+// and only a save names the topic. It does not move the title revision either, so naming that is
+// under way is not disturbed by a look at a suggestion.
+func (r *consoleLocalRuntime) suggestTopicTitle(ctx context.Context, generation *consoleLocalRuntimeGeneration, topicID string) (daemonruntime.TopicTitleSuggestion, error) {
+	if r == nil || r.store == nil || generation == nil {
+		return daemonruntime.TopicTitleSuggestion{}, fmt.Errorf("console runtime generation is not initialized")
+	}
+	topicID = strings.TrimSpace(topicID)
+	if !daemonruntime.TopicRenamable(topicID) {
+		return daemonruntime.TopicTitleSuggestion{}, daemonruntime.BadRequest("topic cannot be renamed")
+	}
+	input := consoleTopicTitleInput(r.store.TopicTitleTasks(topicID, 6))
+	if input == "" {
+		return daemonruntime.TopicTitleSuggestion{}, daemonruntime.BadRequest("topic has no conversation to name")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if r.consoleExecutionState != nil && r.workersCtx != nil {
+		stop := context.AfterFunc(r.workersCtx, cancel)
+		defer stop()
+	}
+	if err := ctx.Err(); err != nil {
+		return daemonruntime.TopicTitleSuggestion{}, err
+	}
+	generation.acquire()
+	defer generation.release()
+	title, err := r.generateTopicTitle(ctx, generation, input)
+	if err != nil {
+		return daemonruntime.TopicTitleSuggestion{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return daemonruntime.TopicTitleSuggestion{}, err
+	}
+	return daemonruntime.TopicTitleSuggestion{Title: title.Title, Icon: title.Icon}, nil
+}
+
 // recordCronTopicRun keeps what a TODO item's topic shows from its item, since a one-time item is
 // gone once it has run, and gives the topic its icon. A failure here costs the display, not the run.
 func (r *consoleLocalRuntime) recordCronTopicRun(generation *consoleLocalRuntimeGeneration, run awareness.TopicRun) {

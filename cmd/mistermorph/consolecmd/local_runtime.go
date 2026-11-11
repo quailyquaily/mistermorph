@@ -1381,6 +1381,10 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			RegenerateTopicTitle: func(ctx context.Context, topicID string) (daemonruntime.TopicInfo, error) {
 				return r.regenerateTopicTitle(ctx, generation, topicID)
 			},
+			SetTopicTitle: r.store.RenameTopic,
+			SuggestTopicTitle: func(ctx context.Context, topicID string) (daemonruntime.TopicTitleSuggestion, error) {
+				return r.suggestTopicTitle(ctx, generation, topicID)
+			},
 			Submit: func(ctx context.Context, req daemonruntime.SubmitTaskRequest) (daemonruntime.SubmitTaskResponse, error) {
 				if generation == nil {
 					return daemonruntime.SubmitTaskResponse{}, fmt.Errorf("console runtime generation is not initialized")
@@ -1391,6 +1395,10 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			Stop:            r.stopTask,
 			AnswerQuestion:  r.answerQuestion,
 			AnswerElevation: r.answerElevation,
+			// A chat task's question (ask_user) waits on the run control for its answer.
+			AwaitingAnswer: func(taskID string) bool {
+				return r.runControl.AwaitingAnswer("console", taskID)
+			},
 			TopicMetadata: func(ctx context.Context, topicID string) (daemonruntime.TopicMetadata, error) {
 				return r.topicMetadataForTopic(ctx, topicID, paths.TopicContextPath, defaultWorkspaceDir)
 			},

@@ -1,22 +1,30 @@
 import { effect, untracked } from "nsh";
 
 import {
+  API_BASE,
+  authState,
   authValid,
   BASE_PATH,
+  localeState,
   translate,
   buildConsoleNotificationURL,
   createConsoleStreamTicket,
   runtimeApiFetchForEndpoint,
   safeJSON,
 } from "./context";
-import {
-  canUseDesktopNotifications,
-  isDesktopRuntime,
-  requestDesktopNotificationPermission,
-  showDesktopNotification,
-} from "./desktop-runtime";
+import { isDesktopRuntime } from "./desktop-runtime";
 import { claimConsoleNotification, normalizeConsoleNotification } from "./system-notification-utils";
-import { localStore, notificationPermission, requestNotificationPermission, showNotification } from "../platform";
+import {
+  configureBackgroundTaskNotifications,
+  hasFeature,
+  localStore,
+  notificationPermission,
+  onNotificationOpened,
+  requestNotificationPermission,
+  showNotification,
+  takeOpenedNotification,
+} from "../platform";
+import { installBackgroundTaskNotifications } from "./background-task-notifications.js";
 
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "./endpoints";
 import { handleTopicTaskNotification, trackNotificationForeground } from "./topic-task-notifications";
@@ -29,37 +37,48 @@ let activeSocket = null;
 let reconnectTimer = 0;
 let connectionGeneration = 0;
 
-export async function requestSystemNotificationPermission() {
-  if (isDesktopRuntime() && canUseDesktopNotifications()) {
-    try {
-      return (await requestDesktopNotificationPermission()) ? "granted" : "denied";
-    } catch {
-      return await requestNotificationPermission();
-    }
+// What shows the notifications: the host's (lib/platform.ts). The browser and the desktop app
+// answer the same calls (the desktop app with the system's notification service, desktop/nsh/src/
+// notify.rs); tests pass their own.
+export const systemNotificationHost = {
+  desktop: isDesktopRuntime,
+  permission: notificationPermission,
+  request: requestNotificationPermission,
+  show: showNotification,
+};
+
+// The desktop app asks the system no permission: its answer is whether a notification service is
+// there ("granted" or "unsupported"). A failed answer is "unsupported", never a second question.
+export async function requestSystemNotificationPermission(host = systemNotificationHost) {
+  // The phone app shows task completions only (background-task-notifications.js), not a TODO
+  // item's opt-in notifications: a TODO item cannot notify there.
+  if (hasFeature("backgroundTaskNotifications")) {
+    return "unsupported";
   }
-  return await requestNotificationPermission();
+  if (!host.desktop()) {
+    return await host.request();
+  }
+  try {
+    return await host.request();
+  } catch {
+    return "unsupported";
+  }
 }
 
-export async function showSystemNotification(event) {
+// Shows a notification once: without the permission (a desktop with no notification service
+// included) nothing is tried, and a notification the host failed to show is not tried again.
+export async function showSystemNotification(event, host = systemNotificationHost) {
   const notification = normalizeConsoleNotification(event);
   if (!notification) {
     return false;
   }
   const title = truncateNotificationText(notification.title);
   const body = truncateNotificationText(notification.body);
-  if (isDesktopRuntime() && canUseDesktopNotifications()) {
-    try {
-      await showDesktopNotification({ id: notification.id, title, body });
-      return true;
-    } catch {
-      // Fall back to the host's other notification path below.
-    }
-  }
-  if ((await notificationPermission()) !== "granted") {
-    return false;
-  }
   try {
-    await showNotification({ id: notification.id, title, body, tag: notification.id });
+    if ((await host.permission()) !== "granted") {
+      return false;
+    }
+    await host.show({ id: notification.id, title, body, tag: notification.id });
     return true;
   } catch {
     return false;
@@ -73,6 +92,21 @@ export function installSystemNotifications(router) {
   }
   installed = true;
   trackNotificationForeground();
+  if (hasFeature("backgroundTaskNotifications")) {
+    // The phone app: its native part tells of finished tasks while the app is away.
+    installBackgroundTaskNotifications({
+      configure: configureBackgroundTaskNotifications,
+      take: takeOpenedNotification,
+      onOpened: onNotificationOpened,
+      api: () => API_BASE,
+      token: () => authState.token,
+      signedIn: () => authValid.value,
+      language: () => localeState.lang,
+      translate,
+      topicExists: async (topicID) => Boolean(await localTopic(topicID)),
+      navigate: (path) => router.push(path),
+    });
+  }
   effect(() => {
     const valid = authValid.value;
     untracked(() => {
@@ -138,10 +172,13 @@ async function connectNotificationSocket(router) {
   };
 }
 
-// The name of a topic of the local Console, whose tasks these notifications are about.
+// A topic of the local Console, whose tasks these notifications are about.
+function localTopic(topicID) {
+  return runtimeApiFetchForEndpoint(CONSOLE_LOCAL_ENDPOINT_REF, `/topics/${encodeURIComponent(topicID)}`);
+}
+
 async function localTopicTitle(topicID) {
-  const topic = await runtimeApiFetchForEndpoint(CONSOLE_LOCAL_ENDPOINT_REF, `/topics/${encodeURIComponent(topicID)}`);
-  return topic?.title;
+  return (await localTopic(topicID))?.title;
 }
 
 function disconnectNotificationSocket() {

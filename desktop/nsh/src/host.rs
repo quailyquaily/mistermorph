@@ -258,8 +258,30 @@ pub fn install(host: &HostChannel, desktop: &Arc<Desktop>) {
     // The page language matters to a browser (screen readers, translation); the window has none.
     host.handle("morph.language", |call| call.resolve(Value::Null));
 
-    host.handle("morph.notify.state", |call| call.resolve(json!(crate::notify::PERMISSION)));
-    host.handle("morph.notify.request", |call| call.resolve(json!(crate::notify::PERMISSION)));
+    // No desktop notification service asks an app permission: a request answers what state does.
+    // The log gets the service going missing (and coming back) once, not on every question.
+    let unavailable = Arc::new(AtomicBool::new(false));
+    for name in ["morph.notify.state", "morph.notify.request"] {
+        let log = desktop.log.clone();
+        let unavailable = unavailable.clone();
+        host.handle(name, move |call| {
+            let Some(reply) = call.into_reply() else {
+                return;
+            };
+            let log = log.clone();
+            let unavailable = unavailable.clone();
+            crate::notify::permission(move |state, error| {
+                let missing = error.is_some();
+                if unavailable.swap(missing, Ordering::Relaxed) != missing {
+                    match error {
+                        Some(err) => log.line(&format!("desktop_window notification service unavailable: {err}")),
+                        None => log.line("desktop_window notification service available"),
+                    }
+                }
+                reply.resolve(json!(state));
+            });
+        });
+    }
 
     let d = desktop.clone();
     let channel = host.clone();

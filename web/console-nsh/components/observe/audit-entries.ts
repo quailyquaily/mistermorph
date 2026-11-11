@@ -2,6 +2,7 @@
 // in behaviour): labels for decisions, risks, reasons and approvals, the files' titles and order,
 // and the badges' weights.
 import { formatShortTime, formatTime, safeJSON, toBool } from "../../lib/core/context.js";
+import { taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
 import type { AuditBadgeSpec } from "./parts";
 import { t } from "./parts";
 
@@ -376,6 +377,8 @@ export function taskTitle(task: any) {
 }
 
 export function taskStatusBadge(task: any): AuditBadgeSpec {
+  // A running task waiting for the person's answer to its question is marked as one waiting for them.
+  if (taskWaitingForAnswer(task)) return auditBadge("alert", "warning");
   switch (String(task?.status || "").trim().toLowerCase()) {
     case "failed":
       return auditBadge("alert", "danger");

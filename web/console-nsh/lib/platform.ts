@@ -84,7 +84,7 @@ export const origin = () => config.origin;
 /** The browser's `isSecureContext`, or null when the host did not report it. */
 export const secureContext = (): boolean | null =>
   typeof config.secureContext === "boolean" ? config.secureContext : null;
-/** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`, `voiceRecord`, `voicePreview`. */
+/** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`, `voiceRecord`, `voicePreview`, `backgroundTaskNotifications`. */
 export const hasFeature = (name: string) => config.features.includes(name);
 
 /* ---------- the server (phone app) ---------- */
@@ -224,6 +224,30 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 export async function showNotification(options: { id: string; title: string; body: string; tag?: string }) {
   if (!hosted) return;
   await hostChannel.call("morph.notify.show", options);
+}
+/**
+ * The phone app's background task notifications (`hasFeature("backgroundTaskNotifications")`):
+ * the native part tells of finished tasks while the app is away, from the console server's
+ * recent completions, with this session and these texts. An empty token stops it.
+ */
+export async function configureBackgroundTaskNotifications(settings: {
+  api: string;
+  token: string;
+  texts: { untitled: string; done: string; failed: string; channel: string };
+}) {
+  if (!hosted || !hasFeature("backgroundTaskNotifications")) return;
+  await hostChannel.call("morph.notify.configure", settings);
+}
+/** The topic of the background task notification pressed last, once; "" when none. */
+export async function takeOpenedNotification(): Promise<string> {
+  if (!hosted || !hasFeature("backgroundTaskNotifications")) return "";
+  const opened = (await hostChannel.call("morph.notify.take")) as { topic_id?: string } | null;
+  return String(opened?.topic_id || "").trim();
+}
+/** Hears that a pressed background task notification brought the app back. */
+export function onNotificationOpened(listener: () => void) {
+  if (!hosted || !hasFeature("backgroundTaskNotifications")) return () => {};
+  return hostChannel.on("morph.notify.opened", () => listener());
 }
 /** Hears a press on a notification this app showed: its `id`. */
 export function onNotificationPress(listener: (id: string) => void) {

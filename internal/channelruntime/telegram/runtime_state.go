@@ -340,7 +340,9 @@ func (s *telegramRuntimeState) daemonRoutes() (daemonruntime.RoutesOptions, erro
 		AgentNameFunc:   func() string { return personautil.LoadAgentName(s.dependencies.RuntimePaths.StateDir) },
 		RuntimePaths:    s.dependencies.RuntimePaths,
 		FileCacheLimits: filecache.Limits{MaxAge: s.options.FileCacheMaxAge, MaxFiles: s.options.FileCacheMaxFiles, MaxTotalBytes: s.options.FileCacheMaxTotalBytes},
-		AuthToken:       strings.TrimSpace(s.options.Server.AuthToken), TaskTopic: daemonruntime.TaskTopicRoutes{TaskReader: s.taskStore}, Overview: func(context.Context) (map[string]any, error) {
+		AuthToken:       strings.TrimSpace(s.options.Server.AuthToken), TaskTopic: daemonruntime.TaskTopicRoutes{TaskReader: s.taskStore, AwaitingAnswer: func(taskID string) bool {
+			return s.runControl.AwaitingAnswer("telegram", taskID)
+		}}, Overview: func(context.Context) (map[string]any, error) {
 			lease, bundle, err := s.captureRuntimeGeneration()
 			if err != nil {
 				return nil, err

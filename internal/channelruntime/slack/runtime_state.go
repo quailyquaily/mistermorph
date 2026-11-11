@@ -329,7 +329,9 @@ func (s *slackRuntimeState) daemonRoutes() (daemonruntime.RoutesOptions, error) 
 		Mode:          "slack",
 		AgentNameFunc: func() string { return personautil.LoadAgentName(s.dependencies.RuntimePaths.StateDir) },
 		RuntimePaths:  s.dependencies.RuntimePaths,
-		AuthToken:     strings.TrimSpace(s.options.Server.AuthToken), TaskTopic: daemonruntime.TaskTopicRoutes{TaskReader: s.taskStore}, Overview: func(context.Context) (map[string]any, error) {
+		AuthToken:     strings.TrimSpace(s.options.Server.AuthToken), TaskTopic: daemonruntime.TaskTopicRoutes{TaskReader: s.taskStore, AwaitingAnswer: func(taskID string) bool {
+			return s.runControl.AwaitingAnswer("slack", taskID)
+		}}, Overview: func(context.Context) (map[string]any, error) {
 			lease, bundle, err := s.captureRuntimeGeneration()
 			if err != nil {
 				return nil, err

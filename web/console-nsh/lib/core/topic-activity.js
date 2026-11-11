@@ -1,6 +1,8 @@
 // Runtime activity and session-only acknowledgements are kept separate from task history.
 export const TOPIC_ACTIVITY_RUNNING = "running";
 export const TOPIC_ACTIVITY_PENDING = "pending";
+// A running task waits for the person's answer to a question it asked (ask_user).
+export const TOPIC_ACTIVITY_WAITING = "waiting";
 export const TOPIC_ACTIVITY_DONE = "done";
 
 export function normalizeTopicActivity(raw) {
@@ -9,11 +11,12 @@ export function normalizeTopicActivity(raw) {
   for (const item of raw) {
     const id = typeof item?.id === "string" ? item.id.trim() : "";
     const status = item?.status;
-    if (!id || !["", TOPIC_ACTIVITY_RUNNING, TOPIC_ACTIVITY_PENDING].includes(status)) continue;
+    if (!id || !["", TOPIC_ACTIVITY_RUNNING, TOPIC_ACTIVITY_PENDING, TOPIC_ACTIVITY_WAITING].includes(status)) continue;
     activity.set(id, {
       status,
       running: Math.max(0, Number(item.running) || 0),
       pending: Math.max(0, Number(item.pending) || 0),
+      waiting: Math.max(0, Math.floor(Number(item.waiting) || 0)),
       // TODO items' runs running now, from their schedule or Run now; the server counts them apart
       // from queued ones.
       cronRunning: Math.max(0, Math.floor(Number(item.cron_running) || 0)),
@@ -24,7 +27,7 @@ export function normalizeTopicActivity(raw) {
 
 export function topicActivitySignature(activity) {
   return [...activity.entries()]
-    .map(([id, item]) => `${id}:${item.status}:${item.running}:${item.pending}:${item.cronRunning || 0}`)
+    .map(([id, item]) => `${id}:${item.status}:${item.running}:${item.pending}:${item.waiting || 0}:${item.cronRunning || 0}`)
     .sort()
     .join("|");
 }
@@ -86,7 +89,7 @@ export function createTopicActivityTracker() {
     snapshot() {
       const result = new Map([...activity].filter(([, item]) => item.status));
       for (const id of unread) {
-        if (!result.has(id)) result.set(id, { status: TOPIC_ACTIVITY_DONE, running: 0, pending: 0, cronRunning: 0 });
+        if (!result.has(id)) result.set(id, { status: TOPIC_ACTIVITY_DONE, running: 0, pending: 0, waiting: 0, cronRunning: 0 });
       }
       return result;
     },

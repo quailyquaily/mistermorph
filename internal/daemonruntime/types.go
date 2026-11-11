@@ -196,6 +196,19 @@ func IsAgentLinkTopicID(id string) bool {
 	return strings.HasPrefix(id, AgentLinkTopicPrefix) && len(id) > len(AgentLinkTopicPrefix)
 }
 
+// TopicTitleSuggestion is a generated title (and the icon generated with it) that nothing has saved.
+type TopicTitleSuggestion struct {
+	Title string `json:"title"`
+	Icon  string `json:"icon,omitempty"`
+}
+
+// TopicRenamable reports whether a person can name a topic themselves: their own topics only. The
+// reserved topics keep the runtime's titles, and a TODO item's topic follows the item's title.
+func TopicRenamable(id string) bool {
+	id = strings.TrimSpace(id)
+	return id != "" && !IsReservedTopicID(id)
+}
+
 // TopicNameRegenerable reports whether a topic's generated naming can be redone: any topic of the
 // person's, and a TODO item's, where it is the icon alone (see CompleteTopicTitleRegeneration).
 func TopicNameRegenerable(id string) bool {

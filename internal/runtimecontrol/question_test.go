@@ -191,3 +191,67 @@ func TestRunLeaseAwaitAnswerEndsWhenStopped(t *testing.T) {
 		t.Fatal("UserStopped() = false")
 	}
 }
+
+func TestRunControlAwaitingAnswer(t *testing.T) {
+	tests := []struct {
+		name  string
+		close func(t *testing.T, control *RunControl, lease *RunLease, question *OpenQuestion)
+	}{
+		{
+			name: "answered",
+			close: func(t *testing.T, control *RunControl, _ *RunLease, _ *OpenQuestion) {
+				if !control.AnswerText("telegram", "q1", "yes") {
+					t.Fatal("AnswerText() = false")
+				}
+			},
+		},
+		{
+			name: "expired",
+			close: func(_ *testing.T, _ *RunControl, _ *RunLease, question *OpenQuestion) {
+				question.Close()
+			},
+		},
+		{
+			name: "stopped",
+			close: func(t *testing.T, control *RunControl, _ *RunLease, _ *OpenQuestion) {
+				if got := control.Stop("telegram", "tg:1", "/stop"); !got.Found {
+					t.Fatal("Stop() found no run")
+				}
+			},
+		},
+		{
+			name: "run finished",
+			close: func(_ *testing.T, _ *RunControl, lease *RunLease, _ *OpenQuestion) {
+				lease.Finish()
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			control := New()
+			lease := startQuestionLease(t, control)
+			if control.AwaitingAnswer("telegram", "task_1") {
+				t.Fatal("AwaitingAnswer() before a question = true")
+			}
+			question, err := lease.OpenQuestion("q1", []string{"yes", "no"}, false)
+			if err != nil {
+				t.Fatalf("OpenQuestion() error = %v", err)
+			}
+			defer question.Close()
+			if !control.AwaitingAnswer("telegram", " task_1 ") {
+				t.Fatal("AwaitingAnswer() with an open question = false")
+			}
+			if control.AwaitingAnswer("console", "task_1") || control.AwaitingAnswer("telegram", "task_2") {
+				t.Fatal("AwaitingAnswer() of another runtime or task = true")
+			}
+			tt.close(t, control, lease, question)
+			if control.AwaitingAnswer("telegram", "task_1") {
+				t.Fatal("AwaitingAnswer() after the question closed = true")
+			}
+		})
+	}
+	var nilControl *RunControl
+	if nilControl.AwaitingAnswer("telegram", "task_1") {
+		t.Fatal("nil RunControl AwaitingAnswer() = true")
+	}
+}

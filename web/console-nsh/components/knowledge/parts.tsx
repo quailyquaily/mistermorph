@@ -19,6 +19,7 @@ import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
 import { Icon, TextField, type IconName } from "../ui";
 import { MobileBarSpacer } from "../frame/mobileBar";
+import { listTitleSize } from "../frame/metrics";
 
 /** translate with its variables typed (the JS default `vars = null` reads as `null` only). */
 export const t = translate as unknown as (key: string, vars?: Record<string, unknown>) => string;
@@ -113,17 +114,19 @@ export function SearchField(props: {
 /** The index search's box: its gutters, the room above and below the field, and the field's size. */
 export function indexSearchMetrics(mobile: boolean) {
   // The list's 16pt gutter on a desktop, the page's phone gutter on a phone, where rows run edge to
-  // edge with their content that far in. No room above: the field sits right under the 57pt head;
-  // 8pt below it, then the list's own 8pt before its first row.
+  // edge with their content that far in. 6pt above the field, under the 57pt head, and 2pt below
+  // it, then the list's own 8pt before its first row: 8pt of room in all, more of it above, so the
+  // field stands off the head and stays close to the rows it filters.
   const gutter = mobile ? gutterX() : 16;
-  return { gutter, top: 0, bottom: 8, size: (mobile ? "md" : "sm") as "md" | "sm" };
+  return { gutter, top: 6, bottom: 2, size: (mobile ? "md" : "sm") as "md" | "sm" };
 }
 
 /**
- * The search under the head of the Topics and Contacts indexes, one field for both: a 14pt text
- * field with the magnifier and a clear button, 38pt tall on a desktop and 44pt (a touch target) on
- * a phone, as wide as the column less its gutters. Escape empties it while it has the focus and
- * holds text. It owns its spacing: put it in `IndexColumn`'s `search`, not its `top`.
+ * The search at the top of the Topics and Contacts lists, one field for both: a 14pt text field
+ * with the magnifier and a clear button, 38pt tall on a desktop and 44pt (a touch target) on a
+ * phone, as wide as the column less its gutters. Escape empties it while it has the focus and holds
+ * text. It owns its spacing and gutters: make it the list's first view (outside any gutter of the
+ * rows), on a phone and a desktop alike, never part of the head; or `IndexColumn`'s `search`.
  */
 export function IndexSearch(props: {
   value: string;
@@ -278,9 +281,9 @@ export function IndexDivider(props: { label: string; class?: string }) {
 }
 
 /**
- * One row of an index: a title (14pt, two lines at most) and a meta line, something before (a
- * 20pt icon, an avatar) and after (a count, a 16pt marker). `sliding`: the list draws the selected
- * fill as one gliding highlight, so the row keeps none of its own.
+ * One row of an index: a title (14pt, 15 on mobile; two lines at most) and a meta line (12pt),
+ * something before (a 20pt icon, an avatar) and after (a count, a 16pt marker). `sliding`: the
+ * list draws the selected fill as one gliding highlight, so the row keeps none of its own.
  */
 export function IndexRow(props: {
   title: string;
@@ -308,6 +311,9 @@ export function IndexRow(props: {
       : phone()
         ? "min-h-11 px-3 py-2.5"
         : "min-h-10 py-2 pr-[13px] pl-3.5";
+  // The title's line: 15.1pt over a meta and 18.2 alone at 14pt, as much more at mobile's 15pt.
+  const titleLeading = () =>
+    isMobile() ? (props.meta ? "leading-[16.2px]" : "leading-[19.5px]") : props.meta ? "leading-[15.1px]" : "leading-[18.2px]";
   // The selected row hovered deepens its fill to 13 %: over the gliding highlight a 3 % layer, on
   // a row that draws its own fill the stronger fill itself.
   const hover = () => (props.active ? (props.sliding ? "hover:bg-[#426f9e08]" : "hover:bg-selection-strong") : "hover:bg-hover-soft");
@@ -331,7 +337,7 @@ export function IndexRow(props: {
       </If>
       {props.leading}
       <View class="flex-1 gap-1">
-        <Text class={`text-sm tracking-[-0.025em] text-foreground ${props.meta ? "leading-[15.1px]" : "leading-[18.2px]"}`} style={{ numberOfLines: 2 }}>
+        <Text class={`${listTitleSize(isMobile())} tracking-[-0.025em] text-foreground ${titleLeading()}`} style={{ numberOfLines: 2 }}>
           {props.title}
         </Text>
         <If when={props.meta}>

@@ -7,7 +7,6 @@
 // It runs in the ChatPage component's body: its effects, timers and sockets go with the page.
 import { batch, cleanup, computed, effect, LayoutAnimation, signal, untracked } from "nsh";
 import { MOTION_SLOW, motionMs } from "../../components/motion/tokens";
-import { HISTORY_END_PADDING } from "../../components/chat/ChatHistoryList";
 import type { ListRef } from "nsh";
 import { approvalDetailsByID, taskApprovalState } from "../../lib/core/chat-approvals.js";
 import { formatDate, formatNumber } from "../../lib/core/intl-format.js";
@@ -46,6 +45,7 @@ import {
   taskActivity,
   taskAgentText,
   taskAwaitingReply,
+  taskWaitingForAnswer,
   taskDurationLabel,
   taskElevations,
   taskInsights,
@@ -72,6 +72,7 @@ import {
   topicActivitySignature,
   TOPIC_ACTIVITY_DONE,
   TOPIC_ACTIVITY_PENDING,
+  TOPIC_ACTIVITY_WAITING,
 } from "../../lib/core/topic-activity.js";
 import { contextMeter } from "../../lib/core/context-meter.js";
 import {
@@ -80,6 +81,7 @@ import {
   ordinaryTopicTags,
   sameTopicTags,
   splitPinnedTopics,
+  tagsAfterDrop,
   topicPinned,
   topicTags,
   withPinned,
@@ -100,6 +102,7 @@ import {
 } from "../../lib/core/context.js";
 import { agentLinkAvatarURL, agentLinkInstanceID } from "../../lib/core/agent-link-avatar.js";
 import { pushNotice } from "../../lib/core/notices.js";
+import { createTopicRename, type TopicRenameSession } from "./topicRename";
 import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile } from "../../lib/platform";
 import { currentRoute, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
@@ -727,7 +730,7 @@ export function createChatController() {
   };
   /** Whether one of the page's dialogs is open (Escape is theirs then, not the detail panel's). */
   const pageDialogOpen = () =>
-    rawDialogOpen() || filePreview().open || topicDeleteDialogOpen() || workspaceBrowserOpen();
+    rawDialogOpen() || filePreview().open || topicDeleteDialogOpen() || topicRename.open() || workspaceBrowserOpen();
   /** The reply the detail panel shows, read live from the history (null once it is gone). */
   const activityDetailItem = computed(() => findActivityDetailItem(chatHistoryItems(), activityDetail()));
   /** What a reply answers: the message before it, on one line. */
@@ -817,6 +820,8 @@ export function createChatController() {
     !isCronTopicID(workspaceTopicID()) &&
     topics().some((topic) => normalizeTopicID(topic?.id) === normalizeTopicID(workspaceTopicID()));
   const topicTagsSaving = () => topicTagSaves().has(normalizeTopicID(workspaceTopicID()));
+  /** A save of this topic's tags is under way. */
+  const topicTagSaving = (topic: any) => topicTagSaves().has(normalizeTopicID(topic?.id));
 
   // The agents' and TODO items' lists are a look aside, so the next visit opens on the date or tag
   // list again.
@@ -830,8 +835,10 @@ export function createChatController() {
   const topicAgentAvatar = (topic: any) => agentLinkAvatarURL(topicAgentContact(topic), endpointState.items);
   const findTopic = (id: string) => untracked(topics).find((topic) => normalizeTopicID(topic?.id) === id) || null;
 
-  // Saves a topic's whole tag list: shown at once, back if the save fails; one save per topic.
-  async function saveTopicTags(rawTopicID: string, nextTags: string[]) {
+  // Saves a topic's whole tag list: shown at once, back if the save fails; one save per topic. With
+  // `confirmed` the list changes only once the runtime has saved it, and a failure is a notice
+  // whichever topic is open (a drop in the topic list, whose topic's panel may be closed).
+  async function saveTopicTags(rawTopicID: string, nextTags: string[], options: { confirmed?: boolean } = {}) {
     const topicID = normalizeTopicID(rawTopicID);
     const endpointRef = untracked(submitEndpointRef);
     const topic = findTopic(topicID);
@@ -839,7 +846,7 @@ export function createChatController() {
     const previous = topicTags(topic);
     const applyTags = (tags: string[]) =>
       topics.update((list) => list.map((item) => (normalizeTopicID(item?.id) === topicID ? { ...item, tags: [...tags] } : item)));
-    applyTags(nextTags);
+    if (!options.confirmed) applyTags(nextTags);
     topicTagSaves.update((saves) => new Set([...saves, topicID]));
     if (topicID === normalizeTopicID(untracked(workspaceTopicID))) topicTagsError.set("");
     try {
@@ -847,13 +854,14 @@ export function createChatController() {
         method: "PUT",
         body: { tags: nextTags },
       });
-      if (untracked(submitEndpointRef) === endpointRef) applyTags(topicTags(updated));
+      // The runtime answers with the topic as saved; one without its tags saved what was sent.
+      if (untracked(submitEndpointRef) === endpointRef) applyTags(Array.isArray(updated?.tags) ? topicTags(updated) : nextTags);
       return true;
     } catch (error) {
       if (untracked(submitEndpointRef) !== endpointRef) return false;
-      applyTags(previous);
+      if (!options.confirmed) applyTags(previous);
       const message = errorMessage(error, t("chat_topic_tags_failed"));
-      if (topicID === normalizeTopicID(untracked(workspaceTopicID))) topicTagsError.set(message);
+      if (!options.confirmed && topicID === normalizeTopicID(untracked(workspaceTopicID))) topicTagsError.set(message);
       else pushNotice({ type: "error", text: message });
       return false;
     } finally {
@@ -863,6 +871,25 @@ export function createChatController() {
         return next;
       });
     }
+  }
+
+  // Dragging a topic onto a tag group in the tag view adds that group's tag to the topic's own
+  // (pages/chat/topicDrag.ts). Only tag groups take a drop: not the pinned or untagged group, nor a
+  // group whose tag the topic has already, nor any while the topic has its most tags, is saving, or
+  // is an agent's or a TODO item's.
+  function topicDropTags(topic: any, group: any): string[] | null {
+    const id = normalizeTopicID(topic?.id);
+    if (topicSidebarView() !== "tags" || group?.drop?.kind !== "tag") return null;
+    if (!id || isAgentLinkTopicID(id) || isCronTopicID(id) || topicTagSaves().has(id)) return null;
+    const current = topics().find((item) => normalizeTopicID(item?.id) === id);
+    return current ? tagsAfterDrop(current, group.drop) : null;
+  }
+  const topicCanDrop = (topic: any, group: any) => topicDropTags(topic, group) !== null;
+  /** Drops the topic on the group: saves the tags it then has, and lists them once saved. */
+  function dropTopicOnGroup(topic: any, group: any) {
+    const next = untracked(() => topicDropTags(topic, group));
+    if (!next) return Promise.resolve(false);
+    return saveTopicTags(topic.id, next, { confirmed: true });
   }
 
   const saveSelectedTopicTags = (tags: string[]) => saveTopicTags(untracked(workspaceTopicID), withPinned(tags, untracked(selectedTopicPinned)));
@@ -944,9 +971,12 @@ export function createChatController() {
   };
   const topicDeleteAvailable = () => Boolean(workspaceTopicID()) && !selectedTopicIsReserved();
   const topicDeleteDisabled = () => !topicDeleteAvailable() || topicDeleting();
-  // A TODO item's topic has no delete, but its generated icon can be redone; its title is the item's.
-  const topicRegenerateAvailable = () => topicDeleteAvailable() || (Boolean(workspaceTopicID()) && selectedTopicIsCron());
-  const topicRegenerateLabel = () => t(selectedTopicIsCron() ? "chat_topic_regenerate_icon_action" : "chat_topic_regenerate_action");
+  // A person's own topic is renamed through the rename dialog, which also offers a generated name.
+  // A TODO item's topic has no delete and no rename (its title is the item's), but its generated
+  // icon can be redone.
+  const topicRenameAvailable = () => topicDeleteAvailable();
+  const topicRegenerateAvailable = () => Boolean(workspaceTopicID()) && selectedTopicIsCron();
+  const topicRegenerateLabel = () => t("chat_topic_regenerate_icon_action");
   effect(() => {
     void workspaceTopicID();
     untracked(() => topicTagsError.set(""));
@@ -954,19 +984,39 @@ export function createChatController() {
   const topicNameRequestKey = () => JSON.stringify([submitEndpointRef(), selectedTopicID()]);
   const topicRegenerating = () => topicNameRequests().has(topicNameRequestKey());
   const topicRegenerateError = () => (topicNameFailure()?.key === topicNameRequestKey() ? topicNameFailure()!.message : "");
-  const topicRegenerateDisabled = () =>
-    !topicRegenerateAvailable() ||
-    topicDeleting() ||
-    topicRegenerating() ||
-    historyLoading() ||
-    (!historyNextCursor() &&
-      !chatHistoryItems().some(
+  /** Whether the open topic has something to name it from: a message that is not a command. */
+  const selectedTopicHasConversation = () =>
+    !historyLoading() &&
+    (Boolean(historyNextCursor()) ||
+      chatHistoryItems().some(
         (item) =>
           item.role === "user" &&
           item.topicID === selectedTopicID() &&
           String(item.text || "").trim() &&
           !String(item.text || "").trim().startsWith("/"),
       ));
+  const topicRegenerateDisabled = () => !topicRegenerateAvailable() || topicDeleting() || topicRegenerating() || !selectedTopicHasConversation();
+  const topicRename = createTopicRename({
+    suggest: (endpointRef, topicID) =>
+      runtimeApiFetchForEndpoint(endpointRef, `/topics/${encodeURIComponent(topicID)}/title-suggestion`, { method: "POST" }),
+    save: (endpointRef, topicID, title) =>
+      runtimeApiFetchForEndpoint(endpointRef, `/topics/${encodeURIComponent(topicID)}/title`, { method: "PUT", body: { title } }),
+    onSaved: (session, updated) => applyRenamedTopic(session, updated),
+    messages: () => ({ empty: t("chat_topic_rename_empty"), saveFailed: t("chat_topic_rename_failed"), suggestFailed: t("chat_topic_regenerate_failed") }),
+  });
+  const topicRenameDisabled = () => !topicRenameAvailable() || topicDeleting() || topicRename.open();
+  const topicRenameRegenerateDisabled = () =>
+    !topicRename.open() || topicRename.suggesting() || topicRename.saving() || !selectedTopicHasConversation();
+  // The dialog belongs to the topic and runtime it was opened for: it goes when either changes.
+  effect(() => {
+    const current = topicRename.session();
+    if (!current) return;
+    const endpointRef = submitEndpointRef();
+    const topicID = workspaceTopicID();
+    if (endpointRef !== current.endpointRef || topicID !== current.topicID || !topicRenameAvailable()) {
+      untracked(() => topicRename.close({ force: true }));
+    }
+  });
   const topicPropertyRows = () => {
     const topic = selectedTopic();
     if (!topic) return [];
@@ -1788,21 +1838,17 @@ export function createChatController() {
 
   /* ---------- history ---------- */
 
-  // The newest message is item 0 of the inverted list. Scroll to that index, not `scrollToEnd()`:
-  // nsh 0.4's core resolves an inverted list's "end" to content offset 0, the top of the content,
-  // which is the OLDEST message (list.rs `end_offset`), so a topic opened at its first message.
-  // Resolved natively, the index scroll also follows the row while it is measured.
-  // An inverted list lays its content padding out mirrored too: the history's 20pt `paddingTop`
-  // is below the newest message, so the scroll goes that much past item 0's own end.
-  const stickToBottom = (animated = false) => historyList?.scrollToIndex({ index: 0, viewPosition: 0, viewOffset: HISTORY_END_PADDING, animated });
+  // The newest message is the last item, at the end of the list's content (its 20pt end padding
+  // under it). Resolved natively, the scroll also follows the end while rows are measured.
+  const stickToBottom = (animated = false) => historyList?.scrollToEnd({ animated });
   // How far the history is scrolled up from the newest message, in points (ChatHistoryList keeps it).
   let historyDistanceFromEnd = 0;
   let historyViewport = 0;
 
   function scrollHistoryToBottom(options: { force?: boolean; smooth?: boolean } = {}) {
-    // The inverted list keeps the newest message in view while it is there; a send or a load moves
-    // back to it. A send glides there when it is near (within 1.5 screens), and jumps from farther,
-    // so the view never trails the conversation (the Vue console's scrollHistoryToBottom).
+    // The list follows the newest message while it is at it (ChatHistoryList); a send or a load
+    // moves back to it. A send glides there when it is near (within 1.5 screens), and jumps from
+    // farther, so the view never trails the conversation (the Vue console's scrollHistoryToBottom).
     if (!options.force && !options.smooth) return;
     const near = historyDistanceFromEnd <= Math.max(1, historyViewport) * 1.5;
     const animated = Boolean(options.smooth) && near;
@@ -1936,6 +1982,8 @@ export function createChatController() {
       }
       if (typeof frame.status === "string" && frame.status !== "") patch.status = normalizeTaskStatus(frame.status);
       if (Object.keys(patch).length > 0) patchAgentHistoryItem(key, historyID, patch);
+      // A question opened or closed: the topic list's mark follows now, not at its next poll.
+      if (patch.questions && taskWaitingForAnswer(existingItem) !== taskWaitingForAnswer({ ...existingItem, ...patch })) void refreshTopicActivity();
       if (frame.done) closeTaskStream(key);
     };
     socket.onclose = () => {
@@ -1963,6 +2011,7 @@ export function createChatController() {
   function topicActivityLabel(topic: any) {
     const status = topicActivityState(topic);
     if (status === TOPIC_ACTIVITY_DONE) return t("chat_topic_status_done");
+    if (status === TOPIC_ACTIVITY_WAITING) return t("chat_topic_status_waiting");
     return status === TOPIC_ACTIVITY_PENDING ? t("chat_topic_status_pending") : t("chat_topic_status_running");
   }
 
@@ -2174,6 +2223,8 @@ export function createChatController() {
         text: taskAgentText(detail, t, { agentName: untracked(activeAgentName), pendingSeed, pendingText: preservePendingText ? existing?.text : "" }),
         // Still the polling hint, unless the stream has already shown words.
         awaiting: taskAwaitingReply(detail) && existing?.awaiting !== false,
+        // The run waits on the answer to its question (while the stream's questions are unknown).
+        awaitingAnswer: detail?.awaiting_answer === true,
         timeText: formatChatHistoryTime(detail?.finished_at || detail?.started_at || detail?.created_at, currentLocale()),
         durationText: taskDurationLabel(detail),
         rawJSON: taskRawJSON(detail),
@@ -2656,6 +2707,23 @@ export function createChatController() {
         return next;
       });
     }
+  }
+
+  function openTopicRename() {
+    const topic = untracked(selectedTopic);
+    if (untracked(topicRenameDisabled) || !topic) return;
+    topicRename.start({ endpointRef: untracked(submitEndpointRef), topicID: untracked(workspaceTopicID), title: String(topic.title || "") });
+  }
+
+  function applyRenamedTopic(session: TopicRenameSession, updated: any) {
+    if (untracked(submitEndpointRef) !== session.endpointRef || !updated) return;
+    topics.update((list) =>
+      list.map((topic) =>
+        normalizeTopicID(topic.id) !== session.topicID || Number(topic.title_revision || 0) > Number(updated?.title_revision || 0)
+          ? topic
+          : { ...topic, ...updated },
+      ),
+    );
   }
 
   function confirmDeleteTopic() {
@@ -3297,6 +3365,10 @@ export function createChatController() {
     topicDeleteAvailable,
     topicDeleteDisabled,
     topicDeleteDialogText,
+    topicRenameAvailable,
+    topicRenameDisabled,
+    topicRenameRegenerateDisabled,
+    topicRename,
     topicRegenerateAvailable,
     topicRegenerateLabel,
     topicRegenerating,
@@ -3304,6 +3376,7 @@ export function createChatController() {
     topicRegenerateDisabled,
     topicTagsAvailable,
     topicTagsSaving,
+    topicTagSaving,
     selectedTopicOrdinaryTags,
     selectedTopicPinned,
     knownTags,
@@ -3368,10 +3441,13 @@ export function createChatController() {
     openWorkspaceSelection,
     downloadWorkspaceSelection,
     regenerateTopicName,
+    openTopicRename,
     confirmDeleteTopic,
     closeTopicDeleteDialog,
     deleteSelectedTopic,
     saveSelectedTopicTags,
+    topicCanDrop,
+    dropTopicOnGroup,
     setSelectedTopicPinned,
     openContextInspector,
     closeRawDialog,

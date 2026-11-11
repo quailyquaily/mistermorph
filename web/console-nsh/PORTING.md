@@ -13,8 +13,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `App.tsx` | Boot (host data, session, language), router start, the frame |
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
-| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker, voice input through the native part |
-| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) |
+| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker, voice input and task notifications through the native part |
+| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) and the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) |
 | `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
@@ -86,6 +86,19 @@ Headless tests prove behaviour, not the look.
 - `style={{ display: "flex" }}` turns a View into a row.
 - On an inverted `List`, `scrollToEnd()` goes to the oldest item (nsh 0.4.0): use
   `scrollToIndex({ index: 0 })` to show the newest.
+- `List` tells the items of `each` apart by identity (`===`), not by `keyExtractor`: an item
+  replaced by a new object (`{ ...item, text }`) is one removed and one inserted, its measured
+  height goes back to `estimatedItemSize`, and the place the list keeps on screen goes with it. A
+  list whose items are updated by copy gets their ids and looks each one up in its row
+  (`ChatHistoryList`; docs/console/chat-scroll-anchoring.md).
+- An inverted `List` keeps its distance from the end, and moves nothing for a row across the
+  viewport's bottom edge: a reply growing there pushes what is on screen up. The chat's list is
+  not inverted: `maintainVisibleContentPosition` follows the end, and is off while scrolled up,
+  since nsh 0.4's compares its old end with an offset already moved for rows that changed above
+  the viewport (an older page taller than the way back to the bottom sent the reader there).
+- Headless (`nsh test`), a list's own scroll corrections are not reported back: `measure()` and
+  `onScroll` lag until the next scroll. Scroll by a point and back before reading positions
+  (`tests/chat-scroll-anchor.test.tsx`).
 - `lifecycle()` from `nsh` breaks the whole page on the web runtime (0.4.0).
 - A page loaded in a hidden browser tab gets no frames, so animated values stall part-way until
   the tab is shown; take screenshots from a visible tab.
@@ -97,6 +110,10 @@ Headless tests prove behaviour, not the look.
   patched copy (`desktop/nsh/patches/nsh-gpui-masks.patch`) fades text glyphs under a linear mask
   (not fills or images). For a cut-out of anything but text, draw on a `Canvas`
   (`components/shared/CutoutAvatar.tsx`).
+- Android draws no masks at all: its prebuilt runtime parses `maskImage` but never passes it to the
+  Java views that draw, and no blend mode erases. `FadeText` fades there by drawing the letters
+  under the fade as texts of their own at the mask's alpha (`components/motion/glyphFade.ts`); a
+  new masked fade on Android needs the same, or nothing fades.
 - Repeating gradients work, though the docs don't say so: `backgroundImage:
   "repeating-linear-gradient(135deg, <c> 0 2px, transparent 2px 5px)"` (hatching, the paper grid in
   `Shell`). Put them in `style` (Tailwind arbitrary values can't hold the spaces).
@@ -129,12 +146,31 @@ Headless tests prove behaviour, not the look.
   for a 22.12pt line). A field that must centre one line beside other controls gets a fixed box
   with the line placed from `lineHeight`, not padding around the measured height
   (`components/chat/composerField.ts`).
+- A layout decided from an `Input`'s measured height must not change the width it was measured at,
+  or it feeds back on itself. Measure at the widths the layout can take with hidden copies of the
+  input instead (`components/chat/ComposerMeasure.tsx`). Hide them with `invisible`: on the web,
+  `focusable={false}`, `readonly` and `disabled` leave the `textarea` in the browser's Tab order
+  (Shift+Tab reached them), while `visibility: hidden` keeps the layout and drops the focus. Two
+  inputs laid out together report `onContentSizeChange` one after the other (a microtask between
+  them does not merge them), before the next frame is drawn. Headless runs measure a line break
+  as no break.
 - A pull down from a list's top is the scroll view's own pull-to-refresh (`onRefresh` with
   `refreshIndicator={{ height }}`: no spinner, the platform decides the gesture, short and empty
   lists included). Touch handlers on the list would not do: the scroll view takes the touches over
   from JS (`onTouchCancel`) once it drags. A released pull leaves the refresh on (the indicator's
   room kept above the content) until the app sets `refreshing` true and then false in a later
   turn. Topics' and Contacts' phone searches use it (`components/shared/pullSearch.ts`).
+- There is no DOM drag and drop: a drag inside the app is a `PanResponder` (`onMoveShouldSet…`
+  past a few points, so a click stays a press; taking the gesture cancels the press under it), and
+  where it is comes from `measure()` of the view whose children's `onLayout` frames are compared
+  (`pages/chat/topicDrag.ts`). A view added to an ancestor of the responder mid-gesture ends the
+  gesture silently (no more moves, no release, no terminate): draw drop marks in views that are
+  there from the start and only restyle them.
+- On the web every nsh `Scroll` contains its overscroll (`.nsh-scroll`: `overscroll-behavior:
+  contain`, no prop to change it), even one that cannot scroll: a vertical touch swipe that starts
+  on a sideways scroller inside a vertical one does not scroll the outer one (chat code blocks do
+  this). Progress and coder runs that do not wrap are a plain row while they fit and a sideways
+  scroller only while they overflow (`components/chat/OverflowLine.tsx`).
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
 
@@ -188,5 +224,7 @@ Headless tests prove behaviour, not the look.
   which then refuses `http://`: `scripts/build-android.sh` runs `nsh package` with an SDK whose
   `aapt2` adds it, for console servers on the local network.
 - 0.4.0 has the photo picker but no `Picker.pickFiles` and no `Notifications`: the Android app
-  attaches images only and shows no system notifications. Avatars (crop and re-encode) and saving
-  files are not available there yet; they say so.
+  attaches images only. Avatars (crop and re-encode) and saving files are not available there yet;
+  they say so. Task notifications come from the app's own Java (a JobScheduler job reading
+  `/api/notifications/events` while the app is away: the page, and its socket, are suspended then);
+  see `docs/feat/feat_20261110_android_task_notifications.md`.

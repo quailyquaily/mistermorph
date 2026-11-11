@@ -26,6 +26,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	submit := opts.Submit
 	stop := opts.Stop
 	answerQuestion := opts.AnswerQuestion
+	awaitingAnswer := opts.AwaitingAnswer
 	answerElevation := opts.AnswerElevation
 
 	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +70,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 				TopicID: strings.TrimSpace(r.URL.Query().Get("topic_id")),
 				Cursor:  cursorRaw,
 			})
+			markAwaitingAnswer(items, awaitingAnswer)
 			page := pagination.PageFromLookahead(items, limit, func(item TaskInfo) string {
 				return pagination.EncodeKeysetCursor(item.CreatedAt, item.ID)
 			})
@@ -309,12 +311,15 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			http.NotFound(w, r)
 			return
 		}
+		// A copy: the reader may hand out its own record.
+		task := []TaskInfo{*info}
+		markAwaitingAnswer(task, awaitingAnswer)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(info)
+		_ = json.NewEncoder(w).Encode(task[0])
 	})
 
 	// The tag view's arrangement: the order of the tag groups and of the topics within them.
-	// The topics with unfinished tasks, for a running indicator on each topic in the list.
+	// The topics with unfinished tasks, for a running (or waiting) indicator on each topic in the list.
 	mux.HandleFunc("/topics/activity", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -330,7 +335,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"topics": topicActivity(reader)})
+		_ = json.NewEncoder(w).Encode(map[string]any{"topics": topicActivity(reader, awaitingAnswer)})
 	})
 
 	mux.HandleFunc("/topics/layout", func(w http.ResponseWriter, r *http.Request) {
@@ -411,6 +416,80 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(updated)
+			return
+		}
+		if strings.HasSuffix(suffix, "/title") {
+			if r.Method != http.MethodPut {
+				w.Header().Set("Allow", "PUT")
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			id := strings.TrimSuffix(suffix, "/title")
+			if id == "" || strings.Contains(id, "/") || !TopicRenamable(id) {
+				http.Error(w, "topic cannot be renamed", http.StatusBadRequest)
+				return
+			}
+			if opts.SetTopicTitle == nil {
+				http.Error(w, "topic rename is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			var req struct {
+				Title string `json:"title"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			renamed, err := opts.SetTopicTitle(id, req.Title)
+			if err != nil {
+				if errors.Is(err, ErrTopicNotFound) {
+					http.NotFound(w, r)
+					return
+				}
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(renamed)
+			return
+		}
+		if strings.HasSuffix(suffix, "/title-suggestion") {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			id := strings.TrimSuffix(suffix, "/title-suggestion")
+			if id == "" || strings.Contains(id, "/") || !TopicRenamable(id) {
+				http.Error(w, "topic cannot be renamed", http.StatusBadRequest)
+				return
+			}
+			if opts.SuggestTopicTitle == nil || topicReader == nil {
+				http.Error(w, "topic name generation is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			topic, ok := topicReader.GetTopic(id)
+			if !ok || topic == nil || topicDeleted(*topic) {
+				http.NotFound(w, r)
+				return
+			}
+			suggestion, err := opts.SuggestTopicTitle(r.Context(), id)
+			if err != nil {
+				status := http.StatusServiceUnavailable
+				if errors.Is(err, ErrTopicTitleBusy) {
+					status = http.StatusConflict
+				} else if _, ok := badRequestMessage(err); ok {
+					status = http.StatusBadRequest
+				}
+				http.Error(w, err.Error(), status)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(suggestion)
 			return
 		}
 		if strings.HasSuffix(suffix, "/tags") {
@@ -524,20 +603,32 @@ func (routes *routeRegistration) registerTaskRoutes() {
 }
 
 // TopicActivity reports unfinished work and the latest successful completion. An empty status
-// means no unfinished work; the client decides whether that completion has been viewed.
+// means no unfinished work; the client decides whether that completion has been viewed. Status is
+// "pending" while a task waits on an approval, else "waiting" while a running task waits on the
+// answer to a question it asked, else "running" while a task is queued or runs.
 // CronRunning counts, apart from Running (which also counts queued tasks), the TODO items' runs
-// running now, whether their schedule or Run now started them.
+// running now, whether their schedule or Run now started them. Waiting counts the running tasks
+// that wait on an answer; Running counts them too.
 type TopicActivity struct {
 	ID               string     `json:"id"`
 	Status           string     `json:"status"`
 	Running          int        `json:"running"`
 	Pending          int        `json:"pending"`
+	Waiting          int        `json:"waiting,omitempty"`
 	CronRunning      int        `json:"cron_running,omitempty"`
 	LatestDoneTaskID string     `json:"latest_done_task_id,omitempty"`
 	LatestDoneAt     *time.Time `json:"latest_done_at,omitempty"`
 }
 
-func topicActivity(reader TaskReader) []TopicActivity {
+// markAwaitingAnswer sets AwaitingAnswer on the running tasks of items whose run waits on an answer
+// now, and clears it on the others.
+func markAwaitingAnswer(items []TaskInfo, awaiting func(taskID string) bool) {
+	for i := range items {
+		items[i].AwaitingAnswer = awaiting != nil && items[i].Status == TaskRunning && awaiting(items[i].ID)
+	}
+}
+
+func topicActivity(reader TaskReader, awaiting func(taskID string) bool) []TopicActivity {
 	byTopic := map[string]*TopicActivity{}
 	triggers, _ := reader.(taskdomain.TaskTriggerReader)
 	cursor := ""
@@ -558,6 +649,9 @@ func topicActivity(reader TaskReader) []TopicActivity {
 				item.Pending++
 			case TaskQueued, TaskRunning:
 				item.Running++
+				if task.Status == TaskRunning && awaiting != nil && awaiting(task.ID) {
+					item.Waiting++
+				}
 				if task.Status == TaskRunning && triggers != nil {
 					if trigger, ok := triggers.GetTrigger(task.ID); ok && IsCronRunTrigger(trigger) {
 						item.CronRunning++
@@ -588,6 +682,8 @@ func topicActivity(reader TaskReader) []TopicActivity {
 	for _, item := range byTopic {
 		if item.Pending > 0 {
 			item.Status = "pending"
+		} else if item.Waiting > 0 {
+			item.Status = "waiting"
 		} else if item.Running > 0 {
 			item.Status = "running"
 		}

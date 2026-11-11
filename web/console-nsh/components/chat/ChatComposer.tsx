@@ -19,8 +19,9 @@ import {
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
 import { isMobile } from "../../lib/shell";
-import { COMPOSER_LINE_HEIGHT as LINE_HEIGHT, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
-import { nextComposerRows, SINGLE_ROW, type ComposerRows } from "./composerRows";
+import { COMPOSER_FIELD_TEXT, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
+import { composerLayout, ONE_ROW, sameComposerLayout, type ComposerLayout } from "./composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheets";
 import { t } from "./i18n";
 
@@ -132,7 +133,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const suggestionContext = signal<any>(null);
   const suggestionIndex = signal(0);
   const historyIndex = signal(-1);
-  const contentHeight = signal(LINE_HEIGHT);
+  const measures = signal(INITIAL_MEASURES);
+  const actionsWidth = signal(0);
   let applyingHistory = false;
 
   const value = () => String(props.value ?? "");
@@ -171,28 +173,28 @@ export function ChatComposer(props: ChatComposerProps) {
     const chosen = String(selectedProfile()?.title ?? "").trim();
     return label && chosen ? `${label}: ${chosen}` : label || chosen;
   };
-  // More than one line of text: the field moves above the controls. One way per edit, as the move
-  // itself widens the field (composerRows.ts).
-  const rows = signal<ComposerRows>(SINGLE_ROW);
-  const multiRow = () => rows().multi;
+  // One row while the text is one line beside the controls; above them, as wide as it was beside
+  // them until it is more than a line at the full width too. Decided from the text's height at both
+  // widths, which the layout does not change, so it never flips back on its own (composerRows.ts).
+  const layout = signal<ComposerLayout>(ONE_ROW);
+  const multiRow = () => layout().rows !== "one";
   // On one row the field is as tall as the controls with its line on their centre line
   // (composerField.ts); above them it is as tall as its text.
-  const fieldBox = () => composerFieldBox(multiRow(), contentHeight());
+  const fieldBox = () => composerFieldBox(multiRow(), layout().height);
+  const fieldWidth = () => {
+    const width = measures().oneRowWidth;
+    return layout().rows === "narrow" && width > 0 ? { width } : {};
+  };
+  // The rows and the height change together, and ease into place (the Vue composer's height
+  // transition) rather than snapping; the history above makes room in the same motion.
   effect(() => {
-    const text = value();
-    const oneLine = contentHeight() <= LINE_HEIGHT * 1.5;
+    const next = composerLayout(value(), measures());
     untracked(() => {
-      const next = nextComposerRows(rows(), text, oneLine);
-      if (next !== rows()) rows.set(next);
+      if (sameComposerLayout(layout(), next)) return;
+      if (!reduceMotion()) LayoutAnimation.configureNext({ duration: 180, update: { type: "easeInEaseOut" } });
+      layout.set(next);
     });
   });
-  // The field eases to its new height as lines come and go (the Vue composer's height transition),
-  // rather than snapping; the history above makes room in the same motion.
-  function growTo(height: number) {
-    if (Math.abs(height - untracked(contentHeight)) < 0.5) return;
-    if (!reduceMotion()) LayoutAnimation.configureNext({ duration: 180, update: { type: "easeInEaseOut" } });
-    contentHeight.set(height);
-  }
   // Enter sends on desktops; while suggestions show it picks one, also on phones.
   const submitBehavior = () => (props.submitOnEnter !== false || suggestionsVisible() ? "submit" : "newline");
 
@@ -541,7 +543,7 @@ export function ChatComposer(props: ChatComposerProps) {
   );
 
   const actions = () => (
-    <View class="flex-row items-center gap-2">
+    <View class="shrink-0 flex-row items-center gap-2" onLayout={({ bounds }) => actionsWidth.set(bounds.size.width)}>
             <If when={profiles().length > 1}>
               <Select
                 items={profiles().map((item) => ({ value: item.value, title: item.title }))}
@@ -690,10 +692,13 @@ export function ChatComposer(props: ChatComposerProps) {
             </If>
           </View>
         </If>
-        {/* One row (add, the field, actions) while the text is one line; longer, the field takes the
-            whole width above a row of the controls, as the Vue composer's multi-row grid does. The
-            field stays the same element, so it keeps its focus and caret. */}
+        {/* One row (add, the field, actions) while the text is one line; longer, the field goes above
+            a row of the controls, as the Vue composer's multi-row grid does, and takes the whole
+            width once its text is more than a line there too (composerRows.ts). The field stays the
+            same element, so it keeps its focus, caret and composition; ComposerMeasure measures the
+            draft at both widths. */}
         <View class={composerRowClass(multiRow())}>
+          <ComposerMeasure text={value()} actionsWidth={actionsWidth()} onMeasure={(next) => measures.set(next)} />
           <If when={!multiRow()}>{addControl()}</If>
           <Input
             ref={field}
@@ -719,14 +724,13 @@ export function ChatComposer(props: ChatComposerProps) {
               syncSuggestions(untracked(value), end);
             }}
             onSubmit={onSubmitKey}
-            onContentSizeChange={({ size }) => growTo(Math.ceil(size.height))}
             onPaste={(event) => {
               if (props.disabled || props.attachDisabled) return;
               const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
               if (files.length) props.onAttachFiles?.(files);
             }}
-            class={`font-mono text-sm text-foreground placeholder:text-muted-foreground ${multiRow() ? "w-full" : "flex-1"}`}
-            style={fieldBox()}
+            class={`${COMPOSER_FIELD_TEXT} text-foreground placeholder:text-muted-foreground ${layout().rows === "one" ? "flex-1" : layout().rows === "wide" ? "w-full" : ""}`}
+            style={{ ...fieldBox(), ...fieldWidth() }}
           />
           <If when={!multiRow()}>{actions()}</If>
           <If when={multiRow()}>

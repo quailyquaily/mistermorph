@@ -21,6 +21,7 @@ import { endpointChannelLabel } from "../../lib/core/endpoints.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { loadResource, resourceKey } from "../../lib/core/resources.js";
 import { createArrivalTracker, createChangeTracker, createHighlightWindow } from "../../lib/core/arrivals.js";
+import { taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
 import { isVisible } from "../../lib/platform";
 import { navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
@@ -123,6 +124,7 @@ export function AuditPage() {
   const currentTaskCursor = computed(() => String(taskPageCursors()[taskPageIndex()] || "").trim());
   const taskStatusTitles = new Map<string, string>(TASK_STATUS_META.map((item: any) => [item.value, t(item.titleKey)]));
   const taskStatusLabel = (task: any) => {
+    if (taskWaitingForAnswer(task)) return t("status_waiting_answer");
     const value = String(task?.status || "").trim().toLowerCase();
     return taskStatusTitles.get(value) || String(task?.status || "").trim() || "-";
   };
@@ -178,7 +180,7 @@ export function AuditPage() {
     untracked(() => {
       const scope = `${taskFeedEndpointRef()}|${currentTaskCursor()}`;
       const arrived = taskArrivals.update(items.map((item) => item.id), scope);
-      const changed = taskChanges.update(items.map((item) => ({ id: item.id, signature: item.status })), scope);
+      const changed = taskChanges.update(items.map((item) => ({ id: item.id, signature: `${item.status}:${taskWaitingForAnswer(item)}` })), scope);
       markArrived(new Set([...arrived, ...changed].map((id) => `task:${id}`)));
     });
   });

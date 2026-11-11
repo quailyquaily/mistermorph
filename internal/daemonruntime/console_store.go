@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/internal/domainjournal"
@@ -662,6 +663,52 @@ func (s *ConsoleFileStore) setTopicTitle(id, title, icon, expectedTitle string, 
 	topic.UpdatedAt = now
 	topic.TitleRevision++
 	return s.saveTopicTitleLocked(topic, now)
+}
+
+// TopicTitleMaxRunes bounds a topic title a person types; generated titles keep to it too.
+const TopicTitleMaxRunes = 72
+
+// RenameTopic sets the title a person chose for one of their topics. The title is trimmed and its
+// runs of white space (line breaks included) become single spaces. It counts as customized and
+// moves the title revision on, so the first-message naming and any regeneration started before it
+// leave it alone. The icon stays. Reserved topics keep their own titles: a TODO item's follows the
+// item.
+func (s *ConsoleFileStore) RenameTopic(id, title string) (TopicInfo, error) {
+	if s == nil {
+		return TopicInfo{}, fmt.Errorf("console task store is nil")
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return TopicInfo{}, BadRequest("missing topic id")
+	}
+	if IsReservedTopicID(id) {
+		return TopicInfo{}, BadRequest("topic cannot be renamed")
+	}
+	title = strings.Join(strings.Fields(title), " ")
+	if title == "" {
+		return TopicInfo{}, BadRequest("missing topic title")
+	}
+	if utf8.RuneCountInString(title) > TopicTitleMaxRunes {
+		return TopicInfo{}, BadRequest(fmt.Sprintf("topic title is longer than %d characters", TopicTitleMaxRunes))
+	}
+	unlock, err := s.lockShared()
+	if err != nil {
+		return TopicInfo{}, err
+	}
+	defer unlock()
+	topic, ok := s.topics[id]
+	if !ok || topicDeleted(topic) {
+		return TopicInfo{}, ErrTopicNotFound
+	}
+	now := time.Now().UTC()
+	topic.Title = title
+	topic.TitleCustomized = true
+	topic.TitleRevision++
+	topic.UpdatedAt = now
+	if err := s.saveTopicTitleLocked(topic, now); err != nil {
+		return TopicInfo{}, err
+	}
+	return s.topics[id], nil
 }
 
 // SetCronTopicTitle renames the topic of the TODO item with this ID after the item, so a saved
