@@ -169,6 +169,12 @@ Headless tests prove behaviour, not the look.
   change made a frame earlier), or a resize's widths when the eased change answers a resize. Ease
   only changes an edit made, once the previous change has been drawn (`followComposerLayout` in
   `components/chat/composerRows.ts`).
+- A multiline `Input` wraps its placeholder as it wraps text, and nothing cuts it to one line: a
+  long one runs onto lines the box does not show (no ellipsis) and, on the web, the empty field
+  scrolls to them. The composer draws its placeholder as a one-line `Text` over the field and
+  leaves the field's own one transparent (`components/chat/ComposerFieldSlot.tsx`). Keep the
+  field's: on the web an `Input`'s accessibility props (`accessibilityLabel`, `accessibilityHint`)
+  go to the view around the `textarea`, so its placeholder is the textarea's only accessible name.
 - A pull down from a list's top is the scroll view's own pull-to-refresh (`onRefresh` with
   `refreshIndicator={{ height }}`: no spinner, the platform decides the gesture, short and empty
   lists included). Touch handlers on the list would not do: the scroll view takes the touches over

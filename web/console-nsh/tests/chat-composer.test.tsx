@@ -10,7 +10,7 @@ import { composerLayout, followComposerLayout, ONE_ROW, type ComposerLayout } fr
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "../components/chat/composerSheets";
 import { softKeyboardUp } from "../lib/softKeyboard";
 import { bottomSheetInsets } from "../lib/systemInsets";
-import { openConsole, type ApiRequest } from "./harness";
+import { localEndpoint, openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
 const TOPICS = {
@@ -696,3 +696,57 @@ test("the model picker's sheet rises above a keyboard its search field raised, w
   // No room at all: the list gets none rather than a negative height.
   expect(lift(500, { top: 24, bottom: 16 }, 390)).toEqual({ paddingBottom: 504, maxHeight: 500 });
 });
+
+// The placeholder (components/chat/ComposerFieldSlot.tsx): the field draws none of its own, which
+// wrapped at a phone's width, so a long one (a long agent name, and the Japanese and Chinese
+// strings, which are longer) is the slot's one line. It shows while the draft is empty, goes as
+// soon as something is typed, and comes back once a multiline draft is cleared or sent. The field
+// keeps it as its accessibility label.
+const LONG_AGENT = "Professor Bartholomew Montgomery-Fitzwilliam";
+for (const [lang, placeholder] of [
+  ["en", `Tell ${LONG_AGENT} anything`],
+  ["ja", `${LONG_AGENT}に話しかける`],
+  ["zh", `和${LONG_AGENT}说点什么`],
+] as const) {
+  test(`on a phone the ${lang} placeholder with a long agent name shows while the draft is empty, also after a multiline one`, async () => {
+    const tasks: string[] = [];
+    const { app } = await openConsole({
+      platform: "android",
+      safeArea: BARS,
+      location: "/e/default/chat/topic-1",
+      kv: { "quail-language": lang },
+      endpoints: [localEndpoint({ agent_name: LONG_AGENT })],
+      api: {
+        "GET /proxy:/todo/tasks": { body: { items: [] } },
+        "GET /proxy:/topics": TOPICS,
+        "GET /proxy:/tasks": { body: { items: [] } },
+        "GET /proxy:/llm/profiles": PROFILES,
+        "POST /proxy:/tasks": (request) => {
+          tasks.push(String(request.json?.task ?? ""));
+          return { body: { id: "task-1", status: "queued", topic_id: "topic-1" } };
+        },
+        "GET /proxy:/tasks/task-1": { body: { id: "task-1", task: "one\ntwo", status: "running", topic_id: "topic-1", created_at: NOW } },
+      },
+    });
+    await app.waitFor("id:chat-composer-placeholder");
+    expect(app.texts().filter((text) => text === placeholder).length).toBe(1);
+    expect(app.shows(`label:${placeholder}`)).toBe(true);
+    await app.type("id:chat-composer-input", "L");
+    await app.waitFor("id:chat-composer-placeholder", { state: "gone" });
+    await app.paste("id:chat-composer-input", { text: "ine one\nline two\nline three" });
+    await app.waitUntil(() => app.value("id:chat-composer-input") === "Line one\nline two\nline three");
+    expect(app.shows("id:chat-composer-placeholder")).toBe(false);
+    await app.clear("id:chat-composer-input");
+    await app.waitFor("id:chat-composer-placeholder");
+    expect(app.texts().filter((text) => text === placeholder).length).toBe(1);
+    // Sent: the field empties and the placeholder is back.
+    await app.paste("id:chat-composer-input", { text: "one\ntwo" });
+    await app.waitFor("id:chat-composer-placeholder", { state: "gone" });
+    await app.press("id:chat-composer-send");
+    await app.waitUntil(() => tasks.length === 1);
+    expect(tasks[0]).toBe("one\ntwo");
+    await app.waitUntil(() => app.value("id:chat-composer-input") === "");
+    await app.waitFor("id:chat-composer-placeholder");
+    expect(app.texts().filter((text) => text === placeholder).length).toBe(1);
+  });
+}

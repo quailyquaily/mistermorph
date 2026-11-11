@@ -19,7 +19,8 @@ import {
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
 import { isMobile } from "../../lib/shell";
-import { COMPOSER_FIELD_TEXT, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
 import { followComposerLayout, ONE_ROW, type ComposerLayout } from "./composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheets";
@@ -130,6 +131,8 @@ export function ChatComposer(props: ChatComposerProps) {
   let field: InputRef | undefined;
   const selection = signal({ start: 0, end: 0 });
   const focused = signal(false);
+  // An input method's composition under way: its text is not in the draft yet on every platform.
+  const composing = signal(false);
   const suggestionContext = signal<any>(null);
   const suggestionIndex = signal(0);
   const historyIndex = signal(-1);
@@ -181,6 +184,8 @@ export function ChatComposer(props: ChatComposerProps) {
   // On one row the field is as tall as the controls with its line on their centre line
   // (composerField.ts); above them it is as tall as its text across the row.
   const fieldBox = () => composerFieldBox(multiRow(), layout().height);
+  // One line, cut with an ellipsis, over the field's first line (ComposerFieldSlot.tsx).
+  const placeholderShown = () => composerPlaceholderShown(props.placeholder, value(), composing());
   // Rows change in one snap, heights above the controls ease; the history above moves with them.
   followComposerLayout(layout, value, measures);
   // Enter sends on desktops; while suggestions show it picks one, also on phones.
@@ -683,42 +688,55 @@ export function ChatComposer(props: ChatComposerProps) {
         {/* One row (add, the field, actions) while the text is one line; longer, the field goes above
             a row of the controls across the whole width, as the Vue composer's multi-row grid does
             (composerRows.ts). The field stays the same element, so it keeps its focus, caret and
-            composition; ComposerMeasure measures the draft at both widths. */}
+            composition; ComposerMeasure measures the draft at both widths. Its slot draws the
+            placeholder on one line (ComposerFieldSlot.tsx). */}
         <View class={composerRowClass(multiRow())}>
           <ComposerMeasure text={value()} actionsWidth={actionsWidth()} onMeasure={(next) => measures.set(next)} />
           <If when={!multiRow()}>{addControl()}</If>
-          <Input
-            ref={field}
-            value={value()}
-            multiline
-            submitBehavior={submitBehavior()}
-            returnKeyType={props.submitOnEnter === false ? "default" : "send"}
+          <ComposerFieldSlot
+            rows={layout().rows}
             placeholder={props.placeholder}
-            accessibilityLabel={props.placeholder}
-            readonly={props.disabled}
-            autoCapitalize="sentences"
-            testID="chat-composer-input"
-            onFocus={() => focused.set(true)}
-            onBlur={() => focused.set(false)}
-            onChange={({ value: next }) => {
-              resetHistory();
-              props.onChange(next);
-              const range = untracked(selection);
-              syncSuggestions(next, range.end > next.length || range.end === 0 ? next.length : range.end);
-            }}
-            onSelectionChange={({ start, end }) => {
-              selection.set({ start, end });
-              syncSuggestions(untracked(value), end);
-            }}
-            onSubmit={onSubmitKey}
-            onPaste={(event) => {
-              if (props.disabled || props.attachDisabled) return;
-              const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
-              if (files.length) props.onAttachFiles?.(files);
-            }}
-            class={`${COMPOSER_FIELD_TEXT} text-foreground placeholder:text-muted-foreground ${multiRow() ? "w-full" : "flex-1"}`}
-            style={fieldBox()}
-          />
+            shown={placeholderShown()}
+            lineTop={fieldBox().paddingTop}
+            testID="chat-composer-placeholder"
+          >
+            <Input
+              ref={field}
+              value={value()}
+              multiline
+              submitBehavior={submitBehavior()}
+              returnKeyType={props.submitOnEnter === false ? "default" : "send"}
+              placeholder={props.placeholder}
+              accessibilityLabel={props.placeholder}
+              readonly={props.disabled}
+              autoCapitalize="sentences"
+              testID="chat-composer-input"
+              onFocus={() => focused.set(true)}
+              onBlur={() => {
+                focused.set(false);
+                composing.set(false);
+              }}
+              onCompositionChange={({ composing: active, text }) => composing.set(active && text !== "")}
+              onChange={({ value: next }) => {
+                resetHistory();
+                props.onChange(next);
+                const range = untracked(selection);
+                syncSuggestions(next, range.end > next.length || range.end === 0 ? next.length : range.end);
+              }}
+              onSelectionChange={({ start, end }) => {
+                selection.set({ start, end });
+                syncSuggestions(untracked(value), end);
+              }}
+              onSubmit={onSubmitKey}
+              onPaste={(event) => {
+                if (props.disabled || props.attachDisabled) return;
+                const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
+                if (files.length) props.onAttachFiles?.(files);
+              }}
+              class={COMPOSER_INPUT_CLASS}
+              style={fieldBox()}
+            />
+          </ComposerFieldSlot>
           <If when={!multiRow()}>{actions()}</If>
           <If when={multiRow()}>
             <View class="flex-row items-center justify-between">
