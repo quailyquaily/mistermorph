@@ -346,6 +346,12 @@ go run ./cmd/mistermorph console --console-static-dir /tmp/morph-console
 
 2. Open `http://127.0.0.1:9080/`. After changing the Console, run `build-web.sh` again and reload.
 
+   For hot reload instead, keep a Console running (`morph console`, on `127.0.0.1:9080`), run
+   `scripts/dev-console.sh` and open `http://127.0.0.1:9082/`: a saved change shows at once,
+   without a rebuild or reload. It runs nsh's web dev server and a proxy that puts the page and
+   that Console's `/api` on one origin; Ctrl-C stops both. `API` points it at another Console,
+   and `DEV_PORT` and `NSH_PORT` change its ports.
+
 3. Check and test the Console:
 
 ```bash
