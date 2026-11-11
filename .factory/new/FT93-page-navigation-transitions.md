@@ -62,3 +62,6 @@ Validation: Claude Code reviewed origin/master...HEAD. Configured gofmt/vet/go t
 Residual risks: rapid successive slides may expose a blank strip when the obsolete outgoing layer is removed; not reproduced, so not recorded as a confirmed finding. Real Android device/emulator, desktop GPUI and FT91 dialog integration were not visually checked in review. Async outgoing callbacks and duplicate browser-history entries need further coverage. Owner should inspect the two confirmed non-blocking defects and the scope choices: wide layouts retain rise motion and nested opens within 500ms skip their slide.
 
 No P0/P1 findings; moved review/ → ready/ under the configured factory review gate. This is not a claim of no defects. No linked GitHub issues or PRs.
+
+## lyric · 2026-11-11 21:06
+嗯 先处理 ft93 的问题，然后合 Ft85,91,86,80,92,93 一起。
