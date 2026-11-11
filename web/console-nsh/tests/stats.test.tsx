@@ -83,6 +83,14 @@ test("usage shows the summary, the daily chart, and the hosts and models", async
   await app.waitFor("8,404"); // total tokens
   await app.waitFor("api.openai.com");
   await app.waitFor("id:stats-daily-plot");
+  // The chart opens on the last 7 days.
+  await app.waitFor("3/7"); // active days
+  const dailyCall = calls.find((call) => call.uri?.startsWith("/stats/llm/daily"));
+  expect(dailyCall?.uri).toContain("days=7");
+
+  // Another range asks again for that many days.
+  await app.press("role:tab[30D]");
+  await app.waitUntil(() => calls.some((call) => call.uri?.includes("days=30")));
   await app.waitFor("10/30"); // active days
   await app.waitFor("$20.00"); // range total
 
@@ -96,14 +104,6 @@ test("usage shows the summary, the daily chart, and the hosts and models", async
   await app.waitFor("$0.1667"); // its average per day
   await app.press("id:stats-daily-legend-claude-sonnet-4");
   await app.waitFor("$0.6667");
-
-  const dailyCall = calls.find((call) => call.uri?.startsWith("/stats/llm/daily"));
-  expect(dailyCall?.uri).toContain("days=30");
-
-  // Another range asks again for that many days.
-  await app.press("role:tab[7D]");
-  await app.waitUntil(() => calls.some((call) => call.uri?.includes("days=7")));
-  await app.waitFor("3/7"); // active days
 
   // The cache view shows the cache figures.
   await app.press("role:tab[Cache]");
