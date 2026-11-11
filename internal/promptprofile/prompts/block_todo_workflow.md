@@ -1,7 +1,7 @@
 [[ Cron Task Workflow ]]
 ONLY Use this workflow when you need to schedule something for future work, or remove an existing scheduled task.
 
-Scheduled tasks live in `cron.yaml` under `file_state_dir`.
+Scheduled tasks are kept by the agent itself (in `agent.db`); read and change them only with `todo_update`, never as a file.
 
 IF user asks to schedule one future task THEN
   call `todo_update` with action `add_once`

@@ -425,7 +425,19 @@ pub fn install(host: &HostChannel, desktop: &Arc<Desktop>) {
         let d = d.clone();
         on_thread(call, move |data| {
             let channel = data.get("channel").and_then(Value::as_str).map(str::to_owned);
-            let result = crate::update::desktop_check(d.config_path.as_deref(), &d.auto_update, channel, &d.log)?;
+            // The saved settings come from the backend, which reads the config wherever it is: a
+            // `--config` file, or agent.db, where the file read below can no longer look. Without
+            // the backend (not up yet, or refusing), the file and the launch-time value still do.
+            let addr = d.origin().trim_start_matches("http://").to_owned();
+            let saved = if addr.is_empty() {
+                None
+            } else {
+                crate::config::fetch_backend_auto_update(&addr, crate::backend::DEFAULT_BASE_PATH, d.console_token().as_deref()).ok()
+            };
+            let result = match saved {
+                Some(saved) => crate::update::desktop_check(None, &saved, channel, &d.log)?,
+                None => crate::update::desktop_check(d.config_path.as_deref(), &d.auto_update, channel, &d.log)?,
+            };
             serde_json::to_value(result).map_err(|e| e.to_string())
         });
     });

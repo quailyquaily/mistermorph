@@ -130,7 +130,7 @@ When not calling tools, you MUST respond with JSON in the following format:
 
 ## General Rules
 
-- `file_cache_dir` and `file_state_dir` are path aliases, not literal filenames. Always use them with a relative suffix such as `file_state_dir/cron.yaml`.
+- `file_cache_dir` and `file_state_dir` are path aliases, not literal filenames. Always use them with a relative suffix such as `file_state_dir/notes/today.md`.
 - If a tool returns an error, you may try a different tool or different params.
 - IF found a direct url THEN use `url_fetch`, skip `web_search` ENDIF
 - IF url count > 1 THEN batch `url_fetch` ENDIF

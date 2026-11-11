@@ -23,11 +23,9 @@ const (
 
 type consoleRuntimeOverrides map[string]any
 
-type consoleConfigFingerprint struct {
-	exists    bool
-	size      int64
-	modTimeNS int64
-}
+// consoleConfigFingerprint changes when the config is saved (configstore.Revision): for a file its
+// size and time, for agent.db its save count, which its file's time does not show.
+type consoleConfigFingerprint string
 
 func captureConsoleRuntimeOverrides(cmd *cobra.Command) consoleRuntimeOverrides {
 	if cmd == nil {
@@ -179,18 +177,11 @@ func expandConfiguredDirKeyOnReader(v *viper.Viper, key string) {
 func fingerprintConfigPath(path string) (consoleConfigFingerprint, error) {
 	path = pathutil.ExpandHomePath(strings.TrimSpace(path))
 	if path == "" {
-		return consoleConfigFingerprint{}, nil
+		return "", nil
 	}
-	info, err := os.Stat(path)
+	revision, err := configstore.Revision(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return consoleConfigFingerprint{}, nil
-		}
-		return consoleConfigFingerprint{}, fmt.Errorf("stat config: %w", err)
+		return "", fmt.Errorf("read config revision: %w", err)
 	}
-	return consoleConfigFingerprint{
-		exists:    true,
-		size:      info.Size(),
-		modTimeNS: info.ModTime().UnixNano(),
-	}, nil
+	return consoleConfigFingerprint(revision), nil
 }

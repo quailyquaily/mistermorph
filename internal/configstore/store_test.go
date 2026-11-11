@@ -683,3 +683,51 @@ func TestImportFileFinishesAnInterruptedRename(t *testing.T) {
 		t.Fatalf("a new file was renamed: %v", err)
 	}
 }
+
+// A watcher (the Console's config poller) tells saves apart by Revision. agent.db writes through
+// its WAL, so its file's time does not change on a save; the revision must, even twice a second.
+func TestRevisionChangesOnEverySave(t *testing.T) {
+	path := DBConfigPath(t.TempDir())
+	if rev, err := Revision(path); err != nil || rev != "" {
+		t.Fatalf("Revision before agent.db = %q, %v", rev, err)
+	}
+	seen := map[string]bool{}
+	for i, model := range []string{"a", "b", "b", "c"} {
+		if err := WriteFileBy(path, []byte("llm:\n  model: "+model+"\n"), ByConsole); err != nil {
+			t.Fatal(err)
+		}
+		rev, err := Revision(path)
+		if err != nil || rev == "" {
+			t.Fatalf("save %d: Revision = %q, %v", i, rev, err)
+		}
+		if seen[rev] {
+			t.Fatalf("save %d: Revision %q repeats an earlier one", i, rev)
+		}
+		seen[rev] = true
+	}
+	// Reading leaves it alone.
+	before, _ := Revision(path)
+	if _, err := ReadFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := Revision(path); after != before {
+		t.Fatalf("a read changed the revision: %q → %q", before, after)
+	}
+}
+
+func TestRevisionOfAFileConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if rev, err := Revision(path); err != nil || rev != "" {
+		t.Fatalf("Revision of a missing file = %q, %v", rev, err)
+	}
+	if err := WriteFile(path, []byte("llm:\n  model: a\n")); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := Revision(path)
+	if err := WriteFile(path, []byte("llm:\n  model: bb\n")); err != nil {
+		t.Fatal(err)
+	}
+	if second, _ := Revision(path); first == "" || second == first {
+		t.Fatalf("file revisions %q then %q", first, second)
+	}
+}

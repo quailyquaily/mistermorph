@@ -15,7 +15,9 @@ package configstore
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,6 +51,10 @@ const (
 )
 
 const savedKey = "config_saved_at"
+
+// revisionKey counts the config's saves. config_saved_at is to the second, so two saves in one
+// second would look the same to a watcher; the count never does.
+const revisionKey = "config_revision"
 
 // DBConfigPath is the agent.db config of the state folder.
 func DBConfigPath(stateDir string) string {
@@ -133,6 +139,43 @@ func Exists(path string) (bool, error) {
 		return false, err
 	}
 	return hasConfig(ctx, db)
+}
+
+// Revision identifies the config's current version, so a watcher can tell a save happened. For a
+// file it is a hash of its content; for agent.db, which writes through its WAL and so leaves its
+// own file's time alone, it is the count of saves and the last save's time. It is "" when there is
+// no config.
+func Revision(path string) (string, error) {
+	if !IsDBConfigPath(path) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", nil
+			}
+			return "", err
+		}
+		sum := sha256.Sum256(data)
+		return "file:" + hex.EncodeToString(sum[:]), nil
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(path), statepaths.AgentDBFilename)); os.IsNotExist(err) {
+		return "", nil
+	}
+	ctx := context.Background()
+	db, err := dbFor(ctx, path)
+	if err != nil {
+		return "", err
+	}
+	var saved, count string
+	err = db.QueryRowContext(ctx, `SELECT
+		COALESCE((SELECT value FROM meta WHERE key = ?), ''),
+		COALESCE((SELECT value FROM meta WHERE key = ?), '')`, savedKey, revisionKey).Scan(&saved, &count)
+	if err != nil {
+		return "", err
+	}
+	if saved == "" {
+		return "", nil
+	}
+	return "db:" + count + ":" + saved, nil
 }
 
 // WriteFile replaces the config at path with the YAML document data. A file is written
@@ -492,8 +535,12 @@ func saveRows(ctx context.Context, q queryer, rows Rows, by string) error {
 			}
 		}
 	}
-	_, err = q.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-		savedKey, now)
+	if _, err = q.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+		savedKey, now); err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, '1')
+		ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)`, revisionKey)
 	return err
 }
 

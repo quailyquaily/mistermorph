@@ -67,9 +67,8 @@ func BuildAwarenessMeta(behavior Behavior, source string, interval time.Duration
 	if behavior == BehaviorHeartbeat && interval > 0 {
 		awareness["interval"] = interval.String()
 	}
-	if behavior == BehaviorHeartbeat && strings.TrimSpace(checklistPath) != "" {
-		awareness["checklist_path"] = checklistPath
-	}
+	// No checklist_path: the heartbeat task is in agent.db's heartbeat_workflows now, and a path
+	// to HEARTBEAT.md would send the agent to read a file that is no longer there.
 	if taskEmpty {
 		awareness["task_empty"] = true
 	}

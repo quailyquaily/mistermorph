@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 )
 
 func TestRuntimeConfigPollerWaitsForActiveReloadAfterCancel(t *testing.T) {
@@ -48,5 +50,42 @@ func TestRuntimeConfigPollerWaitsForActiveReloadAfterCancel(t *testing.T) {
 	case <-pollerDone:
 	case <-time.After(time.Second):
 		t.Fatal("config poller did not exit after the active reload returned")
+	}
+}
+
+// Since the config moved into agent.db its path names no file, so a poller that looked at the
+// file's time never saw a save and the Console kept the models it started with.
+func TestRuntimeConfigPollerReloadsAfterAnAgentDBSave(t *testing.T) {
+	configPath := configstore.DBConfigPath(t.TempDir())
+	if err := configstore.WriteFileBy(configPath, []byte("llm:\n  model: before\n"), configstore.ByConsole); err != nil {
+		t.Fatalf("WriteFileBy(before) error = %v", err)
+	}
+	reloaded := make(chan struct{}, 4)
+	srv := &server{
+		cfg: serveConfig{configPath: configPath},
+		reloadRuntimeConfigFunc: func() error {
+			reloaded <- struct{}{}
+			return nil
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		srv.runtimeConfigPollerWG.Wait()
+	}()
+	srv.startRuntimeConfigPoller(ctx)
+
+	select {
+	case <-reloaded:
+		t.Fatal("reloaded with no save")
+	case <-time.After(consoleConfigPollInterval + 200*time.Millisecond):
+	}
+	if err := configstore.WriteFileBy(configPath, []byte("llm:\n  model: after\n"), configstore.ByConsole); err != nil {
+		t.Fatalf("WriteFileBy(after) error = %v", err)
+	}
+	select {
+	case <-reloaded:
+	case <-time.After(3 * consoleConfigPollInterval):
+		t.Fatal("runtime config did not reload after an agent.db save")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/spf13/viper"
 )
 
@@ -320,4 +321,50 @@ func TestRuntimeGenerationReloadKeepsControlPlaneAvailable(t *testing.T) {
 	if got := readModel(); got != "new-model" {
 		t.Fatalf("model after reload = %q", got)
 	}
+}
+
+// Channel runtimes run with the config in agent.db, whose path names no file: a poller reading
+// the path as a file never saw a save, so `morph telegram` kept its settings until a restart.
+func TestRuntimeGenerationManagerPollsAgentDBConfigChanges(t *testing.T) {
+	configPath := configstore.DBConfigPath(t.TempDir())
+	if err := configstore.WriteFileBy(configPath, []byte("llm:\n  model: old\n"), configstore.ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	source := &generationTestSource{
+		current:    generationTestReader("old-model"),
+		candidate:  generationTestReader("new-model"),
+		configPath: configPath,
+	}
+	manager, err := NewRuntimeGenerationManager(context.Background(), RuntimeGenerationManagerOptions{
+		Source:       source,
+		PollInterval: 10 * time.Millisecond,
+		Build: func(_ context.Context, reader agentsettings.Reader) (ChannelRuntimeBundle, error) {
+			return ChannelRuntimeBundle{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	manager.Start(context.Background())
+
+	time.Sleep(30 * time.Millisecond)
+	if err := configstore.WriteFileBy(configPath, []byte("llm:\n  model: new\n"), configstore.ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		lease, captureErr := manager.Capture()
+		if captureErr != nil {
+			t.Fatal(captureErr)
+		}
+		model := lease.generation.reader.GetString("llm.model")
+		generation := lease.generation.id
+		lease.Release()
+		if generation > 1 && model == "new-model" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("config poller did not switch after an agent.db save")
 }

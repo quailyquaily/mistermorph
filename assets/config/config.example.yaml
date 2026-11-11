@@ -331,6 +331,8 @@ tools:
     # Denylist for sensitive local files. Basenames match anywhere (e.g. "config.yaml" blocks "./x/config.yaml").
     deny_paths:
       - "config.yaml"
+      - "config.yaml.imported"
+      - "agent.db"
   write_file:
     # Enable the write_file tool (writes text to a local file).
     # Note: writes are restricted to `file_cache_dir` or `file_state_dir`.
@@ -441,6 +443,8 @@ tools:
     # (Best-effort string match; not a full sandbox.)
     deny_paths:
       - "config.yaml"
+      - "config.yaml.imported"
+      - "agent.db"
     # Extra directories prepended to PATH for bash execution.
     # Useful when the service manager starts mistermorph with a minimal PATH.
     # path_extra:
@@ -500,6 +504,8 @@ tools:
     # Denylist for sensitive local files. If a command references one of these paths, the tool errors.
     deny_paths:
       - "config.yaml"
+      - "config.yaml.imported"
+      - "agent.db"
     # Extra environment variables to inject into powershell execution.
     # Each entry can be either a variable name or an object with name/value.
     injected_env_vars: []

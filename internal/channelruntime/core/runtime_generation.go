@@ -2,16 +2,15 @@ package core
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"log/slog"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 )
 
 const defaultRuntimeGenerationPollInterval = time.Second
@@ -326,22 +325,18 @@ func (g *runtimeGeneration) cleanup() {
 	}
 }
 
-type runtimeConfigDigest struct {
-	exists bool
-	value  [sha256.Size]byte
-}
+// runtimeConfigDigest changes when the config is saved (configstore.Revision). The config path
+// may name agent.db's config, which is no file: reading the path as a file never saw a save.
+type runtimeConfigDigest string
 
 func runtimeConfigFingerprint(path string) (runtimeConfigDigest, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return runtimeConfigDigest{}, nil
+		return "", nil
 	}
-	data, err := os.ReadFile(path)
+	revision, err := configstore.Revision(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return runtimeConfigDigest{}, nil
-		}
-		return runtimeConfigDigest{}, err
+		return "", err
 	}
-	return runtimeConfigDigest{exists: true, value: sha256.Sum256(data)}, nil
+	return runtimeConfigDigest(revision), nil
 }
