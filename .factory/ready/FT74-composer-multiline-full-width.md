@@ -57,3 +57,15 @@ Moved review/ → ready/ under the factory rule allowing P2 notes; owner should 
 Owner requested Claude Code fixes for the two previously identified P2 findings. Fixed on existing branch: 49bbc7f0; merged origin/master d122775a without conflicts, head e1865a42. Unchanged-layout early return now updates shownFor only for the matching draft measurement. Added type-then-resize regression (fails before fix, passes after) and stale-measurement guard (rejects unconditional shownFor update).
 
 Claude Code reports targeted composer 25/25 and geometry 21/21, gofmt cleanliness, go vet ./..., go test ./... (162 packages), nsh check and full nsh tests 540/540 passing with throwaway HOME. No installs. Manager inspected commits, source diff and clean worktree; did not independently rerun full suites. Actual visual animation, Chrome, native GPUI, Android and Mobile Safari not verified this round. Moved ready/ → review/ for fresh independent review; not shipped.
+
+## factory · review · 2026-11-11 11:08
+head: e1865a42200f988aa7f1f14606fd00f3d048a508
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/composerRows.ts:91-95: Updating shownFor on the first unchanged-layout report consumes an edit before the second measuring copy reports. In established multiline mode, sequential measurements (one-row 4L/full-width 2L, then 4L/3L) produce zero configureNext calls instead of one; a single combined report eases correctly. Headless desktop/phone paste-like integration probes reproduce snapped growth (51→85px / 101→185px). Both probes pass against pre-fix f14b796f, confirming a regression from 49bbc7f0. Defer unchanged-layout acknowledgement until measurements settle, or track both copies per draft; add a sequential-report regression while retaining the type-then-resize and stale-measurement guards.
+
+Validation: Claude Code independently reviewed all seven files in origin/master...HEAD and the request/plan. No P0/P1 findings. Mandatory gofmt cleanliness, go vet ./..., go test ./... (162 packages), nsh check and nsh test --web-host tests/noHost.js passed (540/540), using throwaway HOME. Manager inspected successful suite logs and the failing targeted regression probe. The first coder call returned only a completion acknowledgement; a second call recovered the full review and verified pre-fix comparisons. Branch worktree is clean. Installs: none.
+
+Residual risks: No independent real-browser or native GPUI/Android/Mobile Safari checks. Animation finding is verified through animation-call counts, not observed visual timing. Explicit-newline case uses synthetic measurements; paste-like integration reproduction uses rendered headless geometry. Native measurement order is unverified. Earlier build Chrome checks predate this fix and are not independent review checks.
+
+Moved review/ → ready/ under the factory rule allowing P2 notes. Owner should inspect the sequential-measurement animation regression before shipping. No linked GitHub issue or PR. Not shipped.
