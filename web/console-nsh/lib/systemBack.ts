@@ -14,7 +14,7 @@
 // With none of them, nothing listens, and Back leaves the app.
 //
 // Other platforms keep what they have: the browser's back button and Escape on the desktop.
-import { cleanup, computed, effect, platform, signal, untracked } from "nsh";
+import { cleanup, computed, context, effect, platform, signal, untracked } from "nsh";
 import { BackHandler } from "nsh/mobile";
 import { canGoBack, goBack } from "./platform";
 
@@ -26,12 +26,21 @@ interface BackAction {
 const actions = signal<BackAction[]>([]);
 
 /**
+ * Whether the screen around the caller is the one shown (components/frame/PageStack.tsx provides
+ * it for each page): a page on its way out stays mounted through its slide, and its registrations
+ * must not take Back from the page coming in. Outside a page (the frame's sheets) it is null.
+ */
+export const SystemBackScope = context<(() => boolean) | null>(null);
+
+/**
  * While the calling component lives (and `when` holds), Back runs `run` instead of going back in
  * the history. Newer registrations go first, so a sheet opened over a page closes before the
- * page's own back. Call it in a component body; it is removed with the component.
+ * page's own back. Call it in a component body; it is removed with the component. Inside a page
+ * going out (SystemBackScope) it no longer applies.
  */
 export function onSystemBack(when: () => boolean, run: () => void) {
-  const action: BackAction = { when, run };
+  const shown = SystemBackScope();
+  const action: BackAction = { when: shown ? () => shown() && when() : when, run };
   actions.update((list) => [...list, action]);
   cleanup(() => actions.update((list) => list.filter((item) => item !== action)));
 }

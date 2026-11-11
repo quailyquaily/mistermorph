@@ -19,7 +19,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
 | `lib/i18n/index.js` | The Vue console's strings, unchanged: `translate(key, vars)` |
-| `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()` |
+| `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()`, the last committed `navigation()` |
+| `lib/navMotion.ts` | Which way a navigation moves (further in, back, the navigation's order); `lib/navOrder.ts` is that order |
 | `lib/shell.ts` | The frame's state: endpoints, nav items, mobile breakpoint |
 | `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back, then the history |
 | `lib/softKeyboard.ts` | Whether the software keyboard is up; a phone back arrow lowers it before it leaves |
@@ -27,13 +28,16 @@ stays the reference for behaviour, states and copy until the cutover.
 | `components/ui.tsx` | The design system: Button, TextField, Toggle, SelectField, DropdownMenu, Modal, MessageDialog, confirm, Badge, Section, Page, Markdown, Icon, ... |
 | `components/icons.ts` | The Phosphor icons the console uses, by their Vue names (`PhChats`) |
 | `components/Shell.tsx` | Sidebar, mobile bottom nav, notice stack |
+| `components/frame/PageStack.tsx` | The page host: a layer per page instance and the slide between two (docs/console/page-transitions.md) |
 | `pages/<area>/` | One folder per screen; `pages/routes.tsx` maps routes to pages |
 | `tests/harness.ts` | `openConsole({ location, api })`: the app with a fake host and a stubbed console API |
 
 ## Rules (nsh is not Vue)
 
 1. **A component body runs once.** Read props and signals inside JSX, `computed` or `effect`; never
-   destructure props. To follow the route, read `currentRoute()` in a binding or an effect.
+   destructure props. To follow the route, read `currentRoute()` in a binding or an effect: inside a
+   page it is that page's own route, which stops following once the page slides out (shell code
+   reads `route()`).
 2. **All text is inside `<Text>`.** No DOM, no CSS files, no `<a>`, `<form>`, `window`, `document`,
    `localStorage`. Layout is flexbox; a `View` is a column (`flex-row` for a row).
 3. **Signals propagate synchronously.** Several writes that belong together go in `batch(...)`.
@@ -228,7 +232,18 @@ Headless tests prove behaviour, not the look.
   value. A provider whose children read it at creation resolves them itself (`UnderContext` in
   `components/ui.tsx`, under `DialogActions`); prove such a context in Chrome.
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
-  origin) are in `components/motion/` (see its README).
+  origin, page slides) are in `components/motion/` (see its README).
+- Page transitions (docs/console/page-transitions.md): a page going out stays mounted through its
+  slide (about 280 ms), inert, hidden from assistive tech and with its `onSystemBack`
+  registrations off (`SystemBackScope`). A page reading its route with
+  `currentRoute()` gets its own; code run outside the page's components (a handler's `await`
+  continuation, a module) gets the current one. A page that shows a list or one of its items on
+  phones moves between them with `createPaneStack` (`components/motion/PaneStack.tsx`): `shown`
+  in place of the `If`, `style` and `hidden` on the pane's root view, the item's phone bar inside
+  its pane, and `held` for what clears as the page goes back (an item named by the route). A new
+  phone detail view does the same. Headless steps do not wait for a slide on the system clock: a
+  test that checks a page or pane has gone waits for it (`{ state: "gone" }`), and a press on
+  the list during the slide's last frame can be lost headless (not in a browser).
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
   then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
   blurs it and lowers the keyboard as it closes, and focuses it as it opens

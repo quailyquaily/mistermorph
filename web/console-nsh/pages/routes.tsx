@@ -2,9 +2,11 @@
 // currentRoute() and draw their content only, inside the frame the shell gives them.
 import type { JSX } from "nsh";
 import { Text, View } from "nsh";
-import type { PageKey } from "../lib/router";
+import type { PageKey, Route } from "../lib/router";
 import { currentRoute } from "../lib/router";
 import { endpointRefFromRouteParam } from "../lib/core/endpoint-routes.js";
+import { isMobile } from "../lib/shell";
+import { PageStack } from "../components/frame/PageStack";
 import { AuditPage } from "./audit/AuditPage";
 import { ChatPage } from "./chat/ChatPage";
 import { ContactsPage } from "./contacts/ContactsPage";
@@ -54,16 +56,14 @@ const PAGES: Record<PageKey, () => JSX.Element> = {
 /**
  * The current page. A page is rebuilt when its kind or its endpoint changes (as the Vue
  * console keyed its RouterView by endpoint); within one page, params and query change in place,
- * so a page follows currentRoute() in bindings and effects.
+ * so a page follows currentRoute() in bindings and effects. The page host moves one page out and
+ * the next in as navigation goes (components/frame/PageStack.tsx).
  */
 export function PageView() {
-  const key = () => {
-    const now = currentRoute();
-    return `${now.page}\u0000${now.meta.endpointScoped ? endpointRefFromRouteParam(now.params.endpoint_ref) : ""}`;
-  };
-  return (
-    <Each of={[key()]} key={(value) => value}>
-      {() => PAGES[currentRoute().page]()}
-    </Each>
-  );
+  return <PageStack keyOf={pageInstanceKey} render={(route) => PAGES[route.page]()} stacked={() => isMobile()} />;
+}
+
+/** A page instance's identity: its kind and, for an agent's pages, the agent. */
+export function pageInstanceKey(route: Route) {
+  return `${route.page}\u0000${route.meta.endpointScoped ? endpointRefFromRouteParam(route.params.endpoint_ref) : ""}`;
 }

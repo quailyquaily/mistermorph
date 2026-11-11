@@ -12,6 +12,7 @@ import { previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
+import { createPaneStack } from "../../components/motion/PaneStack";
 import { BackButton, confirm, Icon, type IconName, MessageDialog, Page } from "../../components/ui";
 import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
@@ -126,15 +127,26 @@ export function SettingsPage() {
   const showIndexPane = () => !mobile() || !mobilePanelVisible();
   const showPanelPane = () => !mobile() || mobilePanelVisible();
   const mobileShowBack = () => mobile() && mobilePanelVisible();
+  // On phones the sections (0) and a section (1) are levels of the page that slide (PaneStack).
+  const panes = createPaneStack(() => (mobile() ? (mobilePanelVisible() ? 1 : 0) : null));
   // Android's Back from a section goes to the sections, as the bar's back arrow does. A section
   // opened from the sections also goes back to their address, so the next Back leaves Settings
   // instead of only changing the address under the same screen.
+  // Set while that Back replaces the address with the sections': the route effect hides the
+  // section in the same change that selects the address's own (Persona), so the section going
+  // out keeps what it showed (panelKey) instead of turning into Persona as it slides.
+  let backToIndex = false;
   onSystemBack(mobileShowBack, async () => {
     const indexPath = endpointRoutePath(endpointState.selectedRef, "/settings");
     if (previousLocation() === indexPath) {
       // Replacing with the previous entry removes this section from mobile history. Wait for
       // the leave guard and route to finish before hiding the editor; cancellation keeps it.
-      await navigate(indexPath, { replace: true });
+      backToIndex = true;
+      try {
+        await navigate(indexPath, { replace: true });
+      } finally {
+        backToIndex = false;
+      }
       if (disposed || untracked(() => currentRoute().path) !== indexPath) return;
     }
     mobilePanelVisible.set(false);
@@ -152,7 +164,10 @@ export function SettingsPage() {
         s.discardSettingsDrafts();
       }
       previousRouteSection = section;
-      s.selectedSectionID.set(id);
+      batch(() => {
+        s.selectedSectionID.set(id);
+        if (backToIndex && !section) mobilePanelVisible.set(false);
+      });
       s.ensureSettingsSectionData(id);
       if (section && section !== id) {
         void navigate(settingsSectionPath(endpointState.selectedRef, id), { replace: true });
@@ -284,7 +299,13 @@ export function SettingsPage() {
   const searchFocused = signal(false);
   let searchInput: InputRef | undefined;
   const index = () => (
-    <View class={mobile() ? "flex-1" : "w-[310px]"} testID="settings-index">
+    <View
+      class={mobile() ? "flex-1" : "w-[310px]"}
+      style={panes.style(0)}
+      accessibilityElementsHidden={panes.hidden(0) || undefined}
+      importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
+      testID="settings-index"
+    >
       <View
         class={`mx-4 mb-2 mt-4 h-[34px] flex-row items-center gap-2 rounded-(--radius) border bg-card px-2.5 ${
           searchFocused() ? "border-subtle" : "border-line"
@@ -381,6 +402,8 @@ export function SettingsPage() {
 
   const contentKey = () =>
     `${sectionID()}${s.agentSettingsUnsupported() && ["agent", "routes", "tools", "mcp"].includes(sectionID()) ? ":unsupported" : ""}`;
+  // The section pane keeps its section while it slides out (Back may select another as it goes).
+  const panelKey = panes.held(1, contentKey);
 
   // The section's own scroll (`.settings-panel-scroll`): 16pt from the top, the right and the
   // bottom, none at the left, where the section list is the edge; 16pt both sides on phones.
@@ -418,7 +441,7 @@ export function SettingsPage() {
             s.restartState.tasksRunning = false;
           }}
         />
-        <Each of={[contentKey()]} key={(id) => id}>
+        <Each of={[panelKey()]} key={(id) => id}>
           {(key) =>
             untracked(() => {
               const [id, unsupported] = key().split(":");
@@ -454,8 +477,17 @@ export function SettingsPage() {
             >
               <View class="flex-1">
                 <View class={`flex-1 flex-row ${mobile() ? "" : "gap-1"}`}>
-                  <If when={showIndexPane()}>{index()}</If>
-                  <If when={showPanelPane()}>{content()}</If>
+                  <If when={panes.shown(0, showIndexPane())}>{index()}</If>
+                  <If when={panes.shown(1, showPanelPane())}>
+                    <View
+                      class="flex-1"
+                      style={panes.style(1)}
+                      accessibilityElementsHidden={panes.hidden(1) || undefined}
+                      importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
+                    >
+                      {content()}
+                    </View>
+                  </If>
                   <If when={showPanelPane() && !mobile()}>
                     <PaneOutlet target={pane} />
                   </If>

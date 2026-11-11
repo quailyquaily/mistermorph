@@ -166,6 +166,9 @@ export type TopicPartFrame = PartFrame;
 export function TopicSidebar(props: {
   c: ChatController;
   class?: string;
+  /** Its motion as a phone's pane (ChatPage), and whether it is going out (inert, hidden from assistive tech). */
+  style?: Record<string, unknown>;
+  hidden?: boolean;
   /** Hears where parts lie on the page (tests): `sidebar`, `head-action` (the head's last button),
    * `head-icon` (its icon), `status-<topic id>` and `title-<topic id>`. */
   onPartLayout?: PartLayoutListener;
@@ -385,7 +388,14 @@ export function TopicSidebar(props: {
   );
 
   return (
-    <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar" {...probe(() => "sidebar")}>
+    <View
+      class={`bg-sidebar ${props.class ?? ""}`}
+      style={props.style}
+      accessibilityElementsHidden={props.hidden || undefined}
+      importantForAccessibility={props.hidden ? "no-hide-descendants" : undefined}
+      testID="chat-topic-sidebar"
+      {...probe(() => "sidebar")}
+    >
       {/* The head: the title on the left, the view toggles and New at the right, the last button
           ending at the right inset, its icon centred over the rows' status marks. The search is
           the list's, on a phone and a desktop alike. The hairline under the head shows once topics

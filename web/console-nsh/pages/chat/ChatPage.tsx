@@ -3,8 +3,8 @@
 // of a reply's plan, progress, reasoning or worker, never both. On phones (≤ 980 points) the topic
 // list and the conversation are separate views, and the panel is a sheet. The behaviour is in
 // chatController.
-import { Text, View } from "nsh";
-import { BackButton, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
+import { Text, untracked, View } from "nsh";
+import { BackButton, Fab, Icon, Kicker, MessageDialog, Page, PageBar, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -18,6 +18,7 @@ import { FilePreviewDialog } from "./FilePreviewDialog";
 import { TopicRenameDialog } from "./TopicRenameDialog";
 import { TopicSidebar } from "./TopicSidebar";
 import { Entrance } from "../../components/motion";
+import { createPaneStack } from "../../components/motion/PaneStack";
 import { ActivityDetailPanel } from "./ActivityDetailPanel";
 import { WorkspacePanel, WorkspaceSheet } from "./WorkspacePanel";
 
@@ -251,6 +252,16 @@ function ChatMain(props: { c: ChatController }) {
 
 export function ChatPage() {
   const c = createChatController();
+  // On phones the topic list (0) and a conversation (1) are levels of the page: opening a topic
+  // slides it in, going back slides it out over the list. The conversation keeps its bar and its
+  // topic until it has gone.
+  const panes = createPaneStack(() => (c.mobileTopicSplitEnabled() ? (c.showChatPane() ? 1 : 0) : null));
+  // Asked as the route lets the topic go: the slide has started by then (or starts as the effects
+  // of this change run), so look a microtask later.
+  c.setConversationExit(() => Promise.resolve().then(() => (untracked(panes.exiting) === 1 ? panes.settled() : undefined)));
+  const barShowsBack = panes.held(1, () => c.mobileShowBack());
+  const barTitle = panes.held(1, () => (c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")));
+  const barShowsWorkspace = panes.held(1, () => c.mobileTopicSplitEnabled() && c.showChatPane() && c.workspaceSidebarAvailable());
   // Android's Back from an open topic goes to the topic list, as the bar's back arrow does.
   onSystemBack(
     () => c.mobileShowBack(),
@@ -259,13 +270,13 @@ export function ChatPage() {
 
   const mobileLeading = () => (
     <View class="flex-1 flex-row items-center gap-2">
-      <If when={c.mobileShowBack()}>
+      <If when={barShowsBack()}>
         <BackButton title={t("chat_topics_title")} onPress={() => c.mobileBack()} testID="chat-back" />
       </If>
       <Text class="flex-1 text-xl leading-6 tracking-[-0.03em] text-foreground line-clamp-1" role="header">
-        {c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")}
+        {barTitle()}
       </Text>
-      <If when={c.mobileTopicSplitEnabled() && c.showChatPane() && c.workspaceSidebarAvailable()}>
+      <If when={barShowsWorkspace()}>
         <WorkspaceToggle c={c} bare />
       </If>
     </View>
@@ -276,7 +287,8 @@ export function ChatPage() {
       title={t("chat_title")}
       error={c.err()}
       scroll={false}
-      hideBar={!c.mobileMode() || c.showTopicSidebar()}
+      // With topics, the phone's bar belongs to the conversation (it slides with it), below.
+      hideBar={!c.mobileMode() || (c.chatReadonly() ? c.showTopicSidebar() : c.mobileTopicSplitEnabled())}
       leading={c.consoleTopicsEnabled() ? mobileLeading() : undefined}
       testID="chat-page"
     >
@@ -292,11 +304,27 @@ export function ChatPage() {
         }
       >
         <View class="flex-1 flex-row">
-          <If when={c.showTopicSidebar()}>
-            <TopicSidebar c={c} class={c.mobileTopicSplitEnabled() ? "flex-1" : "w-[314px] pr-1"} />
+          <If when={panes.shown(0, c.showTopicSidebar())}>
+            <TopicSidebar
+              c={c}
+              class={c.mobileTopicSplitEnabled() ? "flex-1" : "w-[314px] pr-1"}
+              style={panes.style(0)}
+              hidden={panes.hidden(0)}
+            />
           </If>
-          <If when={c.showChatPane()}>
-            <ChatMain c={c} />
+          <If when={panes.shown(1, c.showChatPane())}>
+            <View
+              class="flex-1"
+              style={panes.style(1)}
+              accessibilityElementsHidden={panes.hidden(1) || undefined}
+              importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
+              testID="chat-conversation-pane"
+            >
+              <If when={c.mobileMode() && c.mobileTopicSplitEnabled()}>
+                <PageBar leading={mobileLeading()} />
+              </If>
+              <ChatMain c={c} />
+            </View>
           </If>
           {/* One column for either panel: switching between them (or between entries) keeps the
               column and plays the new content's entrance, with no outgoing panel beside it. */}
