@@ -115,6 +115,7 @@ import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQu
 import { hasArtifactBlock } from "../../components/chat/ChatRichContent";
 import { createReceivedFiles } from "../../components/chat/ReceivedFile";
 import { keyedState } from "../../components/chat/rowState";
+import { workspacePathDisplay } from "../../components/chat/workspacePath";
 import {
   activityDetailKey,
   createFocusReturn,
@@ -193,20 +194,6 @@ function loadCollapsedTopicGroups() {
   } catch {
     return new Set<string>();
   }
-}
-
-/** Splits a path into what comes before its last part and the part, for the workspace panel. */
-export function splitWorkspaceDisplayPath(path: string) {
-  const value = String(path || "").trim();
-  if (!value) return { prefix: "", separator: "", tail: "" };
-  if (/^[\\/]+$/u.test(value) || /^[A-Za-z]:[\\/]?$/u.test(value)) return { prefix: "", separator: "", tail: value };
-  const normalized = value.replace(/[\\/]+$/u, "");
-  if (!normalized) return { prefix: "", separator: "", tail: value };
-  const index = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
-  if (index < 0) return { prefix: "", separator: "", tail: normalized };
-  const tail = normalized.slice(index + 1);
-  if (!tail) return { prefix: "", separator: "", tail: value };
-  return { prefix: normalized.slice(0, index), separator: normalized.charAt(index), tail };
 }
 
 function workspaceDownloadFilename(entry: any) {
@@ -445,6 +432,9 @@ export function createChatController() {
   const sending = signal(false);
   const err = signal("");
   const workspaceDir = signal("");
+  // The home directory of the host the workspaces are on (`home_dir`, from that runtime), and the
+  // endpoint that reported it: a path shows `~` for it on that endpoint only.
+  const workspaceHome = signal<{ endpointRef: string; dir: string } | null>(null);
   const workspaceSource = signal("none");
   const workspaceLoading = signal(false);
   const workspaceSaving = signal(false);
@@ -1078,7 +1068,13 @@ export function createChatController() {
   const composerAddDisabled = () => composerDisabled() || !String(submitEndpointRef() || "").trim();
   const workspaceDetachDisabled = () =>
     !workspaceReady() || workspaceBusy() || workspaceSource() !== "attachment" || String(workspaceDir() || "").trim() === "";
-  const workspaceDirDisplay = () => splitWorkspaceDisplayPath(workspaceDir());
+  /** The home directory of the host the selected endpoint's workspaces are on; "" when it did not say. */
+  const workspaceHomeDir = () => {
+    const home = workspaceHome();
+    return home && home.endpointRef === String(submitEndpointRef() || "").trim() ? home.dir : "";
+  };
+  /** The workspace path as the panel writes it: the host's home as `~`, and where its last part starts. */
+  const workspaceDirDisplay = () => workspacePathDisplay(workspaceDir(), workspaceHomeDir());
   // A TODO item's topic shows the workspace its runs use, read-only, and only when there is one.
   const workspaceTabAvailable = () => !selectedTopicIsCron() || Boolean(String(workspaceDir() || "").trim());
   const workspacePanelTabs = () => [
@@ -1525,11 +1521,23 @@ export function createChatController() {
     });
   }
 
-  function applyWorkspacePayload(data: any) {
+  /**
+   * A workspace as a runtime reports it. `endpointRef` names the runtime when the payload is its
+   * own answer: its `home_dir` (the host's home, absent from runtimes that do not report it) is
+   * kept for it. Without one (a payload made here) the home known for the endpoint stays.
+   */
+  function applyWorkspacePayload(data: any, endpointRef = "") {
     const dir = String(data?.workspace_dir || "").trim();
     const raw = String(data?.source || "").trim().toLowerCase();
     const source = ["attachment", "default", "none", "todo"].includes(raw) ? raw : dir ? "attachment" : "none";
+    const ref = String(endpointRef || "").trim();
     batch(() => {
+      if (ref) {
+        const home = typeof data?.home_dir === "string" ? data.home_dir.trim() : "";
+        const known = untracked(workspaceHome);
+        if (home) workspaceHome.set({ endpointRef: ref, dir: home });
+        else if (known?.endpointRef === ref) workspaceHome.set(null);
+      }
       workspaceDir.set(dir);
       workspaceSource.set(source);
       workspaceError.set("");
@@ -1537,9 +1545,9 @@ export function createChatController() {
     });
   }
 
-  function applyTopicMetadataPayload(data: any) {
+  function applyTopicMetadataPayload(data: any, endpointRef: string) {
     const workspace = data?.workspace && typeof data.workspace === "object" ? data.workspace : data;
-    applyWorkspacePayload(workspace);
+    applyWorkspacePayload(workspace, endpointRef);
     const context = data?.context && typeof data.context === "object" ? data.context : null;
     topicContext.set(context && context.available ? context : null);
   }
@@ -1559,7 +1567,7 @@ export function createChatController() {
     try {
       const data = await runtimeApiFetchForEndpoint(endpointRef, `/topic/${encodeURIComponent(topicID)}/metadata`);
       if (request !== workspaceRequestSeq) return false;
-      applyTopicMetadataPayload(data);
+      applyTopicMetadataPayload(data, endpointRef);
       if (untracked(workspaceSidebarOpen) && untracked(workspaceSidebarTabID) === WORKSPACE_TAB_ID && String(untracked(workspaceDir) || "").trim()) {
         await loadWorkspaceTree("", { force: true });
       }
@@ -1793,7 +1801,7 @@ export function createChatController() {
     try {
       const data = await runtimeApiFetchForEndpoint(endpointRef, "/workspace", { method: "PUT", body: { topic_id: topicID, workspace_dir: next } });
       rememberRecentWorkspaceDir(String(data?.workspace_dir || next || "").trim());
-      applyWorkspacePayload(data);
+      applyWorkspacePayload(data, endpointRef);
       workspaceBrowserOpen.set(false);
       if (untracked(workspaceSidebarOpen)) await loadWorkspaceTree("", { force: true });
     } catch (error) {
@@ -1812,7 +1820,7 @@ export function createChatController() {
       workspaceError.set("");
     });
     try {
-      applyWorkspacePayload(await runtimeApiFetchForEndpoint(endpointRef, `/workspace?topic_id=${encodeURIComponent(topicID)}`, { method: "DELETE" }));
+      applyWorkspacePayload(await runtimeApiFetchForEndpoint(endpointRef, `/workspace?topic_id=${encodeURIComponent(topicID)}`, { method: "DELETE" }), endpointRef);
     } catch (error) {
       pushNotice({ type: "error", text: errorMessage(error, t("msg_save_failed")) });
     } finally {

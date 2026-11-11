@@ -130,3 +130,81 @@ test("on a phone the topic list and the conversation are separate views", async 
   await app.press("id:chat-topic-new-fab");
   await app.waitFor("id:chat-placeholder");
 });
+
+// The path in the workspace tab: the home directory of the host the workspace is on (`home_dir`,
+// as that runtime reports it) is `~`, the path on one line, cut in the middle when the panel is
+// narrow. Screen readers, the tooltip and every request keep the raw path.
+async function openWorkspacePath(workspace: Record<string, unknown>, options: { width?: number } = {}) {
+  const opened = await openConsole({
+    location: "/e/default/chat/topic-1",
+    kv: PANEL_OPEN,
+    width: options.width,
+    api: {
+      "GET /proxy:/topics": TOPICS,
+      "GET /proxy:/tasks": listOf(DONE),
+      "GET /proxy:/topic/topic-1/metadata": { body: { workspace: { source: "attachment", ...workspace } } },
+      "GET /proxy:/workspace/tree": { body: { items: [{ name: "README.md", path: "README.md", is_dir: false, size_bytes: 10 }] } },
+      "POST /proxy:/workspace/open": { body: { ok: true } },
+    },
+  });
+  await opened.app.waitFor("id:chat-workspace-panel");
+  await opened.app.press("role:tab[Workspace]");
+  await opened.app.waitFor("id:chat-workspace-path");
+  return opened;
+}
+
+/** A `label:` selector for exactly `label` (a selector starting with `/` is a regex). */
+function exactLabel(label: string) {
+  return `label:/^${label.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$/`;
+}
+
+/** What the path line shows: the texts after the panel's WORKSPACE kicker (the first is the line). */
+function shownPath(texts: string[]) {
+  return texts[texts.indexOf("WORKSPACE") + 1];
+}
+
+const HOME_CASES = [
+  { name: "the host's home is ~", dir: "/home/me", home: "/home/me", shown: "~" },
+  { name: "a folder in the host's home is ~/…", dir: "/home/me/project", home: "/home/me", shown: "~/project" },
+  { name: "a sibling of the home stays whole", dir: "/home/me2/project", home: "/home/me", shown: "/home/me2/project" },
+  { name: "the home's text further in stays whole", dir: "/srv/home/me/project", home: "/home/me", shown: "/srv/home/me/project" },
+  { name: "another user's home on the host stays whole", dir: "/home/me/project", home: "/home/agent", shown: "/home/me/project" },
+  { name: "a host that reports no home shows the path whole", dir: "/home/me/project", home: undefined, shown: "/home/me/project" },
+];
+
+for (const item of HOME_CASES) {
+  test(`workspace path: ${item.name}`, async () => {
+    const { app } = await openWorkspacePath({ workspace_dir: item.dir, ...(item.home ? { home_dir: item.home } : {}) });
+    await app.waitUntil(() => shownPath(app.texts()) === item.shown);
+    expect(app.shows(exactLabel(item.dir))).toBe(true);
+  });
+}
+
+test("workspace path: a long path is cut in the middle on one line, resized with the panel, and requests keep it raw", async () => {
+  const dir = "/home/me/code/clients/acme/monorepo/services/billing-gateway/internal/reconciliation-worker";
+  const display = "~/code/clients/acme/monorepo/services/billing-gateway/internal/reconciliation-worker";
+  const { app, calls } = await openWorkspacePath({ workspace_dir: dir, home_dir: "/home/me" });
+  await app.waitUntil(() => shownPath(app.texts()).includes("..."));
+  const desktop = shownPath(app.texts());
+  const [head, tail] = desktop.split("...");
+  expect(display.startsWith(head)).toBe(true);
+  expect(display.endsWith(tail)).toBe(true);
+  expect(head.startsWith("~/code")).toBe(true);
+  expect(tail.endsWith("-worker")).toBe(true);
+  expect(app.shows(exactLabel(dir))).toBe(true);
+  // The phone layout gives the panel the whole window: more of the path shows.
+  await app.setViewport(900, 800);
+  await app.waitUntil(() => shownPath(app.texts()) !== desktop);
+  const wider = shownPath(app.texts());
+  expect(wider.length).toBeGreaterThan(desktop.length);
+  // Back to the desktop: cut as before.
+  await app.setViewport(1280, 800);
+  await app.waitUntil(() => shownPath(app.texts()) === desktop);
+  // Opening a file asks for it by its raw path in the workspace, as before.
+  await app.press("label:README.md");
+  await app.waitFor("id:chat-workspace-selection");
+  await app.press("role:button[Open]");
+  await app.waitUntil(() => calls.some((call) => call.uri === "/workspace/open"));
+  expect(calls.find((call) => call.uri === "/workspace/open")!.json).toMatchObject({ topic_id: "topic-1", path: "README.md" });
+  expect(calls.every((call) => !String(call.json?.workspace_dir ?? "").includes("~"))).toBe(true);
+});
