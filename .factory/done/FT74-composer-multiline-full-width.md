@@ -69,3 +69,9 @@ Validation: Claude Code independently reviewed all seven files in origin/master.
 Residual risks: No independent real-browser or native GPUI/Android/Mobile Safari checks. Animation finding is verified through animation-call counts, not observed visual timing. Explicit-newline case uses synthetic measurements; paste-like integration reproduction uses rendered headless geometry. Native measurement order is unverified. Earlier build Chrome checks predate this fix and are not independent review checks.
 
 Moved review/ → ready/ under the factory rule allowing P2 notes. Owner should inspect the sequential-measurement animation regression before shipping. No linked GitHub issue or PR. Not shipped.
+
+## factory · 2026-11-11 12:33
+
+Owner-authorized ship with Claude Code: FT68, FT72, fixed FT74 and FT75. Merge: f8daee10; combined master b8a014eb1a44f5e57656296cc38360e4f527d4f3 pushed. No tag created or pushed, as explicitly requested. Fixed latest sequential-measurement P2 in 848757d6; branch head 4125a66a. Unit and desktop/phone rendered regressions fail before fix and pass afterward; type-then-resize and stale-result guards retained. Settled measurement uses two frames; native ordering unverified, resize within that window can still ease. 
+
+Combined validation: gofmt cleanliness, go vet ./..., go test ./..., nsh check, Console tests 611/611, core Node 259/259, Android manifest 6/6 and web build passed. Tests used isolated HOME/XDG directories. Manager inspected diffs and suite logs; did not independently rerun suites. FT72 Rust/native suites not rerun in this ship; previously recorded four baseline fixture failures remain. No browser visual or native device validation this round. No installs. No linked GitHub issue or PR. Moved ready/ → done/.

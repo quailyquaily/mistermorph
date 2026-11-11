@@ -91,3 +91,9 @@ The stale blank-area drag P2 is fixed. Regression tests fail twice with the pre-
 Validation reported by Claude Code: mandatory gofmt cleanliness, go vet ./..., go test ./... exited 0; nsh check exited 0; full nsh tests passed 550/550. Scripted tests used an absolute throwaway HOME. Manager verified unchanged worktree and matching remote head; did not independently rerun the suites. No installs; existing nsh 0.4.0 tool installation used for browser fixture build. No linked GitHub issue or PR.
 
 Not verified: native desktop, Android, actual mobile browsers, Safari/Firefox, live TODO/Skills/Setup editors, and the case where the pointer is already over the editor when it appears (leave tracking depends on a recorded enter). Known trade-offs remain: blank-area drag stops on exit even if re-entered while held, no edge auto-scroll for blank-area drags, and rightmost 8pt reserved for scrollbar.
+
+## factory · 2026-11-11 12:33
+
+Owner-authorized ship with Claude Code: FT68, FT72, fixed FT74 and FT75. Merge: 1e344a4f; combined master b8a014eb1a44f5e57656296cc38360e4f527d4f3 pushed. No tag created or pushed, as explicitly requested. 
+
+Combined validation: gofmt cleanliness, go vet ./..., go test ./..., nsh check, Console tests 611/611, core Node 259/259, Android manifest 6/6 and web build passed. Tests used isolated HOME/XDG directories. Manager inspected diffs and suite logs; did not independently rerun suites. FT72 Rust/native suites not rerun in this ship; previously recorded four baseline fixture failures remain. No browser visual or native device validation this round. No installs. No linked GitHub issue or PR. Moved ready/ → done/.

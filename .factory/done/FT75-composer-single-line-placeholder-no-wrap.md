@@ -51,3 +51,9 @@ Validation: configured gofmt/vet/go test command passed (Go test results cached)
 Residual risks: review did not independently run a browser or native device, real IME, or screen reader. Headless tests do not validate visual ellipsis. Native field padding, transparent backgrounds and drawing order need device confirmation. The previously documented invisible native-placeholder wrapping and possible empty-field scroll thumb remain. Build-stage Chrome validation is recorded above, not repeated here.
 
 Moved review/ → ready/; not merged or released. No linked GitHub issue or PR.
+
+## factory · 2026-11-11 12:33
+
+Owner-authorized ship with Claude Code: FT68, FT72, fixed FT74 and FT75. Merge: b8a014eb; combined master b8a014eb1a44f5e57656296cc38360e4f527d4f3 pushed. No tag created or pushed, as explicitly requested. Resolved conflicts with FT74 preserving full-width multiline layout and single-line placeholder; updated row-mode tests. 
+
+Combined validation: gofmt cleanliness, go vet ./..., go test ./..., nsh check, Console tests 611/611, core Node 259/259, Android manifest 6/6 and web build passed. Tests used isolated HOME/XDG directories. Manager inspected diffs and suite logs; did not independently rerun suites. FT72 Rust/native suites not rerun in this ship; previously recorded four baseline fixture failures remain. No browser visual or native device validation this round. No installs. No linked GitHub issue or PR. Moved ready/ → done/.
