@@ -34,3 +34,13 @@ Web checked by coder in Chrome on an isolated real-composer page: desktop/mobile
 Installs: none.
 Branch push initially required credential.useHttpPath=true; retried successfully with command-local credential settings.
 Moved new/ → review/ for review; not merged or released.
+
+## factory · review · 2026-11-11 16:44
+head: 90d6863203692e1b56a5643139a9605970d6bb8a
+verdict: pass
+notes:
+- Claude Code reviewed every hunk of origin/master...HEAD (base 7a63c01a), two files. No findings. Clean merge with master verified.
+- Validation: gofmt check, go vet ./..., go test ./..., and nsh check passed; nsh test --web-host tests/noHost.js passed all 626 tests, including five new regression tests. Tests used throwaway HOME. Additional glyph-switch probe passed both desktop and mobile cases.
+- No installs. Code HEAD unchanged and worktree clean after review.
+- Review did not inspect real browser, desktop app, Android device/emulator rendering, or measure touch target dimensions; Android coverage is headless simulation only.
+- Moved review/ → ready/; not merged or released.
