@@ -352,6 +352,56 @@ func TestSteerResponderTellsWhenTheRunDropsInputAfterTheReply(t *testing.T) {
 	}
 }
 
+// The run can end while the reply is being delivered: after the reply was checked against the
+// ticket, but before its delivery returns. The input it promised is then dropped, and the person
+// must still be told so.
+func TestSteerResponderTellsWhenTheRunDropsInputDuringDelivery(t *testing.T) {
+	for _, mode := range []string{"applied", "dropped", "stopped"} {
+		t.Run(mode, func(t *testing.T) {
+			control := New()
+			lease := startSteerTestLease(t, control, ActiveRun{})
+			responder := NewSteerResponder(context.Background(), func(context.Context, SteerReplyRequest) (string, error) {
+				return "I'll add a summary table at the end.", nil
+			}, SteerResponderOptions{})
+			log := &steerReplyLog{}
+			var deliveries atomic.Int32
+			if err := responder.Respond(control.Steer("telegram", "chat:1", "add a summary table"), func(ctx context.Context, reply SteerReply) error {
+				if deliveries.Add(1) == 1 {
+					// The first delivery, the reply itself, is still in flight when the run ends.
+					switch mode {
+					case "applied":
+						lease.SteerQueue.Drain()
+						lease.Finish()
+					case "dropped":
+						lease.Finish()
+					case "stopped":
+						control.Stop("telegram", "chat:1", "/stop")
+						lease.Finish()
+					}
+				}
+				return log.deliver(ctx, reply)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			responder.Wait()
+			responder.watchers.Wait()
+			replies := log.all()
+			if len(replies) == 0 || replies[0].Status != SteerReplied || replies[0].Followup {
+				t.Fatalf("replies = %+v, want the reply first", replies)
+			}
+			if mode != "dropped" {
+				if len(replies) != 1 {
+					t.Fatalf("replies = %+v, want just the reply", replies)
+				}
+				return
+			}
+			if len(replies) != 2 || !replies[1].Followup || replies[1].Status != SteerNotApplied || !strings.Contains(replies[1].Text, "add a summary table") {
+				t.Fatalf("replies = %+v, want a follow-up notice after the reply", replies)
+			}
+		})
+	}
+}
+
 func TestSteerResponderRepliesToAnAnswer(t *testing.T) {
 	control := New()
 	lease := startSteerTestLease(t, control, ActiveRun{Task: "Book a table"})

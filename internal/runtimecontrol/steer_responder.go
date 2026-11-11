@@ -188,9 +188,13 @@ func (r *SteerResponder) handle(job steerJob) {
 		if reply.Status == SteerReplied {
 			result.control.recordSteerExchange(result.entry, result.input, reply.Text)
 		}
-		if result.ticket != nil && result.ticket.Outcome() == SteerPending {
-			r.watchers.Add(1)
-			go r.watch(job, reply)
+		// The run may have dropped the input while the reply was delivered: the watcher then sends
+		// the follow-up at once, as its ticket is already done.
+		if result.ticket != nil {
+			if outcome := result.ticket.Outcome(); outcome == SteerPending || outcome == SteerDropped {
+				r.watchers.Add(1)
+				go r.watch(job, reply)
+			}
 		}
 	}
 }
