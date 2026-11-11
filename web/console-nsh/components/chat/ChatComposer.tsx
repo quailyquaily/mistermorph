@@ -171,6 +171,12 @@ export function ChatComposer(props: ChatComposerProps) {
     const current = String(props.llmProfileValue ?? "").trim();
     return profiles().find((item) => String(item.value ?? "").trim() === current) ?? profiles()[0] ?? null;
   };
+  // A profile's mark, in the menu and on the picker: its model vendor's logo, else a chip.
+  const profileGlyph = (profile: ComposerProfileItem | null | undefined) => (
+    <If when={profile?.image} else={<Icon name="PhCpu" size={14} color="subtle" />}>
+      <Image src={profile?.image ?? ""} accessibilityElementsHidden style={{ width: 14, height: 14 }} />
+    </If>
+  );
   const profileTitle = () => {
     const label = String(props.llmProfileLabel ?? "").trim();
     const chosen = String(selectedProfile()?.title ?? "").trim();
@@ -560,9 +566,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   const profile = profiles()[entry.index];
                   return (
                     <View class="flex-row items-center gap-2">
-                      <If when={profile?.image} else={<Icon name="PhCpu" size={14} color="subtle" />}>
-                        <Image src={profile?.image ?? ""} style={{ width: 14, height: 14 }} />
-                      </If>
+                      {profileGlyph(profile)}
                       <View class="flex-1">
                         <Text class="text-sm text-foreground">{entry.title}</Text>
                         <If when={profile?.subtitle}>
@@ -574,7 +578,13 @@ export function ChatComposer(props: ChatComposerProps) {
                 }}
                 trigger={
                   <View class="flex-row items-center gap-1">
-                    <Text class="max-w-40 text-xs text-subtle line-clamp-1">{selectedProfile()?.title || props.llmProfileLabel || ""}</Text>
+                    <View testID={`chat-composer-profile-icon.${selectedProfile()?.image ? "image" : "PhCpu"}`}>{profileGlyph(selectedProfile())}</View>
+                    {/* Phone widths show the mark alone, to leave the field room; the label and tip still name the profile. */}
+                    <If when={!isMobile()}>
+                      <Text testID="chat-composer-profile-name" class="max-w-40 text-xs text-subtle line-clamp-1">
+                        {selectedProfile()?.title || props.llmProfileLabel || ""}
+                      </Text>
+                    </If>
                     <Icon name="PhCaretDown" size={11} color="muted-foreground" />
                   </View>
                 }
