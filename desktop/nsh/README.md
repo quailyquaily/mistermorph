@@ -129,7 +129,7 @@ scratch git repo, `git apply` each patch in order, and copy the result back.
   (fills, images and canvases are drawn as they are). It also draws repeating gradients
   (hatching, the paper grid) at the view's own size up to 4096 pixels a side, instead of
   stretching a 768-pixel image, which blurred their fine lines.
-- `nsh-scroll-speed.patch` (applied last): real wheel and touchpad scrolls
+- `nsh-scroll-speed.patch`: real wheel and touchpad scrolls
   move twice the system's amount (`SCROLL_GAIN` in `src/events.rs`): a wheel notch scrolls 96
   points instead of 48, close to browsers on Windows, and a touchpad gesture and the glide after
   it go twice as far. The gain is applied once, where GPUI's deltas become nsh's; direction,
@@ -137,6 +137,14 @@ scratch git repo, `git apply` each patch in order, and copy the result back.
   own accelerated amounts. Ctrl + wheel keeps the system's amounts so pinch-zooming keeps its
   pace (and a Ctrl + wheel scroll with nothing to zoom moves at that pace too). The scrolls
   nsh's test agent sends (`src/agent.rs`) are not scaled.
+- `nsh-selection-copy.patch` (applied last): Ctrl+C (Cmd+C on macOS) and Ctrl+Insert copy
+  the text selected in a selectable text or `selectable` view (the chat bubbles) while a text
+  field keeps the keyboard focus. A press on page text does not take the focus from the field
+  (the composer), and the field took the copy keys first, copying its own empty selection, so
+  only the context menu's Copy worked. Now a field with nothing selected lets the copy keys go
+  to the page's selection, and a mouse press that starts selecting page text collapses the
+  focused field's selection to its caret, so one selection shows and the newest one is copied.
+  The field keeps the focus, its caret and every other key.
 
 ## Packaging
 

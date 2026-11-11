@@ -1,0 +1,321 @@
+diff --git a/crates/gpui/nsh-platform-gpui/src/input.rs b/crates/gpui/nsh-platform-gpui/src/input.rs
+index 099aee3e..b835f888 100644
+--- a/crates/gpui/nsh-platform-gpui/src/input.rs
++++ b/crates/gpui/nsh-platform-gpui/src/input.rs
+@@ -1375,6 +1375,7 @@ fn down(
+     {
+         // Mouse drags in a selectable view select across its texts; its
+         // texts never select alone.
++        crate::text_input::page_pressed(surface);
+         crate::selectable_view::down(surface, &area, &hit.view, (x, y), clicks, modifiers.shift);
+         item = Some(Item::Area(area));
+     }
+@@ -1384,6 +1385,7 @@ fn down(
+         } else if !touch && crate::text::selectable(&hit.view.state()) {
+             // Mouse drags over selectable text select it rather than
+             // pan.
++            crate::text_input::page_pressed(surface);
+             Some(Item::Text(hit.view.clone()))
+         } else {
+             None
+diff --git a/crates/gpui/nsh-platform-gpui/src/selectable_view.rs b/crates/gpui/nsh-platform-gpui/src/selectable_view.rs
+index 675a3dd1..bc44c0bc 100644
+--- a/crates/gpui/nsh-platform-gpui/src/selectable_view.rs
++++ b/crates/gpui/nsh-platform-gpui/src/selectable_view.rs
+@@ -599,6 +599,15 @@ fn selected_text(surface: u64) -> Option<String> {
+     })
+ }
+ 
++/// True when the active area of `surface` has a selection.
++pub(crate) fn has_selection(surface: u64) -> bool {
++    ACTIVE.with_borrow(|active| {
++        active
++            .as_ref()
++            .is_some_and(|a| a.surface == surface && a.area.attached() && !a.model.is_empty())
++    })
++}
++
+ /// A right click in `area`: Copy (its selection) and Select All.
+ pub(crate) fn context_menu(surface: &Rc<Surface>, area: &NshView) {
+     use nsh_core::desktop::MenuRole;
+diff --git a/crates/gpui/nsh-platform-gpui/src/tests.rs b/crates/gpui/nsh-platform-gpui/src/tests.rs
+index fb014716..0c9deb29 100644
+--- a/crates/gpui/nsh-platform-gpui/src/tests.rs
++++ b/crates/gpui/nsh-platform-gpui/src/tests.rs
+@@ -202,6 +202,7 @@ fn windows(cx: &mut TestAppContext) {
+     releasing_shift_before_alt_keeps_the_auto_hidden_menu_bar_hidden(cx);
+     the_app_s_state_follows_its_window_s_activation_and_visibility(cx);
+     set_frame_sizes_the_window_and_keeps_the_size_it_leaves_out(cx);
++    copy_keys_copy_the_page_selection_while_a_field_is_focused(cx);
+ }
+ 
+ fn keys_reach_the_fields_of_a_surface_showing_a_native_component(cx: &mut TestAppContext) {
+@@ -1557,3 +1558,192 @@ fn set_frame_sizes_the_window_and_keeps_the_size_it_leaves_out(cx: &mut TestAppC
+     cx.simulate_keystrokes(&format!("shift-{primary}-b"));
+     wait_until_window(cx, "the window at 600x400", |cx| size(cx) == (600.0, 400.0));
+ }
++
++/// Two chat bubbles over a focused composer: a plain text in a `selectable`
++/// view (a sent message) and a selectable Markdown view of two paragraphs
++/// (a reply), as the console draws them; and a text selectable alone.
++const BUBBLES_OVER_FIELD: &str = r##"
++import { mount, signal, Text, View } from "nsh";
++import { Input, TextView } from "nsh/base";
++
++function App() {
++  const draft = signal("draft");
++  return (
++    <View style={{ flex: 1 }}>
++      <View selectable style={{ height: 40 }}>
++        <Text style={{ fontSize: 14, lineHeight: 20 }}>alpha beta gamma</Text>
++      </View>
++      <TextView
++        selectable
++        markdown={"First **bold** line\n\nSecond paragraph"}
++        style={{ height: 120 }}
++      />
++      <Input autoFocus value={draft()} onChange={({ value }) => draft.set(value)} style={{ height: 30 }} />
++      <Text style={{ height: 30, fontSize: 14, lineHeight: 20, userSelect: "text" }}>solo text</Text>
++    </View>
++  );
++}
++mount(App);
++"##;
++
++/// Runs the window until the clipboard holds `text`.
++fn wait_for_clipboard(cx: &mut VisualTestContext, text: &str) {
++    let start = Instant::now();
++    loop {
++        cx.run_until_parked();
++        let now = cx.update(|_, cx| cx.read_from_clipboard().and_then(|item| item.text()));
++        if now.as_deref() == Some(text) {
++            return;
++        }
++        assert!(
++            start.elapsed() < Duration::from_secs(10),
++            "the clipboard holds {now:?}, not {text:?}"
++        );
++        std::thread::sleep(Duration::from_millis(10));
++    }
++}
++
++fn set_clipboard(cx: &mut VisualTestContext, text: &str) {
++    cx.update(|_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_owned())));
++}
++
++/// A drag with the primary button from `from` to `to`.
++fn drag(
++    cx: &mut VisualTestContext,
++    from: gpui::Point<gpui::Pixels>,
++    to: gpui::Point<gpui::Pixels>,
++) {
++    let (button, modifiers) = (gpui::MouseButton::Left, gpui::Modifiers::default());
++    cx.simulate_event(gpui::MouseDownEvent {
++        position: from,
++        button,
++        modifiers,
++        click_count: 1,
++        first_mouse: false,
++    });
++    let steps = 8;
++    for i in 1..=steps {
++        let t = i as f32 / steps as f32;
++        let at = gpui::point(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
++        cx.simulate_mouse_move(at, button, modifiers);
++        cx.run_until_parked();
++    }
++    cx.simulate_event(gpui::MouseUpEvent {
++        position: to,
++        button,
++        modifiers,
++        click_count: 1,
++    });
++    cx.run_until_parked();
++}
++
++/// The copy keys copy what is selected in a chat bubble while the composer
++/// keeps the keyboard focus (a press in a selectable view leaves it there),
++/// as the bubble's context menu does; the composer's own selection still
++/// copies, and an empty selection copies nothing.
++fn copy_keys_copy_the_page_selection_while_a_field_is_focused(cx: &mut TestAppContext) {
++    let code = nsh_bundler::compile_module("App.tsx", BUBBLES_OVER_FIELD, &[]).unwrap();
++    let (view, cx) =
++        cx.add_window_view(|window, cx| AppView::new(AppOptions::default(), window, cx));
++    view.update(cx, |view, _| view.load(App::Js(Bundle::source(code))));
++    cx.update(|window, cx| window.focus(&view.focus_handle(cx), cx));
++    wait_for(&view, cx, "draft");
++    let (primary, copy) = if cfg!(target_os = "macos") {
++        ("cmd", "cmd-c")
++    } else {
++        ("ctrl", "ctrl-c")
++    };
++    let pt = |x: f32, y: f32| gpui::point(gpui::px(x), gpui::px(y));
++    let word = pt(12.0, 10.0);
++
++    // A word of the sent message, double-clicked while the composer has
++    // the focus and nothing selected.
++    set_clipboard(cx, "-");
++    click(cx, word, 1);
++    click(cx, word, 2);
++    cx.simulate_keystrokes(copy);
++    wait_for_clipboard(cx, "alpha");
++    assert_eq!(
++        field_text(&view, cx).as_deref(),
++        Some("draft"),
++        "the composer lost the focus"
++    );
++    // A text selectable alone copies the same way.
++    click(cx, pt(12.0, 200.0), 1);
++    click(cx, pt(12.0, 200.0), 2);
++    cx.simulate_keystrokes(copy);
++    wait_for_clipboard(cx, "solo");
++
++    // The composer's selection copies as before (a press in it clears the
++    // message's).
++    let (fx, fy) = (20.0, 175.0);
++    cx.simulate_click(pt(fx, fy), gpui::Modifiers::default());
++    cx.simulate_keystrokes(&format!("{primary}-a {copy}"));
++    wait_for_clipboard(cx, "draft");
++
++    // The word again, while the composer has its text selected: the
++    // composer's selection goes, the word copies.
++    click(cx, word, 1);
++    click(cx, word, 2);
++    cx.simulate_keystrokes(copy);
++    wait_for_clipboard(cx, "alpha");
++    assert_eq!(
++        field_text(&view, cx).as_deref(),
++        Some("draft"),
++        "the composer lost the focus"
++    );
++
++    // Part of the reply, across its paragraphs: from inside "First" to the
++    // end of the second paragraph.
++    set_clipboard(cx, "-");
++    drag(cx, pt(8.0, 50.0), pt(390.0, 150.0));
++    cx.simulate_keystrokes(copy);
++    // The text drawn (not the Markdown source), only from where the drag
++    // began.
++    let selected = "irst bold line\nSecond paragraph";
++    wait_for_clipboard(cx, selected);
++    // Ctrl+Insert copies the same.
++    if !cfg!(target_os = "macos") {
++        set_clipboard(cx, "-");
++        cx.simulate_keystrokes("ctrl-insert");
++        wait_for_clipboard(cx, selected);
++    }
++    // The context menu's Copy copies the same text.
++    set_clipboard(cx, "-");
++    cx.simulate_event(gpui::MouseDownEvent {
++        position: pt(30.0, 60.0),
++        button: gpui::MouseButton::Right,
++        modifiers: gpui::Modifiers::default(),
++        click_count: 1,
++        first_mouse: false,
++    });
++    cx.simulate_event(gpui::MouseUpEvent {
++        position: pt(30.0, 60.0),
++        button: gpui::MouseButton::Right,
++        modifiers: gpui::Modifiers::default(),
++        click_count: 1,
++    });
++    cx.run_until_parked();
++    cx.simulate_keystrokes("down enter");
++    wait_for_clipboard(cx, selected);
++
++    // Typing still goes to the composer, and its own selection made after
++    // the reply's is the one copied.
++    cx.simulate_input("x");
++    wait_for(&view, cx, "draftx");
++    cx.simulate_keystrokes(&format!("{primary}-a {copy}"));
++    wait_for_clipboard(cx, "draftx");
++
++    // A click in a bubble selects nothing: nothing is copied, not the
++    // whole message.
++    cx.simulate_keystrokes("end");
++    set_clipboard(cx, "-");
++    click(cx, word, 1);
++    cx.simulate_keystrokes(copy);
++    for _ in 0..20 {
++        cx.run_until_parked();
++        std::thread::sleep(Duration::from_millis(10));
++    }
++    wait_for_clipboard(cx, "-");
++    assert_eq!(field_text(&view, cx).as_deref(), Some("draftx"));
++}
+diff --git a/crates/gpui/nsh-platform-gpui/src/text.rs b/crates/gpui/nsh-platform-gpui/src/text.rs
+index d23b7782..63c89004 100644
+--- a/crates/gpui/nsh-platform-gpui/src/text.rs
++++ b/crates/gpui/nsh-platform-gpui/src/text.rs
+@@ -2682,6 +2682,14 @@ fn select(surface: u64, view: &NshView, range: Option<(u32, u32)>) {
+     }
+ }
+ 
++/// True when a single text of the surface keyed `surface` has a selection.
++pub(crate) fn has_selection(surface: u64) -> bool {
++    SELECTED.with_borrow(|s| {
++        s.as_ref()
++            .is_some_and(|(key, v)| *key == surface && v.attached())
++    })
++}
++
+ /// Clears the selection of a single text, if there is one (a selection
+ /// area selects: one selection at a time).
+ pub(crate) fn clear_selection() {
+diff --git a/crates/gpui/nsh-platform-gpui/src/text_input.rs b/crates/gpui/nsh-platform-gpui/src/text_input.rs
+index 916bf8e6..58b515a2 100644
+--- a/crates/gpui/nsh-platform-gpui/src/text_input.rs
++++ b/crates/gpui/nsh-platform-gpui/src/text_input.rs
+@@ -2205,6 +2205,16 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
+             }
+             false
+         }
++        // Copying with nothing selected in the field copies the text
++        // selected on the page (a selectable text or area), which a press
++        // there leaves the field focused for.
++        _ if is_command(m)
++            && (vk == 0x43 || (vk == VK_INSERT && !m.shift))
++            && !input.model.borrow().has_selection()
++            && page_selected(surface) =>
++        {
++            false
++        }
+         _ if is_command(m) => match vk {
+             0x41 => moved(&|model| model.select_all()),
+             0x43 => {
+@@ -2251,6 +2261,35 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
+     }
+ }
+ 
++/// True when text outside the fields of `surface` is selected: a selectable
++/// text's ([`crate::text`]) or a selectable view's ([`crate::selectable_view`]).
++fn page_selected(surface: &Surface) -> bool {
++    crate::text::has_selection(surface.key())
++        || crate::selectable_view::has_selection(surface.key())
++}
++
++/// A mouse press starts selecting text outside the focused field, which
++/// keeps the keyboard: the field's selection collapses to its caret, so one
++/// selection shows at a time and the copy keys copy the new one.
++pub(crate) fn page_pressed(surface: &Surface) {
++    let Some(view) = focused(surface) else {
++        return;
++    };
++    let Some(input) = input_of(&view) else {
++        return;
++    };
++    {
++        let mut model = input.model.borrow_mut();
++        if !model.has_selection() {
++            return;
++        }
++        let caret = model.caret();
++        model.move_to(caret, false);
++    }
++    report_selection(surface, &view, &input);
++    view.changed();
++}
++
+ /// Copies the selection (never a password's).
+ fn copy(input: &InputState, secure: bool) {
+     let text = {
