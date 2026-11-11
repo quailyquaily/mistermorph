@@ -1,6 +1,6 @@
 ---
 branch: factory/FT93-page-navigation-transitions
-round: 1
+round: 2
 ---
 # Add directional page and bottom-navigation transitions
 
@@ -65,3 +65,6 @@ No P0/P1 findings; moved review/ → ready/ under the configured factory review 
 
 ## lyric · 2026-11-11 21:06
 嗯 先处理 ft93 的问题，然后合 Ft85,91,86,80,92,93 一起。
+
+## factory · 2026-11-11 21:50
+Fix round 2 completed with Claude Code, head 1666f8b4. Fixed both confirmed review notes: retain outgoing Settings section on Android Back; disable outgoing pages system-back handlers via scoped registration. Added five tests, including slowed-slide full-console Android-host regressions; four regression cases fail with fixes reverted. Updated one existing dismissal test to wait for exit. Configured Go gate passed (162 packages); nsh check passed; full Console suite 658/658 passed. First attempt found a missing pinned cached module and an outdated immediate-dismiss assertion; both resolved and full gate rerun. No unpinned installs. Actual Android/emulator, native desktop and live browser visuals not checked. No unrelated P2 fixes. Moved new/ → review/.
