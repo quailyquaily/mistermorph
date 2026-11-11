@@ -13,7 +13,8 @@ import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
-import { BackButton, confirm, Icon, type IconName, MessageDialog, Page } from "../../components/ui";
+import { BackButton, confirm, Icon, type IconName, MessageDialog, Page, PageBar, PageTitle } from "../../components/ui";
+import { IndexColumn } from "../../components/knowledge/parts";
 import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
 import { SettingsCanBrowsePaths } from "../../components/settings/SettingFields";
@@ -151,7 +152,6 @@ export function SettingsPage() {
     }
     mobilePanelVisible.set(false);
   });
-  const barTitle = () => (mobileShowBack() ? s.selectedSection()?.title || t("settings_title") : t("settings_title"));
   const sectionID = () => s.selectedSection()?.id || "";
 
   /* --- the route decides the section --- */
@@ -295,118 +295,112 @@ export function SettingsPage() {
   // The selected row is marked by the highlight alone: Vue's list keeps a dot for it but hides it.
   const sectionSelected = (id: string) => !mobile() && sectionID() === id;
   const selection = createSlidingSelection(() => (mobile() ? null : sectionID()));
-  const indexEdges = createScrollEdges();
   const searchFocused = signal(false);
   let searchInput: InputRef | undefined;
+  // The section list is an index column as Todo's, Contacts' and Skills' are: the page's title in
+  // its head (there is no bar over both columns), the search under it, then the sections.
   const index = () => (
-    <View
-      class={mobile() ? "flex-1" : "w-[310px]"}
+    <IndexColumn
+      title={t("settings_title")}
+      fill={mobile()}
       style={panes.style(0)}
-      accessibilityElementsHidden={panes.hidden(0) || undefined}
-      importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
+      hidden={panes.hidden(0)}
       testID="settings-index"
-    >
-      <View
-        class={`mx-4 mb-2 mt-4 h-[34px] flex-row items-center gap-2 rounded-(--radius) border bg-card px-2.5 ${
-          searchFocused() ? "border-subtle" : "border-line"
-        }`}
-      >
-        <Icon name="PhMagnifyingGlass" size={14} color="muted-foreground" />
-        <Input
-          ref={(node: InputRef) => {
-            searchInput = node;
-          }}
-          value={query()}
-          onChange={({ value }) => query.set(value)}
-          onSubmit={() => {
-            const first = untracked(results)[0];
-            if (first) void goToSetting(first);
-          }}
-          onKeyPress={({ key }) => {
-            if (key === "Escape" && untracked(query)) query.set("");
-          }}
-          onFocus={() => searchFocused.set(true)}
-          onBlur={() => searchFocused.set(false)}
-          placeholder={t("settings_search_placeholder")}
-          accessibilityLabel={t("settings_search_placeholder")}
-          autoCapitalize="none"
-          autoCorrect={false}
-          testID="settings-search"
-          class="flex-1 px-0.5 text-xs text-foreground placeholder:text-placeholder"
-        />
-        <If when={searching()}>
-          <BaseButton
-            onPress={() => {
-              query.set("");
-              searchInput?.focus();
+      search={
+        <View
+          class={`mx-4 mt-4 h-[34px] flex-row items-center gap-2 rounded-(--radius) border bg-card px-2.5 ${
+            searchFocused() ? "border-subtle" : "border-line"
+          }`}
+        >
+          <Icon name="PhMagnifyingGlass" size={14} color="muted-foreground" />
+          <Input
+            ref={(node: InputRef) => {
+              searchInput = node;
             }}
-            accessibilityLabel={t("audit_clear_filter")}
-            class="size-4 items-center justify-center rounded-(--radius) hover:bg-blue/6"
-          >
-            <Icon name="PhX" size={11} color="subtle" />
-          </BaseButton>
-        </If>
-      </View>
-      <Scroll
-        class="flex-1"
-        contentClass="grow"
-        scrollbar={SCROLLBAR}
-        onScroll={indexEdges.handlers.onScroll}
-        onLayout={indexEdges.handlers.onLayout}
-        scrollEventThrottle={indexEdges.handlers.scrollEventThrottle}
-        style={indexEdges.style()}
-      >
-        <View class={`grow pb-4 ${mobile() ? "" : "px-4"}`} onLayout={indexEdges.onContentLayout}>
-          <If
-            when={searching()}
-            else={
-              <View class="relative gap-0.5">
-                <selection.Highlight class="rounded-(--radius) bg-selection" />
-                <Each of={s.settingsSections()} key={(item) => item.id}>
-                  {(item) => <SectionItem item={item()} selected={sectionSelected(item().id)} mobile={mobile()} onLayout={selection.track(item().id)} onPress={() => void selectSection(item().id)} />}
-                </Each>
-              </View>
-            }
-          >
-            <View role="listbox" accessibilityLabel={t("settings_search_placeholder")} class="gap-0.5" testID="settings-search-results">
-              <If when={results().length === 0}>
-                <Text class="my-1 text-xs text-muted-foreground">{t("settings_search_empty")}</Text>
-              </If>
-              <Each of={results()} key={(entry) => entry.id}>
-                {(entry) => (
-                  <BaseButton
-                    role="option"
-                    selected={activeResultID() === entry().id}
-                    onPress={() => void goToSetting(entry())}
-                    accessibilityLabel={entry().title}
-                    class={`gap-1 rounded-(--radius) border border-transparent py-2 pl-3.5 pr-[13px] transition-colors duration-180 hover:bg-hover-soft ${
-                      activeResultID() === entry().id ? "bg-selection" : ""
-                    }`}
-                  >
-                    <Text class="text-sm leading-[15.1px] tracking-tight text-foreground line-clamp-2">{entry().title}</Text>
-                    <If when={searchWhere(entry())}>
-                      <Text class={`text-xs leading-[16.8px] ${activeResultID() === entry().id ? "text-subtle" : "text-muted-foreground"}`}>
-                        {searchWhere(entry())}
-                      </Text>
-                    </If>
-                  </BaseButton>
-                )}
-              </Each>
-            </View>
+            value={query()}
+            onChange={({ value }) => query.set(value)}
+            onSubmit={() => {
+              const first = untracked(results)[0];
+              if (first) void goToSetting(first);
+            }}
+            onKeyPress={({ key }) => {
+              if (key === "Escape" && untracked(query)) query.set("");
+            }}
+            onFocus={() => searchFocused.set(true)}
+            onBlur={() => searchFocused.set(false)}
+            placeholder={t("settings_search_placeholder")}
+            accessibilityLabel={t("settings_search_placeholder")}
+            autoCapitalize="none"
+            autoCorrect={false}
+            testID="settings-search"
+            class="flex-1 px-0.5 text-xs text-foreground placeholder:text-placeholder"
+          />
+          <If when={searching()}>
+            <BaseButton
+              onPress={() => {
+                query.set("");
+                searchInput?.focus();
+              }}
+              accessibilityLabel={t("audit_clear_filter")}
+              class="size-4 items-center justify-center rounded-(--radius) hover:bg-blue/6"
+            >
+              <Icon name="PhX" size={11} color="subtle" />
+            </BaseButton>
           </If>
         </View>
-        <MobileBarSpacer />
-      </Scroll>
-    </View>
+      }
+    >
+      <If
+        when={searching()}
+        else={
+          <View class="relative gap-0.5">
+            <selection.Highlight class="rounded-(--radius) bg-selection" />
+            <Each of={s.settingsSections()} key={(item) => item.id}>
+              {(item) => <SectionItem item={item()} selected={sectionSelected(item().id)} mobile={mobile()} onLayout={selection.track(item().id)} onPress={() => void selectSection(item().id)} />}
+            </Each>
+          </View>
+        }
+      >
+        <View role="listbox" accessibilityLabel={t("settings_search_placeholder")} class="gap-0.5" testID="settings-search-results">
+          <If when={results().length === 0}>
+            <Text class="my-1 text-xs text-muted-foreground">{t("settings_search_empty")}</Text>
+          </If>
+          <Each of={results()} key={(entry) => entry.id}>
+            {(entry) => (
+              <BaseButton
+                role="option"
+                selected={activeResultID() === entry().id}
+                onPress={() => void goToSetting(entry())}
+                accessibilityLabel={entry().title}
+                class={`gap-1 rounded-(--radius) border border-transparent py-2 pl-3.5 pr-[13px] transition-colors duration-180 hover:bg-hover-soft ${
+                  activeResultID() === entry().id ? "bg-selection" : ""
+                }`}
+              >
+                <Text class="text-sm leading-[15.1px] tracking-tight text-foreground line-clamp-2">{entry().title}</Text>
+                <If when={searchWhere(entry())}>
+                  <Text class={`text-xs leading-[16.8px] ${activeResultID() === entry().id ? "text-subtle" : "text-muted-foreground"}`}>
+                    {searchWhere(entry())}
+                  </Text>
+                </If>
+              </BaseButton>
+            )}
+          </Each>
+        </View>
+      </If>
+    </IndexColumn>
   );
 
   const contentKey = () =>
     `${sectionID()}${s.agentSettingsUnsupported() && ["agent", "routes", "tools", "mcp"].includes(sectionID()) ? ":unsupported" : ""}`;
   // The section pane keeps its section while it slides out (Back may select another as it goes).
   const panelKey = panes.held(1, contentKey);
+  // Its bar's title, kept the same way while the section slides out.
+  const heldBarTitle = panes.held(1, () => s.selectedSection()?.title || t("settings_title"));
 
-  // The section's own scroll (`.settings-panel-scroll`): 16pt from the top, the right and the
-  // bottom, none at the left, where the section list is the edge; 16pt both sides on phones.
+  // The section's own scroll (`.settings-panel-scroll`). On a desktop its cards are framed as a
+  // detail card beside an index is (Contacts, Skills): 8pt from the top, the right and the bottom,
+  // none at the left, where they meet the section list's column, whose rows then sit its 16pt
+  // gutter from them as from the sidebar. On phones, 12pt both sides under the section's bar.
   // Hidden content at an edge fades out (v-scroll-edges).
   const panelEdges = createScrollEdges();
   const content = () => (
@@ -428,7 +422,7 @@ export function SettingsPage() {
     >
       <View
         onLayout={panelEdges.onContentLayout}
-        class={`grow gap-4 pt-4 ${mobile() ? "px-3" : "pl-0 pr-4"} ${s.saveBarVisible() ? "pb-[88px]" : "pb-4"}`}
+        class={`grow gap-4 ${mobile() ? "px-3 pt-4" : "pl-0 pr-2 pt-2"} ${s.saveBarVisible() ? "pb-[88px]" : mobile() ? "pb-4" : "pb-2"}`}
       >
         <SettingsRestartBanner
           pending={s.restartState.pending}
@@ -460,34 +454,36 @@ export function SettingsPage() {
       <SettingsCanBrowsePaths.Provider value={() => s.canBrowsePaths()}>
         <SecretPicker.Provider value={{ enabled: () => s.secretRevealLocal() }}>
           <RevealContext.Provider value={reveal}>
-            <Page
-              title={t("settings_title")}
-              scroll={false}
-              testID="settings-page"
-              leading={
-                <View class="flex-row items-center gap-2">
-                  <If when={mobileShowBack()}>
-                    <BackButton title={t("settings_title")} onPress={() => mobilePanelVisible.set(false)} testID="settings-back" />
-                  </If>
-                  <Text class="text-xl leading-[22.8px] tracking-[-0.03em] text-foreground line-clamp-1" role="header">
-                    {barTitle()}
-                  </Text>
-                </View>
-              }
-            >
+            {/* No bar over both columns: the list's column has the page's title in its head, and on
+                phones the section has a bar of its own, with Back (it slides with the section). */}
+            <Page hideBar scroll={false} testID="settings-page">
               <View class="flex-1">
                 <View class={`flex-1 flex-row ${mobile() ? "" : "gap-1"}`}>
-                  <If when={panes.shown(0, showIndexPane())}>{index()}</If>
-                  <If when={panes.shown(1, showPanelPane())}>
-                    <View
-                      class="flex-1"
-                      style={panes.style(1)}
-                      accessibilityElementsHidden={panes.hidden(1) || undefined}
-                      importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
-                    >
-                      {content()}
-                    </View>
-                  </If>
+                  {/* The list and the section meet with no gap (the section's cards are the list's
+                      right edge); the side panes keep the workbench's 4pt gap. */}
+                  <View class="flex-1 flex-row">
+                    <If when={panes.shown(0, showIndexPane())}>{index()}</If>
+                    <If when={panes.shown(1, showPanelPane())}>
+                      <View
+                        class="flex-1"
+                        style={panes.style(1)}
+                        accessibilityElementsHidden={panes.hidden(1) || undefined}
+                        importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
+                      >
+                        <If when={mobile()}>
+                          <PageBar
+                            leading={
+                              <View class="flex-1 flex-row items-center gap-2">
+                                <BackButton title={t("settings_title")} onPress={() => mobilePanelVisible.set(false)} testID="settings-back" />
+                                <PageTitle text={heldBarTitle()} />
+                              </View>
+                            }
+                          />
+                        </If>
+                        {content()}
+                      </View>
+                    </If>
+                  </View>
                   <If when={showPanelPane() && !mobile()}>
                     <PaneOutlet target={pane} />
                   </If>
