@@ -36,3 +36,15 @@ Tests: required gofmt/vet/go test command independently passed. nsh check passed
 Installs: none; reused existing browser tooling. Not checked: actual Android APK/device, native desktop window, Firefox, Safari or iOS. Android behavior was exercised only by the headless platform harness. Duplicate retries are guarded in code; a held-open request was not tested by the harness.
 
 Initial branch push could not obtain credentials without a repository path; command-scoped credential.useHttpPath=true fixed the retry. No repository credential settings changed.
+
+## factory · review · 2026-11-11 14:07
+head: f9609268925d329a36fbbd617e70ca818e223a6d
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/chat/chatController.ts:2632: retryChatLoad permits a history reload during sending, replacing optimistic messages. Verified example: topic-1 history loads while /topics returns 503; send “One more thing” with POST held open, then press the enabled Refresh strip button after /topics recovers. The sent message disappears and remains absent after task-2 is accepted. Guard retryChatLoad with sending, include sending in chatLoadBusy, and add a held-open-send regression test.
+
+Reviewed by Claude Code against origin/master...HEAD. No P0/P1 findings; moved review/ → ready/ under the factory severity rule. The P2 above remains for owner attention before shipping. Branch merges cleanly with master. No source edits or commits made during review.
+
+Validation: required gofmt/vet/go test command passed; nsh check passed; nsh test --web-host tests/noHost.js passed (619 tests, 0 failures). Additional throwaway probes verified the sending/Refresh defect and single-request guarding during a held-open retry. Tests used an isolated HOME. Installs: none.
+
+Limits: no real-browser visual review, actual Android APK/device, native desktop, Firefox, Safari or iOS check in this review; Android was headless harness only. No linked GitHub issues or PRs in the item.
