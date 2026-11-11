@@ -118,7 +118,10 @@ export interface BesidePressOptions {
   defer?: (run: () => void) => void;
 }
 
-/** The handlers of the view around an Editor: `layout` its width, `pressDown` / `press` / `mouseMove` its events. */
+/**
+ * The handlers of the view around an Editor: `layout` its width, `pressDown` / `press` / `mouseMove` /
+ * `mouseLeave` its events.
+ */
 export interface BesidePresses {
   layout(width: number): void;
   /** The desktops: a mouse press went down beside the rows. */
@@ -127,6 +130,8 @@ export interface BesidePresses {
   press(e: PressEvent): Promise<void>;
   /** The desktops: the mouse moved over the editor (a drag begun beside the rows selects). */
   mouseMove(e: MouseEvent): Promise<void>;
+  /** The desktops: the mouse left the editor (a drag begun beside the rows selects to there and ends). */
+  mouseLeave(e: MouseEvent): Promise<void>;
 }
 
 export function createBesidePresses(options: BesidePressOptions): BesidePresses {
@@ -134,10 +139,17 @@ export function createBesidePresses(options: BesidePressOptions): BesidePresses 
   let width = 0;
   let pressSeq = 0;
   let dragSeq = 0;
-  // A mouse press beside the rows is down (until it ends in place or the mouse moves without the
-  // button), and where its drag selects from.
+  // A mouse press beside the rows is down (until it ends in place, the mouse leaves the editor or
+  // moves without the button), and where its drag selects from. A button released outside the
+  // editor is never seen, so the drag ends as the mouse leaves: else a later drag pressed outside and
+  // moved in would go on from the stale anchor, and typing would replace what that selected. (Not as
+  // the press ends: the web ends it, `onPressUp`, once the pointer moves 10pt, at the drag's start.)
   let mouseDown = false;
   let dragAnchor: EditorPosition | null = null;
+  const release = () => {
+    mouseDown = false;
+    dragAnchor = null;
+  };
 
   const pointAt = async (editor: PressedEditor, point: { x: number; y: number }) => {
     const caretAt: CaretAt = async (position) => {
@@ -154,6 +166,8 @@ export function createBesidePresses(options: BesidePressOptions): BesidePresses 
     // The scroll bar along the right edge keeps its presses (a drag of its thumb scrolls).
     if (options.desktop && width > 0 && e.position.x >= width - SCROLLBAR_WIDTH) return;
     const seq = ++pressSeq;
+    // A move or leave of the drag before still finding its place selects nothing now.
+    dragSeq += 1;
     mouseDown = options.desktop;
     dragAnchor = null;
     const [position, selections] = await Promise.all([pointAt(editor, e.position), editor.selections()]);
@@ -178,21 +192,29 @@ export function createBesidePresses(options: BesidePressOptions): BesidePresses 
     },
     pressDown: (e) => (options.desktop ? place(e) : Promise.resolve()),
     async press(e) {
-      mouseDown = false;
-      dragAnchor = null;
+      release();
       if (!options.desktop) await place(e);
     },
     async mouseMove(e) {
-      if (e.pressedButton !== "left") {
-        mouseDown = false;
-        dragAnchor = null;
-      }
+      if (e.pressedButton !== "left") release();
       const editor = options.editor();
       if (!dragAnchor || !editor) return;
       const seq = ++dragSeq;
       const head = await pointAt(editor, e.position);
       if (seq !== dragSeq || !dragAnchor) return;
       editor.setSelections([{ anchor: dragAnchor, head }]);
+    },
+    async mouseLeave(e) {
+      const anchor = dragAnchor;
+      release();
+      // Dragged out with the button held: the selection reaches the edge it left by (the start or
+      // end of a row, the text's end below it), as the last moves inside may have fallen short.
+      const editor = options.editor();
+      if (!anchor || e.pressedButton !== "left" || !editor) return;
+      const seq = ++dragSeq;
+      const head = await pointAt(editor, e.position);
+      if (seq !== dragSeq) return;
+      editor.setSelections([{ anchor, head }]);
     },
   };
 }

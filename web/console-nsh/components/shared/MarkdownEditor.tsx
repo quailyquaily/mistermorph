@@ -207,6 +207,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             onPressDown={desktop ? (e) => void beside.pressDown(e) : undefined}
             onPress={(e) => void beside.press(e)}
             onMouseMove={desktop ? (e) => void beside.mouseMove(e) : undefined}
+            onMouseLeave={desktop ? (e) => void beside.mouseLeave(e) : undefined}
             testID={props.testID ? `${props.testID}-frame` : undefined}
           >
             <Editor

@@ -197,6 +197,61 @@ test("a drag begun beside the text selects, until the button is up", async () =>
   expect(e.log).toEqual(["focus", "select 2:0-2:0"]);
 });
 
+/**
+ * Delivers `name` to `presses` as the view around the Editor hears it: a view that does not listen
+ * to an event (`presses` has no handler for it) hears nothing.
+ */
+const hear = (presses: object, name: "mouseLeave", e: MouseEvent) =>
+  (presses as Partial<Record<string, (e: MouseEvent) => unknown>>)[name]?.(e);
+
+test("a drag begun beside the text and released outside the editor does not resume later", async () => {
+  // Below Zeta, dragged out of the editor and released there (the view hears neither the release
+  // nor the press after it); then pressed outside and dragged in over "Delta eps|ilon".
+  const text = "Delta epsilon\n\nZeta";
+  const e = editor(text);
+  const presses = createBesidePresses({ editor: () => e.ref as any, desktop: true });
+  presses.layout(600);
+  await presses.pressDown(press({ x: 300, y: 300 }));
+  await presses.mouseMove(move({ x: 300, y: 320 }, "left"));
+  await hear(presses, "mouseLeave", move({ x: 300, y: 640 }, "left"));
+  expect(e.log.slice(0, 2)).toEqual(["focus", "select 2:4-2:4"]);
+  e.log.length = 0;
+  await presses.mouseMove(move(e.point(0, 9), "left"));
+  await presses.mouseMove(move(e.point(0, 10), "left"));
+  // Nothing selected: the rows' own drag (or none) is the user's, and typing replaces nothing.
+  expect(e.log).toEqual([]);
+});
+
+test("a drag begun beside the text ends where it leaves the editor", async () => {
+  const text = "Alpha beta gamma\n\nDelta epsilon";
+  // Leaving ends the drag, selecting to the edge it left by; coming back in with the button held
+  // selects no more.
+  const e = editor(text);
+  const presses = createBesidePresses({ editor: () => e.ref as any, desktop: true });
+  presses.layout(600);
+  await presses.pressDown(press({ x: 300, y: e.point(2, 0).y }));
+  await presses.mouseMove(move(e.point(0, 3), "left"));
+  await presses.mouseLeave(move({ x: -6, y: e.point(0, 0).y }, "left"));
+  expect(e.log).toEqual(["focus", "select 2:13-2:13", "select 2:13-0:3", "select 2:13-0:0"]);
+  e.log.length = 0;
+  await presses.mouseMove(move(e.point(2, 4), "left"));
+  expect(e.log).toEqual([]);
+  // Leaving without a drag selects nothing; a drag inside the editor, released there, still selects.
+  await presses.mouseLeave(move({ x: -6, y: e.point(0, 0).y }, null));
+  await presses.pressDown(press({ x: 4, y: e.point(2, 0).y }));
+  await presses.mouseMove(move(e.point(0, 6), "left"));
+  await presses.press(press(e.point(0, 6)));
+  await presses.mouseMove(move(e.point(0, 2), "left"));
+  expect(e.log).toEqual(["focus", "select 2:0-2:0", "select 2:0-0:6"]);
+  // A move or leave still finding its place when a new press goes down selects nothing after it.
+  e.log.length = 0;
+  await presses.pressDown(press({ x: 4, y: e.point(2, 0).y }));
+  const leave = presses.mouseLeave(move({ x: -6, y: e.point(0, 0).y }, "left"));
+  const down = presses.pressDown(press({ x: 300, y: 300 }));
+  await Promise.all([leave, down]);
+  expect(e.log).toEqual(["focus", "select 2:0-2:0", "focus", "select 2:13-2:13"]);
+});
+
 test("on touch screens a tap places the caret after the web's compatibility mousedown", async () => {
   const text = "Hello";
   const e = editor(text);

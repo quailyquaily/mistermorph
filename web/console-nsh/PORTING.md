@@ -137,6 +137,10 @@ Headless tests prove behaviour, not the look.
   caret, taking presses on the desktops, so the second click of a double click and a drag begun at
   the caret go to it. `MarkdownEditor` puts a pressable view around the Editor that places the caret
   for those presses (`components/shared/editorPresses.ts`); a new Editor elsewhere needs the same.
+  A drag that view begins must also end on `onMouseLeave`, not only on `onPress` and button-less
+  moves: a button released outside is never seen, and a later drag pressed outside and moved in
+  would resume the old one. `onPressUp` is no release signal: on the web a press that moves 10pt
+  ends there (`onPressUp` without `onPress`), at the start of every drag.
 - `role="none"` on a pressable view is still a `button` on the web (0.4.0): give a pressable that is
   not a control `role="group"`.
 - Headless screenshots catch compositor fades part-way (a tooltip looks half transparent): run a
