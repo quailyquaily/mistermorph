@@ -39,8 +39,8 @@ function expectHead(all: Record<string, Frame>, inset: number): number {
 // width: the window; inset: where the head's last button ends, in from the index's right edge;
 // add: whether Add is in the head (a desktop).
 const CASES = [
-  { name: "a desktop", width: 1280, inset: 29, add: true },
-  { name: "a tablet-wide desktop", width: 1024, inset: 29, add: true },
+  { name: "a desktop", width: 1280, inset: 16, add: true },
+  { name: "a tablet-wide desktop", width: 1024, inset: 16, add: true },
   { name: "a phone", width: 390, inset: 12, add: false },
   { name: "a tablet-wide phone layout", width: 800, inset: 14, add: false },
 ];
@@ -58,6 +58,9 @@ for (const item of CASES) {
       expect(Math.abs(marker.w - 16)).toBeLessThan(0.5);
       expect(Math.abs(centerX(marker) - axis)).toBeLessThan(0.5);
       expect(right(marker)).toBeLessThan(right(all.index));
+      // On a desktop the rows end 16pt in, as the topic and contact rows do, where Add ends: the
+      // slot ends the row's 10pt padding and 1pt border inside that.
+      if (item.add) expect(Math.abs(right(all.index) - right(marker) - (16 + 1 + 10))).toBeLessThan(0.5);
       // The title column stops short of its marker (the row's 10pt gap) and keeps its room.
       const title = all[`title-${id}`];
       expect(right(title)).toBeLessThan(marker.x - 9.5);

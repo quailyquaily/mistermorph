@@ -652,7 +652,9 @@ export function MemoriesPage() {
               style={
                 isMobile()
                   ? { paddingLeft: gutterX(), paddingRight: gutterX(), paddingTop: 16 }
-                  : { paddingLeft: 20, paddingRight: gutterX(), paddingTop: 18, marginLeft: 4 }
+                  : // None at the left: the cards meet the index's column, whose rows then sit its
+                    // 16pt gutter from them as from the sidebar on the other side.
+                    { paddingRight: gutterX(), paddingTop: 18 }
               }
               testID="memories-main"
             >

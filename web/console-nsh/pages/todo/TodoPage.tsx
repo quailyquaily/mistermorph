@@ -120,10 +120,12 @@ function EditorPane(props: { state: TodoState; mobile?: boolean }) {
     return "placeholder";
   };
   // In the calendar's side column the card is a panel inset 8 all round and scrolls within the
-  // column; beside the list it is a framed box (margin 8 8 8 16), on phones 16 all round.
+  // column; beside the list it is a framed box inset 8 at the top, right and bottom and none at the
+  // left, so its frame meets the list's column as the sidebar's frame does on the other side, and
+  // the rows sit the list's 16pt gutter from each (Contacts likewise); on phones 16 all round.
   const panel = () => !props.mobile && state.calendarView();
   const margin = () =>
-    props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8, marginLeft: 16 };
+    props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8 };
   return (
     <If when={mode() !== "placeholder"} else={<Placeholder state={state} mobile={props.mobile} />}>
       <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="min-h-full">
@@ -203,8 +205,9 @@ export function TodoPage() {
           <If
             when={state.calendarView()}
             else={
-              // The list's column (310) and the editor beside it, 4 apart (the workbench's gap).
-              <View class="flex-1 flex-row gap-1">
+              // The list's column (310) and the editor beside it, with no gap: the editor's frame
+              // is the list column's right edge.
+              <View class="flex-1 flex-row">
                 <View style={{ width: TODO_INDEX_WIDTH }}>
                   <TodoIndex state={state} />
                 </View>

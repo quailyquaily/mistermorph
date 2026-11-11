@@ -1071,7 +1071,9 @@ export function AuditPage() {
                   />
                 </If>
               }
-              style={isMobile() ? { margin: 12 } : { marginTop: 8, marginRight: 8, marginBottom: 8, marginLeft: 16 }}
+              // No left margin: the ledger's frame meets the index's column, so the index's rows sit its
+              // 16pt gutter from the frame as from the sidebar on the other side.
+              style={isMobile() ? { margin: 12 } : { marginTop: 8, marginRight: 8, marginBottom: 8 }}
               flush
               testID="audit-ledger"
             >

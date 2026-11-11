@@ -516,7 +516,7 @@ export function ContactsPage() {
                   <DetailCard
                     testID="contact-detail"
                     title={displayName(contact())}
-                    class={isMobile() ? (windowSize().width <= 620 ? "m-3" : "m-4") : "mb-2 ml-5 mr-2 mt-2"}
+                    class={isMobile() ? (windowSize().width <= 620 ? "m-3" : "m-4") : "mb-2 mr-2 mt-2"}
                     meta={`${kindText(contact())} · ${channelLabel(contact().channel)}`}
                     actions={
                       <If when={!editing()}>

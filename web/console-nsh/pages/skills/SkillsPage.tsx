@@ -748,7 +748,7 @@ export function SkillsPage() {
                   <DetailCard
                     testID="skill-detail"
                     title={skill().name}
-                    class={isMobile() ? "mx-3 mt-2 mb-4" : "mb-2 ml-5 mr-2 mt-2"}
+                    class={isMobile() ? "mx-3 mt-2 mb-4" : "mb-2 mr-2 mt-2"}
                     actions={<DropdownMenu items={skillMenu()} trigger={<MoreTrigger label={t("skills_more")} testID="skill-actions" />} />}
                   >
                     <If when={skill().description}>

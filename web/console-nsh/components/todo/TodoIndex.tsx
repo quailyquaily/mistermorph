@@ -34,16 +34,18 @@ export const TODO_HEAD_HEIGHT = 57;
 // middle of a 16pt slot at the row's end) is centred under that icon: the axis lies the same
 // distance in from the index's right edge. On a phone the head keeps the pages' phone gutter and
 // the rows, edge to edge, take their right padding from the axis (gutter and half a button, less
-// half the slot and the 1pt border). On a desktop the rows keep the list's 26pt gutter and 13pt
-// padding (the marks' axis 48pt in) and the head's right padding puts the icon there (29pt).
+// half the slot and the 1pt border). On a desktop the rows keep the list's 16pt gutter (as wide as
+// the topic and contact rows) and 10pt padding (the marks' axis 35pt in, their right edge 15.5pt
+// inside the row's, as a topic's), and the head's right padding puts the icon there (16pt): Add
+// ends where the rows do.
 // Centres, not edges: the mark is 7pt, the button 38.
 /** The head's buttons (`Button` sm, icon only; the calendar toggle is BAR_BUTTON_SIZE, as the phone bars' back arrows). */
 export const TODO_HEAD_BUTTON = 38;
 /** The marker's slot at an item's end (RunMarker), the mark in its middle. */
 export const TODO_MARKER_SLOT = 16;
 const ROW_BORDER = 1;
-const DESKTOP_LIST_GUTTER_RIGHT = 26;
-const DESKTOP_ROW_PADDING_RIGHT = 13;
+const DESKTOP_LIST_GUTTER_RIGHT = 16;
+const DESKTOP_ROW_PADDING_RIGHT = 10;
 
 /** How far the axis the head's last icon and the items' markers are centred on lies in from the index's right edge. */
 export function todoMarkerAxisInset(mobile: boolean): number {
@@ -150,7 +152,7 @@ function IndexItem(props: {
 /** A group heading (workspace-sidebar-divider): a small mono label, then a rule that fades out. */
 function Divider(props: { label: string; mobile?: boolean }) {
   return (
-    <View class={`flex-row items-center gap-2.5 pb-1 pt-2.5 ${props.mobile ? "px-3.5" : "ml-4 mr-[26px] px-3.5"}`} role="header">
+    <View class={`flex-row items-center gap-2.5 pb-1 pt-2.5 ${props.mobile ? "px-3.5" : "mx-4 px-3.5"}`} role="header">
       <Text class="font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[1.32px] text-muted-foreground line-clamp-1">
         {props.label}
       </Text>
@@ -227,12 +229,12 @@ export function TodoIndex(props: {
           style={{ paddingBottom: props.mobile ? 84 : gutterY() }}
         >
           <If when={state.loading() || state.heartbeatLoading()}>
-            <View class={`gap-2 ${props.mobile ? "pt-4" : "pl-4 pr-[26px] pt-4"}`} accessibilityLabel={t("todo_heartbeat_loading")}>
+            <View class={`gap-2 ${props.mobile ? "pt-4" : "px-4 pt-4"}`} accessibilityLabel={t("todo_heartbeat_loading")}>
               <Each of={[0, 1, 2]}>{() => <View class="h-15 animate-pulse rounded-(--radius) bg-muted" />}</Each>
             </View>
           </If>
 
-          <View class={`relative ${props.mobile ? "pt-4" : "pl-4 pr-[26px] pt-4"}`}>
+          <View class={`relative ${props.mobile ? "pt-4" : "px-4 pt-4"}`}>
             <heartbeatSelection.Highlight class="rounded-(--radius) bg-selection" />
             <IndexItem
               title={t("todo_heartbeat_title")}
@@ -259,7 +261,7 @@ export function TodoIndex(props: {
               when={state.tasks().length > 0}
               else={
                 <If when={!state.loading()}>
-                  <View class={props.mobile ? "" : "pl-4 pr-[26px]"}>
+                  <View class={props.mobile ? "" : "px-4"}>
                     <BaseButton
                       onPress={state.addTask}
                       accessibilityLabel={t("todo_action_add")}
@@ -282,7 +284,7 @@ export function TodoIndex(props: {
                 </If>
               }
             >
-              <View class={`relative gap-0.5 ${props.mobile ? "" : "pl-4 pr-[26px]"}`} role={props.mobile ? undefined : "list"}>
+              <View class={`relative gap-0.5 ${props.mobile ? "" : "px-4"}`} role={props.mobile ? undefined : "list"}>
                 <taskSelection.Highlight class="rounded-(--radius) bg-selection" />
                 <Each of={state.orderedTasks()} key={(task) => task._key}>
                   {(task) => (

@@ -131,7 +131,8 @@ export const topicTitleClass = (mobile: boolean) =>
 
 // The head's last button (New, or the tag toggle where a phone's New floats over the list) ends the
 // right inset in from the sidebar's right edge: on a phone the pages' phone gutter (`gutterX`), the
-// head's own padding; on a desktop 30pt, the head's right padding. Its 14pt icon sits in the middle
+// head's own padding; on a desktop the list's 16pt gutter, so the button ends where the rows do.
+// Its 14pt icon sits in the middle
 // of its 38pt square, and every row's 7pt status mark is centred under that icon: the marks' axis
 // lies the inset and half a button in from the edge. A row's right padding is that axis less half
 // a mark, the row's 1pt border and, on a desktop, the list's 16pt gutter (phone rows run edge to
@@ -143,7 +144,7 @@ export const TOPIC_LIST_GUTTER = 16;
 export const TOPIC_HEAD_BUTTON = 38;
 /** A row's status mark (StatusDot). */
 export const TOPIC_STATUS_SIZE = 7;
-const DESKTOP_RIGHT_INSET = 30;
+const DESKTOP_RIGHT_INSET = TOPIC_LIST_GUTTER;
 
 /** How far the head's last button ends in from the sidebar's right edge. */
 export function topicRightInset(mobile: boolean): number {
