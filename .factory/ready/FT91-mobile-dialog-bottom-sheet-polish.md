@@ -34,3 +34,14 @@ Installs: none; no manifests or config keys changed.
 Not checked: physical Android/emulator, real iOS, desktop native window, software keyboard and device touch/scroll/swipe. Headless platform tests and helper tests do not establish those visual/device behaviors.
 Review attention: coder observed pre-existing Chrome footer disappearance on conditional action toggling (no current consumers), long labels clipped at equal half widths, and pre-existing small-dialog side gutters. Verify these limits and native safe-area ownership before shipping.
 Branch push initially lacked credential repository path; command-local credential.useHttpPath=true succeeded on retry. Moved new/ → review/ for round 1.
+
+## factory · review · 2026-11-11 19:00
+head: d2ad3e96cf3fdbad29bf3ddf19230e641c101e00
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/ui.tsx:1439: closing is not reset after fully hiding, so a later reopen incorrectly resumes the old exit offset. Verified Android-host probe: grow sheet from 143pt to 527pt while closed, reopen => first frame y=143 exposes 384pt immediately; closing on desktop then reopening at mobile width gives y=0 with no slide. Reset closing after completed/immediate hide, or distinguish still-shown exits; add both reopen regressions.
+- [P3] web/console-nsh/components/ui.tsx:1592: untracked memoization snapshots a Modal footer getter, dropping top-level conditional element changes. Verified swap from Only to Cancel/Save stays Only on this head, while master updates correctly. Evaluate the footer through a reactive function. No current caller changes top-level footer elements; existing button reactive props still work.
+Validation: Claude Code reviewed origin/master...HEAD; no P0/P1. Required gofmt, go vet ./... and go test ./... passed (162 packages, GATE_EXIT=0). nsh check passed; nsh test --web-host tests/noHost.js passed 633/633, including 13 dialog-sheet tests. Targeted regression probes reproduced the above notes; these are additional review probes, not failures of the required suite. Tests used isolated HOME directories. Worktree unchanged. Merge-tree check against master succeeded.
+Installs: no new unpinned tools or dependencies reported; existing Go cache and nsh 0.4.0 used, with routine nsh cache creation.
+Not checked: physical Android/emulator, real iOS, native desktop, real software keyboard and device touch/scroll/swipe. Host probes do not establish device visual behavior.
+Moved review/ → ready/ under the factory rule (no P0/P1); owner should inspect the P2 reopen-motion defect before shipping. No linked issue or PR.
