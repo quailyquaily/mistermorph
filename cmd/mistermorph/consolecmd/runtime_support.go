@@ -39,6 +39,7 @@ func buildConsoleRegistriesFromReader(ctx context.Context, logger *slog.Logger, 
 
 func consoleEngineToolsConfigFromReader(r interface {
 	GetBool(string) bool
+	GetString(string) string
 	GetStringSlice(string) []string
 }) agent.EngineToolsConfig {
 	if r == nil {
@@ -52,6 +53,7 @@ func consoleEngineToolsConfigFromReader(r interface {
 			"codex":  r.GetBool("tools.coder.bypass_approvals.codex"),
 			"claude": r.GetBool("tools.coder.bypass_approvals.claude"),
 		},
+		WorkerNameSet: agent.NormalizeWorkerNameSet(r.GetString("tools.agent_name_set")),
 	}
 }
 

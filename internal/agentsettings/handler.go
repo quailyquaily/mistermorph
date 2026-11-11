@@ -103,6 +103,9 @@ type ToolsSettingsPayload struct {
 	PowerShell    ToolEnabledPayload `json:"powershell"`
 	ImageGenerate ToolEnabledPayload `json:"image_generate"`
 	ImageEdit     ToolEnabledPayload `json:"image_edit"`
+	// AgentNameSet is tools.agent_name_set: the set new spawn and coder workers are named
+	// from, shared by both tools. A missing or unknown stored value reads as the default.
+	AgentNameSet string `json:"agent_name_set"`
 }
 
 type ToolsSettingsUpdate struct {
@@ -120,6 +123,7 @@ type ToolsSettingsUpdate struct {
 	PowerShell    *ToolEnabledUpdate `json:"powershell,omitempty"`
 	ImageGenerate *ToolEnabledUpdate `json:"image_generate,omitempty"`
 	ImageEdit     *ToolEnabledUpdate `json:"image_edit,omitempty"`
+	AgentNameSet  *string            `json:"agent_name_set,omitempty"`
 }
 
 type SkillsSettingsPayload struct {

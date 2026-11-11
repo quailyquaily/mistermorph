@@ -6332,6 +6332,13 @@ components:
           $ref: '#/components/schemas/AgentsettingsToolEnabledPayload'
         skill_install:
           $ref: '#/components/schemas/AgentsettingsToolEnabledPayload'
+        agent_name_set:
+          type: string
+          enum:
+          - scientists
+          - musicians
+          - artists
+          description: tools.agent_name_set, the name set of new spawn and coder workers. A missing or unknown stored value reads as scientists.
       x-source: internal/agentsettings/handler.go:ToolsSettingsPayload
       required:
       - write_file
@@ -6348,6 +6355,7 @@ components:
       - image_edit
       - skill_install_preview
       - skill_install
+      - agent_name_set
     AgentsettingsToolEnabledPayload:
       type: object
       properties:
@@ -6654,6 +6662,10 @@ components:
           $ref: '#/components/schemas/AgentsettingsToolEnabledUpdate'
         skill_install:
           $ref: '#/components/schemas/AgentsettingsToolEnabledUpdate'
+        agent_name_set:
+          type: string
+          nullable: true
+          description: One of scientists, musicians or artists (any case); anything else is rejected with 400.
       x-source: internal/agentsettings/handler.go:ToolsSettingsUpdate
     AgentsettingsToolEnabledUpdate:
       type: object
