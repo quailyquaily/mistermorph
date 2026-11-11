@@ -42,11 +42,20 @@ type TokenName = Parameters<typeof token>[0];
 /* ---------- icons and marks ---------- */
 
 /** A Phosphor icon (regular weight, or its fill weight with `filled` where there is one), tinted with a theme token. */
-export function Icon(props: { name: IconName; size?: number; color?: TokenName; class?: string; filled?: boolean }) {
+export function Icon(props: {
+  name: IconName;
+  size?: number;
+  color?: TokenName;
+  class?: string;
+  filled?: boolean;
+  /** Its frame in its parent as it lays out (layout probes in tests). */
+  onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
+}) {
   return (
     <Image
       src={(props.filled && FILLED_ICONS[props.name]) || ICONS[props.name]}
       class={props.class}
+      onLayout={props.onLayout}
       accessibilityElementsHidden
       style={{
         width: props.size ?? 16,

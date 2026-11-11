@@ -2,9 +2,9 @@
 // controller, as wide as the chat page makes it (314pt with its 4pt right padding where New is in
 // the head, the whole width in a phone's split mode), with topics in every activity state (running,
 // pending, unread, none), long titles, a TODO run with its model line and a foldable group. The
-// frames its head's last button, status marks and titles lie at are read out beside it. The modes
-// along the top: `plus` (New in the head), `split` (a phone's split mode: New floats over the list,
-// the tag toggle ends the head) and `empty` (split, loading, no topics).
+// frames its head's last button and that button's icon, status marks and titles lie at are read
+// out beside it. The modes along the top: `plus` (New in the head), `split` (a phone's split mode:
+// New floats over the list, the tag toggle ends the head) and `empty` (split, loading, no topics).
 import { batch, mount, signal, Text, View } from "nsh";
 import { isMobile } from "../../lib/shell";
 import { topicIcon } from "../../lib/core/topic-metadata.js";

@@ -28,6 +28,7 @@ import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { listTitleSize } from "../../components/frame/metrics";
 import { createPullSearch } from "../../components/shared/pullSearch";
 import { createTopicDrag } from "./topicDrag";
+import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../../components/shared/partProbe";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
 // a blue tint. While TODO runs are running, the TODO toggle's alarm clock has its hands turning, as
@@ -46,8 +47,9 @@ export function ViewToggle(props: {
   testID: string;
   /** Its centre along the head, for the head's sag. */
   onCenter?: (x: number) => void;
-  /** Its frame in the head (the sidebar's `onPartLayout`). */
-  onFrame?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
+  /** Its frame in the head, and its icon's in it (the sidebar's `onPartLayout`). */
+  onFrame?: (event: LayoutBounds) => void;
+  onIconFrame?: (event: LayoutBounds) => void;
   /** Hears how to read the alarm clock's hands (tests). */
   clockProbe?: (read: ClockProbe) => void;
 }) {
@@ -75,7 +77,7 @@ export function ViewToggle(props: {
           probe={props.clockProbe}
         />
       ) : (
-        <Icon name={props.icon} size={14} color={color()} />
+        <Icon name={props.icon} size={14} color={color()} onLayout={props.onIconFrame} />
       )}
     </TipButton>
   );
@@ -125,35 +127,46 @@ export const TOPIC_GROUP_TOGGLE_CLASS =
 export const topicTitleClass = (mobile: boolean) =>
   `${listTitleSize(mobile)} ${mobile ? "leading-[22px]" : "leading-5"} tracking-[-0.025em] text-foreground`;
 
-// The head's last button (New, or the tag toggle where a phone's New floats over the list) and every
-// row's status mark end the same distance in from the sidebar's right edge: the right inset. On a
-// phone it is the pages' phone gutter (`gutterX`), the head's own padding; the rows run edge to
-// edge, so their right padding is the inset less their 1pt border. On a desktop it is the list's
-// 16pt gutter, the border and the row's 13pt padding (30pt), which the head takes as its right
-// padding. The edges are the buttons' outer edges (their hover fill), not their icons.
+// The head's last button (New, or the tag toggle where a phone's New floats over the list) ends the
+// right inset in from the sidebar's right edge: on a phone the pages' phone gutter (`gutterX`), the
+// head's own padding; on a desktop 30pt, the head's right padding. Its 14pt icon sits in the middle
+// of its 38pt square, and every row's 7pt status mark is centred under that icon: the marks' axis
+// lies the inset and half a button in from the edge. A row's right padding is that axis less half
+// a mark, the row's 1pt border and, on a desktop, the list's 16pt gutter (phone rows run edge to
+// edge). Centres, not edges: with the mark's and the button's right edges flush the mark sat 15.5pt
+// right of the icon. A title ends 10pt before its mark (the row's gap), or where the mark would end.
 export const TOPIC_ROW_BORDER = 1;
 export const TOPIC_LIST_GUTTER = 16;
-const DESKTOP_ROW_PADDING_RIGHT = 13;
+/** The head's buttons: 38pt squares, their icon in the middle. */
+export const TOPIC_HEAD_BUTTON = 38;
+/** A row's status mark (StatusDot). */
+export const TOPIC_STATUS_SIZE = 7;
+const DESKTOP_RIGHT_INSET = 30;
 
-/** How far the head's last button and the rows' status marks end in from the sidebar's right edge. */
+/** How far the head's last button ends in from the sidebar's right edge. */
 export function topicRightInset(mobile: boolean): number {
-  return mobile ? gutterX() : TOPIC_LIST_GUTTER + TOPIC_ROW_BORDER + DESKTOP_ROW_PADDING_RIGHT;
+  return mobile ? gutterX() : DESKTOP_RIGHT_INSET;
 }
 
-/** A topic row's right padding, so its status mark ends at `topicRightInset`. */
+/** How far the axis the last button's icon and the rows' status marks are centred on lies in from the sidebar's right edge. */
+export function topicStatusAxisInset(mobile: boolean): number {
+  return topicRightInset(mobile) + TOPIC_HEAD_BUTTON / 2;
+}
+
+/** A topic row's right padding, so its status mark is centred on `topicStatusAxisInset`. */
 export function topicRowPaddingRight(mobile: boolean): number {
-  return topicRightInset(mobile) - (mobile ? 0 : TOPIC_LIST_GUTTER) - TOPIC_ROW_BORDER;
+  return topicStatusAxisInset(mobile) - TOPIC_STATUS_SIZE / 2 - (mobile ? 0 : TOPIC_LIST_GUTTER) - TOPIC_ROW_BORDER;
 }
 
 /** A part's frame on the page, for `onPartLayout`. */
-export type TopicPartFrame = { x: number; y: number; w: number; h: number };
+export type TopicPartFrame = PartFrame;
 
 export function TopicSidebar(props: {
   c: ChatController;
   class?: string;
   /** Hears where parts lie on the page (tests): `sidebar`, `head-action` (the head's last button),
-   * `status-<topic id>` and `title-<topic id>`. */
-  onPartLayout?: (name: string, frame: TopicPartFrame) => void;
+   * `head-icon` (its icon), `status-<topic id>` and `title-<topic id>`. */
+  onPartLayout?: PartLayoutListener;
 }) {
   const c = props.c;
   const view = () => c.topicSidebarView();
@@ -183,42 +196,30 @@ export function TopicSidebar(props: {
   // On a phone the topics are a page of their own and take the pages' phone gutter (Contacts, TODO):
   // the title at the page's 12pt, rows edge to edge with their content 12pt in, group labels at 14.
   // The desktop sidebar keeps its 16pt list gutter and 25.6pt title. The rows' right padding comes
-  // from the shared right inset (above), so their status marks end under the head's last button.
+  // from the shared axis (above), so their status marks are centred under the head's last icon.
   const rowPadding = () => (c.mobileMode() ? "pl-3" : "pl-3.5");
   const rightInset = () => topicRightInset(c.mobileMode());
   // The probe for `onPartLayout`: a view's frame on the page as it lays out. The head's buttons
-  // take no ref: their frames in the head row are placed from the row's.
+  // take no ref: the last one's frame in the head row, and its icon's in it, are placed from the
+  // row's.
+  const parts = createPartProbe(() => props.onPartLayout);
+  const probe = parts.probe;
   let headRow: ViewRef | undefined;
-  const reportPart = (name: string, node: ViewRef | undefined, inner?: TopicPartFrame) => {
-    if (!props.onPartLayout || !node) return;
-    node
-      .measure()
-      .then((m) => {
-        if (!m) return;
-        const at = { x: m.pagePosition.x, y: m.pagePosition.y };
-        props.onPartLayout?.(
-          name,
-          inner ? { x: at.x + inner.x, y: at.y + inner.y, w: inner.w, h: inner.h } : { ...at, w: m.bounds.size.width, h: m.bounds.size.height },
-        );
-      })
-      .catch((error) => console.warn("topic sidebar: measure failed", error));
-  };
-  const probe = (name: () => string) => {
-    if (!props.onPartLayout) return {};
-    let node: ViewRef | undefined;
-    return {
-      ref: (value: ViewRef) => {
-        node = value;
-      },
-      onLayout: () => reportPart(name(), node),
-    };
-  };
-  type LayoutBounds = { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } };
+  let lastButton: PartFrame | undefined;
+  let lastIcon: PartFrame | undefined;
   const headButtonLayout = (last: () => boolean) => (event: LayoutBounds) => {
     if (!last()) return;
-    const { origin, size } = event.bounds;
-    reportPart("head-action", headRow, { x: origin.x, y: origin.y, w: size.width, h: size.height });
+    lastButton = boundsFrame(event);
+    parts.report("head-action", headRow, () => lastButton);
+    parts.report("head-icon", headRow, headIcon);
   };
+  const headIconLayout = (last: () => boolean) => (event: LayoutBounds) => {
+    if (!last()) return;
+    lastIcon = boundsFrame(event);
+    parts.report("head-icon", headRow, headIcon);
+  };
+  const headIcon = () =>
+    lastButton && lastIcon ? { ...lastIcon, x: lastButton.x + lastIcon.x, y: lastButton.y + lastIcon.y } : undefined;
   // The search is the list's first view, scrolling with it, never the head's (the head keeps the
   // title and its buttons). On a touch phone it hides until the list is pulled down from its top;
   // on a desktop (and a desktop's window narrowed to the phone layout) it always shows.
@@ -382,9 +383,9 @@ export function TopicSidebar(props: {
   return (
     <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar" {...probe(() => "sidebar")}>
       {/* The head: the title on the left, the view toggles and New at the right, the last button
-          ending at the right inset over the rows' status marks. The search is the list's, on a
-          phone and a desktop alike. The hairline under the head shows once topics have scrolled
-          beneath, and sags softly under the view toggle that is on
+          ending at the right inset, its icon centred over the rows' status marks. The search is
+          the list's, on a phone and a desktop alike. The hairline under the head shows once topics
+          have scrolled beneath, and sags softly under the view toggle that is on
           (design/ui-refresh.html §1). */}
       <View class="relative z-10">
         <View
@@ -429,6 +430,7 @@ export function TopicSidebar(props: {
             testID="chat-topics-view-tags"
             onCenter={placeToggle("tags")}
             onFrame={headButtonLayout(() => c.mobileTopicSplitEnabled())}
+            onIconFrame={headIconLayout(() => c.mobileTopicSplitEnabled())}
           />
           <If when={!c.mobileTopicSplitEnabled()}>
             <TipButton
@@ -439,7 +441,7 @@ export function TopicSidebar(props: {
               onLayout={headButtonLayout(() => true)}
               class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
             >
-              <Icon name="PhPlus" size={14} color="subtle" />
+              <Icon name="PhPlus" size={14} color="subtle" onLayout={headIconLayout(() => true)} />
             </TipButton>
           </If>
         </View>
