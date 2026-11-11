@@ -34,3 +34,16 @@ Decisions: 2 MiB combined file bytes per message; one file per tool call, up to 
 Commits: 48b53f1b, 334f8983. Installs/dependency changes: none (pinned modules restored only).
 Tests: configured gofmt check, go vet ./..., and go test ./... passed in a throwaway HOME, independently rerun by manager. Coder also reports targeted race tests passed. Regression tests cover binary/empty bytes, replies, unsafe paths, authorization, limits, interrupted transfers and unsupported peers. No forbidden paths changed.
 Not checked: separate physical machines, mixed-version Consoles, slow links, Android/Windows or manual Console attachment presentation. UI sources unchanged, so nsh tests were not required. No remote deployment or live transfer validation. Ready for review, not merged or released.
+
+## factory · review · 2026-11-12 02:20
+head: 334f89837314cf0b60938e0dd2b46ac66c31b8b7
+verdict: pass
+notes:
+- [P2] internal/channelruntime/agentlink/runtime.go:437: asynchronous rejection of a queued reply with attachments drops the text answer too. Example: the asker rejects report.csv because its cache is full after SendWithAttachments returned queued; the fallback never runs. Observe final delivery failure and retry the text-only answer with the attachment failure note.
+- [P3] internal/agentlink/conn.go:26: the increased 4 MiB frame limit permits text-only messages above the old 1 MiB limit to reach legacy runtimes and repeatedly disconnect them on retries. Example: a 2 MiB text message through a new relay to a legacy receiver. Enforce the legacy limit for peers without file capability.
+- [P3] internal/agentlink/inbox.go:124: cleanup runs only upon another incoming file. Example: a crash partial remains beyond one hour indefinitely if no further file arrives. Add startup/periodic cleanup or document opportunistic retention explicitly.
+- [P3] internal/channelruntime/agentlink/runtime.go:303: hop-limit rejection records attachment paths in history, then rejection removes their files. Later tasks see unusable paths. Omit local paths from rejected-message history or retain the referenced files.
+
+Claude Code reviewed origin/master...HEAD; no P0/P1 findings. Required gofmt check, go vet ./... and go test ./... passed with an absolute throwaway HOME (162 packages ok). No installs or dependency changes; worktree unchanged and forbidden paths untouched. Merge compatibility with current master checked clean. Console sources unchanged; nsh checks not applicable.
+Residual risks: inbox capacity eviction can remove files still referenced by queued tasks; slow links can cause duplicate transfer attempts. Not checked: live mixed-version Consoles, separate physical machines, Android/Windows, manual Console attachment presentation, or a fresh race-test run.
+Moved review/ → ready/ under the configured no-P0/P1 review gate. Owner should inspect the P2 reply-loss case and P3 compatibility/retention/history notes before shipping. No linked issues or PRs. Not merged or released.
