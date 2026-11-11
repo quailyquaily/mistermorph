@@ -22,7 +22,9 @@ starts with a comment on why it is built the way it is; keep that when changing 
   blue 16 % with a sliding indicator). Same props as before; `equal` gives each option the same
   share, `icon` on an item shows an icon.
 - `Modal`, `MessageDialog`: scale in from the pressed control (0.9) or from the centre (0.98) with a
-  fade, and back out on close.
+  fade, and back out on close. Where they are sheets at the bottom (windows under 720pt: phones),
+  they slide up from the bottom edge (260 ms) and back down, staying mounted until out of sight;
+  reopened on the way down, they turn back from where they are. Reduced motion: in place at once.
 - `DropdownMenu`, `SelectField` popups: drop in 4pt from the trigger with a fade (120 ms).
 - `Button`: Vue's sizes (`md` 44, `sm` 38, `xs` 32, `xxs` 24pt), 500 weight, press overlay, hover
   colours with the ui-kit's transitions.

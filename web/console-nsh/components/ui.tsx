@@ -3,9 +3,9 @@
 //
 // The look follows the Vue console's ui-kit: square-ish corners (2px), hairlines, a dark blue
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
-import type { Bounds, InputRef, JSX } from "nsh";
+import type { Bounds, InputRef, JSX, Motion } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
-import { cleanup, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -30,7 +30,7 @@ import { recentPress } from "./motion/pressOrigin";
 import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
-import { bottomSheetInsets, dialogLayerInsets } from "../lib/systemInsets";
+import { bottomSheetInsets, dialogLayerInsets, dialogSheetInsets } from "../lib/systemInsets";
 import { MOTION_EASE, MOTION_EASE_CSS, MOTION_NORMAL, MOTION_SLOW, motionMs } from "./motion/tokens";
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 
@@ -385,6 +385,8 @@ export interface ButtonProps {
   class?: string;
   testID?: string;
   onPress?: () => void;
+  /** The button's frame in its parent. */
+  onLayout?: BaseButtonProps["onLayout"];
   /** Anything after the label (a count, a caret). */
   children?: JSX.Element;
 }
@@ -430,6 +432,10 @@ export function busyLook(variant: ButtonVariant = "primary"): { box: string; tex
 const BUTTON_SHADOWS = platform.os !== "android";
 
 export function Button(props: ButtonProps) {
+  // In a dialog's actions row it counts itself, and shares the row's width when it is one of two
+  // on a sheet (DialogActions).
+  const actions = DialogActionsRow();
+  if (actions) cleanup(actions.add());
   const variant = () => BUTTON_VARIANTS[props.variant ?? "primary"];
   const shadow = () => (BUTTON_SHADOWS ? variant().shadow : undefined);
   const size = () => BUTTON_SIZES[props.size ?? "sm"];
@@ -453,7 +459,8 @@ export function Button(props: ButtonProps) {
       tooltip={props.title ? <Tip text={props.title} /> : undefined}
       class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
         props.iconOnly ? `${size().square} px-0` : size().box
-      } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${props.class ?? ""}`}
+      } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
+      onLayout={props.onLayout}
       style={{
         boxShadow: shadow()?.[0],
         transitionProperty: "colors, box-shadow",
@@ -1353,13 +1360,38 @@ export function Tabs(props: {
 
 // The ui-kit's dialog (AppDialog / AppDialogShell, the morph theme): white on a hairline with 2pt
 // corners over a light scrim; a 44pt header with the title and a square red-tinted close button.
-// On phones (< 720pt) it is full width at the bottom.
+// On phones (< 720pt) it is a sheet: full width at the bottom.
 //
 // Motion (styles/base.css, core/dialog-origin.js): it settles in from 98 % as it fades, and when a
 // press opened it (within 900 ms) it grows out of that point from 90 % instead, and goes back into
-// it on close. The backdrop and the panel are drawn here (the base Dialog is only the layer), so
-// both can move, natively, on opacity and transform alone.
+// it on close. A sheet slides up from the bottom edge instead, and back down on close. The backdrop
+// and the panel are drawn here (the base Dialog is only the layer), so both can move, natively, on
+// opacity and transform alone; the panel stays drawn until it is out.
 const DIALOG_SHADOW = "0 12px 24px rgba(20, 24, 32, 0.14)";
+
+/** Below this window width a dialog is a sheet at the bottom of the screen. */
+export const DIALOG_SHEET_WIDTH = 720;
+
+/** Whether dialogs are sheets at the bottom of the screen (phones, narrow windows). Reactive. */
+export function dialogIsSheet() {
+  return windowSize().width < DIALOG_SHEET_WIDTH;
+}
+
+/**
+ * The room a sheet keeps under its last row (the navigation bar's or gesture handle's inset, or
+ * the keyboard's height while it is up; lib/systemInsets.ts `dialogSheetInsets`), 0 for a dialog
+ * that is not a sheet. A dialog whose last strip is painted a colour of its own (SettingDialog's
+ * footer) takes it there, with `DialogLayer`'s `bottomInset="content"`. Reactive.
+ */
+export function dialogSheetClearance() {
+  return dialogIsSheet() ? (dialogSheetInsets(safeArea(), keyboardFrame().height, windowSize().height)?.clear ?? 0) : 0;
+}
+
+/** What a test reads of a dialog's panel: its frame in the layer, and its motion. */
+export interface DialogProbe {
+  layout?: (bounds: Bounds) => void;
+  motion?: (motion: Motion) => void;
+}
 
 /** The dialog layer under `Modal` and `MessageDialog` (scrim, panel, the motion from the pressing control): for a dialog with a panel of its own. */
 /** Android draws dialogs in an Overlay, not nsh's Dialog window (see DialogLayer). */
@@ -1372,43 +1404,79 @@ export function DialogLayer(props: {
   /** The panel's classes (width, padding, gap). */
   panelClass: string;
   panelStyle?: { maxWidth?: number };
+  /** The panel classes' own bottom padding in points (MessageDialog's pb-4: 16): a sheet keeps it above the room it takes under its last row. */
+  panelPaddingBottom?: number;
+  /** On a sheet, who fills the room under the last row: the panel (default), or its last strip, painted a colour of its own, which pads itself by `dialogSheetClearance()`. */
+  bottomInset?: "panel" | "content";
   label?: string;
+  /** For tests: the panel's frame and motion. */
+  probe?: DialogProbe;
   children?: JSX.Element;
 }) {
   const shown = signal(untracked(() => props.open));
   trackPopup(() => props.open);
   const panel = createMotion({ initial: { opacity: 0 } });
+  props.probe?.motion?.(panel);
   const scrim = createAnimatedValue(0);
   const origin = signal<[number, number] | null>(null);
   let press: { x: number; y: number } | null = null;
   let pendingEnter = false;
   let closing = false;
-  const narrow = () => windowSize().width < 720;
+  // Whether the sheet came in from out of sight (a first opening, or after it went out): it slides
+  // in from its own height below the bottom edge; reopened while going out, from where it is.
+  let fromBelow = true;
+  const narrow = dialogIsSheet;
+  // A sheet slides the whole way in and out: a little longer than a dialog's settle.
+  const duration = (sheet: boolean) => motionMs(sheet ? MOTION_SLOW : MOTION_NORMAL);
 
   const enter = (bounds?: { origin: { x: number; y: number }; size: { width: number; height: number } }) => {
     if (!pendingEnter) return;
     pendingEnter = false;
+    const sheet = untracked(narrow);
+    const ms = duration(sheet);
+    void scrim.timing(1, { duration: ms, easing: MOTION_EASE });
+    if (sheet) {
+      origin.set(null);
+      panel.opacity.set(1);
+      panel.scale.set(1);
+      const height = bounds?.size.height ?? panelBox?.size.height ?? untracked(() => windowSize().height);
+      if (ms <= 0) {
+        panel.translateY.set(0);
+        return;
+      }
+      if (fromBelow) panel.translateY.set(height);
+      void panel.translateY.timing(0, { duration: ms, easing: MOTION_EASE });
+      return;
+    }
+    panel.translateY.set(0);
     const fromPress = !!press && !!bounds;
     if (fromPress && bounds) origin.set([press!.x - bounds.origin.x, press!.y - bounds.origin.y]);
     else origin.set(null);
-    const duration = motionMs(MOTION_NORMAL);
-    void scrim.timing(1, { duration, easing: MOTION_EASE });
-    if (duration <= 0) {
+    if (ms <= 0) {
+      panel.scale.set(1);
       panel.opacity.set(1);
       return;
     }
     const from = fromPress ? 0.9 : 0.98;
-    void panel.play({ duration, keyframes: { opacity: [{ value: 0, easing: MOTION_EASE }, 1], scale: [{ value: from, easing: MOTION_EASE }, 1] } });
+    void panel.play({ duration: ms, keyframes: { opacity: [{ value: 0, easing: MOTION_EASE }, 1], scale: [{ value: from, easing: MOTION_EASE }, 1] } });
   };
 
   effect(() => {
     const open = props.open;
     untracked(() => {
       if (open) {
+        fromBelow = !closing;
         closing = false;
         press = recentPress();
         pendingEnter = true;
-        panel.opacity.set(0);
+        if (narrow()) {
+          // Out of sight below the bottom edge until its first layout says how tall it is; reopened
+          // while going out, it turns back from where it is.
+          if (fromBelow) {
+            panel.opacity.set(1);
+            panel.translateY.set(windowSize().height);
+          }
+        } else panel.opacity.set(0);
         if (!shown()) shown.set(true);
         // The panel's first layout starts the entrance; when its frame did not change (reopened in
         // place), start it on the next frame.
@@ -1416,21 +1484,36 @@ export function DialogLayer(props: {
       } else if (shown() && !closing) {
         closing = true;
         pendingEnter = false;
-        const duration = motionMs(MOTION_NORMAL);
-        if (duration <= 0) {
+        const sheet = narrow();
+        const ms = duration(sheet);
+        if (ms <= 0) {
           shown.set(false);
           return;
         }
-        const to = origin() ? 0.9 : 0.98;
-        void scrim.timing(0, { duration, easing: MOTION_EASE });
-        void panel
-          .play({ duration, keyframes: { opacity: [{ value: 1, easing: MOTION_EASE }, 0], scale: [{ value: 1, easing: MOTION_EASE }, to] } })
-          .then(() => {
-            if (closing) shown.set(false);
-          });
+        void scrim.timing(0, { duration: ms, easing: MOTION_EASE });
+        // The panel stays drawn (and its contents mounted) while it goes out.
+        const out = sheet
+          ? panel.translateY.timing(panelBox?.size.height ?? windowSize().height, { duration: ms, easing: MOTION_EASE })
+          : panel.play({
+              duration: ms,
+              keyframes: { opacity: [{ value: 1, easing: MOTION_EASE }, 0], scale: [{ value: 1, easing: MOTION_EASE }, origin() ? 0.9 : 0.98] },
+            });
+        void out.then(() => {
+          if (closing) shown.set(false);
+        });
       }
     });
   });
+
+  // A sheet's bottom: the room under its last row, inside its paper (lib/systemInsets.ts).
+  const sheetInsets = () =>
+    narrow() ? dialogSheetInsets(safeArea(), keyboardFrame().height, windowSize().height) : undefined;
+  const panelInsetStyle = () => {
+    const insets = sheetInsets();
+    if (!insets) return {};
+    const own = props.bottomInset === "content" ? {} : { paddingBottom: (props.panelPaddingBottom ?? 0) + insets.clear };
+    return { ...own, maxHeight: insets.maxHeight };
+  };
 
   // The panel's frame in the layer, which the scrim covers from its origin.
   let panelBox: { origin: { x: number; y: number }; size: { width: number; height: number } } | null = null;
@@ -1454,28 +1537,28 @@ export function DialogLayer(props: {
       accessibilityLabel={props.label}
       onLayout={(event) => {
         panelBox = event.bounds;
+        props.probe?.layout?.(event.bounds);
         enter(event.bounds);
       }}
       class={`max-h-[90%] border border-dialog-line bg-dialog ${narrow() ? "w-full" : "rounded-(--radius)"} ${props.panelClass}`}
-      style={{ ...(props.panelStyle ?? {}), boxShadow: DIALOG_SHADOW, transformOrigin: origin() ?? "center", ...panel.style }}
+      style={{ ...(props.panelStyle ?? {}), ...panelInsetStyle(), boxShadow: DIALOG_SHADOW, transformOrigin: origin() ?? "center", ...panel.style }}
     >
       {props.children}
     </View>,
   ];
   const layerClass = () =>
     `absolute inset-0 items-center ${narrow() ? "justify-end" : `justify-center ${OVERLAY_DIALOGS ? "" : "p-4"}`}`;
-  // On phones the panel is a sheet at the bottom: the layer does not shrink when the software
-  // keyboard opens, so the sheet rises by the keyboard's height (0 without one). A number, not
+  // On phones the panel is a sheet at the bottom, and it takes the room under its last row itself
+  // (the navigation bar or gesture handle, or the software keyboard, which the layer does not
+  // shrink for): its paper reaches the bottom edge and fills that room. A number, not
   // `env(keyboard-inset-height)`: the env value moves the sheet natively but not in nsh's layout,
   // where presses are matched. Android's Overlay covers the whole surface, status and navigation
-  // bars included, so there the layer also keeps the panel out from under them
-  // (lib/systemInsets.ts), with the 16pt margin of wide windows on top.
+  // bars included, so there the layer keeps the panel out from under the status bar and the side
+  // insets (lib/systemInsets.ts), and wide windows keep it inside every inset, with a 16pt margin.
   const layerStyle = () => {
-    if (OVERLAY_DIALOGS) {
-      const insets = dialogLayerInsets(safeArea(), narrow() ? keyboardFrame().height : 0, narrow() ? 0 : 16);
-      return { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left };
-    }
-    return narrow() ? { paddingBottom: keyboardFrame().height } : undefined;
+    if (!OVERLAY_DIALOGS) return undefined;
+    const insets = dialogLayerInsets(safeArea(), 0, narrow() ? 0 : 16);
+    return { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: narrow() ? 0 : insets.bottom, paddingLeft: insets.left };
   };
 
   return (
@@ -1513,6 +1596,55 @@ export function DialogLayer(props: {
   );
 }
 
+// A dialog's actions row. Each `Button` rendered in it counts itself while it is mounted (one an
+// `If` hides does not count), and while the dialog is a sheet (phones) and exactly two show, they
+// share the row's width equally. One, three or more keep their own widths, and so does every row on
+// wider windows. The buttons must sit in the row itself (or in a row inside it): a button in a
+// column of its own would grow down, not across.
+interface DialogActionsCount {
+  /** Counts a button in; the returned function counts it out. */
+  add(): () => void;
+  /** Whether the row's buttons share its width. */
+  equal(): boolean;
+}
+const DialogActionsRow = context<DialogActionsCount | null>(null);
+
+/**
+ * Its children, with the functions among them (expression children, `If`) run here, under the
+ * context values provided around it, each in a memo of its own. nsh web's `Provider` hands its
+ * children on as they are, so such a function would run later, outside the value (the native
+ * runtimes, and so headless tests, run them under it).
+ */
+function UnderContext(props: { children?: JSX.Element }) {
+  const memoize = (value: JSX.Element): JSX.Element =>
+    typeof value === "function" ? computed(() => memoize((value as () => JSX.Element)())) : Array.isArray(value) ? value.map(memoize) : value;
+  return untracked(() => memoize(props.children));
+}
+
+/** A dialog's row of actions: two on a sheet are equally wide (see above). Takes a View's classes. */
+export function DialogActions(props: { class?: string; style?: { paddingBottom?: number }; testID?: string; children?: JSX.Element }) {
+  const count = signal(0);
+  const row: DialogActionsCount = {
+    add() {
+      count.update((n) => n + 1);
+      let counted = true;
+      return () => {
+        if (!counted) return;
+        counted = false;
+        count.update((n) => n - 1);
+      };
+    },
+    equal: () => count() === 2 && dialogIsSheet(),
+  };
+  return (
+    <View class={props.class} style={props.style} testID={props.testID}>
+      <DialogActionsRow.Provider value={row}>
+        <UnderContext>{props.children}</UnderContext>
+      </DialogActionsRow.Provider>
+    </View>
+  );
+}
+
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
 const MODAL_WIDTHS: Record<ModalSize, string> = {
   sm: "w-full max-w-sm",
@@ -1540,6 +1672,8 @@ export function Modal(props: {
   children?: JSX.Element;
   testID?: string;
   closeLabel?: string;
+  /** For tests: the panel's frame and motion. */
+  probe?: DialogProbe;
 }) {
   return (
     <DialogLayer
@@ -1549,6 +1683,7 @@ export function Modal(props: {
       label={props.title}
       panelClass={props.width ? "w-full" : MODAL_WIDTHS[props.size ?? "md"]}
       panelStyle={props.width ? { maxWidth: props.width } : undefined}
+      probe={props.probe}
     >
       <View class="min-h-11 flex-row items-stretch border-b border-dialog-line">
         <View class="flex-1 justify-center gap-0.5 py-2 pl-3 pr-2">
@@ -1580,7 +1715,12 @@ export function Modal(props: {
         </EdgeScroll>
       </If>
       <If when={props.footer}>
-        <View class="flex-row flex-wrap items-center justify-end gap-2 border-t border-line-faint px-4 py-3">{props.footer}</View>
+        <DialogActions
+          class="flex-row flex-wrap items-center justify-end gap-2 border-t border-line-faint px-4 py-3"
+          testID={props.testID ? `${props.testID}-footer` : undefined}
+        >
+          {props.footer}
+        </DialogActions>
       </If>
     </DialogLayer>
   );
@@ -1606,6 +1746,8 @@ export function MessageDialog(props: {
   actions: MessageAction[];
   children?: JSX.Element;
   testID?: string;
+  /** For tests: the panel's frame and motion. */
+  probe?: DialogProbe;
 }) {
   return (
     <DialogLayer
@@ -1614,6 +1756,8 @@ export function MessageDialog(props: {
       testID={props.testID}
       label={props.title}
       panelClass="w-full max-w-[500px] items-stretch px-4 pb-4 pt-6"
+      panelPaddingBottom={16}
+      probe={props.probe}
     >
       <If when={props.icon}>
         <View class="mb-4 items-center">

@@ -32,28 +32,28 @@ export function TopicRenameDialog(props: {
       size="sm"
       testID="chat-topic-rename-dialog"
       footer={
+        // Equally wide on every window (a phone's sheet makes any two actions so; this dialog keeps
+        // it on the desktops too).
         <View class="flex-1 flex-row gap-2">
-          <View class="flex-1" onLayout={layout("cancel")}>
-            <Button
-              variant="outlined"
-              block
-              label={t("action_cancel")}
-              disabled={r.saving()}
-              onPress={() => r.close()}
-              testID="chat-topic-rename-cancel"
-            />
-          </View>
-          <View class="flex-1" onLayout={layout("save")}>
-            <Button
-              variant="primary"
-              block
-              label={t("action_save")}
-              loading={r.saving()}
-              disabled={r.saveDisabled()}
-              onPress={() => void r.save()}
-              testID="chat-topic-rename-save"
-            />
-          </View>
+          <Button
+            variant="outlined"
+            class="flex-1"
+            label={t("action_cancel")}
+            disabled={r.saving()}
+            onPress={() => r.close()}
+            onLayout={layout("cancel")}
+            testID="chat-topic-rename-cancel"
+          />
+          <Button
+            variant="primary"
+            class="flex-1"
+            label={t("action_save")}
+            loading={r.saving()}
+            disabled={r.saveDisabled()}
+            onPress={() => void r.save()}
+            onLayout={layout("save")}
+            testID="chat-topic-rename-save"
+          />
         </View>
       }
     >

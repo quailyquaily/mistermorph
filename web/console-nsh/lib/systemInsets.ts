@@ -10,7 +10,10 @@
 // - while the software keyboard is up, its height (which covers the navigation bar) replaces the
 //   bottom inset, so nothing adds both;
 // - dialogs are an Overlay over the whole surface, outside the frame: their layer takes the same
-//   insets itself;
+//   insets itself, except on phones, where the dialog is a sheet at the bottom: the layer takes
+//   the top and side insets, and the sheet the bottom one (or the keyboard's height) inside its
+//   own paper, so its background fills the room under its last row (`dialogSheetInsets`, on iOS
+//   and the web too);
 // - so are the sheets docked at a side (nsh/base's `Sheet`, the chat's topic and workspace panel on
 //   phones): the panel takes the insets of the edges it touches, inside its own paper, and the
 //   frame's padding never reaches it, so nothing is taken twice;
@@ -121,4 +124,29 @@ export function bottomSheetInsets(
   const room = Math.max(0, size(windowHeight) - size(area.top) - clear);
   const content = contentMax === undefined ? room : Math.min(size(contentMax), room);
   return { paddingBottom: clear + size(padding), maxHeight: clear + content };
+}
+
+/** The room a dialog that is a sheet at the bottom of the screen keeps under its last row. */
+export interface DialogSheetInsets {
+  /** The bottom inset or the keyboard's height (never both), taken inside the painted sheet. */
+  clear: number;
+  /** The sheet's height at most (its share of the screen below the status bar, plus `clear`). */
+  maxHeight: number;
+}
+
+/**
+ * The bottom of a dialog that is a sheet at the bottom of the screen (phones: components/ui.tsx
+ * `DialogLayer`). The sheet runs to the bottom edge of the surface, so its own background fills
+ * the room under its last row: the navigation bar's or gesture handle's inset `area.bottom`, or,
+ * while the software keyboard is up, the keyboard's height instead (it covers that bar). The
+ * layer under it takes no bottom inset, so the room is taken once. `share` of the height below
+ * the status bar (`area.top`) and above that room is the sheet's content at most (its
+ * `max-h-[90%]`). `undefined` when there is nothing to clear: the sheet is as its classes draw it.
+ */
+export function dialogSheetInsets(area: Partial<Edges>, keyboard: number, windowHeight: number, share = 0.9): DialogSheetInsets | undefined {
+  const raised = size(keyboard);
+  const clear = raised > 0 ? Math.max(raised, size(area.bottom)) : size(area.bottom);
+  if (clear === 0) return undefined;
+  const room = Math.max(0, size(windowHeight) - size(area.top) - clear);
+  return { clear, maxHeight: clear + Math.round(room * share * 100) / 100 };
 }
