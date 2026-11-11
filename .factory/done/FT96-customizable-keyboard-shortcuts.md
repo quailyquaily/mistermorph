@@ -62,3 +62,6 @@ Validation: configured gofmt/vet/go test gate passed in both coder and independe
 Residual risks: native desktop GPUI, Android hardware keyboard, real cross-platform browsers, IME/repeat, non-US layouts, screen readers and the updated Settings layout were not manually verified. Browser reservations for Ctrl+Shift+O/Ctrl+K/Ctrl+I need real-browser or authoritative-documentation verification; the coder's second suggested P3 lacked that evidence and is retained as uncertainty, not a confirmed finding. Base Sheet/Popover/Select/DatePicker popup suppression and keyboard focus after recording-control changes were not verified.
 
 Moved review/ → ready/. Round 1 of 3. No linked issues or PRs. Owner should inspect the recorder backslash limitation and native/browser validation gaps before shipping.
+
+## factory · 2026-11-12 08:22
+Merged into master with Claude Code: 416ed2d1; pushed batch head 416ed2d1. No tag, per owner instruction. Both merges clean; no extra fixes. Configured gofmt/vet/full Go tests passed (162 packages); nsh check passed and Console tests passed 788/788. No installs. Existing P2/P3 review notes remain unresolved; live cross-machine transfers and native/browser platform checks were not performed. No linked issues or PRs to close. Branch retained. Moved ready/ → done/.
