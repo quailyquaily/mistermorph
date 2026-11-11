@@ -212,6 +212,12 @@ Headless tests prove behaviour, not the look.
   (`blurAndSubmit`): a dialog that stays open when its Enter fails passes `submitBehavior="submit"`.
   Headless runs settle the closing motion before the next step, so none of this shows there; test
   it on the helper.
+- The phone's bottom navigation floats over the foot of every page that shows it
+  (`mobileBottomNavVisible`), so nothing there is laid out above it by itself: a page's list ends
+  with `MobileBarSpacer`, and so does a column with a fixed control at its foot (the chat's composer
+  on a new topic). Headless `app.press` reaches a view the bar covers (no hit test) and reports no
+  frames: test that the room is there (`MobileBarSpacer`'s `testID`) and look at the geometry in a
+  browser.
 
 ### Android (nsh 0.4.0)
 

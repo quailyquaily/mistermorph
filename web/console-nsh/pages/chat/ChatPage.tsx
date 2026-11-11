@@ -7,6 +7,7 @@ import { Text, View } from "nsh";
 import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
@@ -209,6 +210,10 @@ function ChatMain(props: { c: ChatController }) {
           <WorkspaceToggle c={c} />
         </View>
       </If>
+      {/* On a phone the bottom navigation floats over the foot of a new topic (and of a chat without
+          topics; an open topic hides it): the new-topic form, centred above it, and the composer of a
+          first send in flight or failed end clear of the bar, the keyboard and the safe area. */}
+      <MobileBarSpacer testID="chat-main-bar-room" />
     </View>
   );
 }
