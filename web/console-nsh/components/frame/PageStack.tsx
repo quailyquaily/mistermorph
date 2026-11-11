@@ -8,16 +8,18 @@
 // and reduced motion switch at once.
 //
 // The outgoing page stays mounted through its exit, inert: no presses (pointerEvents), hidden
-// from assistive tech, its text field blurred, and following its own last route
-// (PageRouteContext), never the next page's. A new navigation during a slide ends it where it
-// should end (the obsolete outgoing page goes at once) and starts its own; a resize, a rotation
-// or a change of the reduced-motion setting ends it too. Only committed navigations move pages:
-// a navigation whose guard is still running or that was cancelled changes nothing here.
+// from assistive tech, its text field blurred, its Android Back registrations off
+// (SystemBackScope), and following its own last route (PageRouteContext), never the next page's.
+// A new navigation during a slide ends it where it should end (the obsolete outgoing page goes at
+// once) and starts its own; a resize, a rotation or a change of the reduced-motion setting ends
+// it too. Only committed navigations move pages: a navigation whose guard is still running or
+// that was cancelled changes nothing here.
 //
 // The frame around (sidebar, bottom navigation, banners) is outside this host and never moves.
 import type { JSX, Motion, Signal } from "nsh";
 import { computed, createMotion, effect, Keyboard, reduceMotion, signal, untracked, View, windowSize } from "nsh";
 import { navigation, PageRouteContext, route, type Route } from "../../lib/router";
+import { SystemBackScope } from "../../lib/systemBack";
 import { pagePresentation, topPageOf, type PagePresentation } from "../../lib/navMotion";
 import { playRise } from "../motion/Entrance";
 import { currentX, FILL, isSlide, nativeSlide, OUTGOING_A11Y, pageSlideMs, slideFrames, type SlideDriver } from "../motion/pageSlide";
@@ -203,19 +205,27 @@ function PageLayer(props: { layer: Layer; keyOf: (route: Route) => string; rende
       importantForAccessibility={out() ? OUTGOING_A11Y.importantForAccessibility : undefined}
       testID={out() ? "page-layer-out" : `page-layer.in.${layer.presentation}`}
     >
-      {withPageRoute(own, () => props.render(untracked(own)))}
+      {withPageRoute(own, () => !layer.out(), () => props.render(untracked(own)))}
     </View>
   );
 }
 
-/** Renders `render()` with `own` as the route its pages read (`currentRoute()`). */
-function withPageRoute(own: () => Route, render: () => JSX.Element) {
-  // The children are a getter, read inside the provider (a function child would be rendered
+/**
+ * Renders `render()` with `own` as the route its pages read (`currentRoute()`) and `shown` as
+ * whether their Android Back registrations apply (SystemBackScope).
+ */
+function withPageRoute(own: () => Route, shown: () => boolean, render: () => JSX.Element) {
+  // The children are getters, read inside the providers (a function child would be rendered
   // later, outside the provided value, on the web).
   return PageRouteContext.Provider({
     value: own,
     get children() {
-      return render();
+      return SystemBackScope.Provider({
+        value: shown,
+        get children() {
+          return render();
+        },
+      });
     },
   });
 }

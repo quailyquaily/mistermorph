@@ -2,7 +2,8 @@
 // its slide driver holds each slide until "finish", so both pages can be seen during one. The
 // outgoing page stays mounted and inert with its own route until the slide ends; a new navigation
 // drops an obsolete outgoing page at once; a resize ends a slide; reduced motion never slides;
-// the same page with other data does not move; wide windows keep the entrance.
+// the same page with other data does not move; wide windows keep the entrance; a page going out
+// no longer takes Android's Back.
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
 
@@ -17,6 +18,7 @@ async function openStack(options: { reducedMotion?: boolean } = {}) {
 }
 
 const routeText = (app: App, page: string) => app.texts().find((text) => text.startsWith(`${page}:`)) ?? "";
+const backs = (app: App) => app.texts().find((text) => text.startsWith("backs=")) ?? "";
 const plays = (app: App) => app.texts().find((text) => /^-?\d+>/.test(text)) ?? "";
 
 test("the first page arrives without motion", async () => {
@@ -148,4 +150,30 @@ test("wide windows keep the entrance: the new page rises, the old one goes at on
   expect(app.count("id:fixture-page.a")).toBe(0);
   expect(app.count("id:page-layer.in.rise")).toBe(1);
   expect(plays(app)).toBe("");
+});
+
+test("a page going out no longer takes Android's Back: the page coming in, else the history, does", async () => {
+  const app = await openStack();
+  await app.waitFor("id:fixture-page.a");
+  // Shown, page a takes Back with its own back.
+  await app.press("id:system-back");
+  expect(backs(app)).toBe("backs=page-a");
+
+  await app.press("id:go-c-tab");
+  await app.waitFor("id:fixture-page.c");
+  expect(app.count("id:page-layer-out")).toBe(1);
+  // Mid-slide: a is still mounted (and its back still registered), but it is going out.
+  await app.press("id:system-back");
+  expect(backs(app)).toBe("backs=page-a system");
+  await app.press("id:finish");
+  await app.waitUntil(() => app.count("id:page-layer-out") === 0);
+  await app.press("id:system-back");
+  expect(backs(app)).toBe("backs=page-a system system");
+
+  // Back to a: the page coming in takes Back again while the old one still slides out.
+  await app.press("id:go-a-tab");
+  await app.waitFor("id:fixture-page.a");
+  expect(app.count("id:page-layer-out")).toBe(1);
+  await app.press("id:system-back");
+  expect(backs(app)).toBe("backs=page-a system system page-a");
 });

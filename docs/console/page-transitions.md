@@ -57,12 +57,17 @@ Only `translateX` moves, natively; slides take 280 ms on the Console's easing cu
 - It is inert: it takes no presses (`pointerEvents: "none"`), is hidden from assistive tech
   (`accessibilityElementsHidden`, `importantForAccessibility="no-hide-descendants"`, `aria-hidden`
   on the web), and a text field in it loses the focus (and the phone's keyboard goes down) as the
-  slide starts. Android's Back registered by a pane going out no longer applies.
+  slide starts. Android's Back registered inside it no longer applies: a page going out gives its
+  `onSystemBack` registrations a false `when` (`SystemBackScope`, provided per page layer), and a
+  pane going out drops its bar's back (`onBack` undefined while `hidden`), so Back mid-slide goes
+  to the page coming in, else the history.
 - It never reacts to the next page's route: pages read their route with `currentRoute()`, which
   inside a page is that page instance's own (`PageRouteContext`), frozen once it goes out. Pages
   whose item clears with the route (Skills' `?skill=`, the context inspector's steps, a deleted
-  contact) show it through `PaneStack.held`, and Chat lets its topic go only once the conversation
-  has slid out (the topic list comes back at once).
+  contact, Settings' section when Android's Back returns to the sections' address) show it through
+  `PaneStack.held`, and Chat lets its topic go only once the conversation has slid out (the topic
+  list comes back at once). A page whose route change and level change belong together makes both
+  in one `batch`, so `held` sees the level change with the value (Settings' Back).
 - A new navigation during a slide drops the obsolete outgoing page at once; the page that was
   coming in turns round from where it is (no jump). A resize, a rotation, a switch between the
   phone and wide layouts, or reduced motion turned on ends a running slide where it ends.
@@ -77,7 +82,10 @@ Only `translateX` moves, natively; slides take 280 ms on the Console's easing cu
   page inert with its own route, rapid switches, resize, reduced motion, wide windows),
   `tests/page-transitions.test.tsx` (the real Console: bottom navigation and Android's Back, a page
   further in and back, the browser's back and forward buttons, rapid taps, reduced motion, the wide
-  entrance, a chat topic in and out, a cancelled leave).
+  entrance, a chat topic in and out, a cancelled leave), `tests/page-transitions-back.test.tsx` (the
+  real Console with every slide stretched to a minute by `tests/slowSlidesConsole.tsx`: Android's
+  Back from a settings section, also mid-slide-in, keeps the section on the leaving pane; Back while
+  a page slides out goes through the history, not the outgoing page's own back).
 - Headless steps do not wait for a slide on the system clock: a test that checks a page has gone
   right after a navigation waits for it (`app.waitFor(sel, { state: "gone" })`).
 - Chrome (the real Console served by `console serve`, Playwright, 390×844 touch and 1280×800):

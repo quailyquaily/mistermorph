@@ -210,7 +210,8 @@ Headless tests prove behaviour, not the look.
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin, page slides) are in `components/motion/` (see its README).
 - Page transitions (docs/console/page-transitions.md): a page going out stays mounted through its
-  slide (about 280 ms), inert and hidden from assistive tech. A page reading its route with
+  slide (about 280 ms), inert, hidden from assistive tech and with its `onSystemBack`
+  registrations off (`SystemBackScope`). A page reading its route with
   `currentRoute()` gets its own; code run outside the page's components (a handler's `await`
   continuation, a module) gets the current one. A page that shows a list or one of its items on
   phones moves between them with `createPaneStack` (`components/motion/PaneStack.tsx`): `shown`

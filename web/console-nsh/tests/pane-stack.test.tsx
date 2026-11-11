@@ -55,6 +55,20 @@ test("back slides the item out to the right over the list, still showing its ite
   await app.waitUntil(() => read(app, "settled=") === "2");
 });
 
+test("back while the item still slides in turns it round, and the item going out keeps what it showed", async () => {
+  const app = await openPanes();
+  await app.press("id:open");
+  expect(app.count("id:pane.1")).toBe(1);
+  // The item cleared with the change, mid-slide: the pane that was coming in holds it as it goes.
+  await app.press("id:back");
+  expect(app.count("id:pane.1.out")).toBe(1);
+  expect(read(app, "item=")).toBe("Item 7");
+  await app.press("id:finish");
+  await app.waitUntil(() => app.count("id:pane.1.out") === 0);
+  expect(app.count("id:pane.1")).toBe(0);
+  expect(app.count("id:pane.0")).toBe(1);
+});
+
 test("a deeper level and back up again slide the same ways", async () => {
   const app = await openPanes();
   await app.press("id:open");

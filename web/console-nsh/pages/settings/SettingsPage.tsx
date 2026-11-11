@@ -132,12 +132,21 @@ export function SettingsPage() {
   // Android's Back from a section goes to the sections, as the bar's back arrow does. A section
   // opened from the sections also goes back to their address, so the next Back leaves Settings
   // instead of only changing the address under the same screen.
+  // Set while that Back replaces the address with the sections': the route effect hides the
+  // section in the same change that selects the address's own (Persona), so the section going
+  // out keeps what it showed (panelKey) instead of turning into Persona as it slides.
+  let backToIndex = false;
   onSystemBack(mobileShowBack, async () => {
     const indexPath = endpointRoutePath(endpointState.selectedRef, "/settings");
     if (previousLocation() === indexPath) {
       // Replacing with the previous entry removes this section from mobile history. Wait for
       // the leave guard and route to finish before hiding the editor; cancellation keeps it.
-      await navigate(indexPath, { replace: true });
+      backToIndex = true;
+      try {
+        await navigate(indexPath, { replace: true });
+      } finally {
+        backToIndex = false;
+      }
       if (disposed || untracked(() => currentRoute().path) !== indexPath) return;
     }
     mobilePanelVisible.set(false);
@@ -155,7 +164,10 @@ export function SettingsPage() {
         s.discardSettingsDrafts();
       }
       previousRouteSection = section;
-      s.selectedSectionID.set(id);
+      batch(() => {
+        s.selectedSectionID.set(id);
+        if (backToIndex && !section) mobilePanelVisible.set(false);
+      });
       s.ensureSettingsSectionData(id);
       if (section && section !== id) {
         void navigate(settingsSectionPath(endpointState.selectedRef, id), { replace: true });
@@ -390,6 +402,8 @@ export function SettingsPage() {
 
   const contentKey = () =>
     `${sectionID()}${s.agentSettingsUnsupported() && ["agent", "routes", "tools", "mcp"].includes(sectionID()) ? ":unsupported" : ""}`;
+  // The section pane keeps its section while it slides out (Back may select another as it goes).
+  const panelKey = panes.held(1, contentKey);
 
   // The section's own scroll (`.settings-panel-scroll`): 16pt from the top, the right and the
   // bottom, none at the left, where the section list is the edge; 16pt both sides on phones.
@@ -427,7 +441,7 @@ export function SettingsPage() {
             s.restartState.tasksRunning = false;
           }}
         />
-        <Each of={[contentKey()]} key={(id) => id}>
+        <Each of={[panelKey()]} key={(id) => id}>
           {(key) =>
             untracked(() => {
               const [id, unsupported] = key().split(":");

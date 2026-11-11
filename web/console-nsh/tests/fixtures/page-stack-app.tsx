@@ -1,13 +1,16 @@
 // A test entry for tests/page-stack.test.tsx: the console's page host (components/frame/PageStack.tsx)
 // over a route of its own, with a slide driver that holds every slide part-way until "finish" is
 // pressed, so the test sees both pages during a slide. Each page shows the route it reads
-// (`currentRoute()`, its own while it goes out) and how many routes it has seen.
+// (`currentRoute()`, its own while it goes out) and how many routes it has seen. Page "a" has a
+// back of its own for Android's Back (`onSystemBack`, as a page showing an item has); "system-back"
+// is Back pressed (lib/systemBack.ts `handleBack`), and `backs` lists who took each one.
 import { mount, signal, Text, View } from "nsh";
 import { PageStack } from "../../components/frame/PageStack";
 import type { SlideDriver } from "../../components/motion/pageSlide";
 import type { PageMotion } from "../../lib/navMotion";
 import type { PageKey, Route } from "../../lib/router";
 import { currentRoute } from "../../lib/router";
+import { handleBack, onSystemBack } from "../../lib/systemBack";
 import { effect, untracked } from "nsh";
 
 function routeOf(path: string): Route {
@@ -19,6 +22,7 @@ const route = signal<Route>(routeOf("/a"));
 const stacked = signal(true);
 let nextMotion: PageMotion = "none";
 const plays = signal<string[]>([]);
+const backs = signal<string[]>([]);
 let waiting: (() => void)[] = [];
 
 const driver: SlideDriver = {
@@ -45,6 +49,10 @@ function FixturePage() {
   const name = untracked(() => currentRoute().page);
   let seen = 0;
   const count = signal(0);
+  onSystemBack(
+    () => String(name) === "a",
+    () => backs.update((list) => [...list, `page-${name}`]),
+  );
   effect(() => {
     void currentRoute().path;
     untracked(() => count.set(++seen));
@@ -75,8 +83,12 @@ function Fixture() {
         {button("go-b3-forward", () => go("/b/3", "forward"))}
         {button("wide", () => stacked.set(false))}
         {button("finish", finish)}
+        {button("system-back", () => {
+          if (!handleBack()) backs.update((list) => [...list, "system"]);
+        })}
       </View>
       <Text testID="plays">{plays().join(" ")}</Text>
+      <Text testID="backs">{`backs=${backs().join(" ")}`}</Text>
       <PageStack
         keyOf={(r) => r.page}
         render={() => <FixturePage />}
