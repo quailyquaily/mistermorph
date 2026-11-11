@@ -38,13 +38,13 @@ export function mobileBarRoom() {
 
 /**
  * The end of a page's main list on a phone: as tall as the floating bar's room, so the last row
- * scrolls clear of it. Put it last in the list's content (a `List`'s `footer`); nothing shows
- * while the bar is not there.
+ * scrolls clear of it. Put it last in the list's content (a `List`'s `footer`), or last in a column
+ * whose foot holds a fixed control (the chat's composer); nothing shows while the bar is not there.
  */
-export function MobileBarSpacer() {
+export function MobileBarSpacer(props: { testID?: string } = {}) {
   return (
     <If when={mobileBarRoom() > 0}>
-      <View accessibilityElementsHidden style={{ height: mobileBarRoom() }} />
+      <View accessibilityElementsHidden testID={props?.testID} style={{ height: mobileBarRoom() }} />
     </If>
   );
 }
