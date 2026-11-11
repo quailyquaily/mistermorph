@@ -7,8 +7,8 @@ models:
       - openai/gpt-6.1-sol
     context_window_tokens: 1050000
     sources:
-      - url: https://developers.openai.com/api/docs/models
-        checked_at: "2026-10-02"
+      - url: https://developers.openai.com/api/docs/models/gpt-6.1-sol
+        checked_at: "2026-11-11"
   - provider: openai
     model: gpt-6.1-terra
     aliases:
