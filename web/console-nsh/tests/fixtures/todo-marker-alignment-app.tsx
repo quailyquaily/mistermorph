@@ -19,8 +19,8 @@ const task = (id: string, title: string, enabled = true) =>
   ({ _key: `k-${id}`, id, title, enabled, cron: "0 9 * * *" }) as unknown as TodoTask;
 const tasks = [task("running", LONG), task("queued", "Queued behind the weekly report"), task("on", "Daily digest"), task("off", LONG, false)];
 const runs: Record<string, TodoRun> = {
-  running: { state: "running", manual: false, startedAt: "" },
-  queued: { state: "queued", manual: false, startedAt: "" },
+  running: { state: "running", manual: false, startedAt: "", runID: "run-running", stopping: false },
+  queued: { state: "queued", manual: false, startedAt: "", runID: "run-queued", stopping: false },
 };
 const empty = () => mode() === "empty";
 
