@@ -18,8 +18,8 @@ type State = {
   multi: boolean;
   /** The text's height at the field's width, from the hidden copies. */
   height: number;
-  /** The hidden copies' heights, the draft they measured and the one-row copy's width. */
-  measures: { oneRow: number; twoRows: number; text: string | null; oneRowWidth: number };
+  /** The hidden copies' heights, the draft they measured, whether both have laid it out and the one-row copy's width. */
+  measures: { oneRow: number; twoRows: number; text: string | null; settled: boolean; oneRowWidth: number };
   /** How late the fixture delivers the measures, in milliseconds. */
   late: number;
   /** What the field itself reports for its text at the width it has. */
@@ -322,6 +322,30 @@ for (const [device, options] of [
         expectOneMove(state(), before, `${key}${late ? " with late measures" : ""}`);
       }
     }
+  }, 60000);
+
+  test(`on ${device}, a paste that makes a multiline draft taller eases the height once, at the full width`, async () => {
+    const { app, report } = await openRow(options);
+    const state = () => report()["live-state"] as State;
+    const eased = () => (report().eased as number | undefined) ?? 0;
+    const settle = async () => {
+      await app.waitUntil(() => state().measures.text === state().value && app.value("id:live-input") === state().value);
+      await app.wait(150);
+    };
+    // A draft above the controls, several lines across the row (the rows change at once: no easing).
+    await app.press("id:live-put-long");
+    await settle();
+    expect(expectComplete(report(), "live", "the long draft")).toBe("two:n");
+    const before = { height: state().height, width: (report()["live-field"] as Frame).w, eased: eased(), changes: state().changes };
+    // As much again pasted after it: the copies lay it out one after the other, and the field grows
+    // across the row in one eased move, as wide as before.
+    await app.press("id:live-put-longer");
+    await settle();
+    expect(expectComplete(report(), "live", "the pasted draft")).toBe("two:n");
+    expect(state().height).toBeGreaterThan(before.height + COMPOSER_LINE_HEIGHT / 2);
+    near((report()["live-field"] as Frame).w, before.width);
+    expect(eased() - before.eased).toBe(1);
+    expectOneMove(state(), before.changes, "the pasted draft");
   }, 60000);
 
   test(`on ${device}, resizing the window moves a draft between the layouts and back the same way`, async () => {

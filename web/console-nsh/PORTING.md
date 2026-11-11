@@ -147,7 +147,8 @@ Headless tests prove behaviour, not the look.
   as no break. `onContentSizeChange` fires only when the size changes, so a report alone cannot
   say which value it measured: tag each with the value, take the heights as current a couple of
   frames after a value that reported nothing, and keep the layout while they are older than the
-  value (`composerRows.ts`).
+  value (`composerRows.ts`). Two inputs measuring one value report it one after the other: the
+  first report is not the value's last, so treat the value as settled only after those frames.
 - `LayoutAnimation.configureNext` on the web eases each view's `left`/`top`/`width`/`height`, so an
   `Input` whose width eases reflows its text on the way (it shows the widths in between). Let a
   change of width snap and ease only heights. The ease takes every frame change of the next commit,

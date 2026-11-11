@@ -172,7 +172,8 @@ test("the arrow keys move through the suggestions and Escape closes them", async
 // field in the two-row layout. The rows now come from the draft's height beside the controls, which
 // the rows do not change, and two rows are always the full width (composerRows.ts).
 const LINE = COMPOSER_LINE_HEIGHT;
-const measured = (text: string, oneRow: number, twoRows: number) => ({ oneRow, twoRows, text });
+/** The copies' heights for `text`; `settled`: both have laid it out (ComposerMeasure's two frames). */
+const measured = (text: string, oneRow: number, twoRows: number, settled = true) => ({ oneRow, twoRows, text, settled });
 const TWO = (height: number): ComposerLayout => ({ rows: "two", height });
 
 test("one line beside the controls is one row, whatever the wider field would hold", () => {
@@ -203,7 +204,7 @@ test("a line break is two rows of two lines at least, measured or not", () => {
 
 test("a draft the copies have not measured yet keeps the layout it has, so it moves once, when they have", () => {
   // Nothing measured yet (a draft restored on opening): one row until the copies report.
-  expect(composerLayout("a restored draft", { oneRow: LINE, twoRows: LINE, text: null }, ONE_ROW)).toEqual(ONE_ROW);
+  expect(composerLayout("a restored draft", { oneRow: LINE, twoRows: LINE, text: null, settled: false }, ONE_ROW)).toEqual(ONE_ROW);
   // A long draft replaced by a short one in one edit: the copies' heights are the long draft's.
   expect(composerLayout("hi", measured("a long draft", 5 * LINE, 4 * LINE), ONE_ROW)).toEqual(ONE_ROW);
   expect(composerLayout("hi", measured("a long draft", 5 * LINE, 4 * LINE), TWO(4 * LINE))).toEqual(TWO(4 * LINE));
@@ -297,6 +298,28 @@ test("above the controls an edit's height eases once measured, past the earlier 
     // The copies report the new draft a line taller: that height is the edit's, and eases.
     composer.measures.set(measured("a long draft that grows", 4 * LINE, 3 * LINE));
     expect(composer.layout()).toEqual(TWO(3 * LINE));
+    expect(composer.eased()).toBe(1);
+  } finally {
+    composer.restore();
+  }
+});
+
+test("above the controls an edit's height eases when the copies report it one after the other", () => {
+  const composer = followed("a long draft", 2 * LINE);
+  try {
+    // Pasted: the one-row copy reports the new draft first, a line taller beside the controls, while
+    // the full-width copy has not laid it out yet. The layout it gives is the one shown.
+    composer.text.set("a long draft that grows");
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 2 * LINE, false));
+    expect(composer.layout()).toEqual(TWO(2 * LINE));
+    // Then the full-width copy: the edit's height, which eases as one that both report at once does.
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 3 * LINE, false));
+    expect(composer.layout()).toEqual(TWO(3 * LINE));
+    expect(composer.eased()).toBe(1);
+    // Settled, a resize after it snaps.
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 3 * LINE));
+    composer.measures.set(measured("a long draft that grows", 5 * LINE, 4 * LINE));
+    expect(composer.layout()).toEqual(TWO(4 * LINE));
     expect(composer.eased()).toBe(1);
   } finally {
     composer.restore();

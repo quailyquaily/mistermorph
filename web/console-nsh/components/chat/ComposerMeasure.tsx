@@ -7,7 +7,8 @@
 //
 // Each report names the draft it measured. A copy reports only when its height changes, so a draft
 // that leaves both heights as they were reports nothing: two frames after it came, once it has been
-// laid out, the heights are taken as its own.
+// laid out, the heights are taken as its own. Then too the report says the draft is settled: the
+// two copies report one after the other, and the first one's report is not the draft's last.
 //
 // Placed as the first child of the composer's row view: absolute, so the row's flex layout and gap
 // leave it out, and as wide as that row in both layouts.
@@ -22,23 +23,34 @@ export interface ComposerMeasured extends ComposerMeasures {
 }
 
 /** Nothing measured yet: the composer stays one row (composerLayout). */
-export const INITIAL_MEASURES: ComposerMeasured = { oneRow: COMPOSER_LINE_HEIGHT, twoRows: COMPOSER_LINE_HEIGHT, text: null, oneRowWidth: 0 };
+export const INITIAL_MEASURES: ComposerMeasured = { oneRow: COMPOSER_LINE_HEIGHT, twoRows: COMPOSER_LINE_HEIGHT, text: null, settled: false, oneRowWidth: 0 };
 
 export function ComposerMeasure(props: { text: string; actionsWidth: number; onMeasure: (measures: ComposerMeasured) => void }) {
   let current = INITIAL_MEASURES;
   const update = (patch: Partial<ComposerMeasured>) => {
     const next = { ...current, ...patch };
-    if (next.oneRow === current.oneRow && next.twoRows === current.twoRows && next.text === current.text && Math.abs(next.oneRowWidth - current.oneRowWidth) < 0.25) return;
+    if (
+      next.oneRow === current.oneRow &&
+      next.twoRows === current.twoRows &&
+      next.text === current.text &&
+      next.settled === current.settled &&
+      Math.abs(next.oneRowWidth - current.oneRowWidth) < 0.25
+    )
+      return;
     current = next;
     props.onMeasure(next);
   };
-  const measured = (patch: Partial<ComposerMeasured>) => update({ ...patch, text: untracked(() => props.text) });
+  // A copy's report: settled only if the draft was already (a new width's heights, not an edit's).
+  const measured = (patch: Partial<ComposerMeasured>) => {
+    const text = untracked(() => props.text);
+    update({ ...patch, text, settled: current.settled && current.text === text });
+  };
   effect(() => {
     const text = props.text;
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {
         frame = 0;
-        if (current.text !== text) update({ text });
+        if (current.text !== text || !current.settled) update({ text, settled: true });
       });
     });
     cleanup(() => {

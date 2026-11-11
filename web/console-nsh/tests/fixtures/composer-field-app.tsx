@@ -2,10 +2,11 @@
 // ChatComposer lays them out (composerFrameClass, composerRowClass, composerFieldBox, the hidden
 // copies of ComposerMeasure and followComposerLayout), a 38pt add button, the field and the actions,
 // with the frames, boxes, row mode and the field's own measured text height (what it shows, at the
-// width it has) read out as text. A second row is read-only, as a disabled composer is; a third has wider
-// actions, as with the model picker and voice input.
+// width it has) read out as text, and how many of its layout commits followComposerLayout eased. A
+// second row is read-only, as a disabled composer is; a third has wider actions, as with the model
+// picker and voice input.
 import type { Bounds } from "nsh";
-import { effect, mount, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { effect, LayoutAnimation, mount, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Input } from "nsh/base";
 import { COMPOSER_FIELD_TEXT, COMPOSER_LINE_HEIGHT, composerFieldBox, composerFrameClass, composerRowClass } from "../../components/chat/composerField";
 import { ComposerMeasure, INITIAL_MEASURES } from "../../components/chat/ComposerMeasure";
@@ -26,10 +27,21 @@ function track(name: string) {
   };
 }
 
+const LONG = "A draft put in at once, long enough to wrap beside the controls and above them on any window this test opens. ";
+
 export const PUT = {
-  long: "A draft put in at once, long enough to wrap beside the controls and above them on any window this test opens. ".repeat(2),
+  long: LONG.repeat(2),
   short: "hi",
   lines: "one\ntwo",
+  // The long draft with as much again pasted after it: taller at both widths.
+  longer: LONG.repeat(4),
+};
+
+// Every commit followComposerLayout eases, counted (only the live row is edited while it is read).
+const ease = LayoutAnimation.configureNext;
+(LayoutAnimation as { configureNext: unknown }).configureNext = (...args: Parameters<typeof ease>) => {
+  put("eased", ((untracked(report).eased as number | undefined) ?? 0) + 1);
+  return ease.apply(LayoutAnimation, args);
 };
 
 function FieldRow(props: { name: string; readonly?: boolean; tools?: boolean }) {

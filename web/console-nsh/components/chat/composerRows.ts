@@ -28,12 +28,14 @@ import { COMPOSER_LINE_HEIGHT } from "./composerField";
 /** `one`: add, the field, actions. `two`: the field across the row, above the controls. */
 export type ComposerRows = "one" | "two";
 
-/** The draft's laid-out height beside the controls (`oneRow`) and across the row (`twoRows`), and
- *  the draft they were measured for (`null`: not measured yet). */
+/** The draft's laid-out height beside the controls (`oneRow`) and across the row (`twoRows`), the
+ *  draft they were measured for (`null`: not measured yet), and whether both copies have laid that
+ *  draft out (`settled`): the first copy to report it does so before the second has. */
 export interface ComposerMeasures {
   oneRow: number;
   twoRows: number;
   text: string | null;
+  settled: boolean;
 }
 
 /** The rows, and the height of the text at the width the field takes in them. */
@@ -89,9 +91,11 @@ export function followComposerLayout(layout: Signal<ComposerLayout>, text: Acces
       const current = layout();
       const next = composerLayout(draft, measured, current);
       if (sameComposerLayout(current, next)) {
-        // Measured for this draft and unchanged, the layout shown is this draft's: a height that
-        // comes next is a new width's. Heights from an earlier draft leave it with that draft.
-        if (measured.text === draft) shownFor = draft;
+        // Unchanged once both copies have laid this draft out, the layout shown is this draft's: a
+        // height that comes next is a new width's. Not before: the first copy to report leaves the
+        // layout as it was while the second has still to report the edit's height (a paste, which
+        // must ease). Heights from an earlier draft leave it with that draft.
+        if (measured.text === draft && measured.settled) shownFor = draft;
         return;
       }
       if (next.rows !== current.rows) {
