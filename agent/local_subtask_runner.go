@@ -133,8 +133,9 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 		ToolCallTimeout:   r.engine.config.ToolCallTimeout,
 		ContextCompaction: r.engine.config.ContextCompaction,
 	}, r.engine.spec, append(subOpts, WithEngineToolsConfig(EngineToolsConfig{
-		SpawnEnabled: canSpawn,
-		CoderEnabled: false,
+		SpawnEnabled:  canSpawn,
+		CoderEnabled:  false,
+		WorkerNameSet: r.engine.engineToolsConfig.WorkerNameSet,
 	}))...)
 
 	final, _, err := subEngine.Run(ctx, BuildSubtaskTask(req.Task, req.OutputSchema), RunOptions{
@@ -171,7 +172,9 @@ func currentModelProfileLister(list ModelProfileLister, profile string) ModelPro
 }
 
 func PrepareSubtaskContext(ctx context.Context, meta map[string]any) (string, context.Context, map[string]any) {
-	ctx = withWorkerScope(ctx)
+	// A spawn call runs in its task's scope, so the task's name set applies; only a caller
+	// outside any task gets the default set.
+	ctx = withWorkerScope(ctx, DefaultWorkerNameSet)
 	taskID := llmstats.NewSyntheticRunID("sub")
 	call, _ := ctx.Value(toolActivityContextKey{}).(toolActivity)
 	scope := ctx.Value(workerScopeKey{}).(*workerScope)

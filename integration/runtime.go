@@ -287,6 +287,7 @@ func (rt *Runtime) newRunEngineWithRegistry(ctx context.Context, task string, ba
 		CoderEnabled:   snap.Registry.ToolsCoderEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinCoder),
 		PathRoots:      runStaticRegistry.Common.PathRoots,
 		CoderPathExtra: append([]string(nil), snap.Registry.ToolsCoderPathExtra...),
+		WorkerNameSet:  snap.Registry.ToolsAgentNameSet,
 	}
 	var clientDecorator taskruntime.ClientDecorator
 	if clientWrap != nil {

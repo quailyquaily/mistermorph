@@ -1,13 +1,17 @@
-// Tools: each built-in tool with its switch, its Advanced settings and its schema, in groups; then
-// the tools channel runtimes add, as a matrix of tool by channel.
+// Tools: each built-in tool with its switch, its Advanced settings and its schema, in groups; the
+// name set spawn and coder share; then the tools channel runtimes add, as a matrix of tool by
+// channel.
 import type { JSX } from "nsh";
 import { Image, Scroll, Text, View } from "nsh";
 import { isMobile } from "../../../lib/shell";
 import { Button as BaseButton } from "nsh/base";
 import { TOOL_ADVANCED_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
+import { WORKER_NAME_SETS, workerNameExamples } from "../../../lib/core/worker-identity.js";
+import { localeState } from "../../../lib/stores/index.js";
 import { Button, Icon } from "../../../components/ui";
 import { InlineNotice } from "../../../components/settings/DialogShell";
-import { SettingToggleRow, SettingsCard } from "../../../components/settings-page/parts";
+import { SettingRow, SettingToggleRow, SettingsCard } from "../../../components/settings-page/parts";
+import { SettingSelect } from "../../../components/settings/SettingFields";
 import { TOOL_CHANNEL_ROWS, TOOL_CHANNELS, TOOL_GROUPS, type ToolChannel } from "../constants";
 import type { SettingsStore } from "../store";
 import { t } from "../i18n";
@@ -43,6 +47,48 @@ function MatrixFrame(props: { children?: JSX.Element }) {
         {props.children}
       </Scroll>
     </If>
+  );
+}
+
+/**
+ * The name set new spawn subagents and coders are named from: shared by both tools, so it sits
+ * below every tool's own settings and saves with them. A few of the set's names, in the Console's
+ * language, show what it is like.
+ */
+function AgentNameSetSetting(props: { s: SettingsStore; disabled: boolean }) {
+  const s = props.s;
+  const options = () => WORKER_NAME_SETS.map((set) => ({ title: t(`settings_agent_name_set_${set}`), value: set }));
+  const examples = () =>
+    t("settings_agent_name_set_examples", {
+      names: workerNameExamples(s.agentNameSet(), localeState.lang).join(t("settings_agent_name_set_separator")),
+    });
+  return (
+    <View class="gap-2" testID="settings-agent-name-set">
+      <GroupTitle text={t("settings_agent_name_set_group")} />
+      <View class="border-t border-line-soft">
+        <SettingRow
+          first
+          title={t("settings_agent_name_set_title")}
+          note={t("settings_agent_name_set_note")}
+          status={
+            <Text class="text-xs leading-[20.3px] text-subtle" testID="settings-agent-name-set-examples">
+              {examples()}
+            </Text>
+          }
+        >
+          <View class={isMobile() ? "self-stretch" : "w-[200px] shrink-0"}>
+            <SettingSelect
+              value={s.agentNameSet()}
+              options={options()}
+              onChange={(value) => s.setAgentNameSet(value)}
+              label={t("settings_agent_name_set_title")}
+              disabled={props.disabled}
+              testID="settings-agent-name-set-select"
+            />
+          </View>
+        </SettingRow>
+      </View>
+    </View>
   );
 }
 
@@ -117,6 +163,10 @@ export function ToolsSection(props: { s: SettingsStore }) {
               </View>
             )}
           </Each>
+
+          <If when={s.agentNameSetSupported()}>
+            <AgentNameSetSetting s={s} disabled={busy() || s.agentSettingsReadOnly()} />
+          </If>
 
           <View class="gap-2">
             <View class="gap-0.5">

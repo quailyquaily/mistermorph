@@ -88,7 +88,7 @@ test("activity marks follow the runtime, and the TODO toggle counts running runs
   await app.waitFor("Trip plans");
 });
 
-test("the TODO toggle's beam lasts as long as the runs, outlives a failed poll, and the toggle works meanwhile", async () => {
+test("the TODO toggle's clock hands turn as long as the runs, through a failed poll, and the toggle works meanwhile", async () => {
   let cronRunning = 2;
   let pollFails = false;
   const { app } = await openConsole({
@@ -118,11 +118,11 @@ test("the TODO toggle's beam lasts as long as the runs, outlives a failed poll, 
   await app.clock!.runFor(5000);
   await app.waitFor("label:TODO runs — 1 running");
   expect(app.count("id:chat-cron-running")).toBe(1);
-  // A failed poll is not the end of the runs.
+  // A failed poll is not the end of the runs: the hands keep turning.
   pollFails = true;
   await app.clock!.runFor(5000);
   expect(app.count("id:chat-cron-running")).toBe(1);
-  // The last one ends: the beam goes and the toggle is plain again.
+  // The last one ends: the hands settle and the toggle is plain again.
   pollFails = false;
   cronRunning = 0;
   await app.clock!.runFor(5000);

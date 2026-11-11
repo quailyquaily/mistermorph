@@ -456,6 +456,11 @@ Tools:
   administrator after the user approves each one, in the chat that started the task or a system
   dialog (`enabled`, default true; `approval_timeout`, default `2m`; bash also `dialog`, `askpass`,
   `approver` (`auto`, `client`, `dialog`; default `auto`)). See [Elevated commands](tools.md#elevated-commands).
+- `tools.agent_name_set` picks the names new `spawn` subagents and `coder` workers get, shared by
+  both tools: `scientists` (default), `musicians` or `artists`. A missing or unknown value means
+  `scientists`. It applies to tasks started after the change; workers already named, and a task
+  resumed after an approval pause, keep the set they were named from. The Console sets it on the
+  Tools page (Agent name set).
 
 Console:
 

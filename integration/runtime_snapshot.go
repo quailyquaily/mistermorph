@@ -51,6 +51,7 @@ type registrySnapshot struct {
 	ToolsSpawnEnabled         bool
 	ToolsCoderEnabled         bool
 	ToolsCoderPathExtra       []string
+	ToolsAgentNameSet         string
 	ToolsPlanCreateEnabled    bool
 	ToolsPlanCreateMaxSteps   int
 	ToolsTodoUpdateEnabled    bool

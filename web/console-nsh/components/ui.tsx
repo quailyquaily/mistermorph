@@ -42,11 +42,20 @@ type TokenName = Parameters<typeof token>[0];
 /* ---------- icons and marks ---------- */
 
 /** A Phosphor icon (regular weight, or its fill weight with `filled` where there is one), tinted with a theme token. */
-export function Icon(props: { name: IconName; size?: number; color?: TokenName; class?: string; filled?: boolean }) {
+export function Icon(props: {
+  name: IconName;
+  size?: number;
+  color?: TokenName;
+  class?: string;
+  filled?: boolean;
+  /** Its frame in its parent as it lays out (layout probes in tests). */
+  onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
+}) {
   return (
     <Image
       src={(props.filled && FILLED_ICONS[props.name]) || ICONS[props.name]}
       class={props.class}
+      onLayout={props.onLayout}
       accessibilityElementsHidden
       style={{
         width: props.size ?? 16,
@@ -485,6 +494,8 @@ export interface TextFieldProps {
   value: string;
   onChange?: (value: string) => void;
   onSubmit?: (text: string) => void;
+  /** What Enter does in a one-line field: `blurAndSubmit` (the default: submits and lets go of the focus) or `submit` (keeps the focus, for a form that stays open when its submit fails). */
+  submitBehavior?: "submit" | "blurAndSubmit";
   onKeyPress?: (key: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -557,6 +568,7 @@ export function TextField(props: TextFieldProps) {
           value={props.value}
           onChange={({ value }) => props.onChange?.(value)}
           onSubmit={({ text }) => props.onSubmit?.(text)}
+          submitBehavior={props.multiline ? undefined : props.submitBehavior}
           onKeyPress={props.onKeyPress ? ({ key }) => props.onKeyPress?.(key) : undefined}
           onFocus={props.onFocus}
           onBlur={props.onBlur}

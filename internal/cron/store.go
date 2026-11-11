@@ -210,7 +210,8 @@ func (s *Store) RecordRunStart(id string, at time.Time) error {
 	return err
 }
 
-// RecordRunResult notes how the task's last run ended: RunStatusDone or RunStatusFailed.
+// RecordRunResult notes how the task's last run ended: RunStatusDone, RunStatusFailed or
+// RunStatusCanceled.
 func (s *Store) RecordRunResult(id string, status string) error {
 	db, err := s.handle(context.Background())
 	if err != nil {
@@ -428,11 +429,22 @@ func (s *Store) DueLenient(now time.Time) ([]DueTask, []error, error) {
 			taskErrs = append(taskErrs, err)
 			continue
 		}
-		if due {
+		if due && !stoppedOnceAfter(task, scheduledAt) {
 			out = append(out, DueTask{Task: task, ScheduledAtUTC: scheduledAt})
 		}
 	}
 	return out, taskErrs, nil
+}
+
+// stoppedOnceAfter reports whether a one-time task's run at or after its time scheduledAt was
+// stopped by a person. That was its one execution, so the past time does not fire it again (a
+// failed one does); the task is kept as it is, and a new time or a manual run runs it again.
+func stoppedOnceAfter(task Task, scheduledAt time.Time) bool {
+	if strings.TrimSpace(task.At) == "" || strings.TrimSpace(task.LastRunStatus) != RunStatusCanceled {
+		return false
+	}
+	last, err := time.Parse(time.RFC3339, strings.TrimSpace(task.LastRunAt))
+	return err == nil && !last.Before(scheduledAt)
 }
 
 // SchedulerLockFilename is the lock one process holds while it schedules the TODO list, in the
