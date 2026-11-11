@@ -19,7 +19,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
 | `lib/i18n/index.js` | The Vue console's strings, unchanged: `translate(key, vars)` |
-| `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()` |
+| `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()`, the last committed `navigation()` |
+| `lib/navMotion.ts` | Which way a navigation moves (further in, back, the navigation's order); `lib/navOrder.ts` is that order |
 | `lib/shell.ts` | The frame's state: endpoints, nav items, mobile breakpoint |
 | `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back, then the history |
 | `lib/softKeyboard.ts` | Whether the software keyboard is up; a phone back arrow lowers it before it leaves |
@@ -27,13 +28,16 @@ stays the reference for behaviour, states and copy until the cutover.
 | `components/ui.tsx` | The design system: Button, TextField, Toggle, SelectField, DropdownMenu, Modal, MessageDialog, confirm, Badge, Section, Page, Markdown, Icon, ... |
 | `components/icons.ts` | The Phosphor icons the console uses, by their Vue names (`PhChats`) |
 | `components/Shell.tsx` | Sidebar, mobile bottom nav, notice stack |
+| `components/frame/PageStack.tsx` | The page host: a layer per page instance and the slide between two (docs/console/page-transitions.md) |
 | `pages/<area>/` | One folder per screen; `pages/routes.tsx` maps routes to pages |
 | `tests/harness.ts` | `openConsole({ location, api })`: the app with a fake host and a stubbed console API |
 
 ## Rules (nsh is not Vue)
 
 1. **A component body runs once.** Read props and signals inside JSX, `computed` or `effect`; never
-   destructure props. To follow the route, read `currentRoute()` in a binding or an effect.
+   destructure props. To follow the route, read `currentRoute()` in a binding or an effect: inside a
+   page it is that page's own route, which stops following once the page slides out (shell code
+   reads `route()`).
 2. **All text is inside `<Text>`.** No DOM, no CSS files, no `<a>`, `<form>`, `window`, `document`,
    `localStorage`. Layout is flexbox; a `View` is a column (`flex-row` for a row).
 3. **Signals propagate synchronously.** Several writes that belong together go in `batch(...)`.
@@ -209,8 +213,37 @@ Headless tests prove behaviour, not the look.
   on a sideways scroller inside a vertical one does not scroll the outer one (chat code blocks do
   this). Progress and coder runs that do not wrap are a plain row while they fit and a sideways
   scroller only while they overflow (`components/chat/OverflowLine.tsx`).
+- On a touch screen such a drag must not take a swipe from the list's scroll view, so it waits for
+  a finger to rest (`pages/chat/topicDrag.ts`: 450ms within 8pt). nsh/base's `Button` takes no
+  `onLongPress`, so the hold is timed in JS from the touch events of the view around the button
+  (`onTouchStart`/`Move`/`End`/`Cancel`, which every listening view hears, before the responder's
+  events of the same touch). Nothing can claim the responder between touch events: the claim is
+  the next move's `onMoveShouldSetPanResponder` after the hold, and the grant's block is what
+  stops the scroll view. On Android that block sets the `ScrollBox`'s `jsBlocked` (it neither
+  intercepts nor scrolls), a scroll view that starts to scroll first cancels the JS touches
+  (`onTouchCancel`, terminate), and its touch tracker sends a move only when a position changed.
+  The release after a hold still presses the button under it: the row's `onPress` asks the drag
+  whether the hold took that press. Headless runs cannot rest a finger and then move it in one
+  gesture (`dragAndHold` moves at once), so the steps are driven on the module
+  (`tests/chat-topic-touch-drag.test.tsx`).
+- On the web, nsh's context `Provider` hands its children on unresolved: a function among them (an
+  expression child in a fragment, an `If`) runs later, outside the provided value, and a context
+  read there gets the default. Native runtimes, and so headless tests, resolve them under the
+  value. A provider whose children read it at creation resolves them itself (`UnderContext` in
+  `components/ui.tsx`, under `DialogActions`); prove such a context in Chrome.
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
-  origin) are in `components/motion/` (see its README).
+  origin, page slides) are in `components/motion/` (see its README).
+- Page transitions (docs/console/page-transitions.md): a page going out stays mounted through its
+  slide (about 280 ms), inert, hidden from assistive tech and with its `onSystemBack`
+  registrations off (`SystemBackScope`). A page reading its route with
+  `currentRoute()` gets its own; code run outside the page's components (a handler's `await`
+  continuation, a module) gets the current one. A page that shows a list or one of its items on
+  phones moves between them with `createPaneStack` (`components/motion/PaneStack.tsx`): `shown`
+  in place of the `If`, `style` and `hidden` on the pane's root view, the item's phone bar inside
+  its pane, and `held` for what clears as the page goes back (an item named by the route). A new
+  phone detail view does the same. Headless steps do not wait for a slide on the system clock: a
+  test that checks a page or pane has gone waits for it (`{ state: "gone" }`), and a press on
+  the list during the slide's last frame can be lost headless (not in a browser).
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
   then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
   blurs it and lowers the keyboard as it closes, and focuses it as it opens
@@ -232,9 +265,10 @@ Headless tests prove behaviour, not the look.
   Android; do not combine the two on anything pressable.
 - Android gives a touch that no view takes to the views behind it: the dialog's scrim heard presses on
   the panel's padding. The scrim ignores presses inside the panel's frame.
-- Neither the surface nor a dialog shrinks when the software keyboard opens. The app's root and the
-  dialog layer add `keyboardFrame().height` as bottom padding. Not `env(keyboard-inset-height)`:
-  it moves views natively but not in the layout presses are matched against.
+- Neither the surface nor a dialog shrinks when the software keyboard opens. The app's root adds
+  `keyboardFrame().height` as bottom padding, and so does a dialog that is a sheet at the bottom
+  (phones), inside its own panel. Not `env(keyboard-inset-height)`: it moves views natively but not
+  in the layout presses are matched against.
 - On touch screens nsh/base's `Menu` and `Select` are sheets at the bottom of the screen (their
   `placement` is the desktops'), and opening one does not take the focus from a text field: a
   sheet opened from beside a focused field lies under its keyboard. The composer's add menu and
@@ -267,6 +301,14 @@ Headless tests prove behaviour, not the look.
   `safeArea()` has their sizes). The app's frame takes them once (`lib/systemInsets.ts`): pages and
   their 57pt bars need no inset of their own, and `env(safe-area-inset-*)` must not be added inside
   the frame on Android. Overlays cover the whole surface and take the insets themselves.
+- A dialog on a phone is a sheet at the bottom (`DialogLayer`, windows under 720pt): its layer
+  takes the top and side insets, and the sheet's own panel the bottom one (or the keyboard's
+  height instead), so its paper fills the room under its last row, taken once
+  (`dialogSheetInsets`, lib/systemInsets.ts; iOS and the web too). A dialog whose last strip is
+  painted a colour of its own takes that room in the strip (`bottomInset="content"` +
+  `dialogSheetClearance()`, as `SettingDialog` does). Its footer's buttons go in `DialogActions`
+  (Modal's footer and SettingDialog's are): exactly two share the row's width on a sheet; put
+  them in the row itself, not each in a column of its own (`flex-1` would grow it down).
 - nsh/base's `Sheet` is such an overlay: the frame's padding does not reach it, and its panel runs
   under the status bar unless it is padded. The chat's phone panel (`WorkspaceSheet`) pads its
   popup with `rightSheetInsets` (`lib/systemInsets.ts`); a new sheet at a side does the same, never

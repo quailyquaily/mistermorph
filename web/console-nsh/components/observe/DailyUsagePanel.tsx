@@ -86,7 +86,7 @@ function browserTimeZone() {
 const ROLL_MS = 420;
 
 export function DailyUsagePanel() {
-  const range = signal(30);
+  const range = signal(7);
   const metric = signal<Metric>("cost");
   const payload = signal<any>(null);
   const loading = signal(false);
@@ -368,8 +368,9 @@ export function DailyUsagePanel() {
         </Text>
       }
     >
-      {/* Range and metric set what the chart shows, so they sit at the top of the body. */}
-      <View class="flex-row flex-wrap gap-2">
+      {/* Range and metric set what the chart shows, so they sit at the top of the body: range at
+          the left edge, metric at the right. */}
+      <View class="flex-row flex-wrap justify-between gap-2">
         <Tabs
           items={DAILY_RANGES.map((n: number) => ({ id: String(n), label: t("stats_daily_range_days", { count: n }) }))}
           value={String(range())}

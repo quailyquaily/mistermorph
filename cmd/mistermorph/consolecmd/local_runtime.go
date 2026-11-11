@@ -1080,6 +1080,7 @@ func (r *consoleLocalRuntime) topicMetadataForTopic(ctx context.Context, topicID
 		Workspace: daemonruntime.TopicMetadataWorkspace{
 			WorkspaceDir: workspaceResolution.WorkspaceDir,
 			Source:       workspaceResolution.Source,
+			HomeDir:      workspace.HostHomeDir(),
 		},
 	}
 	item, ok, err := topiccontext.NewStore(topicContextPath).Get(conversationKey)
@@ -1423,6 +1424,7 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 				return r.deleteWorkspaceForTopic(ctx, topicID, defaultWorkspaceDir)
 			},
 			DefaultDir: defaultWorkspaceDir,
+			HomeDir:    workspace.HostHomeDir(),
 			Open: func(ctx context.Context, topicID string, targetPath string) error {
 				return r.openWorkspacePathForTopic(ctx, topicID, targetPath, defaultWorkspaceDir)
 			},

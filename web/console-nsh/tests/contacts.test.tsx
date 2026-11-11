@@ -213,7 +213,8 @@ test("on a phone the index and the card take turns", async () => {
   expect(app.shows("text:No contact selected")).toBe(false);
   await app.press("id:contact-row:tg:1001");
   await app.waitFor("id:contact-detail");
-  expect(app.shows("id:contacts-index")).toBe(false);
+  // The card slides in over the index, which goes once the slide has ended.
+  await app.waitFor("id:contacts-index", { state: "gone" });
   await app.press("id:mobile-back");
   await app.waitFor("id:contacts-index");
 });

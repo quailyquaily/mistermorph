@@ -1,7 +1,7 @@
 // The topic list's status marks are centred under the icon of the head's last button (its middle
 // axis, not the button's outer edge): New on a desktop and on a phone with New in the head, the tag
 // toggle in a phone's split mode (New floats over the list). The head keeps its buttons where they
-// were (the last one ends at the pages' phone gutter on phones, 30pt in on desktops); the marks
+// were (the last one ends at the pages' phone gutter on phones, and where the rows end on desktops, 16pt in); the marks
 // move under the icon, for running, pending and unread topics, long titles and TODO runs. Titles
 // keep their room and stop short of the marks (a title with no mark where a mark would end), and
 // nothing runs past the sidebar. TODO's own list: tests/todo-marker-alignment.test.tsx.
@@ -44,8 +44,8 @@ function expectHead(all: Record<string, Frame>, inset: number): Frame {
 // width: the window; inset: where the head's last button ends, in from the sidebar's outer right
 // edge (unchanged by the marks' alignment).
 const CASES = [
-  { name: "a desktop", width: 1280, mode: "plus" as const, inset: 30 + 4, newInHead: true },
-  { name: "a tablet-wide desktop", width: 1024, mode: "plus" as const, inset: 30 + 4, newInHead: true },
+  { name: "a desktop", width: 1280, mode: "plus" as const, inset: 16 + 4, newInHead: true },
+  { name: "a tablet-wide desktop", width: 1024, mode: "plus" as const, inset: 16 + 4, newInHead: true },
   { name: "a phone with New in the head", width: 390, mode: "plus" as const, inset: 12 + 4, newInHead: true },
   { name: "a phone in split mode", width: 390, mode: "split" as const, inset: 12, newInHead: false },
   { name: "a tablet-wide phone layout in split mode", width: 800, mode: "split" as const, inset: 14, newInHead: false },

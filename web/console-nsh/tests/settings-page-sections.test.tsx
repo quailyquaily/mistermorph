@@ -245,10 +245,11 @@ test("on a phone the sections come first, then a section with a back button", as
   expect(app.shows("id:settings-persona")).toBe(false);
   await app.press("id:settings-section-persona");
   await app.waitFor("id:settings-persona");
-  expect(app.shows("id:settings-index")).toBe(false);
+  // The section slides in over the sections, which go once the slide has ended; back, the reverse.
+  await app.waitFor("id:settings-index", { state: "gone" });
   await app.press("id:settings-back");
   await app.waitFor("id:settings-index");
-  expect(app.shows("id:settings-persona")).toBe(false);
+  await app.waitFor("id:settings-persona", { state: "gone" });
 });
 
 test("System: says the config is kept in agent.db, or names the --config file", async () => {

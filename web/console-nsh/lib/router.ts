@@ -1,7 +1,7 @@
 // One current location, as vue-router had it, with the same paths and the same guard: a session,
 // a setup that is complete, and an endpoint that can be selected, before any workspace page.
 // On the web it mirrors the address bar (lib/platform.ts); the desktop app keeps it in memory.
-import { batch, computed, effect, signal, untracked } from "nsh";
+import { batch, computed, context, effect, platform, signal, untracked } from "nsh";
 import { authState, authValid, endpointState } from "./stores/index.js";
 import {
   apiFetch,
@@ -24,6 +24,8 @@ import {
   endpointRouteRef,
 } from "./core/endpoint-routes.js";
 import { routeExtensions } from "./ext/routes/index.js";
+import { NAV_ITEMS_META } from "./navOrder";
+import { classifyPageMotion, MotionHistory, type PageMotion } from "./navMotion";
 import { initialLocation, isVisible, onHistoryPop, onVisibilityChange, writeHistory } from "./platform";
 
 /** Which page a route shows (pages/routes.tsx maps each to its component). */
@@ -160,19 +162,7 @@ const SETUP_FREE_PATHS = new Set([
   ...extensionSetupFreePaths,
 ]);
 
-/** The workspace navigation, as the sidebar and the mobile nav show it. */
-export const NAV_ITEMS_META = [
-  { id: "/chat", titleKey: "nav_chat", icon: "PhChats" },
-  { id: "/contacts", titleKey: "nav_contacts", icon: "PhUsers" },
-  { id: "/todo", titleKey: "nav_todo", icon: "PhListChecks" },
-  { id: "/memories", titleKey: "nav_memories", icon: "PhBrain" },
-  { id: "/skills", titleKey: "nav_skills", icon: "PhMagicWand" },
-  { id: "__sep_primary", separator: true },
-  { id: "/stats", titleKey: "nav_stats", icon: "PhChartBar" },
-  { id: "/audit", titleKey: "nav_audit", icon: "PhFingerprint" },
-  { id: "__sep_secondary", separator: true },
-  { id: "/settings", titleKey: "nav_settings", icon: "PhGearSix" },
-] as const;
+export { NAV_ITEMS_META };
 
 /* ---------- parsing ---------- */
 
@@ -346,10 +336,43 @@ const current = signal<Route | null>(null);
 const pending = signal("");
 let navigationSeq = 0;
 
+/** A committed navigation: where from, where to, how it came and which way it moves (lib/navMotion.ts). */
+export interface Navigation {
+  /** Counts the commits of this run. */
+  seq: number;
+  from: Route | null;
+  to: Route;
+  /** A page or the app opened it, replaced the place, or a history step (back/forward buttons, Android's Back) came to it. */
+  kind: "push" | "replace" | "pop";
+  motion: PageMotion;
+}
+
+const lastNavigation = signal<Navigation | null>(null);
+let commitSeq = 0;
+/** The last committed navigation (set with the route, in the same batch). */
+export const navigation = () => lastNavigation();
+
+// The history this run wrote, with each step's motion, for history steps to replay. The phone app's
+// own history drops a place replaced by the one before it (lib/mobileHost.ts); browsers keep it.
+const motionHistory = new MotionHistory(platform.os === "android" || platform.os === "ios");
+
+/**
+ * The route a page instance follows (pages/routes.tsx provides it): the current route while the
+ * page is the one shown; a page on its way out keeps the last route that was its own, so it never
+ * reacts to the next page's route as it leaves.
+ */
+export const PageRouteContext = context<(() => Route) | null>(null);
+
 /** The current route, `null` until the first navigation settles (tracked where it is read). */
 export const route = () => current();
-/** The route as a never-null value for pages, which only mount once there is one. */
-export const currentRoute = () => current() as Route;
+/**
+ * The route as a never-null value for pages, which only mount once there is one: the page's own
+ * (PageRouteContext) inside a page, else the current one.
+ */
+export const currentRoute = () => {
+  const own = PageRouteContext();
+  return (own ? own() : current()) as Route;
+};
 /** The path being opened while its guard runs, else the current path: the nav selects it at once. */
 export const currentPath = computed(() => pending() || current()?.path || "");
 
@@ -361,19 +384,34 @@ export function setLeaveGuard(next: LeaveGuard | null) {
   leaveGuard = next;
 }
 
-function commit(next: Route, mode: "push" | "replace" | "none") {
+/** How a navigation came: its kind, whether the navigation itself asked, and a history step's known motion. */
+interface Step {
+  kind: Navigation["kind"];
+  tab?: boolean;
+  /** For a history step: the motion it replays, or null when not known. */
+  motion?: PageMotion | null;
+}
+
+function commit(next: Route, mode: "push" | "replace" | "none", step: Step) {
+  const from = untracked(current);
+  let motion: PageMotion;
+  if (step.kind === "pop" && step.motion) motion = step.motion;
+  else motion = classifyPageMotion(from?.path ?? null, next.path, { tab: step.tab, pop: step.kind === "pop" });
+  if (mode === "push") motionHistory.push(next.fullPath, motion);
+  else if (mode === "replace") motionHistory.replace(next.fullPath, motion);
   batch(() => {
     pending.set("");
+    lastNavigation.set({ seq: ++commitSeq, from, to: next, kind: step.kind, motion });
     current.set(next);
   });
   if (mode !== "none") writeHistory(mode, next.fullPath);
 }
 
-async function run(location: string, mode: "push" | "replace" | "none", hops = 0): Promise<void> {
+async function run(location: string, mode: "push" | "replace" | "none", hops = 0, step: Step = { kind: "push" }): Promise<void> {
   const seq = ++navigationSeq;
   const resolved = resolve(location);
   if (resolved.redirect) {
-    return run(resolved.redirect, mode === "push" ? "push" : "replace", hops + 1);
+    return run(resolved.redirect, mode === "push" ? "push" : "replace", hops + 1, step);
   }
   const to = resolved.route!;
   pending.set(to.path);
@@ -391,17 +429,20 @@ async function run(location: string, mode: "push" | "replace" | "none", hops = 0
       pending.set("");
       return;
     }
-    return run(decision, mode === "none" ? "replace" : mode, hops + 1);
+    return run(decision, mode === "none" ? "replace" : mode, hops + 1, step);
   }
-  commit(to, mode);
+  commit(to, mode, step);
 }
 
-/** Opens `to` (path, query and hash), as router.push or router.replace did. */
-export async function navigate(to: string, options: { replace?: boolean; force?: boolean } = {}) {
+/**
+ * Opens `to` (path, query and hash), as router.push or router.replace did. `tab`: the navigation
+ * (sidebar, bottom bar, More) asked, so pages of the navigation move in its order.
+ */
+export async function navigate(to: string, options: { replace?: boolean; force?: boolean; tab?: boolean } = {}) {
   const target = String(to || "").trim() || "/";
   if (!options.force && leaveGuard && !(await leaveGuard(target))) return;
   if (!options.force) leaveGuard = null;
-  await run(target, options.replace ? "replace" : "push");
+  await run(target, options.replace ? "replace" : "push", 0, { kind: options.replace ? "replace" : "push", tab: options.tab });
 }
 
 /** The vue-router calls the copied logic makes. */
@@ -425,6 +466,12 @@ export const router = {
 export function locationOf(path: string, query: Record<string, string | undefined | null> = {}, hash = "") {
   const entries = Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== "");
   return withQuery(path, Object.fromEntries(entries) as Record<string, string>, hash);
+}
+
+/** A location as the router writes it to the history (`fullPath`): normalized path, query and hash. */
+function historyLocation(location: string) {
+  const { path, search, hash } = splitLocation(location);
+  return `${path}${search}${hash}`;
 }
 
 /* ---------- the session's end ---------- */
@@ -474,20 +521,26 @@ export function startRouter() {
     if (isVisible()) scheduleSessionExpiry();
   });
   onHistoryPop((location) => {
+    // The history moved already: note which way, whatever the leave guard says.
+    const motion = motionHistory.pop(historyLocation(location));
+    const step: Step = { kind: "pop", motion };
     if (leaveGuard) {
       const guardFn = leaveGuard;
       void Promise.resolve(guardFn(location)).then((leave) => {
         if (leave) {
           leaveGuard = null;
-          void run(location, "none");
+          void run(location, "none", 0, step);
         } else {
           const now = untracked(() => current());
-          if (now) writeHistory("push", now.fullPath);
+          if (now) {
+            motionHistory.push(now.fullPath, "none");
+            writeHistory("push", now.fullPath);
+          }
         }
       });
       return;
     }
-    void run(location, "none");
+    void run(location, "none", 0, step);
   });
-  void run(initialLocation(), "replace");
+  void run(initialLocation(), "replace", 0, { kind: "replace" });
 }

@@ -83,7 +83,8 @@ test("Back from an open topic goes to the topic list, also when the app reopened
   await app.waitFor("id:chat-back");
   await app.back();
   await app.waitFor("id:chat-topic-sidebar");
-  expect(app.shows("id:chat-back")).toBe(false);
+  // The conversation slides out to the right, its bar with it, then goes.
+  await app.waitFor("id:chat-back", { state: "gone" });
   await app.waitUntil(() => location(app) === "/e/default/chat");
   await expectSystemBack(app);
 
@@ -188,6 +189,8 @@ test("Settings Back keeps the editor and draft on cancel, and leaves only after 
   await app.press("id:dialog-action-confirm");
   await app.waitFor("id:settings-index");
   await app.waitUntil(() => location(app) === "/e/default/settings");
+  // The section keeps Tools on it while it slides out over the sections (page-transitions-back).
+  await app.waitFor("id:settings-panel", { state: "gone" });
   expect(app.shows("id:settings-tool-web_search-switch")).toBe(false);
   expect(app.shows("id:settings-save-bar")).toBe(false);
   await expectSystemBack(app);

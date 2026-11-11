@@ -26,6 +26,7 @@ import { isVisible } from "../../lib/platform";
 import { navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
+import { createPaneStack } from "../../components/motion/PaneStack";
 import { RawJsonDialogContent } from "../../components/shared/RawJsonDialog";
 import {
   auditEntries,
@@ -107,6 +108,9 @@ export function AuditPage() {
   const mobileShowBack = () => isMobile() && mobileLedgerVisible();
   // Android's Back from a ledger goes to the files, as the bar's back arrow does.
   onSystemBack(mobileShowBack, () => mobileLedgerVisible.set(false));
+  // On phones the index (0) and the open log (1) are levels of the page that slide (PaneStack).
+  const panes = createPaneStack(() => (isMobile() ? (mobileLedgerVisible() ? 1 : 0) : null));
+  const ledgerShowsBack = panes.held(1, mobileShowBack);
   const currentEndpointRef = () => String(endpointState.selectedRef || "").trim();
   const taskFeedEndpointRef = computed(() => {
     const selected: any = runtimeEndpointByRef(endpointState.selectedRef);
@@ -940,11 +944,13 @@ export function AuditPage() {
   return (
     <Page title={t("audit_title")} hideBar scroll={false} testID="audit-page">
       <View class="flex-1 flex-row">
-        <If when={showIndexPane()}>
+        <If when={panes.shown(0, showIndexPane())}>
           <View
             // Transparent, as Vue's workspace sidebar: the page paper's grid runs under it.
             class={isMobile() ? "flex-1" : ""}
-            style={isMobile() ? undefined : { width: INDEX_WIDTH }}
+            style={isMobile() ? panes.style(0) : { width: INDEX_WIDTH }}
+            accessibilityElementsHidden={panes.hidden(0) || undefined}
+            importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
             accessibilityLabel={t("audit_title")}
             testID="audit-index"
           >
@@ -1028,100 +1034,109 @@ export function AuditPage() {
           </View>
         </If>
 
-        <If when={showLedgerPane()}>
-          {/* The open log: a boxed section the height of the workbench; its toolbar over the entries. */}
-          <ObserveSection
-            variant="boxed"
-            gap={0}
-            padding={16}
+        <If when={panes.shown(1, showLedgerPane())}>
+          <View
             class="flex-1"
-            bodyClass="flex-1"
-            title={isTasks() ? t("tasks_title") : selectedFileTitle()}
-            meta={
-              <If when={!isTasks() && selectedFileItem()?.subtitle}>
-                <Text class="text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{selectedFileItem()?.subtitle}</Text>
-              </If>
-            }
-            lead={
-              <If when={mobileShowBack()}>
-                <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("audit_title")} onPress={() => mobileLedgerVisible.set(false)} />
-              </If>
-            }
-            actions={
-              <If when={!isTasks() && pageValue() > 1}>
-                <Button
-                  variant="plain"
-                  size="xs"
-                  label={t("audit_latest")}
-                  disabled={loading()}
-                  onPress={() => void refreshAudit({ latest: true })}
-                  testID="audit-latest"
-                />
-              </If>
-            }
-            style={isMobile() ? { margin: 12 } : { marginTop: 8, marginRight: 8, marginBottom: 8, marginLeft: 16 }}
-            flush
-            testID="audit-ledger"
+            style={panes.style(1)}
+            accessibilityElementsHidden={panes.hidden(1) || undefined}
+            importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
           >
-            <View
-              class={`flex-row items-center justify-between border-b border-line-soft ${isMobile() ? "flex-wrap gap-1 px-3 py-2.5" : "gap-3 px-4 py-3"}`}
-            >
-              <If
-                when={!isTasks()}
-                else={<Text class="text-xs text-subtle tabular-nums">{t("audit_page_count", { count: taskItems().length })}</Text>}
-              >
-                <View class={`flex-row flex-wrap items-center gap-x-3 gap-y-1.5 ${isMobile() ? "w-full" : "flex-1"}`}>
-                  <TextField
-                    value={filterText()}
-                    onChange={(value) => filterText.set(value)}
-                    placeholder={t("audit_filter_placeholder")}
-                    accessibilityLabel={t("audit_filter_placeholder")}
+            {/* The open log: a boxed section the height of the workbench; its toolbar over the entries. */}
+            <ObserveSection
+              variant="boxed"
+              gap={0}
+              padding={16}
+              class="flex-1"
+              bodyClass="flex-1"
+              title={isTasks() ? t("tasks_title") : selectedFileTitle()}
+              meta={
+                <If when={!isTasks() && selectedFileItem()?.subtitle}>
+                  <Text class="text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{selectedFileItem()?.subtitle}</Text>
+                </If>
+              }
+              lead={
+                <If when={ledgerShowsBack()}>
+                  <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("audit_title")} onPress={() => mobileLedgerVisible.set(false)} />
+                </If>
+              }
+              actions={
+                <If when={!isTasks() && pageValue() > 1}>
+                  <Button
+                    variant="plain"
                     size="xs"
-                    class={isMobile() ? "w-full" : "max-w-85 flex-1"}
-                    testID="audit-filter"
+                    label={t("audit_latest")}
+                    disabled={loading()}
+                    onPress={() => void refreshAudit({ latest: true })}
+                    testID="audit-latest"
                   />
-                  <If when={!isMobile()}>
-                    <Text class="text-xs text-subtle">{t("audit_filter_scope")}</Text>
-                  </If>
+                </If>
+              }
+              // No left margin: the ledger's frame meets the index's column, so the index's rows sit its
+              // 16pt gutter from the frame as from the sidebar on the other side.
+              style={isMobile() ? { margin: 12 } : { marginTop: 8, marginRight: 8, marginBottom: 8 }}
+              flush
+              testID="audit-ledger"
+            >
+              <View
+                class={`flex-row items-center justify-between border-b border-line-soft ${isMobile() ? "flex-wrap gap-1 px-3 py-2.5" : "gap-3 px-4 py-3"}`}
+              >
+                <If
+                  when={!isTasks()}
+                  else={<Text class="text-xs text-subtle tabular-nums">{t("audit_page_count", { count: taskItems().length })}</Text>}
+                >
+                  <View class={`flex-row flex-wrap items-center gap-x-3 gap-y-1.5 ${isMobile() ? "w-full" : "flex-1"}`}>
+                    <TextField
+                      value={filterText()}
+                      onChange={(value) => filterText.set(value)}
+                      placeholder={t("audit_filter_placeholder")}
+                      accessibilityLabel={t("audit_filter_placeholder")}
+                      size="xs"
+                      class={isMobile() ? "w-full" : "max-w-85 flex-1"}
+                      testID="audit-filter"
+                    />
+                    <If when={!isMobile()}>
+                      <Text class="text-xs text-subtle">{t("audit_filter_scope")}</Text>
+                    </If>
+                  </View>
+                </If>
+                <View class="ml-auto flex-row items-center gap-1" accessibilityLabel={t("audit_pagination")}>
+                  <Button
+                    variant="plain"
+                    size={isMobile() ? "md" : "sm"}
+                    iconOnly
+                    icon="PhArrowLeft"
+                    title={t("audit_newer")}
+                    disabled={isTasks() ? taskLoading() || taskPageIndex() <= 0 : loading() || pageValue() <= 1}
+                    onPress={() => (untracked(isTasks) ? prevTaskPage() : void goPrev())}
+                    testID="audit-newer"
+                  />
+                  <Text class="min-w-13 text-center text-xs text-subtle tabular-nums">
+                    {t("audit_page_number", { page: isTasks() ? taskPageIndex() + 1 : pageValue() })}
+                  </Text>
+                  <Button
+                    variant="plain"
+                    size={isMobile() ? "md" : "sm"}
+                    iconOnly
+                    icon="PhArrowRight"
+                    title={t("audit_older")}
+                    disabled={isTasks() ? taskLoading() || !taskNextCursor() : loading() || !meta().has_next || !meta().next_cursor}
+                    onPress={() => (untracked(isTasks) ? nextTaskPage() : void goNext())}
+                    testID="audit-older"
+                  />
                 </View>
-              </If>
-              <View class="ml-auto flex-row items-center gap-1" accessibilityLabel={t("audit_pagination")}>
-                <Button
-                  variant="plain"
-                  size={isMobile() ? "md" : "sm"}
-                  iconOnly
-                  icon="PhArrowLeft"
-                  title={t("audit_newer")}
-                  disabled={isTasks() ? taskLoading() || taskPageIndex() <= 0 : loading() || pageValue() <= 1}
-                  onPress={() => (untracked(isTasks) ? prevTaskPage() : void goPrev())}
-                  testID="audit-newer"
-                />
-                <Text class="min-w-13 text-center text-xs text-subtle tabular-nums">
-                  {t("audit_page_number", { page: isTasks() ? taskPageIndex() + 1 : pageValue() })}
-                </Text>
-                <Button
-                  variant="plain"
-                  size={isMobile() ? "md" : "sm"}
-                  iconOnly
-                  icon="PhArrowRight"
-                  title={t("audit_older")}
-                  disabled={isTasks() ? taskLoading() || !taskNextCursor() : loading() || !meta().has_next || !meta().next_cursor}
-                  onPress={() => (untracked(isTasks) ? nextTaskPage() : void goNext())}
-                  testID="audit-older"
-                />
               </View>
-            </View>
-            <View class="h-0.75 overflow-hidden">
-              <If when={isTasks() ? taskLoading() : loading()}>
-                <ProgressBar indeterminate label={t("runtime_loading")} />
-              </If>
-            </View>
-            <View class={`flex-1 ${isMobile() ? "px-3" : "px-4"}`}>
-              <If when={!isTasks()} else={<TaskLedger />}>
-                <AuditLedger />
-              </If>
-            </View>
-          </ObserveSection>
+              <View class="h-0.75 overflow-hidden">
+                <If when={isTasks() ? taskLoading() : loading()}>
+                  <ProgressBar indeterminate label={t("runtime_loading")} />
+                </If>
+              </View>
+              <View class={`flex-1 ${isMobile() ? "px-3" : "px-4"}`}>
+                <If when={!isTasks()} else={<TaskLedger />}>
+                  <AuditLedger />
+                </If>
+              </View>
+            </ObserveSection>
+          </View>
         </If>
 
         <SidePane open={pane() !== null} onClose={closePane} sheet={isMobile()} label={paneLabel()}>

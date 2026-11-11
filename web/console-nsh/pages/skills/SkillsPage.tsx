@@ -52,6 +52,7 @@ import { skillToggleSettings } from "../../lib/core/skills-load.js";
 import { SKILL_DOC_PATH, skillFileURL, useSkillFilePreview } from "../../lib/core/skill-files.js";
 import { openExternal } from "../../lib/platform";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
+import { createPaneStack } from "../../components/motion/PaneStack";
 import { isMobile } from "../../lib/shell";
 import { scrollIntoViewNearest } from "./scroll";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -179,10 +180,14 @@ export function SkillsPage() {
   const showSearch = () => skills().length > SEARCH_THRESHOLD;
   const visibleSkills = () => (showSearch() ? (filterSkills(skills(), query()) as Skill[]) : skills());
   const selectedID = () => String(currentRoute().query.skill || "").trim();
-  const selected = computed(() => {
+  // The skill the address names; on phones the list (0) and that skill (1) are levels of the page
+  // that slide (PaneStack). The detail goes on showing its skill while it slides out.
+  const routeSelected = computed(() => {
     const id = selectedID().toLowerCase();
     return skills().find((skill) => skill.id.toLowerCase() === id) || null;
   });
+  const panes = createPaneStack(() => (isMobile() ? (routeSelected() ? 1 : 0) : null));
+  const selected = panes.held(1, routeSelected);
   const selectedKey = computed(() => selected()?.id || "");
 
   // The newer store version of an installed skill, when it came from the store and has one.
@@ -200,8 +205,8 @@ export function SkillsPage() {
   const skillsRoot = () => catalog().roots[0] || "~/.morph/skills";
   const addLinkValid = () => Boolean(normalizeInstallLink(addLink()));
   // Phones show the list or one skill; desktop shows both, as on TODO.
-  const showIndex = () => !isMobile() || !selected();
-  const showDetail = () => Boolean(selected());
+  const showIndex = () => !isMobile() || !routeSelected();
+  const showDetail = () => Boolean(routeSelected());
   // Files fold into one line; SKILL.md is what the card is for.
   const filesSummary = () => {
     const files = selected()?.files || [];
@@ -613,14 +618,13 @@ export function SkillsPage() {
 
   return (
     <Page hideBar scroll={false} testID="skills-page">
-      <If when={isMobile() && showDetail()}>
-        <MobileBar title={t("skills_title")} backLabel={t("action_back")} onBack={closeSkill} />
-      </If>
       <View class="flex-1 flex-row">
-        <If when={showIndex()}>
+        <If when={panes.shown(0, showIndex())}>
           <IndexColumn
             title={t("skills_title")}
             fill={isMobile()}
+            style={panes.style(0)}
+            hidden={panes.hidden(0)}
             actions={indexActions}
             headRight="none"
             testID="skills-index"
@@ -675,287 +679,297 @@ export function SkillsPage() {
           </IndexColumn>
         </If>
 
-        <If when={showDetail() || !isMobile()}>
-          <Scroll
-            ref={detailScroll}
+        <If when={panes.shown(1, showDetail() || !isMobile())}>
+          <View
             class="flex-1"
-            scrollbar={SCROLLBAR}
-            contentClass="grow"
-            onScroll={(event) => {
-              detailOffset = event.offset.y;
-              detailHeight = event.size.height;
-            }}
-            onLayout={({ bounds }) => {
-              detailHeight = bounds.size.height;
-            }}
+            style={panes.style(1)}
+            accessibilityElementsHidden={panes.hidden(1) || undefined}
+            importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
           >
-            <If
-              when={selected()}
-              else={
-                <If when={!isMobile() && !loading()}>
-                  {/* No skill open: an Add skill tile in the middle of the column. */}
-                  <View class="grow gap-3 px-4 py-6">
+            <If when={isMobile()}>
+              <MobileBar title={t("skills_title")} backLabel={t("action_back")} onBack={panes.hidden(1) ? undefined : closeSkill} />
+            </If>
+            <Scroll
+              ref={detailScroll}
+              class="flex-1"
+              scrollbar={SCROLLBAR}
+              contentClass="grow"
+              onScroll={(event) => {
+                detailOffset = event.offset.y;
+                detailHeight = event.size.height;
+              }}
+              onLayout={({ bounds }) => {
+                detailHeight = bounds.size.height;
+              }}
+            >
+              <If
+                when={selected()}
+                else={
+                  <If when={!isMobile() && !loading()}>
+                    {/* No skill open: an Add skill tile in the middle of the column. */}
+                    <View class="grow gap-3 px-4 py-6">
+                      <If when={err()}>
+                        <InlineNotice type="error" text={err()} testID="skills-error" />
+                      </If>
+                      <View class="flex-1 items-center justify-center gap-3">
+                        {/* Buttons align themselves to the start; a wrapper as wide as each centres it. */}
+                        <View>
+                          <Button
+                            variant="outlined"
+                            size="md"
+                            iconOnly
+                            title={t("skills_add")}
+                            disabled={unsupported()}
+                            onPress={openAdd}
+                            testID="skills-empty-add"
+                          >
+                            <Icon name="PhPlus" size={18} color="subtle" />
+                          </Button>
+                        </View>
+                        <If when={!skills().length}>
+                          <Note text={t("skills_empty_title")} />
+                          <View>
+                            <Button
+                              variant="plain"
+                              size="sm"
+                              icon="PhStorefront"
+                              label={t("skills_store_browse")}
+                              disabled={unsupported()}
+                              onPress={openStore}
+                            />
+                          </View>
+                        </If>
+                      </View>
+                    </View>
+                  </If>
+                }
+              >
+                {(skill) => (
+                  <DetailCard
+                    testID="skill-detail"
+                    title={skill().name}
+                    class={isMobile() ? "mx-3 mt-2 mb-4" : "mb-2 mr-2 mt-2"}
+                    actions={<DropdownMenu items={skillMenu()} trigger={<MoreTrigger label={t("skills_more")} testID="skill-actions" />} />}
+                  >
+                    <If when={skill().description}>
+                      <View selectable>
+                        <Text class="text-sm leading-[21.7px] text-subtle">{skill().description}</Text>
+                      </View>
+                    </If>
+                    <If when={catalog().readOnly && catalog().readOnlyReason}>
+                      <InlineNotice type="warning" text={catalog().readOnlyReason} />
+                    </If>
                     <If when={err()}>
                       <InlineNotice type="error" text={err()} testID="skills-error" />
                     </If>
-                    <View class="flex-1 items-center justify-center gap-3">
-                      {/* Buttons align themselves to the start; a wrapper as wide as each centres it. */}
-                      <View>
-                        <Button
-                          variant="outlined"
-                          size="md"
-                          iconOnly
-                          title={t("skills_add")}
-                          disabled={unsupported()}
-                          onPress={openAdd}
-                          testID="skills-empty-add"
-                        >
-                          <Icon name="PhPlus" size={18} color="subtle" />
-                        </Button>
-                      </View>
-                      <If when={!skills().length}>
-                        <Note text={t("skills_empty_title")} />
-                        <View>
+                    <If when={selectedUpdate()}>
+                      {(entry) => (
+                        <View class="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius) border border-[#426f9e4d] bg-[#426f9e0f] px-2.5 py-2">
+                          <Text class="text-xs text-subtle">{t("skills_update_note", { version: entry().version })}</Text>
                           <Button
-                            variant="plain"
-                            size="sm"
-                            icon="PhStorefront"
-                            label={t("skills_store_browse")}
-                            disabled={unsupported()}
-                            onPress={openStore}
+                            variant="outlined"
+                            size="xs"
+                            label={t("skills_update_to", { version: entry().version })}
+                            loading={installBusy()}
+                            disabled={locked()}
+                            onPress={() => void updateFromStore(entry())}
+                            testID="skill-update"
                           />
                         </View>
-                      </If>
-                    </View>
-                  </View>
-                </If>
-              }
-            >
-              {(skill) => (
-                <DetailCard
-                  testID="skill-detail"
-                  title={skill().name}
-                  class={isMobile() ? "mx-3 mt-2 mb-4" : "mb-2 ml-5 mr-2 mt-2"}
-                  actions={<DropdownMenu items={skillMenu()} trigger={<MoreTrigger label={t("skills_more")} testID="skill-actions" />} />}
-                >
-                  <If when={skill().description}>
-                    <View selectable>
-                      <Text class="text-sm leading-[21.7px] text-subtle">{skill().description}</Text>
-                    </View>
-                  </If>
-                  <If when={catalog().readOnly && catalog().readOnlyReason}>
-                    <InlineNotice type="warning" text={catalog().readOnlyReason} />
-                  </If>
-                  <If when={err()}>
-                    <InlineNotice type="error" text={err()} testID="skills-error" />
-                  </If>
-                  <If when={selectedUpdate()}>
-                    {(entry) => (
-                      <View class="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius) border border-[#426f9e4d] bg-[#426f9e0f] px-2.5 py-2">
-                        <Text class="text-xs text-subtle">{t("skills_update_note", { version: entry().version })}</Text>
-                        <Button
-                          variant="outlined"
-                          size="xs"
-                          label={t("skills_update_to", { version: entry().version })}
-                          loading={installBusy()}
-                          disabled={locked()}
-                          onPress={() => void updateFromStore(entry())}
-                          testID="skill-update"
-                        />
+                      )}
+                    </If>
+                    <If when={skill().modified.length}>
+                      <View class="flex-row items-start gap-1.5">
+                        <View class="pt-px">
+                          <Icon name="PhWarning" size={14} color="danger" />
+                        </View>
+                        <Text class="flex-1 text-xs leading-[17.4px] text-danger">{t("skills_modified_since", { files: skill().modified.join(", ") })}</Text>
                       </View>
-                    )}
-                  </If>
-                  <If when={skill().modified.length}>
-                    <View class="flex-row items-start gap-1.5">
-                      <View class="pt-px">
-                        <Icon name="PhWarning" size={14} color="danger" />
-                      </View>
-                      <Text class="flex-1 text-xs leading-[17.4px] text-danger">{t("skills_modified_since", { files: skill().modified.join(", ") })}</Text>
-                    </View>
-                  </If>
+                    </If>
 
-                  <PropertyList>
-                    <PropertyRow label={t("skills_field_enabled")} center>
-                      <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
-                        <SwitchOnly
-                          checked={isOn(skill())}
-                          disabled={locked()}
-                          label={t("skills_load_toggle", { name: skill().name })}
-                          onChange={(value) => setLoaded(skill(), value)}
-                          testID="skill-loaded"
-                        />
-                        <Text class="text-xs leading-normal text-muted-foreground">{enabledNote()}</Text>
-                      </View>
-                    </PropertyRow>
-                    <If when={skillSourceText(skill())}>
-                      <PropertyRow label={t("skills_fact_source")}>
-                        <If when={skill().source.url} else={<PropertyText text={skillSourceText(skill())} />}>
-                          <LinkText text={skillSourceText(skill())} onPress={() => openExternal(skill().source.url)} testID="skill-source" />
-                        </If>
-                      </PropertyRow>
-                    </If>
-                    <PropertyRow label={t("skills_fact_location")}>
-                      <PropertyText text={skill().dir} mono />
-                    </PropertyRow>
-                    <If when={skill().requirements.length}>
-                      <PropertyRow label={t("skills_fact_requires")}>
-                        <PropertyText text={skill().requirements.join(", ")} />
-                      </PropertyRow>
-                    </If>
-                    <If when={skill().authProfiles.length}>
-                      <PropertyRow label={t("skills_fact_auth")}>
-                        <PropertyText text={skill().authProfiles.join(", ")} />
-                      </PropertyRow>
-                    </If>
-                    <PropertyRow label={t("skills_fact_files")}>
-                      <View class="gap-0">
-                        <BaseButton
-                          onPress={() => filesExpanded.update((open) => !open)}
-                          selected={filesExpanded()}
-                          accessibilityLabel={filesSummary()}
-                          testID="skill-files-toggle"
-                          class="group flex-row items-center gap-1.5 self-start"
-                        >
-                          <Text class="text-xs leading-normal text-subtle group-hover:text-foreground" style={ROW_TRANSITION}>
-                            {filesSummary()}
-                          </Text>
-                          <TurnCaret open={filesExpanded()} />
-                        </BaseButton>
-                        <If when={filesExpanded()}>
-                          <SkillFileTree
-                            endpointRef={endpointState.selectedRef}
-                            skillId={skill().id}
-                            selectedPath={treeSelectedPath()}
-                            disabled={editing()}
-                            fallbackFiles={skill().files}
-                            onSelect={(path) => openFile(path)}
+                    <PropertyList>
+                      <PropertyRow label={t("skills_field_enabled")} center>
+                        <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
+                          <SwitchOnly
+                            checked={isOn(skill())}
+                            disabled={locked()}
+                            label={t("skills_load_toggle", { name: skill().name })}
+                            onChange={(value) => setLoaded(skill(), value)}
+                            testID="skill-loaded"
                           />
-                        </If>
-                      </View>
-                    </PropertyRow>
-                  </PropertyList>
+                          <Text class="text-xs leading-normal text-muted-foreground">{enabledNote()}</Text>
+                        </View>
+                      </PropertyRow>
+                      <If when={skillSourceText(skill())}>
+                        <PropertyRow label={t("skills_fact_source")}>
+                          <If when={skill().source.url} else={<PropertyText text={skillSourceText(skill())} />}>
+                            <LinkText text={skillSourceText(skill())} onPress={() => openExternal(skill().source.url)} testID="skill-source" />
+                          </If>
+                        </PropertyRow>
+                      </If>
+                      <PropertyRow label={t("skills_fact_location")}>
+                        <PropertyText text={skill().dir} mono />
+                      </PropertyRow>
+                      <If when={skill().requirements.length}>
+                        <PropertyRow label={t("skills_fact_requires")}>
+                          <PropertyText text={skill().requirements.join(", ")} />
+                        </PropertyRow>
+                      </If>
+                      <If when={skill().authProfiles.length}>
+                        <PropertyRow label={t("skills_fact_auth")}>
+                          <PropertyText text={skill().authProfiles.join(", ")} />
+                        </PropertyRow>
+                      </If>
+                      <PropertyRow label={t("skills_fact_files")}>
+                        <View class="gap-0">
+                          <BaseButton
+                            onPress={() => filesExpanded.update((open) => !open)}
+                            selected={filesExpanded()}
+                            accessibilityLabel={filesSummary()}
+                            testID="skill-files-toggle"
+                            class="group flex-row items-center gap-1.5 self-start"
+                          >
+                            <Text class="text-xs leading-normal text-subtle group-hover:text-foreground" style={ROW_TRANSITION}>
+                              {filesSummary()}
+                            </Text>
+                            <TurnCaret open={filesExpanded()} />
+                          </BaseButton>
+                          <If when={filesExpanded()}>
+                            <SkillFileTree
+                              endpointRef={endpointState.selectedRef}
+                              skillId={skill().id}
+                              selectedPath={treeSelectedPath()}
+                              disabled={editing()}
+                              fallbackFiles={skill().files}
+                              onSelect={(path) => openFile(path)}
+                            />
+                          </If>
+                        </View>
+                      </PropertyRow>
+                    </PropertyList>
 
-                  <View ref={docSection} class="gap-3 pt-1" testID="skill-doc">
-                    <If
-                      when={viewPath()}
-                      else={
-                        <View class="gap-3">
-                          <View class="min-h-8 flex-row items-center gap-2.5">
-                            <MonoLabel text="SKILL.md" />
-                            <If when={documentSize()}>
-                              <Text class="text-xs text-muted-foreground">{documentSize()}</Text>
-                            </If>
-                            <View class="flex-1" />
-                            <If
-                              when={editing()}
-                              else={
-                                <If when={detail()}>
+                    <View ref={docSection} class="gap-3 pt-1" testID="skill-doc">
+                      <If
+                        when={viewPath()}
+                        else={
+                          <View class="gap-3">
+                            <View class="min-h-8 flex-row items-center gap-2.5">
+                              <MonoLabel text="SKILL.md" />
+                              <If when={documentSize()}>
+                                <Text class="text-xs text-muted-foreground">{documentSize()}</Text>
+                              </If>
+                              <View class="flex-1" />
+                              <If
+                                when={editing()}
+                                else={
+                                  <If when={detail()}>
+                                    <Button
+                                      variant="plain"
+                                      size="xs"
+                                      icon="PhPencilSimple"
+                                      label={t("action_edit")}
+                                      disabled={!canEdit()}
+                                      title={detail()?.truncated ? t("skills_edit_truncated") : undefined}
+                                      onPress={startEdit}
+                                      testID="skill-edit"
+                                    />
+                                  </If>
+                                }
+                              >
+                                <View class="flex-row items-center gap-1.5">
                                   <Button
                                     variant="plain"
                                     size="xs"
-                                    icon="PhPencilSimple"
-                                    label={t("action_edit")}
-                                    disabled={!canEdit()}
-                                    title={detail()?.truncated ? t("skills_edit_truncated") : undefined}
-                                    onPress={startEdit}
-                                    testID="skill-edit"
+                                    label={t("action_cancel")}
+                                    disabled={editSaving()}
+                                    onPress={cancelEdit}
+                                    testID="skill-edit-cancel"
                                   />
-                                </If>
-                              }
-                            >
-                              <View class="flex-row items-center gap-1.5">
-                                <Button
-                                  variant="plain"
-                                  size="xs"
-                                  label={t("action_cancel")}
-                                  disabled={editSaving()}
-                                  onPress={cancelEdit}
-                                  testID="skill-edit-cancel"
-                                />
-                                <Button
-                                  variant="primary"
-                                  size="xs"
-                                  label={t("action_save")}
-                                  loading={editSaving()}
-                                  disabled={!draftChanged()}
-                                  onPress={() => void saveEdit()}
-                                  testID="skill-edit-save"
-                                />
-                              </View>
+                                  <Button
+                                    variant="primary"
+                                    size="xs"
+                                    label={t("action_save")}
+                                    loading={editSaving()}
+                                    disabled={!draftChanged()}
+                                    onPress={() => void saveEdit()}
+                                    testID="skill-edit-save"
+                                  />
+                                </View>
+                              </If>
+                            </View>
+                            <If when={detail()?.truncated}>
+                              <InlineNotice type="warning" text={t("skills_content_truncated")} />
+                            </If>
+                            <If when={editErr()}>
+                              <InlineNotice type="error" text={editErr()} testID="skill-edit-error" />
+                            </If>
+                            <If when={detailLoading() && !detail()}>
+                              <Blocks count={1} height={120} />
+                            </If>
+                            <If when={!(detailLoading() && !detail()) && editing()}>
+                              <AppMarkdownEditor
+                                value={draft()}
+                                onChange={(value) => draft.set(value)}
+                                height="clamp(320px, 60vh, 760px)"
+                                disabled={editSaving()}
+                                accessibilityLabel="SKILL.md"
+                                testID="skill-editor"
+                              />
+                            </If>
+                            <If when={!(detailLoading() && !detail()) && !editing() && documentSource()}>
+                              <SkillDocument source={documentSource()} onLinkPress={(url) => openExternal(url)} />
                             </If>
                           </View>
-                          <If when={detail()?.truncated}>
-                            <InlineNotice type="warning" text={t("skills_content_truncated")} />
-                          </If>
-                          <If when={editErr()}>
-                            <InlineNotice type="error" text={editErr()} testID="skill-edit-error" />
-                          </If>
-                          <If when={detailLoading() && !detail()}>
-                            <Blocks count={1} height={120} />
-                          </If>
-                          <If when={!(detailLoading() && !detail()) && editing()}>
-                            <AppMarkdownEditor
-                              value={draft()}
-                              onChange={(value) => draft.set(value)}
-                              height="clamp(320px, 60vh, 760px)"
-                              disabled={editSaving()}
-                              accessibilityLabel="SKILL.md"
-                              testID="skill-editor"
-                            />
-                          </If>
-                          <If when={!(detailLoading() && !detail()) && !editing() && documentSource()}>
-                            <SkillDocument source={documentSource()} onLinkPress={(url) => openExternal(url)} />
-                          </If>
-                        </View>
-                      }
-                    >
-                      <View class="min-h-8 flex-row items-center gap-2.5">
-                        <View class="shrink" selectable style={{ minWidth: 0 }}>
-                          <FadeText text={viewPath()} fade={26} class="font-mono text-[11px] font-medium leading-[15.4px] text-muted-foreground" />
-                        </View>
-                        <If when={previewData(filePreview())}>
-                          {(data) => <Text class="text-xs text-muted-foreground">{formatBytes(data().size)}</Text>}
-                        </If>
-                        <View class="flex-1" />
-                        <Button
-                          variant="plain"
-                          size="xs"
-                          icon="PhArrowLeft"
-                          label="SKILL.md"
-                          title={t("skills_file_back")}
-                          onPress={showDocument}
-                          testID="skill-file-back"
-                        />
-                      </View>
-                      <If when={filePreview()?.status === "loading"}>
-                        <Blocks count={1} height={120} label={t("skills_files_loading")} />
-                      </If>
-                      <If when={filePreview()?.status === "error"}>
-                        <InlineNotice type="error" text={filePreviewNote()} testID="skill-file-error" />
-                      </If>
-                      <If when={filePreview()?.status === "ready" && filePreviewNote()}>
-                        <Note text={filePreviewNote()} testID="skill-file-note" />
-                      </If>
-                      <If when={filePreview()?.status === "ready" && !filePreviewNote()}>
-                        {/* Plain text, never HTML or rendered Markdown: 14pt mono on the paper, scrolling past 70% of the window. */}
-                        <Scroll
-                          scrollbar={SCROLLBAR}
-                          class="grow-0 rounded-(--radius) border border-line-soft bg-background"
-                          style={{ maxHeight: previewMaxHeight(), flexGrow: 0 }}
-                          contentClass="px-3.5 py-3"
-                        >
-                          <View selectable accessibilityLabel={viewPath()} testID="skill-file-preview">
-                            <Text class="font-mono text-sm leading-[21.7px] text-foreground">{previewData(filePreview())?.content ?? ""}</Text>
+                        }
+                      >
+                        <View class="min-h-8 flex-row items-center gap-2.5">
+                          <View class="shrink" selectable style={{ minWidth: 0 }}>
+                            <FadeText text={viewPath()} fade={26} class="font-mono text-[11px] font-medium leading-[15.4px] text-muted-foreground" />
                           </View>
-                        </Scroll>
+                          <If when={previewData(filePreview())}>
+                            {(data) => <Text class="text-xs text-muted-foreground">{formatBytes(data().size)}</Text>}
+                          </If>
+                          <View class="flex-1" />
+                          <Button
+                            variant="plain"
+                            size="xs"
+                            icon="PhArrowLeft"
+                            label="SKILL.md"
+                            title={t("skills_file_back")}
+                            onPress={showDocument}
+                            testID="skill-file-back"
+                          />
+                        </View>
+                        <If when={filePreview()?.status === "loading"}>
+                          <Blocks count={1} height={120} label={t("skills_files_loading")} />
+                        </If>
+                        <If when={filePreview()?.status === "error"}>
+                          <InlineNotice type="error" text={filePreviewNote()} testID="skill-file-error" />
+                        </If>
+                        <If when={filePreview()?.status === "ready" && filePreviewNote()}>
+                          <Note text={filePreviewNote()} testID="skill-file-note" />
+                        </If>
+                        <If when={filePreview()?.status === "ready" && !filePreviewNote()}>
+                          {/* Plain text, never HTML or rendered Markdown: 14pt mono on the paper, scrolling past 70% of the window. */}
+                          <Scroll
+                            scrollbar={SCROLLBAR}
+                            class="grow-0 rounded-(--radius) border border-line-soft bg-background"
+                            style={{ maxHeight: previewMaxHeight(), flexGrow: 0 }}
+                            contentClass="px-3.5 py-3"
+                          >
+                            <View selectable accessibilityLabel={viewPath()} testID="skill-file-preview">
+                              <Text class="font-mono text-sm leading-[21.7px] text-foreground">{previewData(filePreview())?.content ?? ""}</Text>
+                            </View>
+                          </Scroll>
+                        </If>
                       </If>
-                    </If>
-                  </View>
-                </DetailCard>
-              )}
-            </If>
-            <MobileBarSpacer />
-          </Scroll>
+                    </View>
+                  </DetailCard>
+                )}
+              </If>
+              <MobileBarSpacer />
+            </Scroll>
+          </View>
         </If>
       </View>
       <If when={isMobile() && showIndex()}>

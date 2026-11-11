@@ -113,6 +113,9 @@ type TopicMetadata struct {
 type TopicMetadataWorkspace struct {
 	WorkspaceDir string `json:"workspace_dir"`
 	Source       string `json:"source"`
+	// HomeDir is the home directory on the host that resolves the workspace (the runtime's
+	// user), so clients can show paths under it with `~`; empty when the host cannot tell.
+	HomeDir string `json:"home_dir,omitempty"`
 }
 
 type TopicMetadataContext struct {
@@ -184,10 +187,12 @@ type WorkspaceRoutes struct {
 	Put        WorkspacePutFunc
 	Delete     WorkspaceDeleteFunc
 	DefaultDir string
-	Open       WorkspaceOpenFunc
-	Tree       WorkspaceTreeFunc
-	Browse     WorkspaceBrowseFunc
-	CreateDir  WorkspaceCreateDirFunc
+	// HomeDir is the runtime's home directory, reported with each workspace (`home_dir`).
+	HomeDir   string
+	Open      WorkspaceOpenFunc
+	Tree      WorkspaceTreeFunc
+	Browse    WorkspaceBrowseFunc
+	CreateDir WorkspaceCreateDirFunc
 }
 
 var (

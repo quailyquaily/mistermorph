@@ -12,6 +12,7 @@ import { Sheet } from "nsh/base";
 import { Button, Icon, type IconName, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
 import { TopicTagsEditor } from "../../components/chat/TopicTagsEditor";
+import { WorkspacePathLine } from "../../components/chat/WorkspacePathLine";
 import { t } from "../../components/chat/i18n";
 import { formatBytes } from "../../lib/core/context.js";
 import { workspaceTreeIcon } from "../../lib/core/workspace-icons.js";
@@ -238,15 +239,16 @@ function WorkspaceTab(props: { c: ChatController }) {
           <View class="flex-row items-start gap-2 px-4 pb-2 pt-3">
             <View class="min-w-0 flex-1 gap-1">
               <Kicker>{t("chat_workspace_label")}</Kicker>
-              <View selectable tooltip={<Tip text={c.workspaceDir()} />}>
-                <Text class="font-mono text-xs leading-5 line-clamp-2" testID="chat-workspace-path">
-                  <If when={c.workspaceDirDisplay().prefix}>
-                    <Text class="text-muted-foreground">{c.workspaceDirDisplay().prefix}</Text>
-                  </If>
-                  <Text class="text-muted-foreground">{c.workspaceDirDisplay().separator}</Text>
-                  <Text class="text-foreground">{c.workspaceDirDisplay().tail}</Text>
-                </Text>
-              </View>
+              {/* One line: the host's home as `~`, the middle cut when the panel is too narrow. The
+                  tooltip, screen readers and every action keep the raw path. */}
+              <WorkspacePathLine
+                path={c.workspaceDirDisplay().text}
+                leafStart={c.workspaceDirDisplay().leafStart}
+                textClass="font-mono text-xs leading-5"
+                accessibilityLabel={c.workspaceDir()}
+                tooltip={<Tip text={c.workspaceDir()} />}
+                testID="chat-workspace-path"
+              />
               <If when={c.workspaceHintText()}>
                 <Text class="text-xs leading-[18px] text-muted-foreground">{c.workspaceHintText()}</Text>
               </If>

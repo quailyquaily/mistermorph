@@ -998,3 +998,45 @@ func TestPreviewContentSecurityPolicy(t *testing.T) {
 		}
 	})
 }
+
+func TestWorkspaceRouteReportsHostHomeDir(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		homeDir string
+		want    any
+	}{
+		{name: "known home", homeDir: "/home/morph", want: "/home/morph"},
+		{name: "unknown home", homeDir: "", want: nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			RegisterRoutes(mux, RoutesOptions{
+				Mode:      "console",
+				AuthToken: "token",
+				Workspace: WorkspaceRoutes{
+					HomeDir: tt.homeDir,
+					Get: func(_ context.Context, _ string) (WorkspaceResolution, error) {
+						return WorkspaceResolution{WorkspaceDir: "/home/morph/project", Source: "attachment"}, nil
+					},
+				},
+			})
+			req := httptest.NewRequest(http.MethodGet, "/workspace?topic_id=topic_a", nil)
+			req.Header.Set("Authorization", "Bearer token")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			if payload["home_dir"] != tt.want {
+				t.Fatalf("payload.home_dir = %#v, want %#v", payload["home_dir"], tt.want)
+			}
+			if payload["workspace_dir"] != "/home/morph/project" {
+				t.Fatalf("payload.workspace_dir = %#v, want the raw path", payload["workspace_dir"])
+			}
+		})
+	}
+}

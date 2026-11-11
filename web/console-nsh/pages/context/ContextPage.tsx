@@ -6,7 +6,7 @@
 // item's text; Back steps up a level before it leaves for the topic.
 import { batch, Canvas, computed, effect, platform, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Page, Spinner, Tip } from "../../components/ui";
+import { BackButton, Icon, Page, Spinner, Tip } from "../../components/ui";
 import { t } from "../../components/chat/i18n";
 import { contextCellGrid, contextRing } from "../../lib/core/context-inspector.js";
 import { currentLocale, endpointState, runtimeApiFetch } from "../../lib/core/context.js";
@@ -14,6 +14,7 @@ import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { goBack } from "../../lib/platform";
 import { currentRoute, router } from "../../lib/router";
 import { onSystemBack } from "../../lib/systemBack";
+import { createPaneStack } from "../../components/motion/PaneStack";
 
 const RING_RADIUS = 40;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -212,6 +213,12 @@ export function ContextPage() {
       lastPhone = phone;
     });
   });
+
+  // On phones the overview (0), a part's items (1) and an item's text (2) are levels of the page
+  // that slide (PaneStack); a step going out keeps what it showed.
+  const panes = createPaneStack(() => (isPhone() ? phoneStep() : null));
+  const shownSelected = panes.held(1, selected);
+  const shownItem = panes.held(2, item);
 
   function goPhoneStep(step: number) {
     batch(() => {
@@ -440,7 +447,7 @@ export function ContextPage() {
       testID="context-page"
       leading={
         <View class="flex-1 flex-row items-center gap-2">
-          <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("context_inspector_back")} onPress={back} testID="context-back" />
+          <BackButton title={t("context_inspector_back")} onPress={back} desktopSize="xs" testID="context-back" />
           <Text class="flex-1 text-lg font-semibold text-foreground line-clamp-1" role="header" testID="context-bar-title">
             {barTitle()}
           </Text>
@@ -463,18 +470,49 @@ export function ContextPage() {
       </If>
       <If when={!(loading() && !grid()) && !error() && grid()}>
         <View class={isPhone() ? "gap-5" : "flex-row items-start gap-6"}>
-          <If when={showOverview()}>{overview()}</If>
+          <If when={panes.shown(0, showOverview())}>
+            <View
+              style={panes.style(0)}
+              accessibilityElementsHidden={panes.hidden(0) || undefined}
+              importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
+            >
+              {overview()}
+            </View>
+          </If>
           <If
-            when={selected()}
+            when={shownSelected()}
             else={
               <If when={!isPhone()}>
                 <Text class="w-80 text-sm text-muted-foreground">{t("context_inspector_pick")}</Text>
               </If>
             }
           >
-            {(group) => <If when={showItems()}>{items(group)}</If>}
+            {(group) => (
+              <If when={panes.shown(1, showItems())}>
+                <View
+                  style={panes.style(1)}
+                  accessibilityElementsHidden={panes.hidden(1) || undefined}
+                  importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
+                >
+                  {items(group)}
+                </View>
+              </If>
+            )}
           </If>
-          <If when={item()}>{(entry) => <If when={showText()}>{text(entry)}</If>}</If>
+          <If when={shownItem()}>
+            {(entry) => (
+              <If when={panes.shown(2, showText())}>
+                <View
+                  class="flex-1"
+                  style={panes.style(2)}
+                  accessibilityElementsHidden={panes.hidden(2) || undefined}
+                  importantForAccessibility={panes.hidden(2) ? "no-hide-descendants" : undefined}
+                >
+                  {text(entry)}
+                </View>
+              </If>
+            )}
+          </If>
         </View>
       </If>
     </Page>

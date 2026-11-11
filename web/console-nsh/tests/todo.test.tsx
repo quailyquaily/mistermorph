@@ -773,7 +773,8 @@ test("on a phone the calendar shows counts and the day's agenda", async () => {
   await app.waitFor("Selected day");
   await app.press("text:Report");
   await app.waitFor("id:todo-task-editor");
-  expect(app.shows("id:todo-calendar")).toBe(false);
+  // The task slides in over the calendar, which goes once the slide has ended.
+  await app.waitFor("id:todo-calendar", { state: "gone" });
 });
 
 test("a day with more than three runs folds the rest behind +N more", async () => {

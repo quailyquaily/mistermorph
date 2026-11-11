@@ -89,12 +89,13 @@ test("on a phone each level is a step: overview, items, text, and back up", asyn
   expect(app.shows("id:context-items")).toBe(false);
   await app.press("id:context-part-history");
   await app.waitFor("id:context-items");
-  expect(app.shows("id:context-overview")).toBe(false);
+  // Each step slides in over the one before, which goes once the slide has ended.
+  await app.waitFor("id:context-overview", { state: "gone" });
   await app.waitFor("History");
   await app.waitFor("text:What is the weather?");
   await app.press("id:context-item-history:0");
   await app.waitFor("id:context-text");
-  expect(app.shows("id:context-items")).toBe(false);
+  await app.waitFor("id:context-items", { state: "gone" });
   await app.press("id:context-back");
   await app.waitFor("id:context-items");
   await app.press("id:context-back");

@@ -64,6 +64,8 @@ export interface ConsoleOptions {
   reducedMotion?: boolean;
   /** A manual clock (`app.clock`): time moves only as the test moves it. */
   clock?: boolean;
+  /** Page and pane slides last a minute (tests/slowSlidesConsole.tsx): steps act during one. */
+  slowSlides?: boolean;
 }
 
 /** Where the phone app keeps the console server's address and its last location (lib/mobileHost.ts). */
@@ -161,8 +163,9 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
   const routes = { ...defaults(options), ...(options.api || {}) };
   // A bare "*" is a GET of any URL; each method needs its own catch-all.
   const network = Object.fromEntries(["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => [`${method} *`, answer]));
+  const entry = options.slowSlides ? "./slowSlidesConsole.tsx" : "../App.tsx";
   if (options.platform === "android") {
-    const app = await open("../App.tsx", {
+    const app = await open(entry, {
       width: options.width ?? 390,
       height: options.height ?? 844,
       platform: "android",
@@ -180,7 +183,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     });
     return { app, calls };
   }
-  const app = await open("../App.tsx", {
+  const app = await open(entry, {
     width: options.width ?? 1280,
     height: options.height ?? 800,
     // A desktop idiom; "web" would load host.js, which needs a browser page.

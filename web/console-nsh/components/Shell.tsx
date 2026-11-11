@@ -1,5 +1,6 @@
-// The frame around every page (the Vue console's AppLayout): a new top-level page rises 6pt into
-// place as it fades in (Entrance), and the last press is noted for dialogs to grow out of. The
+// The frame around every page (the Vue console's AppLayout): the pages move inside it (pages/routes.tsx
+// PageView: a slide on phones, a new top-level page rising into place on wide windows), and the last
+// press is noted for dialogs to grow out of. The
 // insecure-connection banner across the top; on wide windows the sidebar (agent switcher,
 // navigation, foldable edge) beside the page; on phones the bottom navigation, floating over the
 // foot of the page, with its More and agent sheets; and the notice stack over everything.
@@ -7,8 +8,7 @@
 // the notices only. The keyboard shortcuts are bound here (components/frame/shortcutDispatch.ts).
 import type { JSX } from "nsh";
 import { View } from "nsh";
-import { currentPageKey, isMobile, mobileBottomNavVisible } from "../lib/shell";
-import { Entrance } from "./motion/Entrance";
+import { isMobile, mobileBottomNavVisible } from "../lib/shell";
 import { notePress } from "./motion/pressOrigin";
 import { InsecureBanner } from "./frame/InsecureBanner";
 import { MobileBottomMenus, MobileBottomNav } from "./frame/MobileBottomNav";
@@ -33,9 +33,8 @@ export function Shell(props: { shellless: boolean; standalone: boolean; children
           <Sidebar />
         </If>
         <View class="relative flex-1">
-          <Entrance watch={currentPageKey()} class="flex-1">
-            {props.children}
-          </Entrance>
+          {/* The pages and their motion; the navigation below stays where it is. */}
+          {props.children}
           <If when={mobileBottomNavVisible()}>
             <MobileBottomMenus />
             <MobileBottomNav />

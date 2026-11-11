@@ -461,7 +461,8 @@ test("on a phone with a hardware keyboard the back arrow goes to the topic list 
 
   await app.press("id:chat-back");
   await app.waitFor("id:chat-topic-sidebar");
-  expect(app.shows("id:chat-back")).toBe(false);
+  // The conversation slides out with its bar, then goes.
+  await app.waitFor("id:chat-back", { state: "gone" });
 
   // The topic keeps its draft, and opening it again does not focus the field.
   await app.press("id:chat-topic-topic-1");
@@ -476,7 +477,8 @@ test("on a phone with the keyboard down the back arrow goes to the topic list at
   expect(await fieldFocused(app)).toBe(false);
   await app.press("id:chat-back");
   await app.waitFor("id:chat-topic-sidebar");
-  expect(app.shows("id:chat-back")).toBe(false);
+  // The conversation slides out with its bar, then goes.
+  await app.waitFor("id:chat-back", { state: "gone" });
 });
 
 test("in a narrow desktop window the back arrow goes to the topic list with the field focused", async () => {
@@ -491,7 +493,8 @@ test("in a narrow desktop window the back arrow goes to the topic list with the 
   expect(await fieldFocused(app)).toBe(true);
   await app.press("id:chat-back");
   await app.waitFor("id:chat-topic-sidebar");
-  expect(app.shows("id:chat-back")).toBe(false);
+  // The conversation slides out with its bar, then goes.
+  await app.waitFor("id:chat-back", { state: "gone" });
 });
 
 test("the software keyboard is up by its frame, or on the web by the focused field until a frame reports one", () => {

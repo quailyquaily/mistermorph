@@ -115,6 +115,7 @@ import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQu
 import { hasArtifactBlock } from "../../components/chat/ChatRichContent";
 import { createReceivedFiles } from "../../components/chat/ReceivedFile";
 import { keyedState } from "../../components/chat/rowState";
+import { workspacePathDisplay } from "../../components/chat/workspacePath";
 import {
   activityDetailKey,
   createFocusReturn,
@@ -193,20 +194,6 @@ function loadCollapsedTopicGroups() {
   } catch {
     return new Set<string>();
   }
-}
-
-/** Splits a path into what comes before its last part and the part, for the workspace panel. */
-export function splitWorkspaceDisplayPath(path: string) {
-  const value = String(path || "").trim();
-  if (!value) return { prefix: "", separator: "", tail: "" };
-  if (/^[\\/]+$/u.test(value) || /^[A-Za-z]:[\\/]?$/u.test(value)) return { prefix: "", separator: "", tail: value };
-  const normalized = value.replace(/[\\/]+$/u, "");
-  if (!normalized) return { prefix: "", separator: "", tail: value };
-  const index = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
-  if (index < 0) return { prefix: "", separator: "", tail: normalized };
-  const tail = normalized.slice(index + 1);
-  if (!tail) return { prefix: "", separator: "", tail: value };
-  return { prefix: normalized.slice(0, index), separator: normalized.charAt(index), tail };
 }
 
 function workspaceDownloadFilename(entry: any) {
@@ -425,6 +412,14 @@ export function createChatController() {
   const topicsLoading = signal(false);
   const topicsLoadingOlder = signal(false);
   const topicsNextCursor = signal("");
+  // Why the conversation or the topic list could not be loaded, shown in the chat view with a
+  // Refresh (ChatLoadError) rather than in the notice stack. A history failure belongs to the
+  // conversation it was for (its history scope); a topic list failure to the agent.
+  const historyLoadError = signal<{ scope: string; message: string } | null>(null);
+  const topicsLoadError = signal("");
+  // The conversation a Refresh is reloading (its history scope), while it does.
+  const chatLoadRetryScope = signal<string | null>(null);
+  let chatLoadRetrySeq = 0;
   // The topic the address names is selected at once, so returning to Chat shows it straight away;
   // loadTopics drops it if the agent has no such topic.
   const selectedTopicID = signal(untracked(routeTopicID));
@@ -445,6 +440,9 @@ export function createChatController() {
   const sending = signal(false);
   const err = signal("");
   const workspaceDir = signal("");
+  // The home directory of the host the workspaces are on (`home_dir`, from that runtime), and the
+  // endpoint that reported it: a path shows `~` for it on that endpoint only.
+  const workspaceHome = signal<{ endpointRef: string; dir: string } | null>(null);
   const workspaceSource = signal("none");
   const workspaceLoading = signal(false);
   const workspaceSaving = signal(false);
@@ -1078,7 +1076,13 @@ export function createChatController() {
   const composerAddDisabled = () => composerDisabled() || !String(submitEndpointRef() || "").trim();
   const workspaceDetachDisabled = () =>
     !workspaceReady() || workspaceBusy() || workspaceSource() !== "attachment" || String(workspaceDir() || "").trim() === "";
-  const workspaceDirDisplay = () => splitWorkspaceDisplayPath(workspaceDir());
+  /** The home directory of the host the selected endpoint's workspaces are on; "" when it did not say. */
+  const workspaceHomeDir = () => {
+    const home = workspaceHome();
+    return home && home.endpointRef === String(submitEndpointRef() || "").trim() ? home.dir : "";
+  };
+  /** The workspace path as the panel writes it: the host's home as `~`, and where its last part starts. */
+  const workspaceDirDisplay = () => workspacePathDisplay(workspaceDir(), workspaceHomeDir());
   // A TODO item's topic shows the workspace its runs use, read-only, and only when there is one.
   const workspaceTabAvailable = () => !selectedTopicIsCron() || Boolean(String(workspaceDir() || "").trim());
   const workspacePanelTabs = () => [
@@ -1525,11 +1529,23 @@ export function createChatController() {
     });
   }
 
-  function applyWorkspacePayload(data: any) {
+  /**
+   * A workspace as a runtime reports it. `endpointRef` names the runtime when the payload is its
+   * own answer: its `home_dir` (the host's home, absent from runtimes that do not report it) is
+   * kept for it. Without one (a payload made here) the home known for the endpoint stays.
+   */
+  function applyWorkspacePayload(data: any, endpointRef = "") {
     const dir = String(data?.workspace_dir || "").trim();
     const raw = String(data?.source || "").trim().toLowerCase();
     const source = ["attachment", "default", "none", "todo"].includes(raw) ? raw : dir ? "attachment" : "none";
+    const ref = String(endpointRef || "").trim();
     batch(() => {
+      if (ref) {
+        const home = typeof data?.home_dir === "string" ? data.home_dir.trim() : "";
+        const known = untracked(workspaceHome);
+        if (home) workspaceHome.set({ endpointRef: ref, dir: home });
+        else if (known?.endpointRef === ref) workspaceHome.set(null);
+      }
       workspaceDir.set(dir);
       workspaceSource.set(source);
       workspaceError.set("");
@@ -1537,9 +1553,9 @@ export function createChatController() {
     });
   }
 
-  function applyTopicMetadataPayload(data: any) {
+  function applyTopicMetadataPayload(data: any, endpointRef: string) {
     const workspace = data?.workspace && typeof data.workspace === "object" ? data.workspace : data;
-    applyWorkspacePayload(workspace);
+    applyWorkspacePayload(workspace, endpointRef);
     const context = data?.context && typeof data.context === "object" ? data.context : null;
     topicContext.set(context && context.available ? context : null);
   }
@@ -1559,7 +1575,7 @@ export function createChatController() {
     try {
       const data = await runtimeApiFetchForEndpoint(endpointRef, `/topic/${encodeURIComponent(topicID)}/metadata`);
       if (request !== workspaceRequestSeq) return false;
-      applyTopicMetadataPayload(data);
+      applyTopicMetadataPayload(data, endpointRef);
       if (untracked(workspaceSidebarOpen) && untracked(workspaceSidebarTabID) === WORKSPACE_TAB_ID && String(untracked(workspaceDir) || "").trim()) {
         await loadWorkspaceTree("", { force: true });
       }
@@ -1793,7 +1809,7 @@ export function createChatController() {
     try {
       const data = await runtimeApiFetchForEndpoint(endpointRef, "/workspace", { method: "PUT", body: { topic_id: topicID, workspace_dir: next } });
       rememberRecentWorkspaceDir(String(data?.workspace_dir || next || "").trim());
-      applyWorkspacePayload(data);
+      applyWorkspacePayload(data, endpointRef);
       workspaceBrowserOpen.set(false);
       if (untracked(workspaceSidebarOpen)) await loadWorkspaceTree("", { force: true });
     } catch (error) {
@@ -1812,7 +1828,7 @@ export function createChatController() {
       workspaceError.set("");
     });
     try {
-      applyWorkspacePayload(await runtimeApiFetchForEndpoint(endpointRef, `/workspace?topic_id=${encodeURIComponent(topicID)}`, { method: "DELETE" }));
+      applyWorkspacePayload(await runtimeApiFetchForEndpoint(endpointRef, `/workspace?topic_id=${encodeURIComponent(topicID)}`, { method: "DELETE" }), endpointRef);
     } catch (error) {
       pushNotice({ type: "error", text: errorMessage(error, t("msg_save_failed")) });
     } finally {
@@ -2290,6 +2306,7 @@ export function createChatController() {
       topicDeleteTarget.set(null);
       topicDeleting.set(false);
       topicDeleteError.set("");
+      topicsLoadError.set("");
       resetWorkspaceState();
     });
     syncMobileTopicView({ preferTopics: true });
@@ -2326,6 +2343,7 @@ export function createChatController() {
       batch(() => {
         topics.set(items);
         topicsNextCursor.set(String(data?.next_cursor || "").trim());
+        topicsLoadError.set("");
       });
       if (preferredTopicID && items.some((topic) => normalizeTopicID(topic?.id) === preferredTopicID)) {
         batch(() => {
@@ -2370,7 +2388,9 @@ export function createChatController() {
       return true;
     } catch (error) {
       if (draftKey !== composerFileDraftKey(untracked(composerDraftScope))) return false;
-      err.set(errorMessage(error, t("msg_load_failed")));
+      // The topics already listed stay; the chat view says the list failed and offers a Refresh.
+      console.warn("chat: topics", errorMessage(error, ""));
+      topicsLoadError.set(errorMessage(error, t("msg_load_failed")));
       if (!preserveSelection) {
         batch(() => {
           selectedTopicID.set("");
@@ -2464,6 +2484,7 @@ export function createChatController() {
         replaceHistoryItems([]);
         historyItemsScope.set(scope);
         historyLoading.set(false);
+        historyLoadError.set(null);
       });
       return true;
     }
@@ -2471,7 +2492,10 @@ export function createChatController() {
     try {
       if (untracked(consoleTopicsEnabled) && (untracked(creatingTopic) || !normalizeTopicID(untracked(selectedTopicID)))) {
         applyComposerTopicLLMProfile("");
-        replaceHistoryItems([]);
+        batch(() => {
+          replaceHistoryItems([]);
+          historyLoadError.set(null);
+        });
         return true;
       }
       const path = historyPath();
@@ -2485,15 +2509,23 @@ export function createChatController() {
         current,
         keepLiveTaskState(current, taskListHistoryItems(tasks, t, { agentName: untracked(activeAgentName), endpointRef, locale: currentLocale() })),
       );
-      replaceHistoryItems(next.length > 0 ? next : [emptyHistoryItem()]);
+      batch(() => {
+        replaceHistoryItems(next.length > 0 ? next : [emptyHistoryItem()]);
+        historyLoadError.set(null);
+      });
       scrollHistoryToBottom({ force: true });
       void loadApprovalDetails(endpointRef, version);
       followRunningTasks(endpointRef, false);
       return true;
     } catch (error) {
       if (viewActive && version === historyLoadVersion) {
-        if (!options.preserveCurrent) replaceHistoryItems([]);
-        err.set(errorMessage(error, t("msg_load_failed")));
+        // Another conversation's messages go; this one's, already on screen, stay (a reload that
+        // failed), and the chat view says it failed with a Refresh (ChatLoadError).
+        console.warn("chat: history", errorMessage(error, ""));
+        batch(() => {
+          if (!options.preserveCurrent && untracked(historyItemsScope) !== scope) replaceHistoryItems([]);
+          historyLoadError.set({ scope, message: errorMessage(error, t("msg_load_failed")) });
+        });
       }
       return false;
     } finally {
@@ -2570,7 +2602,7 @@ export function createChatController() {
     }
   }
 
-  async function refreshChatData(options: { preferredTopicID?: string; preserveSelection?: boolean } = {}) {
+  async function refreshChatData(options: { preferredTopicID?: string; preserveSelection?: boolean; preserveDraft?: boolean } = {}) {
     let topicsLoaded = true;
     const preferred = normalizeTopicID(options.preferredTopicID);
     if (untracked(consoleTopicsEnabled) && preferred && normalizeTopicID(untracked(selectedTopicID)) === preferred) {
@@ -2586,6 +2618,53 @@ export function createChatController() {
     else resetTopicState();
     // The Vue page cleared a failed topic load's error here at once; it stays until the next load.
     await loadHistory({ keepError: !topicsLoaded });
+  }
+
+  /* ---------- a failed load, and its Refresh ---------- */
+
+  // What could not be loaded for the conversation on screen: its history, else the topic list.
+  const chatLoadErrorKind = (): "" | "history" | "topics" => {
+    const history = historyLoadError();
+    if (history && history.scope === currentHistoryScope()) return "history";
+    return consoleTopicsEnabled() && topicsLoadError() ? "topics" : "";
+  };
+  const chatLoadErrorMessage = () => {
+    const kind = chatLoadErrorKind();
+    if (kind === "history") return historyLoadError()?.message || "";
+    return kind === "topics" ? topicsLoadError() : "";
+  };
+  const chatLoadErrorTitle = () => (chatLoadErrorKind() === "topics" ? t("chat_topics_load_failed") : t("chat_history_load_failed"));
+  // Nothing of the conversation to show: the error panel takes its place. With messages on screen
+  // (a reload failed, or a message sent since), they stay and a strip above the composer says so.
+  const chatLoadErrorFull = () => chatLoadErrorKind() !== "" && chatHistoryItems().length === 0;
+  // The phone's topic list (or a desktop's, while the conversation shows another failure) says
+  // the list failed itself; otherwise the conversation's panel or strip does.
+  const topicsLoadErrorInSidebar = () => topicsLoadError() !== "" && (mobileTopicSplitEnabled() || chatLoadErrorKind() !== "topics");
+  const chatLoadRetrying = () => chatLoadRetryScope() === currentHistoryScope();
+  // A load is under way (a Refresh, a topic switch, the first load): the Refresh waits for it.
+  const chatLoadBusy = () => chatLoadRetrying() || topicsLoading() || historyLoading();
+
+  // Refresh: the conversation on screen again, and the topic list too when that failed. One at a
+  // time; what a load answers for a conversation no longer on screen is dropped (loadHistory's
+  // version, loadTopics' draft scope).
+  async function retryChatLoad() {
+    if (!viewActive || untracked(chatLoadBusy)) return;
+    const topicsFailed = untracked(consoleTopicsEnabled) && untracked(topicsLoadError) !== "";
+    if (!topicsFailed && untracked(chatLoadErrorKind) === "") return;
+    const seq = ++chatLoadRetrySeq;
+    chatLoadRetryScope.set(historyScope());
+    try {
+      if (topicsFailed) {
+        // As the first load: the selected topic stays (and opens), a new chat being written stays,
+        // and with neither a phone goes to the topic list once it comes.
+        const topicID = normalizeTopicID(untracked(selectedTopicID));
+        await refreshChatData({ preferredTopicID: topicID, preserveSelection: Boolean(topicID), preserveDraft: true });
+      } else {
+        await loadHistory();
+      }
+    } finally {
+      if (seq === chatLoadRetrySeq) chatLoadRetryScope.set(null);
+    }
   }
 
   async function syncTopicFromRoute(options: { force?: boolean } = {}) {
@@ -3212,6 +3291,12 @@ export function createChatController() {
     });
   });
 
+  // Resolves once the phone's conversation has slid out to the topic list (ChatPage's panes).
+  let conversationExit: (() => Promise<void>) | null = null;
+  function setConversationExit(next: (() => Promise<void>) | null) {
+    conversationExit = next;
+  }
+
   let lastRouteTopic: string | undefined;
   effect(() => {
     const topicID = routeTopicID();
@@ -3223,7 +3308,29 @@ export function createChatController() {
       if (lastRouteTopic === topicID) return;
       lastRouteTopic = topicID;
       topicSidebarView.set(topicSidebarViewFor(topicID, topicSidebarView()) as SidebarView);
-      void syncTopicFromRoute().finally(focusComposerOnDesktop);
+      // Back to the topic list on a phone (the bar's arrow, Android's Back, the browser's back): the
+      // list comes back at once and the conversation slides out still showing its topic (ChatPage's
+      // panes), which it lets go once it has gone.
+      const leaving =
+        !topicID &&
+        mobileTopicSplitEnabled() &&
+        hasSidebarTopics() &&
+        Boolean(normalizeTopicID(selectedTopicID()) || creatingTopic()) &&
+        conversationExit !== null;
+      if (leaving) syncMobileTopicView({ preferTopics: true });
+      const exit = leaving ? conversationExit?.() : null;
+      if (!exit) {
+        void syncTopicFromRoute().finally(focusComposerOnDesktop);
+        return;
+      }
+      // Unless the user went on meanwhile (another topic, a new chat): that sync is theirs.
+      const heldTopic = normalizeTopicID(selectedTopicID());
+      const heldCreating = creatingTopic();
+      void exit.then(() => {
+        if (!viewActive || untracked(routeTopicID) !== topicID || untracked(mobileTopicView) !== "topics") return;
+        if (normalizeTopicID(untracked(selectedTopicID)) !== heldTopic || untracked(creatingTopic) !== heldCreating) return;
+        void syncTopicFromRoute().finally(focusComposerOnDesktop);
+      });
     });
   });
 
@@ -3259,6 +3366,7 @@ export function createChatController() {
   });
 
   return {
+    setConversationExit,
     // state
     mobileMode,
     chatHistoryItems,
@@ -3336,6 +3444,14 @@ export function createChatController() {
     showTopicSidebar,
     showChatPane,
     showChatPlaceholder,
+    chatLoadErrorKind,
+    chatLoadErrorMessage,
+    chatLoadErrorTitle,
+    chatLoadErrorFull,
+    chatLoadBusy,
+    topicsLoadError,
+    topicsLoadErrorInSidebar,
+    retryChatLoad,
     chatPlaceholderHint,
     deskTitle,
     hasSidebarTopics,

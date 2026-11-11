@@ -6,7 +6,8 @@ import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
-import { Button, Fab, type MessageAction, MessageDialog, Page, PageTitle } from "../../components/ui";
+import { BackButton, Button, Fab, type MessageAction, MessageDialog, Page, PageBar, PageTitle } from "../../components/ui";
+import { createPaneStack } from "../../components/motion/PaneStack";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import { TodoHeartbeatEditor } from "../../components/todo/TodoHeartbeatEditor";
@@ -119,10 +120,12 @@ function EditorPane(props: { state: TodoState; mobile?: boolean }) {
     return "placeholder";
   };
   // In the calendar's side column the card is a panel inset 8 all round and scrolls within the
-  // column; beside the list it is a framed box (margin 8 8 8 16), on phones 16 all round.
+  // column; beside the list it is a framed box inset 8 at the top, right and bottom and none at the
+  // left, so its frame meets the list's column as the sidebar's frame does on the other side, and
+  // the rows sit the list's 16pt gutter from each (Contacts likewise); on phones 16 all round.
   const panel = () => !props.mobile && state.calendarView();
   const margin = () =>
-    props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8, marginLeft: 16 };
+    props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8 };
   return (
     <If when={mode() !== "placeholder"} else={<Placeholder state={state} mobile={props.mobile} />}>
       <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="min-h-full">
@@ -170,6 +173,10 @@ export function TodoPage() {
     () => state.showIndexView(),
   );
   effect(() => untracked(() => void state.start()));
+  // On phones the list (0) and a task (1) are levels of the page that slide (PaneStack); the task
+  // keeps its bar while it goes out.
+  const panes = createPaneStack(() => (isMobile() ? (state.showIndexPane() ? 0 : 1) : null));
+  const barTitle = panes.held(1, () => state.mobileBarTitle());
 
   const runDialogActions = (): MessageAction[] => {
     const dialog = state.runDialog();
@@ -190,34 +197,17 @@ export function TodoPage() {
   };
 
   return (
-    <Page
-      title={t("todo_title")}
-      hideBar={!isMobile() || !state.mobileShowBack()}
-      scroll={false}
-      testID="todo-page"
-      leading={
-        <View class="flex-1 flex-row items-center gap-2">
-          <Button
-            variant="plain"
-            size="xs"
-            iconOnly
-            icon="PhArrowLeft"
-            title={t("todo_nav_title")}
-            testID="todo-back"
-            onPress={state.showIndexView}
-          />
-          <PageTitle text={state.mobileBarTitle()} />
-        </View>
-      }
-    >
+    // The phone's bar belongs to the task (it slides with it), below.
+    <Page title={t("todo_title")} hideBar scroll={false} testID="todo-page">
       <If
         when={isMobile()}
         else={
           <If
             when={state.calendarView()}
             else={
-              // The list's column (310) and the editor beside it, 4 apart (the workbench's gap).
-              <View class="flex-1 flex-row gap-1">
+              // The list's column (310) and the editor beside it, with no gap: the editor's frame
+              // is the list column's right edge.
+              <View class="flex-1 flex-row">
                 <View style={{ width: TODO_INDEX_WIDTH }}>
                   <TodoIndex state={state} />
                 </View>
@@ -241,13 +231,38 @@ export function TodoPage() {
         }
       >
         <View class="flex-1">
-          <If when={state.showIndexPane()} else={<EditorPane state={state} mobile />}>
-            <If when={state.calendarView()} else={<TodoIndex state={state} mobile />}>
-              <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24">
-                <Calendar state={state} mobile />
-                <MobileBarSpacer />
-              </Scroll>
-            </If>
+          <If when={panes.shown(0, state.showIndexPane())}>
+            <View
+              class="flex-1"
+              style={panes.style(0)}
+              accessibilityElementsHidden={panes.hidden(0) || undefined}
+              importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
+            >
+              <If when={state.calendarView()} else={<TodoIndex state={state} mobile />}>
+                <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24">
+                  <Calendar state={state} mobile />
+                  <MobileBarSpacer />
+                </Scroll>
+              </If>
+            </View>
+          </If>
+          <If when={panes.shown(1, !state.showIndexPane())}>
+            <View
+              class="flex-1"
+              style={panes.style(1)}
+              accessibilityElementsHidden={panes.hidden(1) || undefined}
+              importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
+            >
+              <PageBar
+                leading={
+                  <View class="flex-1 flex-row items-center gap-2">
+                    <BackButton title={t("todo_nav_title")} testID="todo-back" onPress={state.showIndexView} />
+                    <PageTitle text={barTitle()} />
+                  </View>
+                }
+              />
+              <EditorPane state={state} mobile />
+            </View>
           </If>
           <If when={state.showIndexPane()}>
             <Fab

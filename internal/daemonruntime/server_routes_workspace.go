@@ -23,6 +23,7 @@ func (routes *routeRegistration) registerWorkspaceRoutes() {
 	workspacePut := opts.Put
 	workspaceDelete := opts.Delete
 	workspaceDefaultDir := strings.TrimSpace(opts.DefaultDir)
+	workspaceHomeDir := strings.TrimSpace(opts.HomeDir)
 	workspaceOpen := opts.Open
 	workspaceTree := opts.Tree
 	workspaceBrowse := opts.Browse
@@ -36,12 +37,16 @@ func (routes *routeRegistration) registerWorkspaceRoutes() {
 		}
 
 		writeWorkspaceResponse := func(topicID string, resolution WorkspaceResolution) {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			payload := map[string]any{
 				"topic_id":      strings.TrimSpace(topicID),
 				"workspace_dir": strings.TrimSpace(resolution.WorkspaceDir),
 				"source":        strings.TrimSpace(resolution.Source),
-			})
+			}
+			if workspaceHomeDir != "" {
+				payload["home_dir"] = workspaceHomeDir
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(payload)
 		}
 		handleWorkspaceError := func(err error) {
 			if err == nil {

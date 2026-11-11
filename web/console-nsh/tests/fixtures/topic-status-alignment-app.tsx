@@ -72,6 +72,10 @@ const c = {
   topicsLoading: () => empty(),
   topicsNextCursor: () => "",
   topicsLoadingOlder: () => false,
+  topicsLoadError: () => "",
+  topicsLoadErrorInSidebar: () => false,
+  chatLoadBusy: () => false,
+  retryChatLoad: async () => undefined,
   loadOlderTopics: async () => undefined,
 } as unknown as ChatController;
 

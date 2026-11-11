@@ -9,8 +9,9 @@
 //
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
-// measure them and move with them. On desktops a topic in the tag view can be dragged onto a tag
-// group to add that tag (./topicDrag.ts), the groups it can go to outlined meanwhile.
+// measure them and move with them. A topic in the tag view can be dragged onto a tag group to add
+// that tag (./topicDrag.ts), the groups it can go to outlined meanwhile: with a mouse straight away,
+// on a touch screen once a finger has rested on it (a swipe stays the list's scroll).
 import { Image, Scroll, signal, Text, token, View, type InputRef, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
@@ -22,6 +23,7 @@ import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdge
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
 import { sagHalf, SagRule } from "../../components/motion/Sag";
 import { t } from "../../components/chat/i18n";
+import { ChatLoadError } from "../../components/chat/ChatLoadError";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -130,7 +132,8 @@ export const topicTitleClass = (mobile: boolean) =>
 
 // The head's last button (New, or the tag toggle where a phone's New floats over the list) ends the
 // right inset in from the sidebar's right edge: on a phone the pages' phone gutter (`gutterX`), the
-// head's own padding; on a desktop 30pt, the head's right padding. Its 14pt icon sits in the middle
+// head's own padding; on a desktop the list's 16pt gutter, so the button ends where the rows do.
+// Its 14pt icon sits in the middle
 // of its 38pt square, and every row's 7pt status mark is centred under that icon: the marks' axis
 // lies the inset and half a button in from the edge. A row's right padding is that axis less half
 // a mark, the row's 1pt border and, on a desktop, the list's 16pt gutter (phone rows run edge to
@@ -142,7 +145,7 @@ export const TOPIC_LIST_GUTTER = 16;
 export const TOPIC_HEAD_BUTTON = 38;
 /** A row's status mark (StatusDot). */
 export const TOPIC_STATUS_SIZE = 7;
-const DESKTOP_RIGHT_INSET = 30;
+const DESKTOP_RIGHT_INSET = TOPIC_LIST_GUTTER;
 
 /** How far the head's last button ends in from the sidebar's right edge. */
 export function topicRightInset(mobile: boolean): number {
@@ -165,6 +168,9 @@ export type TopicPartFrame = PartFrame;
 export function TopicSidebar(props: {
   c: ChatController;
   class?: string;
+  /** Its motion as a phone's pane (ChatPage), and whether it is going out (inert, hidden from assistive tech). */
+  style?: Record<string, unknown>;
+  hidden?: boolean;
   /** Hears where parts lie on the page (tests): `sidebar`, `head-action` (the head's last button),
    * `head-icon` (its icon), `status-<topic id>` and `title-<topic id>`. */
   onPartLayout?: PartLayoutListener;
@@ -257,9 +263,9 @@ export function TopicSidebar(props: {
     () => c.consoleTopicsEnabled(),
   );
 
-  // A topic's row. The view around it takes the drag (desktops) and reports the frame the sliding
-  // selection and the drop zones are placed from; while dragged it follows the pointer on a card of
-  // its own, and while a dropped tag saves it is dimmed.
+  // A topic's row. The view around it takes the drag and reports the frame the sliding selection
+  // and the drop zones are placed from; while dragged it follows the pointer on a card of its own,
+  // and while a dropped tag saves it is dimmed. Letting go of a topic a finger lifted opens nothing.
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => {
     const key = row().key;
     const placeSelection = selection.track(key);
@@ -277,10 +283,12 @@ export function TopicSidebar(props: {
       >
         <TipButton
           selected={c.topicIsActive(row().topic)}
-          onPress={() => c.selectTopic(row().topic?.id)}
+          onPress={() => {
+            if (!drag.pressTaken(key)) c.selectTopic(row().topic?.id);
+          }}
           accessibilityLabel={c.topicTitle(row().topic)}
           testID={`chat-topic-${normalizeTopicID(row().topic?.id)}`}
-          tooltip={c.topicTimeLabel(row().topic) && !drag.lifted(key) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
+          tooltip={c.topicTimeLabel(row().topic) && !drag.hidesTip(key) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
           class={`${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 ${rowPadding()} transition-colors duration-[180ms] hover:bg-hover-soft`}
           style={{ paddingRight: topicRowPaddingRight(c.mobileMode()) }}
         >
@@ -396,7 +404,14 @@ export function TopicSidebar(props: {
   );
 
   return (
-    <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar" {...probe(() => "sidebar")}>
+    <View
+      class={`bg-sidebar ${props.class ?? ""}`}
+      style={props.style}
+      accessibilityElementsHidden={props.hidden || undefined}
+      importantForAccessibility={props.hidden ? "no-hide-descendants" : undefined}
+      testID="chat-topic-sidebar"
+      {...probe(() => "sidebar")}
+    >
       {/* The head: the title on the left, the view toggles and New at the right, the last button
           ending at the right inset, its icon centred over the rows' status marks. The search is
           the list's, on a phone and a desktop alike. The hairline under the head shows once topics
@@ -498,6 +513,18 @@ export function TopicSidebar(props: {
             <View testID="chat-topics-loading">
               <Spinner class="items-center py-3" />
             </View>
+          </If>
+          {/* The list failed to load (or to refresh: the topics already listed stay below). */}
+          <If when={c.topicsLoadErrorInSidebar()}>
+            <ChatLoadError
+              compact
+              title={t("chat_topics_load_failed")}
+              message={c.topicsLoadError()}
+              refreshLabel={t("action_refresh")}
+              busy={c.chatLoadBusy()}
+              onRefresh={() => void c.retryChatLoad()}
+              testID="chat-topics-load-error"
+            />
           </If>
           {/* The list's gutter (16pt; none on a phone, where rows run edge to edge as Contacts' do) as
               views inside the content rather than its padding: the content is at least the viewport's
