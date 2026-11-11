@@ -30,3 +30,14 @@ Visual checks: coder compared real Console before/after in headless Chrome at 39
 Installs: none. Existing Playwright tooling reused.
 Push initially failed because credential requests omitted repository path; one retry with command-local credential.useHttpPath=true succeeded.
 Moved new/ → review/ for review; not merged into master.
+
+## factory · review · 2026-11-11 19:30
+head: add161b425dc26d7c76fda003c9d0825624858a6
+verdict: pass
+notes:
+- Non-blocking sizing observation: on phone Chat with the workspace sidebar available, the back control is now 38×38 while the adjacent bare workspace toggle remains 32×32 (ChatPage.tsx:118,227,233). Claude Code rated this P3; manager treats it as an intentionally unchanged adjacent control, not a failure of the requested back-button sizing. Owner may consider matching it separately.
+
+Reviewed all 10 changed files in origin/master...HEAD using Claude Code. No P0/P1 findings. Branch merges cleanly with origin/master. No files changed or commits created by reviewer.
+Validation: Go formatting gate, go vet ./..., go test ./... passed; nsh check passed; nsh test --web-host tests/noHost.js passed (626 tests, 0 failed). Scripted tests used throwaway HOME. Installs: none.
+Limits: reviewer did not independently visually inspect the UI; geometry tests cover mobile web and Android platform emulation. Real Android device/emulator and desktop app were not visually checked. Build's headless Chrome comparison remains the only visual evidence.
+Moved review/ → ready/; not merged into master. No linked GitHub issues or PRs.
