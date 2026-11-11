@@ -971,6 +971,7 @@ export function createSettingsStore() {
       items.push({ id: "console", icon: "PhNetwork", title: t("settings_console_title"), meta: t("settings_section_console_meta"), saveKind: "" });
     }
     items.push({ id: "app", icon: "PhAppWindow", title: t("settings_app_title"), meta: t("settings_section_app_meta"), saveKind: "" });
+    items.push({ id: "shortcuts", icon: "PhKeyboard", title: t("shortcuts_title"), meta: t("shortcuts_section_meta"), saveKind: "" });
     items.push({ id: "runtime", icon: "PhPulse", title: t("runtime_title"), saveKind: "" });
     items.push({ id: "credits", icon: "PhInfo", title: t("settings_credits_title"), saveKind: "" });
     return items;

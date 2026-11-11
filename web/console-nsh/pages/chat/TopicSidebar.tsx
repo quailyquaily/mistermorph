@@ -12,7 +12,7 @@
 // measure them and move with them. A topic in the tag view can be dragged onto a tag group to add
 // that tag (./topicDrag.ts), the groups it can go to outlined meanwhile: with a mouse straight away,
 // on a touch screen once a finger has rested on it (a swipe stays the list's scroll).
-import { Image, Scroll, signal, Text, token, View, type ViewRef } from "nsh";
+import { Image, Scroll, signal, Text, token, View, type InputRef, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
@@ -30,6 +30,7 @@ import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { listTitleSize } from "../../components/frame/metrics";
 import { createPullSearch } from "../../components/shared/pullSearch";
 import { createTopicDrag } from "./topicDrag";
+import { provideShortcut, shortcutLabel } from "../../lib/shortcuts";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../../components/shared/partProbe";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
@@ -238,6 +239,7 @@ export function TopicSidebar(props: {
   // The search: the loaded topics of this view whose title holds the text, as it is typed. The
   // index search Contacts has too (same field, gutters and room around it); it aligns with the
   // rows. Escape empties it.
+  let searchField: InputRef | undefined;
   const search = () => (
     <IndexSearch
       value={c.topicSearch()}
@@ -245,7 +247,20 @@ export function TopicSidebar(props: {
       placeholder={t("chat_topics_search")}
       mobile={c.mobileMode()}
       testID="chat-topics-search"
+      inputRef={(node) => {
+        searchField = node;
+      }}
     />
+  );
+  // Its keyboard shortcut (lib/shortcuts.ts) shows the search (on a touch phone it may still be
+  // hidden) and focuses it once it is there.
+  provideShortcut(
+    "chat.searchTopics",
+    () => {
+      pull.reveal();
+      setTimeout(() => searchField?.focus(), 0);
+    },
+    () => c.consoleTopicsEnabled(),
   );
 
   // A topic's row. The view around it takes the drag and reports the frame the sliding selection
@@ -451,7 +466,7 @@ export function TopicSidebar(props: {
             <TipButton
               onPress={() => c.startNewTopic()}
               accessibilityLabel={t("chat_topic_new")}
-              tooltip={<Tip text={t("chat_topic_new")} />}
+              tooltip={<Tip text={t("chat_topic_new")} shortcut={shortcutLabel("chat.newTopic")} />}
               testID="chat-topic-new"
               onLayout={headButtonLayout(() => true)}
               class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"

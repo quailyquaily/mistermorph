@@ -206,7 +206,8 @@ export function Markdown(props: {
 const TIP_SHADOW = "0 4px 14px rgba(24, 24, 50, 0.1)";
 
 /** A tooltip: `tooltip={<Tip text="…" />}` on any view. */
-export function Tip(props: { text: string; placement?: "top" | "bottom" | "left" | "right" }) {
+/** A tooltip; `shortcut` is the keyboard shortcut of what it names, shown after it (`⇧⌘O`). */
+export function Tip(props: { text: string; shortcut?: string; placement?: "top" | "bottom" | "left" | "right" }) {
   return (
     <Tooltip
       delay={420}
@@ -216,7 +217,14 @@ export function Tip(props: { text: string; placement?: "top" | "bottom" | "left"
       endingClass="opacity-0"
       style={{ boxShadow: TIP_SHADOW, transitionTimingFunction: MOTION_EASE_CSS }}
     >
-      <Text class="text-xs leading-[17.4px] text-foreground">{props.text}</Text>
+      <If when={props.shortcut} else={<Text class="text-xs leading-[17.4px] text-foreground">{props.text}</Text>}>
+        <View class="flex-row items-center gap-2">
+          <Text class="shrink text-xs leading-[17.4px] text-foreground">{props.text}</Text>
+          <Text class="shrink-0 text-xs leading-[17.4px] text-muted-foreground" testID="tip-shortcut">
+            {props.shortcut}
+          </Text>
+        </View>
+      </If>
     </Tooltip>
   );
 }
@@ -375,6 +383,8 @@ export interface ButtonProps {
   iconOnly?: boolean;
   /** The tooltip, and the accessible name when there is no label. */
   title?: string;
+  /** The accessible name, when the label alone would not say enough ("Change" in a list of rows). */
+  accessibilityLabel?: string;
   disabled?: boolean;
   /** Busy: disabled (presses blocked), keeping its size and content, with the border beam running round it (design/ui-refresh.html §6). */
   loading?: boolean;
@@ -456,7 +466,7 @@ export function Button(props: ButtonProps) {
       disabled={!enabled()}
       selected={props.selected}
       onPress={() => enabled() && props.onPress?.()}
-      accessibilityLabel={props.label || props.title || props.icon || undefined}
+      accessibilityLabel={props.accessibilityLabel || props.label || props.title || props.icon || undefined}
       testID={props.testID}
       tooltip={props.title ? <Tip text={props.title} /> : undefined}
       class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${

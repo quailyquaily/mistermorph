@@ -58,6 +58,8 @@ export interface ConsoleOptions {
   platform?: "android";
   /** The system bars' insets (`safeArea()`), with `platform`. */
   safeArea?: SafeArea;
+  /** The desktop's OS (default `linux`): `macos` has Apple's keys (`mod` is Command, ⌘ labels). */
+  os?: "linux" | "macos" | "windows";
   /** The user asks for less motion. */
   reducedMotion?: boolean;
   /** A manual clock (`app.clock`): time moves only as the test moves it. */
@@ -185,7 +187,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     width: options.width ?? 1280,
     height: options.height ?? 800,
     // A desktop idiom; "web" would load host.js, which needs a browser page.
-    platform: "linux",
+    platform: options.os ?? "linux",
     locale: options.locale ?? "en-US",
     reducedMotion: options.reducedMotion ?? false,
     clock: options.clock ? {} : null,

@@ -31,6 +31,7 @@ import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { uiSlots } from "./slots";
+import { SHORTCUT_ACTIONS, shortcutLabel } from "../../lib/shortcuts";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -49,6 +50,11 @@ export function NavLink(props: {
   onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
 }) {
   const active = () => isNavItemActive(props.item);
+  // Its keyboard shortcut, in the tooltip (wide windows: the phone's More menu has no keyboard).
+  const shortcut = () => {
+    const action = props.mobile ? undefined : SHORTCUT_ACTIONS.find((item) => item.page === props.item.pagePath);
+    return action ? shortcutLabel(action.id) : "";
+  };
   // AppNavList.css: 42pt rows, 14pt sides, a 14pt icon 10pt before a 14pt label in the second ink;
   // the page you are on is ink on the list's highlight (no fill of its own: the sidebar draws its
   // band, which flares into the sidebar's edge), and another row lights up 6 % after a short pause when
@@ -61,7 +67,7 @@ export function NavLink(props: {
       onLayout={props.onLayout}
       accessibilityLabel={props.item.title}
       testID={props.testID}
-      tooltip={props.collapsed ? <Tip text={props.item.title} placement="right" /> : undefined}
+      tooltip={props.collapsed || shortcut() ? <Tip text={props.item.title} shortcut={shortcut()} placement="right" /> : undefined}
       class={`flex-row items-center gap-2.5 ${props.mobile ? "min-h-12 px-4" : "min-h-[42px]"} ${
         props.collapsed ? "justify-center px-0" : props.mobile ? "" : "px-3.5"
       } ${active() ? "hover:bg-transparent focus:bg-transparent" : "hover:bg-hover-soft focus:bg-hover-soft"}`}
@@ -175,7 +181,7 @@ function SidebarEdge() {
       focusable
       accessibilityLabel={label()}
       testID="sidebar-edge"
-      tooltip={<Tip text={label()} placement="right" />}
+      tooltip={<Tip text={label()} shortcut={shortcutLabel("frame.toggleSidebar")} placement="right" />}
       onFocus={() => {
         stopKeys();
         unbind = keymap.bind({

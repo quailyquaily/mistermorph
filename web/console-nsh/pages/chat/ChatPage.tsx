@@ -13,6 +13,7 @@ import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { onSystemBack } from "../../lib/systemBack";
+import { provideShortcut } from "../../lib/shortcuts";
 import { createChatController, type ChatController } from "./chatController";
 import { FilePreviewDialog } from "./FilePreviewDialog";
 import { TopicRenameDialog } from "./TopicRenameDialog";
@@ -266,6 +267,17 @@ export function ChatPage() {
   onSystemBack(
     () => c.mobileShowBack(),
     () => c.showTopicsView(),
+  );
+  // Keyboard shortcuts (lib/shortcuts.ts): a new topic, and back to the message field.
+  provideShortcut(
+    "chat.newTopic",
+    () => c.startNewTopic(),
+    () => c.consoleTopicsEnabled() && !c.chatReadonly(),
+  );
+  provideShortcut(
+    "chat.focusComposer",
+    () => c.focusComposer(),
+    () => c.showChatPane() && !c.chatReadonly(),
   );
 
   const mobileLeading = () => (

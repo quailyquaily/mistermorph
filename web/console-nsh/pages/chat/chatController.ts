@@ -3537,6 +3537,7 @@ export function createChatController() {
     stopActiveTask,
     selectTopic,
     startNewTopic,
+    focusComposer,
     showTopicsView,
     mobileBack,
     setTopicSidebarView,
