@@ -2,6 +2,7 @@ package agentlink
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +21,11 @@ const (
 	pingInterval = 30 * time.Second
 	idleTimeout  = 3 * pingInterval
 	writeTimeout = 10 * time.Second
-	maxFrameSize = 1 << 20
+	// maxFrameSize bounds a frame. A runtime or Console that predates file transfer reads at most
+	// 1 MiB; only messages with attachments, which go only to peers with CapabilityFiles, are larger.
+	maxFrameSize = 4 << 20
+	// slowLinkBytesPerSecond is the slowest link a large frame is given time to cross.
+	slowLinkBytesPerSecond = 64 << 10
 )
 
 // ErrClosed is returned by a closed Conn.
@@ -64,14 +69,19 @@ func (c *wsConn) WriteFrame(ctx context.Context, frame Frame) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	data, err := json.Marshal(frame)
+	if err != nil {
+		return err
+	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	deadline := time.Now().Add(writeTimeout)
+	// A frame with a file may take longer than writeTimeout to cross a slow link.
+	deadline := time.Now().Add(writeTimeout + time.Duration(len(data)/slowLinkBytesPerSecond)*time.Second)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
 	_ = c.conn.SetWriteDeadline(deadline)
-	return c.conn.WriteJSON(frame)
+	return c.conn.WriteMessage(websocket.TextMessage, data)
 }
 
 func (c *wsConn) Close() error {

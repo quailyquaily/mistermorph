@@ -98,6 +98,13 @@ func (n *Node) SessionFor(conversationKey, to string) string {
 	return id.String()
 }
 
+// replyWaitingLocked reports whether someone waits for msg as the answer to a message this runtime
+// sent.
+func (n *Node) replyWaitingLocked(msg Message) bool {
+	w := n.replies[strings.TrimSpace(msg.Envelope.ReplyTo)]
+	return w != nil && w.to == msg.From
+}
+
 // takeReplyLocked hands msg to whoever waits for it, reporting whether someone did.
 func (n *Node) takeReplyLocked(msg Message) bool {
 	w := n.replies[strings.TrimSpace(msg.Envelope.ReplyTo)]

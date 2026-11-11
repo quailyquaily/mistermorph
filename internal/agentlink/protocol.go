@@ -60,6 +60,9 @@ const (
 type Peer struct {
 	InstanceID string `json:"instance_id"`
 	AgentName  string `json:"agent_name,omitempty"`
+	// Capabilities lists what the agent supports, such as CapabilityFiles. A Console relay that
+	// predates them lists none.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // ContactID is the peer's contact ID.
@@ -73,6 +76,9 @@ type Message struct {
 	To        string                     `json:"to"`
 	Hop       int                        `json:"hop"`
 	Envelope  busruntime.MessageEnvelope `json:"envelope"`
+	// Attachments are the files the message carries; see Attachment. Only a peer and a relay with
+	// CapabilityFiles get a message with them.
+	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
 // Validate checks the fields every message needs.
@@ -89,23 +95,25 @@ func (m Message) Validate() error {
 	if m.Hop < 1 {
 		return fmt.Errorf("hop must be at least 1")
 	}
-	if strings.TrimSpace(m.Envelope.Text) == "" {
+	if strings.TrimSpace(m.Envelope.Text) == "" && len(m.Attachments) == 0 {
 		return fmt.Errorf("text is required")
 	}
-	return nil
+	return validateAttachments(m.Attachments)
 }
 
 // Frame is one WebSocket frame between a runtime and a Console.
 type Frame struct {
-	Type       string   `json:"type"`
-	InstanceID string   `json:"instance_id,omitempty"`
-	AgentName  string   `json:"agent_name,omitempty"`
-	Agents     []Peer   `json:"agents,omitempty"`
-	LeaseID    string   `json:"lease_id,omitempty"`
-	MessageID  string   `json:"message_id,omitempty"`
-	Status     string   `json:"status,omitempty"`
-	Reason     string   `json:"reason,omitempty"`
-	Message    *Message `json:"message,omitempty"`
+	Type       string `json:"type"`
+	InstanceID string `json:"instance_id,omitempty"`
+	AgentName  string `json:"agent_name,omitempty"`
+	// Capabilities is what a runtime's hello says it supports.
+	Capabilities []string `json:"capabilities,omitempty"`
+	Agents       []Peer   `json:"agents,omitempty"`
+	LeaseID      string   `json:"lease_id,omitempty"`
+	MessageID    string   `json:"message_id,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	Reason       string   `json:"reason,omitempty"`
+	Message      *Message `json:"message,omitempty"`
 }
 
 // ContactID returns the contact ID of the agent with instanceID.

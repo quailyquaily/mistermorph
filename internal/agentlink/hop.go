@@ -1,6 +1,11 @@
 package agentlink
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+)
 
 type incomingHopKey struct{}
 
@@ -22,4 +27,62 @@ func IncomingHop(ctx context.Context) int {
 // OutgoingHop is the hop of a message the task in ctx sends.
 func OutgoingHop(ctx context.Context) int {
 	return IncomingHop(ctx) + 1
+}
+
+type replyFilesKey struct{}
+
+// ReplyFiles collects the files a task answering an Agent Link message attaches to its answer: the
+// runtime sends them with the answer as the reply.
+type ReplyFiles struct {
+	peer string
+
+	mu    sync.Mutex
+	files []Attachment
+}
+
+// NewReplyFiles collects files for the answer to the agent with instance ID peer.
+func NewReplyFiles(peer string) *ReplyFiles {
+	return &ReplyFiles{peer: strings.TrimSpace(peer)}
+}
+
+// WithReplyFiles marks ctx as running a task whose answer goes back to an agent with files.
+func WithReplyFiles(ctx context.Context, files *ReplyFiles) context.Context {
+	return context.WithValue(ctx, replyFilesKey{}, files)
+}
+
+// ReplyFilesFromContext returns the collector of the task in ctx, if its answer goes back to an
+// agent.
+func ReplyFilesFromContext(ctx context.Context) (*ReplyFiles, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	files, ok := ctx.Value(replyFilesKey{}).(*ReplyFiles)
+	return files, ok && files != nil
+}
+
+// Peer is the instance ID of the agent the answer goes to.
+func (r *ReplyFiles) Peer() string { return r.peer }
+
+// Add attaches a file to the answer, within the limits of one message.
+func (r *ReplyFiles) Add(a Attachment) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.files) >= MaxAttachments {
+		return fmt.Errorf("the answer already has %d files, the most one message carries", MaxAttachments)
+	}
+	if attachmentBytes(r.files)+int64(len(a.Data)) > MaxAttachmentBytes {
+		return fmt.Errorf("the answer's files would pass %d bytes, the most one message carries", MaxAttachmentBytes)
+	}
+	r.files = append(r.files, a)
+	return nil
+}
+
+// Attachments returns the files attached so far.
+func (r *ReplyFiles) Attachments() []Attachment {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]Attachment(nil), r.files...)
 }
