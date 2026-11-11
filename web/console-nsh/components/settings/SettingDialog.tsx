@@ -2,14 +2,15 @@
 // saving it cannot be closed: Escape and the backdrop do nothing, Cancel is disabled.
 //
 // It is built on the ui's DialogLayer, as AppDialog is in Vue: the scrim and panel fade in, the
-// panel growing out of the control that opened it, and go back into it on close (Escape too).
+// panel growing out of the control that opened it, and go back into it on close (Escape too); on
+// phones it is a sheet sliding up from the bottom edge, Cancel and Save equally wide.
 //
 // Vue to nsh: `modelValue` is `open`, `update:modelValue` is `onOpenChange(open)`; `cancel` and
 // `save` are `onCancel()` and `onSave()`.
 import type { JSX } from "nsh";
 import { Scroll, Text, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
-import { Button, DialogLayer, type ModalSize } from "../ui";
+import { Button, DialogActions, DialogLayer, dialogSheetClearance, type DialogProbe, type ModalSize } from "../ui";
 import { SCROLLBAR } from "../motion";
 import { isMobile } from "../../lib/shell";
 
@@ -35,6 +36,8 @@ export interface SettingDialogProps {
   saveDisabled?: boolean;
   children?: JSX.Element;
   testID?: string;
+  /** For tests: the panel's frame and motion. */
+  probe?: DialogProbe;
 }
 
 export function SettingDialog(props: SettingDialogProps) {
@@ -50,6 +53,10 @@ export function SettingDialog(props: SettingDialogProps) {
       testID={props.testID}
       label={props.title}
       panelClass={WIDTHS[props.size ?? "lg"]}
+      // The actions' strip is paper, not the dialog's white: on a sheet it reaches down over the
+      // room under it (the navigation bar, gesture handle or keyboard) itself.
+      bottomInset="content"
+      probe={props.probe}
     >
       {/* SettingDialog.css: a 44pt title bar, a 20pt body (16 on phones), and the actions in a 60pt
           strip on the paper, Cancel at the left and Save at the right. */}
@@ -61,7 +68,12 @@ export function SettingDialog(props: SettingDialogProps) {
       <Scroll class="shrink" contentClass={`gap-3 ${isMobile() ? "p-4" : "p-5"}`} scrollbar={SCROLLBAR}>
         {props.children}
       </Scroll>
-      <View class={`min-h-15 flex-row items-center justify-between gap-3 border-t border-line bg-paper py-2 ${isMobile() ? "px-4" : "px-5"}`}>
+      <DialogActions
+        class={`min-h-15 flex-row items-center justify-between gap-3 border-t border-line bg-paper py-2 ${isMobile() ? "px-4" : "px-5"}`}
+        // py-2's 8pt under the buttons, above the sheet's room under its last row.
+        style={dialogSheetClearance() > 0 ? { paddingBottom: 8 + dialogSheetClearance() } : undefined}
+        testID={props.testID ? `${props.testID}-footer` : undefined}
+      >
         <Button variant="outlined" size="md" label={t("action_cancel")} disabled={props.saving} onPress={cancel} />
         <Button
           variant="primary"
@@ -72,7 +84,7 @@ export function SettingDialog(props: SettingDialogProps) {
           onPress={() => props.onSave?.()}
           testID={props.testID ? `${props.testID}-save` : undefined}
         />
-      </View>
+      </DialogActions>
     </DialogLayer>
   );
 }

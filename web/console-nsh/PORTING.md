@@ -220,9 +220,10 @@ Headless tests prove behaviour, not the look.
   Android; do not combine the two on anything pressable.
 - Android gives a touch that no view takes to the views behind it: the dialog's scrim heard presses on
   the panel's padding. The scrim ignores presses inside the panel's frame.
-- Neither the surface nor a dialog shrinks when the software keyboard opens. The app's root and the
-  dialog layer add `keyboardFrame().height` as bottom padding. Not `env(keyboard-inset-height)`:
-  it moves views natively but not in the layout presses are matched against.
+- Neither the surface nor a dialog shrinks when the software keyboard opens. The app's root adds
+  `keyboardFrame().height` as bottom padding, and so does a dialog that is a sheet at the bottom
+  (phones), inside its own panel. Not `env(keyboard-inset-height)`: it moves views natively but not
+  in the layout presses are matched against.
 - On touch screens nsh/base's `Menu` and `Select` are sheets at the bottom of the screen (their
   `placement` is the desktops'), and opening one does not take the focus from a text field: a
   sheet opened from beside a focused field lies under its keyboard. The composer's add menu and
@@ -255,6 +256,14 @@ Headless tests prove behaviour, not the look.
   `safeArea()` has their sizes). The app's frame takes them once (`lib/systemInsets.ts`): pages and
   their 57pt bars need no inset of their own, and `env(safe-area-inset-*)` must not be added inside
   the frame on Android. Overlays cover the whole surface and take the insets themselves.
+- A dialog on a phone is a sheet at the bottom (`DialogLayer`, windows under 720pt): its layer
+  takes the top and side insets, and the sheet's own panel the bottom one (or the keyboard's
+  height instead), so its paper fills the room under its last row, taken once
+  (`dialogSheetInsets`, lib/systemInsets.ts; iOS and the web too). A dialog whose last strip is
+  painted a colour of its own takes that room in the strip (`bottomInset="content"` +
+  `dialogSheetClearance()`, as `SettingDialog` does). Its footer's buttons go in `DialogActions`
+  (Modal's footer and SettingDialog's are): exactly two share the row's width on a sheet; put
+  them in the row itself, not each in a column of its own (`flex-1` would grow it down).
 - nsh/base's `Sheet` is such an overlay: the frame's padding does not reach it, and its panel runs
   under the status bar unless it is padded. The chat's phone panel (`WorkspaceSheet`) pads its
   popup with `rightSheetInsets` (`lib/systemInsets.ts`); a new sheet at a side does the same, never
