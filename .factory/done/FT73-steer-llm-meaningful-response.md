@@ -45,3 +45,15 @@ Validation: required gofmt, go vet ./... and go test ./... passed (162 packages)
 Installs: none.
 Residual risks: live model/provider, per-channel delivery and desktop/Android UI not exercised. Console late notices need history refresh; concurrent inbound Respond calls do not guarantee original arrival order. Review passes the configured P0/P1 gate, not a claim of zero defects.
 Moved review/ → ready/; not shipped. Owner should inspect the delivery-race note and live UI/channel behavior.
+
+## factory · 2026-11-11 14:11
+
+Owner-authorized ship with tag. Merge: e41edbcf46a0969cc5e1f3500240ca9c96e69ffd. Released in v0.3.96 at e41edbcf46a0969cc5e1f3500240ca9c96e69ffd; manager atomic push and remote master/tag verification succeeded.
+
+Fixed dropped-during-delivery missing follow-up in 58ff29d0d2e25fe7ada6d52216a0b53d36abda70; deterministic regression fails before and passes after. Repeated race regression passes 20/20; applied/stopped inputs retain correct behavior. Updated feature branch pushed by manager.
+
+Final read-only review: no P0–P3 findings. Combined validation: gofmt/vet/go test passed (162 packages), nsh check passed, full nsh suite 621/621, core Node tests 262/262 and manifest tests 6/6, steer race checks 220/220 and runtimecontrol race x3, web build passed. Scripted tests isolated HOME/XDG/TMP/cache. No installs. Initial Node PATH failure corrected using existing install.
+
+No physical Android/emulator/native app or visual validation; Android build/host tests not run. No live model/channel verification. Console late notices still need history refresh; simultaneous replies may not preserve arrival order. Underlying nsh lifecycle limitation remains. No deployment.
+
+Linked issues/PRs: none declared in header or owner sections; none closed. FT80 unchanged. Moved ready/ → done/.

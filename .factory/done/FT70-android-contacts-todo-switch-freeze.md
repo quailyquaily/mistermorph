@@ -52,3 +52,15 @@ notes:
 - Residual test limits: the per-test timeout cannot stop this baseline hang, so CI needs an outer timeout; the lifecycle fixture intentionally asserts the current nsh bug and will need updating after an upstream fix.
 
 Moved review → ready.
+
+## factory · 2026-11-11 14:11
+
+Owner-authorized ship with tag. Merge: e1aafbac1298ba41c56e118b30318dfaf47c22cd. Released in v0.3.96 at e41edbcf46a0969cc5e1f3500240ca9c96e69ffd; manager atomic push and remote master/tag verification succeeded.
+
+Resolved ContactsPage conflict preserving the current shared phone/desktop page and lifecycle ownership. Read-only ship review found a P2 loading-to-empty regression; fixed in 3f82298dfaa73b45f43c1fa367d5948842700662. Deterministic new tests failed 12/12 before correction and passed after; phone/desktop immediate/delayed reload cases pass. Three 50-round-trip navigation scenarios pass.
+
+Final read-only review: no P0–P3 findings. Combined validation: gofmt/vet/go test passed (162 packages), nsh check passed, full nsh suite 621/621, core Node tests 262/262 and manifest tests 6/6, steer race checks 220/220 and runtimecontrol race x3, web build passed. Scripted tests isolated HOME/XDG/TMP/cache. No installs. Initial Node PATH failure corrected using existing install.
+
+No physical Android/emulator/native app or visual validation; Android build/host tests not run. No live model/channel verification. Console late notices still need history refresh; simultaneous replies may not preserve arrival order. Underlying nsh lifecycle limitation remains. No deployment.
+
+Linked issues/PRs: none declared in header or owner sections; none closed. FT80 unchanged. Moved ready/ → done/.
