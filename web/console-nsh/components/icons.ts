@@ -60,6 +60,7 @@ import PhHash from "../assets/icons/hash.svg";
 import PhImage from "../assets/icons/image.svg";
 import PhInfo from "../assets/icons/info.svg";
 import PhKey from "../assets/icons/key.svg";
+import PhKeyboard from "../assets/icons/keyboard.svg";
 import PhLink from "../assets/icons/link.svg";
 import PhListBullets from "../assets/icons/list-bullets.svg";
 import PhListChecks from "../assets/icons/list-checks.svg";
@@ -175,6 +176,7 @@ export const ICONS = {
   PhImage,
   PhInfo,
   PhKey,
+  PhKeyboard,
   PhLink,
   PhListBullets,
   PhListChecks,

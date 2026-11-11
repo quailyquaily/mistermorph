@@ -4,7 +4,7 @@
 // navigation, foldable edge) beside the page; on phones the bottom navigation, floating over the
 // foot of the page, with its More and agent sheets; and the notice stack over everything.
 // Shellless pages (login, troubleshooting) and standalone ones (overview, setup) get the banner and
-// the notices only.
+// the notices only. The keyboard shortcuts are bound here (components/frame/shortcutDispatch.ts).
 import type { JSX } from "nsh";
 import { View } from "nsh";
 import { currentPageKey, isMobile, mobileBottomNavVisible } from "../lib/shell";
@@ -13,10 +13,13 @@ import { notePress } from "./motion/pressOrigin";
 import { InsecureBanner } from "./frame/InsecureBanner";
 import { MobileBottomMenus, MobileBottomNav } from "./frame/MobileBottomNav";
 import { Sidebar } from "./frame/Sidebar";
+import { startShortcutDispatch } from "./frame/shortcutDispatch";
 import { ConfirmHost, NoticeHost } from "./ui";
 
 export function Shell(props: { shellless: boolean; standalone: boolean; children?: JSX.Element }) {
   const withSidebar = () => !props.shellless && !props.standalone && !isMobile();
+  // The keyboard shortcuts (lib/shortcuts.ts), bound for as long as the frame is there.
+  startShortcutDispatch();
   // Every press passes here first (capture), so dialogs know which control opened them.
   return (
     // Plain paper: no grid behind the pages (design/ui-refresh.html, "no background patterns").

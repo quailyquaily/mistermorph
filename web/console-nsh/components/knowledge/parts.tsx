@@ -10,7 +10,7 @@
 // padded 12/13/11/14. The selected row is a soft fill that glides between rows (one highlight,
 // components/motion's sliding selection); a row's hover fill comes in after 60 ms and goes at once,
 // so sweeping the pointer down a list does not flash every row it passes.
-import type { JSX } from "nsh";
+import type { InputRef, JSX } from "nsh";
 import { cleanup, effect, keymap, Scroll, signal, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
@@ -135,6 +135,8 @@ export function IndexSearch(props: {
   /** The phone layout (default: the console's mobile breakpoint). */
   mobile?: boolean;
   testID: string;
+  /** The field, to focus it (a keyboard shortcut). */
+  inputRef?: (node: InputRef) => void;
 }) {
   const metrics = () => indexSearchMetrics(props.mobile ?? isMobile());
   const focused = signal(false);
@@ -163,6 +165,7 @@ export function IndexSearch(props: {
         size={metrics().size}
         clearable
         testID={props.testID}
+        inputRef={(node) => props.inputRef?.(node)}
       />
     </View>
   );

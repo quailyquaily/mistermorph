@@ -140,6 +140,7 @@ export const SETTINGS_SECTION_IDS = new Set([
   "security",
   "console",
   "app",
+  "shortcuts",
   "runtime",
   "credits",
 ]);

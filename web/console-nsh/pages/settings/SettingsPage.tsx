@@ -37,6 +37,7 @@ import { ConsoleSection } from "./sections/ConsoleSection";
 import { UnsupportedSection } from "./sections/UnsupportedSection";
 import { RuntimePanel } from "./RuntimePanel";
 import { SettingsAppPanel } from "../../components/settings/SettingsAppPanel";
+import { ShortcutsPanel } from "../../components/settings/ShortcutsPanel";
 import { SettingsCreditsPanel } from "../../components/settings/SettingsCreditsPanel";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
@@ -74,6 +75,7 @@ const SECTIONS: Record<string, (s: SettingsStore, pane: PaneTargetValue) => JSX.
   system: (s) => <SystemSection s={s} />,
   console: (s, pane) => <ConsoleSection s={s} pane={pane} />,
   app: () => <SettingsAppPanel />,
+  shortcuts: () => <ShortcutsPanel />,
   runtime: () => <RuntimePanel />,
   credits: () => <SettingsCreditsPanel />,
 };
