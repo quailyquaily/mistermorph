@@ -9,8 +9,9 @@
 //
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
-// measure them and move with them. On desktops a topic in the tag view can be dragged onto a tag
-// group to add that tag (./topicDrag.ts), the groups it can go to outlined meanwhile.
+// measure them and move with them. A topic in the tag view can be dragged onto a tag group to add
+// that tag (./topicDrag.ts), the groups it can go to outlined meanwhile: with a mouse straight away,
+// on a touch screen once a finger has rested on it (a swipe stays the list's scroll).
 import { Image, Scroll, signal, Text, token, View, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
@@ -242,9 +243,9 @@ export function TopicSidebar(props: {
     />
   );
 
-  // A topic's row. The view around it takes the drag (desktops) and reports the frame the sliding
-  // selection and the drop zones are placed from; while dragged it follows the pointer on a card of
-  // its own, and while a dropped tag saves it is dimmed.
+  // A topic's row. The view around it takes the drag and reports the frame the sliding selection
+  // and the drop zones are placed from; while dragged it follows the pointer on a card of its own,
+  // and while a dropped tag saves it is dimmed. Letting go of a topic a finger lifted opens nothing.
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => {
     const key = row().key;
     const placeSelection = selection.track(key);
@@ -262,10 +263,12 @@ export function TopicSidebar(props: {
       >
         <TipButton
           selected={c.topicIsActive(row().topic)}
-          onPress={() => c.selectTopic(row().topic?.id)}
+          onPress={() => {
+            if (!drag.pressTaken(key)) c.selectTopic(row().topic?.id);
+          }}
           accessibilityLabel={c.topicTitle(row().topic)}
           testID={`chat-topic-${normalizeTopicID(row().topic?.id)}`}
-          tooltip={c.topicTimeLabel(row().topic) && !drag.lifted(key) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
+          tooltip={c.topicTimeLabel(row().topic) && !drag.hidesTip(key) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
           class={`${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 ${rowPadding()} transition-colors duration-[180ms] hover:bg-hover-soft`}
           style={{ paddingRight: topicRowPaddingRight(c.mobileMode()) }}
         >
