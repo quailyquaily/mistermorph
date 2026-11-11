@@ -397,6 +397,69 @@ export function ContactsPage() {
       metaFade
     />
   );
+  // The index's list, one on a phone and a desktop, always there, so the filter (a pull reaches it
+  // on a touch phone) can be used while it loads, fails or is empty too; the filter and an error head
+  // it and scroll with it (not the head's: the head keeps the title alone), and stay the same views (a
+  // focused field keeps its focus) as matches come and go and the window crosses the mobile
+  // breakpoint. On a desktop the rows keep the list's 16pt gutter; the filter has its own, so it is
+  // not doubled. A virtualized List: its rows are recycled cells, so the selected fill is each row's
+  // own and fades in and out (180 ms) rather than gliding as one highlight.
+  //
+  // Its `empty` view is an element made here, not a function: nsh 0.4.0 never disposes the scope a
+  // function `empty` slot renders in, so each list that went away (every Contacts page left, every
+  // contact opened on the phone) kept one, subscribed to the store and re-rendering its loading
+  // blocks into the dead list on every load, until the app hung for good: on the 10th Contacts /
+  // TODO round trip headless, after 14 in the Android report. Made in this component, it goes with
+  // the list (tests/contacts-todo-switch.test.tsx, tests/list-empty-slot.test.tsx).
+  function IndexList() {
+    const empty = (
+      <If
+        when={store.loading}
+        else={
+          <Note
+            text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
+            class="mx-4 mt-1 leading-normal"
+            testID="contacts-empty"
+          />
+        }
+      >
+        <Blocks count={4} height={65} class={isMobile() ? undefined : "px-4"} />
+      </If>
+    );
+    return (
+      <List
+        footer={MobileBarSpacer}
+        header={() => (
+          <View>
+            <If when={pull.shown()}>{filterField()}</If>
+            <If when={!store.loading && err()}>
+              <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
+            </If>
+            {/* With the list's 2pt gap, the 8pt the list keeps before its first row (as the
+                list's top padding did under the filter). */}
+            <View class="h-1.5" />
+          </View>
+        )}
+        empty={empty}
+        each={store.loading ? [] : filteredItems()}
+        keyExtractor={(item) => contactID(item)}
+        estimatedItemSize={67}
+        class="flex-1"
+        scrollbar={SCROLLBAR}
+        contentClass="gap-0.5 pb-4"
+        refreshIndicator={pull.indicator}
+        refreshing={pull.refreshing()}
+        onRefresh={pull.onRefresh}
+        onScrollDragStart={pull.onDragStart}
+        accessibilityActions={pull.actions()}
+        onAccessibilityAction={pull.onAction}
+        testID="contacts-list"
+      >
+        {(item) => <View class={isMobile() ? "" : "px-4"}>{contactRow(item)}</View>}
+      </List>
+    );
+  }
+
   return (
     <Page hideBar scroll={false} testID="contacts-page">
       <If when={mobileShowBack()}>
@@ -410,57 +473,7 @@ export function ContactsPage() {
             scroll={false}
             testID="contacts-index"
           >
-            {/* One list on a phone and a desktop, always there, so the filter (a pull reaches it on a
-                touch phone) can be used while it loads, fails or is empty too; the filter and an
-                error head it and scroll with it (not the head's: the head keeps the title alone),
-                and stay the same views (a focused field keeps its focus) as matches come and go and
-                the window crosses the mobile breakpoint. On a desktop the rows keep the list's 16pt
-                gutter; the filter has its own, so it is not doubled. A virtualized List: its rows
-                are recycled cells, so the selected fill is each row's own and fades in and out
-                (180 ms) rather than gliding as one highlight. */}
-            <List
-              footer={MobileBarSpacer}
-              header={() => (
-                <View>
-                  <If when={pull.shown()}>{filterField()}</If>
-                  <If when={!store.loading && err()}>
-                    <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
-                  </If>
-                  {/* With the list's 2pt gap, the 8pt the list keeps before its first row (as the
-                      list's top padding did under the filter). */}
-                  <View class="h-1.5" />
-                </View>
-              )}
-              empty={() => (
-                <If
-                  when={store.loading}
-                  else={
-                    <Note
-                      text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
-                      class="mx-4 mt-1 leading-normal"
-                      testID="contacts-empty"
-                    />
-                  }
-                >
-                  <Blocks count={4} height={65} class={isMobile() ? undefined : "px-4"} />
-                </If>
-              )}
-              each={store.loading ? [] : filteredItems()}
-              keyExtractor={(item) => contactID(item)}
-              estimatedItemSize={67}
-              class="flex-1"
-              scrollbar={SCROLLBAR}
-              contentClass="gap-0.5 pb-4"
-              refreshIndicator={pull.indicator}
-              refreshing={pull.refreshing()}
-              onRefresh={pull.onRefresh}
-              onScrollDragStart={pull.onDragStart}
-              accessibilityActions={pull.actions()}
-              onAccessibilityAction={pull.onAction}
-              testID="contacts-list"
-            >
-              {(item) => <View class={isMobile() ? "" : "px-4"}>{contactRow(item)}</View>}
-            </List>
+            <IndexList />
           </IndexColumn>
         </If>
 

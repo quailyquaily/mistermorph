@@ -84,6 +84,13 @@ Headless tests prove behaviour, not the look.
 - Opacity modifiers on the app's own colour tokens (`bg-paper/70`) do nothing: add a token to
   `theme.json` (`paper-soft`, `card-soft`) instead.
 - `style={{ display: "flex" }}` turns a View into a row.
+- A `List`'s `empty` slot given as a function renders in a scope nsh 0.4.0 never disposes: the
+  signals its view reads keep it alive after the list has gone, rendering into the dead list each
+  time they change. Leaked like that by every Contacts page left, an `If` on the store's loading flag
+  hung the Android app after about ten Contacts / TODO round trips. Give `empty` an element made in
+  the component that renders the list (`pages/contacts/ContactsPage.tsx` `IndexList`): it goes with
+  the list and still comes and goes as the list empties (`tests/list-empty-slot.test.tsx`). `header`,
+  `footer` and the rows are disposed as they should be.
 - On an inverted `List`, `scrollToEnd()` goes to the oldest item (nsh 0.4.0): use
   `scrollToIndex({ index: 0 })` to show the newest.
 - `List` tells the items of `each` apart by identity (`===`), not by `keyExtractor`: an item
