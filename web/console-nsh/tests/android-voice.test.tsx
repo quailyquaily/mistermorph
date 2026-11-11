@@ -195,3 +195,35 @@ test("another conversation ends the recording; the words go into the draft they 
   await app.press("Voice");
   await app.waitUntil(() => app.value("id:chat-composer-input") === "first draft");
 });
+
+test("the mic is red only while recording: a refused microphone leaves it as it was", async () => {
+  const MIC = "id:chat-composer-voice-icon.PhMicrophone.subtle";
+  const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.danger";
+  const answers = [{ ok: false, error: "permission-denied" }, { ok: false, error: "permission-blocked" }, { ok: true }];
+  const { app } = await openPhone(nativeHost({ "morph.voice.start": () => answers.shift() ?? { ok: true } }));
+  // The refusal notices sit over the composer on the phone: the glyph is counted, not waited for
+  // as visible.
+  const looks = (selector: string) => app.waitUntil(() => app.count(selector) === 1);
+  await looks(MIC);
+  await app.press("label:Voice input");
+  await app.waitUntil(() => shows(app, "Voice input needs the microphone. Tap the mic again"));
+  expect(app.count(RED_MIC)).toBe(0);
+  expect(app.count(MIC)).toBe(1);
+  await app.press("label:Voice input");
+  await app.waitUntil(() => shows(app, "Microphone access is turned off for this app"));
+  expect(app.count(RED_MIC)).toBe(0);
+  // Allowed: red while it records, and the same button stops it.
+  await app.press("label:Voice input");
+  await looks(RED_MIC);
+  expect(app.count(MIC)).toBe(0);
+  await app.press("label:Stop and transcribe");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
+  await looks(MIC);
+  expect(app.count(RED_MIC)).toBe(0);
+  // Ended by the native part with an error.
+  await app.press("label:Voice input");
+  await looks(RED_MIC);
+  await app.host.send("morph.voice.ended", { reason: "error", message: "The recorder stopped (1, -1)." });
+  await looks(MIC);
+  expect(app.count(RED_MIC)).toBe(0);
+});

@@ -48,6 +48,7 @@ export function Icon(props: {
   color?: TokenName;
   class?: string;
   filled?: boolean;
+  testID?: string;
   /** Its frame in its parent as it lays out (layout probes in tests). */
   onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
 }) {
@@ -55,6 +56,7 @@ export function Icon(props: {
     <Image
       src={(props.filled && FILLED_ICONS[props.name]) || ICONS[props.name]}
       class={props.class}
+      testID={props.testID}
       onLayout={props.onLayout}
       accessibilityElementsHidden
       style={{
