@@ -16,6 +16,10 @@ type EngineToolsConfig struct {
 	// CoderBypassApprovals names the backends ("codex", "claude") whose terminal sessions start
 	// without approval prompts or sandbox. One-shot CLI runs bypass them anyway.
 	CoderBypassApprovals map[string]bool
+	// WorkerNameSet is the name set (see WorkerNameSets) a task started by this engine names
+	// its spawn and coder workers from; empty or unknown means the scientists. Nested runs and
+	// resumed tasks keep the set of their task.
+	WorkerNameSet string
 }
 
 func DefaultEngineToolsConfig() EngineToolsConfig {

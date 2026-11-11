@@ -1,11 +1,12 @@
 // Worker names in a task's roster: scientists in the Console's language, the same scientist at
-// each position, a legacy record keeping its ordinary name, and switching back restoring them.
+// each position, a legacy record keeping its ordinary name, musicians and artists from their own
+// sets, and switching back restoring them.
 import { expect, open, test } from "nsh/test";
 
 const NAMES = {
-  en: ["Noether", "Curie", "Einstein", "Archimedes", "Mendeleev", "Turing", "Hopper", "Ramanujan", "Newton", "Darwin", "Lovelace", "Copernicus", "Darwin-2", "Hazel"],
-  zh: ["诺特", "居里", "爱因斯坦", "阿基米德", "门捷列夫", "图灵", "霍珀", "拉马努金", "牛顿", "达尔文", "洛夫莱斯", "哥白尼", "达尔文-2", "胡敏"],
-  ja: ["ネーター", "キュリー", "アインシュタイン", "アルキメデス", "メンデレーエフ", "チューリング", "ホッパー", "ラマヌジャン", "ニュートン", "ダーウィン", "ラブレス", "コペルニクス", "ダーウィン-2", "山口凛"],
+  en: ["Noether", "Curie", "Einstein", "Archimedes", "Mendeleev", "Turing", "Hopper", "Ramanujan", "Newton", "Darwin", "Lovelace", "Copernicus", "Darwin-2", "Hazel", "Chopin", "Van Gogh-2"],
+  zh: ["诺特", "居里", "爱因斯坦", "阿基米德", "门捷列夫", "图灵", "霍珀", "拉马努金", "牛顿", "达尔文", "洛夫莱斯", "哥白尼", "达尔文-2", "胡敏", "肖邦", "梵高-2"],
+  ja: ["ネーター", "キュリー", "アインシュタイン", "アルキメデス", "メンデレーエフ", "チューリング", "ホッパー", "ラマヌジャン", "ニュートン", "ダーウィン", "ラブレス", "コペルニクス", "ダーウィン-2", "山口凛", "ショパン", "ゴッホ-2"],
 };
 
 function shown(app: { texts(): string[] }) {

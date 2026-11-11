@@ -60,6 +60,7 @@ strip = true
 # multiplies touchpad scroll amounts by 3 and reports finger lifts as empty moves, so scrolling
 # ran ahead of other apps and never glided; patches/nsh-gpui-masks.patch (masks, repeating
 # gradients); patches/nsh-scroll-speed.patch (wheel and touchpad scroll twice the system's
-# amount). See README.md. Drop this once nsh/GPUI Fast ship the fixes.
+# amount); patches/nsh-selection-copy.patch (the copy keys copy a selected chat bubble's text
+# while the composer keeps the focus). See README.md. Drop this once nsh/GPUI Fast ship the fixes.
 [patch.crates-io]
 nsh-platform-gpui = { path = "vendor/nsh-platform-gpui" }

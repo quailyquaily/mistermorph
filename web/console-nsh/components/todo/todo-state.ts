@@ -16,7 +16,15 @@ import { pushNotice } from "../../lib/core/notices.js";
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { invalidateConsoleSetupReadiness } from "../../lib/core/setup.js";
 import { requestSystemNotificationPermission } from "../../lib/core/system-notifications.js";
-import { normalizeTodoRuns, todoRunsSignature, TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
+import {
+  normalizeFinishedTodoRuns,
+  normalizeTodoRuns,
+  todoRunsSignature,
+  TODO_RUN_CANCELED,
+  TODO_RUN_DONE,
+  TODO_RUN_FAILED,
+  TODO_RUN_RUNNING,
+} from "../../lib/core/todo-runs.js";
 import {
   findTodoTopic,
   todoTopicChatPath,
@@ -64,7 +72,34 @@ export interface TodoRun {
   state: string;
   manual: boolean;
   startedAt: string;
+  /** Names this one execution; a later run of the same item gets another. */
+  runID: string;
+  /** A stop was asked for (from here or elsewhere) and the run is winding down. */
+  stopping: boolean;
 }
+
+/**
+ * A stop asked for one execution, keyed by its run ID: `requesting` while the request is out,
+ * `stopping` once the runtime took it, until the run's end shows in /todo/runs.
+ */
+export interface TodoStop {
+  endpointRef: string;
+  taskID: string;
+  runID: string;
+  title: string;
+  startedAt: string;
+  phase: "requesting" | "stopping";
+}
+
+/** The selected item's running execution, with whether a stop is on its way. */
+export interface SelectedRunStop {
+  run: TodoRun;
+  pending: boolean;
+}
+
+const FINISHED_STATUSES = [TODO_RUN_DONE, TODO_RUN_FAILED, TODO_RUN_CANCELED];
+/** How often /todo/runs is asked while a stop waits for the run's end. */
+const STOP_POLL_MS = 1000;
 
 /** A dropdown entry of the timezone, schedule, model and chat pickers. */
 export interface TodoMenuItem {
@@ -152,6 +187,10 @@ export function createTodoState() {
   // TODO items the runtime is running or has queued now, by task ID; polled while the page is open.
   const taskRuns = signal<Map<string, TodoRun>>(new Map());
   let taskRunsSignature = "";
+  let taskRunsSeq = 0;
+  // The stops asked from this page that have not seen their run's end, by run ID.
+  const stops = signal<Map<string, TodoStop>>(new Map());
+  let stopPollTimer: ReturnType<typeof setTimeout> | null = null;
   const chatOptions = signal<any[]>([]);
   const llmDefaultRouteModel = signal("");
   const llmProfiles = signal<any[]>([]);
@@ -325,6 +364,18 @@ export function createTodoState() {
       trimText(selectedStoredTask()?.id) !== "" &&
       !taskRun(selectedStoredTask()),
   );
+  // Only a running execution of a saved item offers Stop; idle, waiting and unsaved ones do not.
+  const selectedRunStop = computed<SelectedRunStop | null>(() => {
+    const task = selectedStoredTask();
+    if (!task || heartbeatSelected() || !persistedTaskSignatures().has(task._key)) {
+      return null;
+    }
+    const run = taskRun(task);
+    if (!run || run.state !== TODO_RUN_RUNNING || !run.runID) {
+      return null;
+    }
+    return { run, pending: run.stopping || stops().has(run.runID) };
+  });
   const canDuplicateSelectedTask = computed(
     () => Boolean(selectedTask()) && !heartbeatSelected() && !loading() && !saving(),
   );
@@ -466,24 +517,161 @@ export function createTodoState() {
     return arrivedTick() >= 0 && arrivedTasks.has(task?._key);
   }
 
-  function applyTaskRuns(raw: unknown) {
+  // finishedRaw is /todo/runs "finished" (how recent runs ended); /todo/tasks has none.
+  function applyTaskRuns(raw: unknown, finishedRaw?: unknown) {
     const next = normalizeTodoRuns(raw) as Map<string, TodoRun>;
     const signature = todoRunsSignature(next);
     if (signature !== taskRunsSignature) {
       taskRunsSignature = signature;
       taskRuns.set(next);
     }
+    settleStops(next, finishedRaw);
   }
 
   async function refreshTaskRuns() {
     if (!isVisible()) {
       return;
     }
+    const seq = ++taskRunsSeq;
     try {
       const data = await runtimeApiFetch("/todo/runs");
-      if (!disposed) applyTaskRuns(data?.runs);
+      // An older answer never overwrites a newer one.
+      if (!disposed && seq === taskRunsSeq) applyTaskRuns(data?.runs, data?.finished);
     } catch {
       // An older runtime has no /todo/runs; the list then shows no run state.
+    }
+  }
+
+  /* ---------- stopping a run ---------- */
+
+  function putStop(stop: TodoStop) {
+    const next = new Map(untracked(stops));
+    next.set(stop.runID, stop);
+    stops.set(next);
+  }
+
+  function dropStop(runID: string) {
+    const current = untracked(stops);
+    if (!current.has(runID)) return;
+    const next = new Map(current);
+    next.delete(runID);
+    stops.set(next);
+  }
+
+  // A stop the runtime took ends when its run's end shows: how it ended is in "finished". A run
+  // that is gone without a record (an older runtime, a long-forgotten run) just ended.
+  function settleStops(runs: Map<string, TodoRun>, finishedRaw: unknown) {
+    const pending = [...untracked(stops).values()].filter((stop) => stop.phase === "stopping");
+    if (pending.length === 0 || !Array.isArray(finishedRaw)) {
+      return;
+    }
+    const finished = normalizeFinishedTodoRuns(finishedRaw) as Map<string, { status: string }>;
+    for (const stop of pending) {
+      const ended = finished.get(stop.runID);
+      if (ended) {
+        settleStop(stop, ended.status);
+      } else if (runs.get(stop.taskID)?.runID !== stop.runID) {
+        settleStop(stop, "");
+      }
+    }
+  }
+
+  // Says how the stopped run ended and shows it as the item's last run.
+  function settleStop(stop: TodoStop, status: string) {
+    dropStop(stop.runID);
+    if (stop.endpointRef !== endpointState.selectedRef) {
+      return;
+    }
+    const title = stop.title || t("todo_untitled");
+    if (status === TODO_RUN_CANCELED) {
+      notice.success(t("todo_stop_stopped", { title }));
+    } else if (status === TODO_RUN_DONE) {
+      pushNotice({ type: "info", text: t("todo_stop_completed", { title }) });
+    } else if (status === TODO_RUN_FAILED) {
+      pushNotice({ type: "warning", text: t("todo_stop_failed_before", { title }) });
+    } else {
+      pushNotice({ type: "info", text: t("todo_stop_ended", { title }) });
+    }
+    if (FINISHED_STATUSES.includes(status)) {
+      showLastRun(stop.taskID, status, stop.startedAt);
+    }
+  }
+
+  // The item's last-run line without reloading the list (which would drop edits): the stored item
+  // and an open draft of it are replaced with copies that have the run's end.
+  function showLastRun(taskID: string, status: string, startedAt: string) {
+    const withRun = (task: TodoTask): TodoTask => ({
+      ...task,
+      last_run_status: status,
+      last_run_at: startedAt || task.last_run_at,
+    });
+    batch(() => {
+      const list = untracked(tasks);
+      if (list.some((task) => trimText(task.id) === taskID)) {
+        tasks.set(list.map((task) => (trimText(task.id) === taskID ? withRun(task) : task)));
+      }
+      const draft = untracked(selectedTaskDraft);
+      if (draft && trimText(draft.id) === taskID) {
+        selectedTaskDraft.set(withRun(draft));
+      }
+    });
+  }
+
+  function scheduleStopPoll() {
+    if (stopPollTimer || disposed) return;
+    stopPollTimer = setTimeout(() => {
+      stopPollTimer = null;
+      if (disposed || ![...untracked(stops).values()].some((stop) => stop.phase === "stopping")) {
+        return;
+      }
+      void refreshTaskRuns().finally(scheduleStopPoll);
+    }, STOP_POLL_MS);
+  }
+
+  // Stops the selected item's running execution, the one shown now: the request names its run ID,
+  // so it can never stop a later run. One request at a time; the item stays as it is.
+  async function stopSelectedRun() {
+    const task = untracked(selectedStoredTask);
+    const target = untracked(selectedRunStop);
+    if (!task || !target || target.pending) {
+      return;
+    }
+    const taskID = trimText(task.id);
+    const stop: TodoStop = {
+      endpointRef: endpointState.selectedRef,
+      taskID,
+      runID: target.run.runID,
+      title: taskTitle(task),
+      startedAt: target.run.startedAt,
+      phase: "requesting",
+    };
+    putStop(stop);
+    try {
+      const data = await runtimeApiFetch(`/todo/tasks/${encodeURIComponent(taskID)}/stop`, {
+        method: "POST",
+        body: { run_id: stop.runID },
+      });
+      if (disposed || !untracked(stops).has(stop.runID)) return;
+      const status = trimText(data?.status);
+      if (status === "stopping") {
+        // Taken, not yet stopped: the run's end says how it went.
+        putStop({ ...stop, phase: "stopping" });
+        scheduleStopPoll();
+        return;
+      }
+      settleStop(stop, FINISHED_STATUSES.includes(status) ? status : "");
+      void refreshTaskRuns();
+    } catch (e) {
+      if (disposed) return;
+      dropStop(stop.runID);
+      if ((e as { status?: number } | null)?.status === 404) {
+        // The runtime no longer holds that run: it ended (or the runtime restarted).
+        settleStop(stop, "");
+      } else if (stop.endpointRef === endpointState.selectedRef) {
+        // Still running, as far as the page knows: Stop can be pressed again.
+        notice.error(t("todo_stop_failed", { error: errorMessage(e) || t("msg_load_failed") }));
+      }
+      void refreshTaskRuns();
     }
   }
 
@@ -1169,6 +1357,8 @@ export function createTodoState() {
     }, 5000);
     cleanup(() => {
       clearInterval(timer);
+      if (stopPollTimer) clearTimeout(stopPollTimer);
+      stopPollTimer = null;
       disposed = true;
       taskTopicLookupSeq += 1;
       cancelRunDialogLookup();
@@ -1195,6 +1385,7 @@ export function createTodoState() {
     heartbeatIndexMeta,
     canSave,
     canRunSelectedTask,
+    selectedRunStop,
     runningTaskKey,
     calendarView,
     showIndexPane,
@@ -1237,6 +1428,7 @@ export function createTodoState() {
     closeDeleteDialog,
     deleteSelectedTask,
     runSelectedTaskNow,
+    stopSelectedRun,
     openTaskTopic,
     closeRunDialog,
     retryRunDialogTopic,

@@ -44,3 +44,6 @@ Finished task results retain this metadata through the existing activity persist
 path. Reloading uses the saved names and PIDs, without allocating new names or probing
 old PIDs. Older saved tasks without worker metadata remain readable and display as
 before. No configuration keys or settings are added.
+
+Since 2026-11-11 the pool is a chosen name set (scientists by default, or musicians or
+artists); see [Choosing the name set](feat_20261111_agent_name_sets.md).

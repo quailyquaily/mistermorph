@@ -202,6 +202,7 @@ fn windows(cx: &mut TestAppContext) {
     releasing_shift_before_alt_keeps_the_auto_hidden_menu_bar_hidden(cx);
     the_app_s_state_follows_its_window_s_activation_and_visibility(cx);
     set_frame_sizes_the_window_and_keeps_the_size_it_leaves_out(cx);
+    copy_keys_copy_the_page_selection_while_a_field_is_focused(cx);
 }
 
 fn keys_reach_the_fields_of_a_surface_showing_a_native_component(cx: &mut TestAppContext) {
@@ -1556,4 +1557,193 @@ fn set_frame_sizes_the_window_and_keeps_the_size_it_leaves_out(cx: &mut TestAppC
     // platforms that do not).
     cx.simulate_keystrokes(&format!("shift-{primary}-b"));
     wait_until_window(cx, "the window at 600x400", |cx| size(cx) == (600.0, 400.0));
+}
+
+/// Two chat bubbles over a focused composer: a plain text in a `selectable`
+/// view (a sent message) and a selectable Markdown view of two paragraphs
+/// (a reply), as the console draws them; and a text selectable alone.
+const BUBBLES_OVER_FIELD: &str = r##"
+import { mount, signal, Text, View } from "nsh";
+import { Input, TextView } from "nsh/base";
+
+function App() {
+  const draft = signal("draft");
+  return (
+    <View style={{ flex: 1 }}>
+      <View selectable style={{ height: 40 }}>
+        <Text style={{ fontSize: 14, lineHeight: 20 }}>alpha beta gamma</Text>
+      </View>
+      <TextView
+        selectable
+        markdown={"First **bold** line\n\nSecond paragraph"}
+        style={{ height: 120 }}
+      />
+      <Input autoFocus value={draft()} onChange={({ value }) => draft.set(value)} style={{ height: 30 }} />
+      <Text style={{ height: 30, fontSize: 14, lineHeight: 20, userSelect: "text" }}>solo text</Text>
+    </View>
+  );
+}
+mount(App);
+"##;
+
+/// Runs the window until the clipboard holds `text`.
+fn wait_for_clipboard(cx: &mut VisualTestContext, text: &str) {
+    let start = Instant::now();
+    loop {
+        cx.run_until_parked();
+        let now = cx.update(|_, cx| cx.read_from_clipboard().and_then(|item| item.text()));
+        if now.as_deref() == Some(text) {
+            return;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "the clipboard holds {now:?}, not {text:?}"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn set_clipboard(cx: &mut VisualTestContext, text: &str) {
+    cx.update(|_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_owned())));
+}
+
+/// A drag with the primary button from `from` to `to`.
+fn drag(
+    cx: &mut VisualTestContext,
+    from: gpui::Point<gpui::Pixels>,
+    to: gpui::Point<gpui::Pixels>,
+) {
+    let (button, modifiers) = (gpui::MouseButton::Left, gpui::Modifiers::default());
+    cx.simulate_event(gpui::MouseDownEvent {
+        position: from,
+        button,
+        modifiers,
+        click_count: 1,
+        first_mouse: false,
+    });
+    let steps = 8;
+    for i in 1..=steps {
+        let t = i as f32 / steps as f32;
+        let at = gpui::point(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+        cx.simulate_mouse_move(at, button, modifiers);
+        cx.run_until_parked();
+    }
+    cx.simulate_event(gpui::MouseUpEvent {
+        position: to,
+        button,
+        modifiers,
+        click_count: 1,
+    });
+    cx.run_until_parked();
+}
+
+/// The copy keys copy what is selected in a chat bubble while the composer
+/// keeps the keyboard focus (a press in a selectable view leaves it there),
+/// as the bubble's context menu does; the composer's own selection still
+/// copies, and an empty selection copies nothing.
+fn copy_keys_copy_the_page_selection_while_a_field_is_focused(cx: &mut TestAppContext) {
+    let code = nsh_bundler::compile_module("App.tsx", BUBBLES_OVER_FIELD, &[]).unwrap();
+    let (view, cx) =
+        cx.add_window_view(|window, cx| AppView::new(AppOptions::default(), window, cx));
+    view.update(cx, |view, _| view.load(App::Js(Bundle::source(code))));
+    cx.update(|window, cx| window.focus(&view.focus_handle(cx), cx));
+    wait_for(&view, cx, "draft");
+    let (primary, copy) = if cfg!(target_os = "macos") {
+        ("cmd", "cmd-c")
+    } else {
+        ("ctrl", "ctrl-c")
+    };
+    let pt = |x: f32, y: f32| gpui::point(gpui::px(x), gpui::px(y));
+    let word = pt(12.0, 10.0);
+
+    // A word of the sent message, double-clicked while the composer has
+    // the focus and nothing selected.
+    set_clipboard(cx, "-");
+    click(cx, word, 1);
+    click(cx, word, 2);
+    cx.simulate_keystrokes(copy);
+    wait_for_clipboard(cx, "alpha");
+    assert_eq!(
+        field_text(&view, cx).as_deref(),
+        Some("draft"),
+        "the composer lost the focus"
+    );
+    // A text selectable alone copies the same way.
+    click(cx, pt(12.0, 200.0), 1);
+    click(cx, pt(12.0, 200.0), 2);
+    cx.simulate_keystrokes(copy);
+    wait_for_clipboard(cx, "solo");
+
+    // The composer's selection copies as before (a press in it clears the
+    // message's).
+    let (fx, fy) = (20.0, 175.0);
+    cx.simulate_click(pt(fx, fy), gpui::Modifiers::default());
+    cx.simulate_keystrokes(&format!("{primary}-a {copy}"));
+    wait_for_clipboard(cx, "draft");
+
+    // The word again, while the composer has its text selected: the
+    // composer's selection goes, the word copies.
+    click(cx, word, 1);
+    click(cx, word, 2);
+    cx.simulate_keystrokes(copy);
+    wait_for_clipboard(cx, "alpha");
+    assert_eq!(
+        field_text(&view, cx).as_deref(),
+        Some("draft"),
+        "the composer lost the focus"
+    );
+
+    // Part of the reply, across its paragraphs: from inside "First" to the
+    // end of the second paragraph.
+    set_clipboard(cx, "-");
+    drag(cx, pt(8.0, 50.0), pt(390.0, 150.0));
+    cx.simulate_keystrokes(copy);
+    // The text drawn (not the Markdown source), only from where the drag
+    // began.
+    let selected = "irst bold line\nSecond paragraph";
+    wait_for_clipboard(cx, selected);
+    // Ctrl+Insert copies the same.
+    if !cfg!(target_os = "macos") {
+        set_clipboard(cx, "-");
+        cx.simulate_keystrokes("ctrl-insert");
+        wait_for_clipboard(cx, selected);
+    }
+    // The context menu's Copy copies the same text.
+    set_clipboard(cx, "-");
+    cx.simulate_event(gpui::MouseDownEvent {
+        position: pt(30.0, 60.0),
+        button: gpui::MouseButton::Right,
+        modifiers: gpui::Modifiers::default(),
+        click_count: 1,
+        first_mouse: false,
+    });
+    cx.simulate_event(gpui::MouseUpEvent {
+        position: pt(30.0, 60.0),
+        button: gpui::MouseButton::Right,
+        modifiers: gpui::Modifiers::default(),
+        click_count: 1,
+    });
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down enter");
+    wait_for_clipboard(cx, selected);
+
+    // Typing still goes to the composer, and its own selection made after
+    // the reply's is the one copied.
+    cx.simulate_input("x");
+    wait_for(&view, cx, "draftx");
+    cx.simulate_keystrokes(&format!("{primary}-a {copy}"));
+    wait_for_clipboard(cx, "draftx");
+
+    // A click in a bubble selects nothing: nothing is copied, not the
+    // whole message.
+    cx.simulate_keystrokes("end");
+    set_clipboard(cx, "-");
+    click(cx, word, 1);
+    cx.simulate_keystrokes(copy);
+    for _ in 0..20 {
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    wait_for_clipboard(cx, "-");
+    assert_eq!(field_text(&view, cx).as_deref(), Some("draftx"));
 }

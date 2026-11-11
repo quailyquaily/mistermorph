@@ -130,6 +130,19 @@ Headless tests prove behaviour, not the look.
 - Canvases draw with animated values natively (`createAnimatedValue` in coordinates, alphas,
   dashes): the route map's draw-in and traffic run without JS per frame.
 - `position: "sticky"` works in a `Scroll`; the base `Editor` colours ranges through decorations.
+- The base `Editor`'s rows take presses only over the text: its `content` padding and, with
+  `scrollBeyondLastLine={false}`, the room below the last line take none (no focus, no caret). And
+  the app-wide hover-mode scroll bars (`Scrollbar.setTheme(SCROLLBAR)`) give its hidden one-point
+  caret field (a multiline input) a bar of its own: invisible, 8pt wide, over the 7pt left of the
+  caret, taking presses on the desktops, so the second click of a double click and a drag begun at
+  the caret go to it. `MarkdownEditor` puts a pressable view around the Editor that places the caret
+  for those presses (`components/shared/editorPresses.ts`); a new Editor elsewhere needs the same.
+  A drag that view begins must also end on `onMouseLeave`, not only on `onPress` and button-less
+  moves: a button released outside is never seen, and a later drag pressed outside and moved in
+  would resume the old one. `onPressUp` is no release signal: on the web a press that moves 10pt
+  ends there (`onPressUp` without `onPress`), at the start of every drag.
+- `role="none"` on a pressable view is still a `button` on the web (0.4.0): give a pressable that is
+  not a control `role="group"`.
 - Headless screenshots catch compositor fades part-way (a tooltip looks half transparent): run a
   `frames` step before the shot.
 - A multiline `Input` draws its first line at the top of its content box, and the height
@@ -144,7 +157,24 @@ Headless tests prove behaviour, not the look.
   (Shift+Tab reached them), while `visibility: hidden` keeps the layout and drops the focus. Two
   inputs laid out together report `onContentSizeChange` one after the other (a microtask between
   them does not merge them), before the next frame is drawn. Headless runs measure a line break
-  as no break.
+  as no break. `onContentSizeChange` fires only when the size changes, so a report alone cannot
+  say which value it measured: tag each with the value, take the heights as current a couple of
+  frames after a value that reported nothing, and keep the layout while they are older than the
+  value (`composerRows.ts`). Two inputs measuring one value report it one after the other: the
+  first report is not the value's last, so treat the value as settled only after those frames.
+- `LayoutAnimation.configureNext` on the web eases each view's `left`/`top`/`width`/`height`, so an
+  `Input` whose width eases reflows its text on the way (it shows the widths in between). Let a
+  change of width snap and ease only heights. The ease takes every frame change of the next commit,
+  including ones the code did not mean to animate: a layout the core has not drawn yet (a snapped
+  change made a frame earlier), or a resize's widths when the eased change answers a resize. Ease
+  only changes an edit made, once the previous change has been drawn (`followComposerLayout` in
+  `components/chat/composerRows.ts`).
+- A multiline `Input` wraps its placeholder as it wraps text, and nothing cuts it to one line: a
+  long one runs onto lines the box does not show (no ellipsis) and, on the web, the empty field
+  scrolls to them. The composer draws its placeholder as a one-line `Text` over the field and
+  leaves the field's own one transparent (`components/chat/ComposerFieldSlot.tsx`). Keep the
+  field's: on the web an `Input`'s accessibility props (`accessibilityLabel`, `accessibilityHint`)
+  go to the view around the `textarea`, so its placeholder is the textarea's only accessible name.
 - A pull down from a list's top is the scroll view's own pull-to-refresh (`onRefresh` with
   `refreshIndicator={{ height }}`: no spinner, the platform decides the gesture, short and empty
   lists included). Touch handlers on the list would not do: the scroll view takes the touches over
@@ -157,8 +187,20 @@ Headless tests prove behaviour, not the look.
   (`pages/chat/topicDrag.ts`). A view added to an ancestor of the responder mid-gesture ends the
   gesture silently (no more moves, no release, no terminate): draw drop marks in views that are
   there from the start and only restyle them.
+- On the web every nsh `Scroll` contains its overscroll (`.nsh-scroll`: `overscroll-behavior:
+  contain`, no prop to change it), even one that cannot scroll: a vertical touch swipe that starts
+  on a sideways scroller inside a vertical one does not scroll the outer one (chat code blocks do
+  this). Progress and coder runs that do not wrap are a plain row while they fit and a sideways
+  scroller only while they overflow (`components/chat/OverflowLine.tsx`).
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
+- A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
+  then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
+  blurs it and lowers the keyboard as it closes, and focuses it as it opens
+  (`components/shared/dialogFieldFocus.ts`). A one-line `Input` blurs itself on Enter
+  (`blurAndSubmit`): a dialog that stays open when its Enter fails passes `submitBehavior="submit"`.
+  Headless runs settle the closing motion before the next step, so none of this shows there; test
+  it on the helper.
 
 ### Android (nsh 0.4.0)
 

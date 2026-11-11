@@ -3,6 +3,7 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -464,7 +465,7 @@ func TestTodoRunsRouteListsQueuedAndRunningItems(t *testing.T) {
 	defer cronstore.RegisterRunBoard(paths.CronPath, board)()
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 	board.Queue("long", false, now)
-	board.Start("long", now)
+	board.Start("long", "", now, nil)
 	board.Queue("next", true, now)
 
 	mux := http.NewServeMux()
@@ -487,5 +488,89 @@ func TestTodoRunsRouteListsQueuedAndRunningItems(t *testing.T) {
 			payload.Runs[1].ID != "next" || payload.Runs[1].State != cronstore.RunQueued || !payload.Runs[1].Manual {
 			t.Fatalf("%s: runs = %+v", path, payload.Runs)
 		}
+	}
+}
+
+func TestTodoTaskStopRouteStopsOneExecution(t *testing.T) {
+	stateDir := t.TempDir()
+	paths := testRuntimePaths(stateDir)
+	board := &cronstore.RunBoard{}
+	defer cronstore.RegisterRunBoard(paths.CronPath, board)()
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+	runID := board.Queue("long", false, now)
+	runCtx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	board.Start("long", runID, now, cancel)
+	finishedID := board.Queue("quick", false, now)
+	board.Start("quick", finishedID, now, nil)
+	board.Finish("quick", finishedID, cronstore.RunStatusDone, now)
+
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{Mode: "serve", AuthToken: "token", RuntimePaths: paths})
+	post := func(path, body string, auth bool) (int, map[string]any) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		if auth {
+			req.Header.Set("Authorization", "Bearer token")
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		var payload map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &payload)
+		return rec.Code, payload
+	}
+
+	if code, _ := post("/todo/tasks/long/stop", `{"run_id":"`+runID+`"}`, false); code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated stop: %d", code)
+	}
+	if runCtx.Err() != nil {
+		t.Fatal("an unauthenticated stop cancelled the run")
+	}
+	if code, payload := post("/todo/tasks/long/stop", `{}`, true); code != http.StatusBadRequest || payload["error"] != "run_id is required" {
+		t.Fatalf("stop without run_id: %d %v", code, payload)
+	}
+	if code, payload := post("/todo/tasks/long/stop", `{"run_id":"run_old"}`, true); code != http.StatusNotFound || payload["status"] != cronstore.StopNotFound {
+		t.Fatalf("stop of another execution: %d %v", code, payload)
+	}
+	if runCtx.Err() != nil {
+		t.Fatal("a stop for another execution cancelled the run")
+	}
+	if code, payload := post("/todo/tasks/quick/stop", `{"run_id":"`+finishedID+`"}`, true); code != http.StatusOK || payload["status"] != cronstore.RunStatusDone {
+		t.Fatalf("stop of a finished run: %d %v", code, payload)
+	}
+	for i := 0; i < 2; i++ {
+		code, payload := post("/todo/tasks/long/stop", `{"run_id":"`+runID+`"}`, true)
+		if code != http.StatusAccepted || payload["status"] != cronstore.StopStopping || payload["run_id"] != runID {
+			t.Fatalf("stop #%d: %d %v", i+1, code, payload)
+		}
+	}
+	if !errors.Is(context.Cause(runCtx), cronstore.ErrRunStopped) {
+		t.Fatalf("run cause = %v", context.Cause(runCtx))
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/todo/tasks/long/stop", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET stop: %d", rec.Code)
+	}
+
+	// The runs list marks the stopping run and reports how recent runs ended.
+	board.Finish("long", runID, cronstore.RunStatusCanceled, now.Add(time.Second))
+	req = httptest.NewRequest(http.MethodGet, "/todo/runs", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	var runs struct {
+		Runs     []cronstore.TaskRun     `json:"runs"`
+		Finished []cronstore.FinishedRun `json:"finished"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &runs); err != nil {
+		t.Fatal(err)
+	}
+	if len(runs.Runs) != 0 || len(runs.Finished) != 2 || runs.Finished[1].RunID != runID ||
+		runs.Finished[1].Status != cronstore.RunStatusCanceled || !runs.Finished[1].Stopping {
+		t.Fatalf("runs = %+v", runs)
 	}
 }

@@ -397,6 +397,7 @@ func New(deps Dependencies) *cobra.Command {
 						strings.TrimSpace(viper.GetString("file_state_dir")),
 					),
 					CoderPathExtra: append([]string(nil), viper.GetStringSlice("tools.coder.path_extra")...),
+					WorkerNameSet:  agent.NormalizeWorkerNameSet(viper.GetString("tools.agent_name_set")),
 				},
 				clientDecorator:   clientDecorator,
 				createLLMClient:   createLLMClient,

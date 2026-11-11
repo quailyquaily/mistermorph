@@ -599,6 +599,15 @@ fn selected_text(surface: u64) -> Option<String> {
     })
 }
 
+/// True when the active area of `surface` has a selection.
+pub(crate) fn has_selection(surface: u64) -> bool {
+    ACTIVE.with_borrow(|active| {
+        active
+            .as_ref()
+            .is_some_and(|a| a.surface == surface && a.area.attached() && !a.model.is_empty())
+    })
+}
+
 /// A right click in `area`: Copy (its selection) and Select All.
 pub(crate) fn context_menu(surface: &Rc<Surface>, area: &NshView) {
     use nsh_core::desktop::MenuRole;

@@ -2682,6 +2682,14 @@ fn select(surface: u64, view: &NshView, range: Option<(u32, u32)>) {
     }
 }
 
+/// True when a single text of the surface keyed `surface` has a selection.
+pub(crate) fn has_selection(surface: u64) -> bool {
+    SELECTED.with_borrow(|s| {
+        s.as_ref()
+            .is_some_and(|(key, v)| *key == surface && v.attached())
+    })
+}
+
 /// Clears the selection of a single text, if there is one (a selection
 /// area selects: one selection at a time).
 pub(crate) fn clear_selection() {

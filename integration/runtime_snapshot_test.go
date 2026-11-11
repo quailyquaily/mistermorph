@@ -259,3 +259,16 @@ func TestRuntimeSnapshotPassesToolSearchAndCodeMode(t *testing.T) {
 		t.Fatalf("overrides: tool_search = %v, codemode = %v; want both off", tools.ToolSearch.Enabled, tools.CodeMode.Enabled)
 	}
 }
+
+func TestRuntimeSnapshotLoadsAgentNameSet(t *testing.T) {
+	if got := New(DefaultConfig()).snap.Registry.ToolsAgentNameSet; got != "scientists" {
+		t.Fatalf("default ToolsAgentNameSet = %q, want scientists", got)
+	}
+	for value, want := range map[string]string{"musicians": "musicians", " Artists ": "artists", "poets": "scientists"} {
+		cfg := DefaultConfig()
+		cfg.Set("tools.agent_name_set", value)
+		if got := New(cfg).snap.Registry.ToolsAgentNameSet; got != want {
+			t.Fatalf("ToolsAgentNameSet(%q) = %q, want %q", value, got, want)
+		}
+	}
+}

@@ -40,10 +40,11 @@ type consoleActivityProgress struct {
 type consoleActivityWorker struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// NameIndex and AvatarIndex are the worker's allocated name and logo style (see
-	// agent.WorkerMetadata); older records have neither.
-	NameIndex   *int `json:"name_index,omitempty"`
-	AvatarIndex *int `json:"avatar_index,omitempty"`
+	// NameSet, NameIndex and AvatarIndex are the worker's allocated name and logo style (see
+	// agent.WorkerMetadata); older records lack them.
+	NameSet     string `json:"name_set,omitempty"`
+	NameIndex   *int   `json:"name_index,omitempty"`
+	AvatarIndex *int   `json:"avatar_index,omitempty"`
 	// Kind is "coder" for a coder call, else "subagent".
 	Kind   string `json:"kind"`
 	Status string `json:"status,omitempty"`
@@ -610,6 +611,9 @@ func syncConsoleActivityWorkers(progress *consoleActivityProgress, eventWorker *
 		if entry.Worker != nil {
 			if name := strings.TrimSpace(entry.Worker.Name); name != "" {
 				worker.Name = name
+			}
+			if set := strings.TrimSpace(entry.Worker.NameSet); set != "" {
+				worker.NameSet = set
 			}
 			if entry.Worker.NameIndex != nil {
 				worker.NameIndex = cloneConsoleIndex(entry.Worker.NameIndex)

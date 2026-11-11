@@ -15,7 +15,7 @@ import (
 )
 
 func TestWorkerNamesStableDistinctAndNested(t *testing.T) {
-	ctx := withWorkerScope(context.Background())
+	ctx := withWorkerScope(context.Background(), DefaultWorkerNameSet)
 	engine := New(nil, tools.NewRegistry(), Config{}, DefaultPromptSpec())
 	var mu sync.Mutex
 	var events []Event
@@ -69,7 +69,7 @@ func TestWorkerNamesStableDistinctAndNested(t *testing.T) {
 
 func TestWorkerSubtaskLifecycleAndSerialization(t *testing.T) {
 	var events []Event
-	ctx := WithEventSinkContext(withWorkerScope(context.Background()), EventSinkFunc(func(_ context.Context, event Event) { events = append(events, event) }))
+	ctx := WithEventSinkContext(withWorkerScope(context.Background(), DefaultWorkerNameSet), EventSinkFunc(func(_ context.Context, event Event) { events = append(events, event) }))
 	ctx = llmstats.WithRunID(ctx, "parent")
 	ctx = withToolActivity(ctx, "spawn-call", "")
 	worker := allocateWorker(ctx, workerCallKey(ctx, "spawn-call"))

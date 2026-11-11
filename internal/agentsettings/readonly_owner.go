@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/configstore"
 )
 
@@ -97,5 +98,6 @@ func toolsSettingsFromReader(reader Reader) ToolsSettingsPayload {
 		WebSearch:    ToolEnabledPayload{Enabled: reader.GetBool("tools.web_search.enabled")},
 		Bash:         ToolEnabledPayload{Enabled: reader.GetBool("tools.bash.enabled")},
 		PowerShell:   ToolEnabledPayload{Enabled: reader.GetBool("tools.powershell.enabled")},
+		AgentNameSet: agent.NormalizeWorkerNameSet(reader.GetString(agentNameSetConfigPath)),
 	}
 }

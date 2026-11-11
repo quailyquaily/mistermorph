@@ -4,12 +4,13 @@
 // back arrow, whose first tap with the keyboard up only lowers it.
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
+import { LayoutAnimation, signal } from "nsh";
 import { COMPOSER_LINE_HEIGHT } from "../components/chat/composerField";
-import { composerLayout, ONE_ROW } from "../components/chat/composerRows";
+import { composerLayout, followComposerLayout, ONE_ROW, type ComposerLayout } from "../components/chat/composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "../components/chat/composerSheets";
 import { softKeyboardUp } from "../lib/softKeyboard";
 import { bottomSheetInsets } from "../lib/systemInsets";
-import { openConsole, type ApiRequest } from "./harness";
+import { localEndpoint, openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
 const TOPICS = {
@@ -167,42 +168,162 @@ test("the arrow keys move through the suggestions and Escape closes them", async
 
 // A line that wraps beside the controls but fits the wider field above them used to flip the
 // layout on every layout pass (the field's height decided the rows, the rows its width), until a
-// phone's page ran out of memory; held one way per edit, the two-row layout then showed that line
-// as one line. The rows now come from the draft's height at both widths, which the rows do not
-// change (composerRows.ts).
+// phone's page ran out of memory; the next fix kept the one-row width above the controls, a narrow
+// field in the two-row layout. The rows now come from the draft's height beside the controls, which
+// the rows do not change, and two rows are always the full width (composerRows.ts).
 const LINE = COMPOSER_LINE_HEIGHT;
+/** The copies' heights for `text`; `settled`: both have laid it out (ComposerMeasure's two frames). */
+const measured = (text: string, oneRow: number, twoRows: number, settled = true) => ({ oneRow, twoRows, text, settled });
+const TWO = (height: number): ComposerLayout => ({ rows: "two", height });
 
 test("one line beside the controls is one row, whatever the wider field would hold", () => {
-  expect(composerLayout("hello", { oneRow: LINE, twoRows: LINE })).toEqual({ rows: "one", height: LINE });
+  expect(composerLayout("hello", measured("hello", LINE, LINE))).toEqual({ rows: "one", height: LINE });
   // A line measured a little taller is still one line.
-  expect(composerLayout("hello", { oneRow: LINE + 3, twoRows: LINE + 3 }).rows).toBe("one");
+  expect(composerLayout("hello", measured("hello", LINE + 3, LINE + 3)).rows).toBe("one");
 });
 
-test("a line that wraps beside the controls but fits above them goes above them at the one-row width, on its two lines", () => {
-  const narrow = composerLayout("a line that wraps beside the buttons", { oneRow: 2 * LINE, twoRows: LINE });
-  expect(narrow).toEqual({ rows: "narrow", height: 2 * LINE });
+test("a line that wraps beside the controls is two rows at once, as tall as it is across the row, even one line", () => {
+  const text = "a line that wraps beside the buttons";
+  const layout = composerLayout(text, measured(text, 2 * LINE, LINE));
+  expect(layout).toEqual(TWO(LINE));
   // Laid out again (the field above the controls now), the measures are the same: so is the layout.
-  for (let pass = 0; pass < 10; pass += 1) expect(composerLayout("a line that wraps beside the buttons", { oneRow: 2 * LINE, twoRows: LINE })).toEqual(narrow);
+  for (let pass = 0; pass < 10; pass += 1) expect(composerLayout(text, measured(text, 2 * LINE, LINE), layout)).toEqual(layout);
+  // Longer, it grows across the row.
+  expect(composerLayout("a long draft", measured("a long draft", 3 * LINE, 2 * LINE))).toEqual(TWO(2 * LINE));
 });
 
-test("more than a line at the full width too, or a line break, takes the full width at that height", () => {
-  expect(composerLayout("a long draft", { oneRow: 3 * LINE, twoRows: 2 * LINE })).toEqual({ rows: "wide", height: 2 * LINE });
-  expect(composerLayout("one\ntwo", { oneRow: 2 * LINE, twoRows: 2 * LINE })).toEqual({ rows: "wide", height: 2 * LINE });
-  // A line break is two lines at once, before the copies have measured it.
-  expect(composerLayout("hi\n", { oneRow: LINE, twoRows: LINE })).toEqual({ rows: "wide", height: 2 * LINE });
-  expect(composerLayout("one\ntwo\nthree", { oneRow: 3 * LINE, twoRows: 3 * LINE })).toEqual({ rows: "wide", height: 3 * LINE });
+test("a line break is two rows of two lines at least, measured or not", () => {
+  expect(composerLayout("one\ntwo", measured("one\ntwo", 2 * LINE, 2 * LINE))).toEqual(TWO(2 * LINE));
+  // Headless engines measure a break as no break.
+  expect(composerLayout("hi\n", measured("hi\n", LINE, LINE))).toEqual(TWO(2 * LINE));
+  expect(composerLayout("one\ntwo\nthree", measured("one\ntwo\nthree", 3 * LINE, 3 * LINE))).toEqual(TWO(3 * LINE));
+  // Typed before the copies have laid it out: two rows at once, no shorter than before.
+  expect(composerLayout("hi\n", measured("hi", LINE, LINE), ONE_ROW)).toEqual(TWO(2 * LINE));
+  expect(composerLayout("a long draft\n", measured("a long draft", 3 * LINE, 3 * LINE), TWO(3 * LINE))).toEqual(TWO(3 * LINE));
+});
+
+test("a draft the copies have not measured yet keeps the layout it has, so it moves once, when they have", () => {
+  // Nothing measured yet (a draft restored on opening): one row until the copies report.
+  expect(composerLayout("a restored draft", { oneRow: LINE, twoRows: LINE, text: null, settled: false }, ONE_ROW)).toEqual(ONE_ROW);
+  // A long draft replaced by a short one in one edit: the copies' heights are the long draft's.
+  expect(composerLayout("hi", measured("a long draft", 5 * LINE, 4 * LINE), ONE_ROW)).toEqual(ONE_ROW);
+  expect(composerLayout("hi", measured("a long draft", 5 * LINE, 4 * LINE), TWO(4 * LINE))).toEqual(TWO(4 * LINE));
+  // A short draft replaced by a long one: one row until measured, then two rows in one move.
+  expect(composerLayout("a long draft", measured("hi", LINE, LINE), ONE_ROW)).toEqual(ONE_ROW);
+  expect(composerLayout("a long draft", measured("a long draft", 5 * LINE, 4 * LINE), ONE_ROW)).toEqual(TWO(4 * LINE));
 });
 
 test("the way back is the way there: the same draft and widths give the same layout, and empty is one row", () => {
-  for (const measures of [
-    { oneRow: LINE, twoRows: LINE },
-    { oneRow: 2 * LINE, twoRows: LINE },
-    { oneRow: 3 * LINE, twoRows: 2 * LINE },
+  for (const [oneRow, twoRows] of [
+    [LINE, LINE],
+    [2 * LINE, LINE],
+    [3 * LINE, 2 * LINE],
   ]) {
-    expect(composerLayout("draft", measures)).toEqual(composerLayout("draft", { ...measures }));
+    const there = composerLayout("draft", measured("draft", oneRow, twoRows), ONE_ROW);
+    expect(composerLayout("draft", measured("draft", oneRow, twoRows), TWO(9 * LINE))).toEqual(there);
   }
   // Cleared or sent: one row at once, before the copies have measured the empty field.
-  expect(composerLayout("", { oneRow: 5 * LINE, twoRows: 4 * LINE })).toEqual(ONE_ROW);
+  expect(composerLayout("", measured("a long draft", 5 * LINE, 4 * LINE), TWO(4 * LINE))).toEqual(ONE_ROW);
+});
+
+/** followComposerLayout over a draft and its measures, with LayoutAnimation.configureNext counted
+ *  and display frames run by hand (`frames`), from a two-row layout settled for `draft`. */
+function followed(draft: string, height: number) {
+  const ease = LayoutAnimation.configureNext;
+  const raf = globalThis.requestAnimationFrame;
+  const caf = globalThis.cancelAnimationFrame;
+  let eased = 0;
+  let queued = new Map<number, () => void>();
+  let id = 0;
+  (LayoutAnimation as { configureNext: unknown }).configureNext = () => {
+    eased += 1;
+  };
+  globalThis.requestAnimationFrame = (run: (time: number) => void) => {
+    id += 1;
+    queued.set(id, () => run(0));
+    return id;
+  };
+  globalThis.cancelAnimationFrame = (frame?: number) => void queued.delete(frame ?? 0);
+  const layout = signal<ComposerLayout>(ONE_ROW);
+  const text = signal(draft);
+  const measures = signal(measured(draft, height + LINE, height));
+  followComposerLayout(layout, text, measures);
+  const frames = () => {
+    for (let frame = 0; frame < 4; frame += 1) {
+      const due = queued;
+      queued = new Map();
+      for (const run of due.values()) run();
+    }
+  };
+  frames();
+  expect(layout()).toEqual(TWO(height));
+  eased = 0;
+  return {
+    layout,
+    text,
+    measures,
+    frames,
+    eased: () => eased,
+    restore() {
+      (LayoutAnimation as { configureNext: unknown }).configureNext = ease;
+      globalThis.requestAnimationFrame = raf;
+      globalThis.cancelAnimationFrame = caf;
+    },
+  };
+}
+
+test("above the controls a resize snaps the height, even right after an edit that kept it", () => {
+  const composer = followed("a long draft", 2 * LINE);
+  try {
+    // A character that leaves both heights as they were, measured for the new draft.
+    composer.text.set("a long draft!");
+    composer.measures.set(measured("a long draft!", 3 * LINE, 2 * LINE));
+    expect(composer.layout()).toEqual(TWO(2 * LINE));
+    // The window narrows: the same draft is a line taller across the row. A new width, not an edit.
+    composer.measures.set(measured("a long draft!", 4 * LINE, 3 * LINE));
+    expect(composer.layout()).toEqual(TWO(3 * LINE));
+    expect(composer.eased()).toBe(0);
+  } finally {
+    composer.restore();
+  }
+});
+
+test("above the controls an edit's height eases once measured, past the earlier draft's measures", () => {
+  const composer = followed("a long draft", 2 * LINE);
+  try {
+    // Typed: the copies' heights are still the earlier draft's, so nothing moves yet.
+    composer.text.set("a long draft that grows");
+    expect(composer.measures().text).toBe("a long draft");
+    expect(composer.layout()).toEqual(TWO(2 * LINE));
+    // The copies report the new draft a line taller: that height is the edit's, and eases.
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 3 * LINE));
+    expect(composer.layout()).toEqual(TWO(3 * LINE));
+    expect(composer.eased()).toBe(1);
+  } finally {
+    composer.restore();
+  }
+});
+
+test("above the controls an edit's height eases when the copies report it one after the other", () => {
+  const composer = followed("a long draft", 2 * LINE);
+  try {
+    // Pasted: the one-row copy reports the new draft first, a line taller beside the controls, while
+    // the full-width copy has not laid it out yet. The layout it gives is the one shown.
+    composer.text.set("a long draft that grows");
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 2 * LINE, false));
+    expect(composer.layout()).toEqual(TWO(2 * LINE));
+    // Then the full-width copy: the edit's height, which eases as one that both report at once does.
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 3 * LINE, false));
+    expect(composer.layout()).toEqual(TWO(3 * LINE));
+    expect(composer.eased()).toBe(1);
+    // Settled, a resize after it snaps.
+    composer.measures.set(measured("a long draft that grows", 4 * LINE, 3 * LINE));
+    composer.measures.set(measured("a long draft that grows", 5 * LINE, 4 * LINE));
+    expect(composer.layout()).toEqual(TWO(4 * LINE));
+    expect(composer.eased()).toBe(1);
+  } finally {
+    composer.restore();
+  }
 });
 
 // On phones the add menu and the model picker are sheets at the bottom of the screen, under the
@@ -575,3 +696,57 @@ test("the model picker's sheet rises above a keyboard its search field raised, w
   // No room at all: the list gets none rather than a negative height.
   expect(lift(500, { top: 24, bottom: 16 }, 390)).toEqual({ paddingBottom: 504, maxHeight: 500 });
 });
+
+// The placeholder (components/chat/ComposerFieldSlot.tsx): the field draws none of its own, which
+// wrapped at a phone's width, so a long one (a long agent name, and the Japanese and Chinese
+// strings, which are longer) is the slot's one line. It shows while the draft is empty, goes as
+// soon as something is typed, and comes back once a multiline draft is cleared or sent. The field
+// keeps it as its accessibility label.
+const LONG_AGENT = "Professor Bartholomew Montgomery-Fitzwilliam";
+for (const [lang, placeholder] of [
+  ["en", `Tell ${LONG_AGENT} anything`],
+  ["ja", `${LONG_AGENT}に話しかける`],
+  ["zh", `和${LONG_AGENT}说点什么`],
+] as const) {
+  test(`on a phone the ${lang} placeholder with a long agent name shows while the draft is empty, also after a multiline one`, async () => {
+    const tasks: string[] = [];
+    const { app } = await openConsole({
+      platform: "android",
+      safeArea: BARS,
+      location: "/e/default/chat/topic-1",
+      kv: { "quail-language": lang },
+      endpoints: [localEndpoint({ agent_name: LONG_AGENT })],
+      api: {
+        "GET /proxy:/todo/tasks": { body: { items: [] } },
+        "GET /proxy:/topics": TOPICS,
+        "GET /proxy:/tasks": { body: { items: [] } },
+        "GET /proxy:/llm/profiles": PROFILES,
+        "POST /proxy:/tasks": (request) => {
+          tasks.push(String(request.json?.task ?? ""));
+          return { body: { id: "task-1", status: "queued", topic_id: "topic-1" } };
+        },
+        "GET /proxy:/tasks/task-1": { body: { id: "task-1", task: "one\ntwo", status: "running", topic_id: "topic-1", created_at: NOW } },
+      },
+    });
+    await app.waitFor("id:chat-composer-placeholder");
+    expect(app.texts().filter((text) => text === placeholder).length).toBe(1);
+    expect(app.shows(`label:${placeholder}`)).toBe(true);
+    await app.type("id:chat-composer-input", "L");
+    await app.waitFor("id:chat-composer-placeholder", { state: "gone" });
+    await app.paste("id:chat-composer-input", { text: "ine one\nline two\nline three" });
+    await app.waitUntil(() => app.value("id:chat-composer-input") === "Line one\nline two\nline three");
+    expect(app.shows("id:chat-composer-placeholder")).toBe(false);
+    await app.clear("id:chat-composer-input");
+    await app.waitFor("id:chat-composer-placeholder");
+    expect(app.texts().filter((text) => text === placeholder).length).toBe(1);
+    // Sent: the field empties and the placeholder is back.
+    await app.paste("id:chat-composer-input", { text: "one\ntwo" });
+    await app.waitFor("id:chat-composer-placeholder", { state: "gone" });
+    await app.press("id:chat-composer-send");
+    await app.waitUntil(() => tasks.length === 1);
+    expect(tasks[0]).toBe("one\ntwo");
+    await app.waitUntil(() => app.value("id:chat-composer-input") === "");
+    await app.waitFor("id:chat-composer-placeholder");
+    expect(app.texts().filter((text) => text === placeholder).length).toBe(1);
+  });
+}

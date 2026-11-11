@@ -7,7 +7,7 @@
 // Not ported: the coloured overlay that marked command and skill tokens inside the text (a native
 // text field draws its own text; nothing can be laid exactly over it).
 import type { InputRef, JSX } from "nsh";
-import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, LayoutAnimation, platform, reduceMotion, signal, Text, token, untracked, View } from "nsh";
+import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, platform, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { BorderBeam } from "../motion/BorderBeam";
 import { ICONS } from "../icons";
@@ -19,9 +19,10 @@ import {
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
 import { isMobile } from "../../lib/shell";
-import { COMPOSER_FIELD_TEXT, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
-import { composerLayout, ONE_ROW, sameComposerLayout, type ComposerLayout } from "./composerRows";
+import { followComposerLayout, ONE_ROW, type ComposerLayout } from "./composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheets";
 import { t } from "./i18n";
 
@@ -130,6 +131,8 @@ export function ChatComposer(props: ChatComposerProps) {
   let field: InputRef | undefined;
   const selection = signal({ start: 0, end: 0 });
   const focused = signal(false);
+  // An input method's composition under way: its text is not in the draft yet on every platform.
+  const composing = signal(false);
   const suggestionContext = signal<any>(null);
   const suggestionIndex = signal(0);
   const historyIndex = signal(-1);
@@ -173,28 +176,18 @@ export function ChatComposer(props: ChatComposerProps) {
     const chosen = String(selectedProfile()?.title ?? "").trim();
     return label && chosen ? `${label}: ${chosen}` : label || chosen;
   };
-  // One row while the text is one line beside the controls; above them, as wide as it was beside
-  // them until it is more than a line at the full width too. Decided from the text's height at both
-  // widths, which the layout does not change, so it never flips back on its own (composerRows.ts).
+  // One row while the text is one line beside the controls; past that (or with a line break), the
+  // field goes above them across the whole row at once. Decided from the text's height beside the
+  // controls, which the layout does not change, so it never flips back on its own (composerRows.ts).
   const layout = signal<ComposerLayout>(ONE_ROW);
-  const multiRow = () => layout().rows !== "one";
+  const multiRow = () => layout().rows === "two";
   // On one row the field is as tall as the controls with its line on their centre line
-  // (composerField.ts); above them it is as tall as its text.
+  // (composerField.ts); above them it is as tall as its text across the row.
   const fieldBox = () => composerFieldBox(multiRow(), layout().height);
-  const fieldWidth = () => {
-    const width = measures().oneRowWidth;
-    return layout().rows === "narrow" && width > 0 ? { width } : {};
-  };
-  // The rows and the height change together, and ease into place (the Vue composer's height
-  // transition) rather than snapping; the history above makes room in the same motion.
-  effect(() => {
-    const next = composerLayout(value(), measures());
-    untracked(() => {
-      if (sameComposerLayout(layout(), next)) return;
-      if (!reduceMotion()) LayoutAnimation.configureNext({ duration: 180, update: { type: "easeInEaseOut" } });
-      layout.set(next);
-    });
-  });
+  // One line, cut with an ellipsis, over the field's first line (ComposerFieldSlot.tsx).
+  const placeholderShown = () => composerPlaceholderShown(props.placeholder, value(), composing());
+  // Rows change in one snap, heights above the controls ease; the history above moves with them.
+  followComposerLayout(layout, value, measures);
   // Enter sends on desktops; while suggestions show it picks one, also on phones.
   const submitBehavior = () => (props.submitOnEnter !== false || suggestionsVisible() ? "submit" : "newline");
 
@@ -693,45 +686,57 @@ export function ChatComposer(props: ChatComposerProps) {
           </View>
         </If>
         {/* One row (add, the field, actions) while the text is one line; longer, the field goes above
-            a row of the controls, as the Vue composer's multi-row grid does, and takes the whole
-            width once its text is more than a line there too (composerRows.ts). The field stays the
-            same element, so it keeps its focus, caret and composition; ComposerMeasure measures the
-            draft at both widths. */}
+            a row of the controls across the whole width, as the Vue composer's multi-row grid does
+            (composerRows.ts). The field stays the same element, so it keeps its focus, caret and
+            composition; ComposerMeasure measures the draft at both widths. Its slot draws the
+            placeholder on one line (ComposerFieldSlot.tsx). */}
         <View class={composerRowClass(multiRow())}>
           <ComposerMeasure text={value()} actionsWidth={actionsWidth()} onMeasure={(next) => measures.set(next)} />
           <If when={!multiRow()}>{addControl()}</If>
-          <Input
-            ref={field}
-            value={value()}
-            multiline
-            submitBehavior={submitBehavior()}
-            returnKeyType={props.submitOnEnter === false ? "default" : "send"}
+          <ComposerFieldSlot
+            rows={layout().rows}
             placeholder={props.placeholder}
-            accessibilityLabel={props.placeholder}
-            readonly={props.disabled}
-            autoCapitalize="sentences"
-            testID="chat-composer-input"
-            onFocus={() => focused.set(true)}
-            onBlur={() => focused.set(false)}
-            onChange={({ value: next }) => {
-              resetHistory();
-              props.onChange(next);
-              const range = untracked(selection);
-              syncSuggestions(next, range.end > next.length || range.end === 0 ? next.length : range.end);
-            }}
-            onSelectionChange={({ start, end }) => {
-              selection.set({ start, end });
-              syncSuggestions(untracked(value), end);
-            }}
-            onSubmit={onSubmitKey}
-            onPaste={(event) => {
-              if (props.disabled || props.attachDisabled) return;
-              const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
-              if (files.length) props.onAttachFiles?.(files);
-            }}
-            class={`${COMPOSER_FIELD_TEXT} text-foreground placeholder:text-muted-foreground ${layout().rows === "one" ? "flex-1" : layout().rows === "wide" ? "w-full" : ""}`}
-            style={{ ...fieldBox(), ...fieldWidth() }}
-          />
+            shown={placeholderShown()}
+            lineTop={fieldBox().paddingTop}
+            testID="chat-composer-placeholder"
+          >
+            <Input
+              ref={field}
+              value={value()}
+              multiline
+              submitBehavior={submitBehavior()}
+              returnKeyType={props.submitOnEnter === false ? "default" : "send"}
+              placeholder={props.placeholder}
+              accessibilityLabel={props.placeholder}
+              readonly={props.disabled}
+              autoCapitalize="sentences"
+              testID="chat-composer-input"
+              onFocus={() => focused.set(true)}
+              onBlur={() => {
+                focused.set(false);
+                composing.set(false);
+              }}
+              onCompositionChange={({ composing: active, text }) => composing.set(active && text !== "")}
+              onChange={({ value: next }) => {
+                resetHistory();
+                props.onChange(next);
+                const range = untracked(selection);
+                syncSuggestions(next, range.end > next.length || range.end === 0 ? next.length : range.end);
+              }}
+              onSelectionChange={({ start, end }) => {
+                selection.set({ start, end });
+                syncSuggestions(untracked(value), end);
+              }}
+              onSubmit={onSubmitKey}
+              onPaste={(event) => {
+                if (props.disabled || props.attachDisabled) return;
+                const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
+                if (files.length) props.onAttachFiles?.(files);
+              }}
+              class={COMPOSER_INPUT_CLASS}
+              style={fieldBox()}
+            />
+          </ComposerFieldSlot>
           <If when={!multiRow()}>{actions()}</If>
           <If when={multiRow()}>
             <View class="flex-row items-center justify-between">

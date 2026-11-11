@@ -1,7 +1,8 @@
 // The editor of one TODO item (the task editor card of web/console/src/views/TodoView.js, styled as
-// views/TodoView.css): a boxed card whose head is the enabled switch, Save and the action menu;
-// then the title, the content, the timezone / schedule / model / chat pickers, the date or the
-// repeat, the preview sentence, the workspace directory and the bash environment.
+// views/TodoView.css): a boxed card whose head is the enabled switch, Stop (while the item runs),
+// Save and the action menu; then the title, the content, the timezone / schedule / model / chat
+// pickers, the date or the repeat, the preview sentence, the workspace directory and the bash
+// environment.
 //
 // The form follows its own width as the Vue form's container queries do: the four pickers stand one
 // per row under 720pt, two from 720, four from 1120; the weekly controls put the time beside the
@@ -254,6 +255,22 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
       }
       actions={
         <View class="flex-row items-center gap-1">
+          {/* Only while the saved item runs: stops that one run, never the item or its schedule.
+              Busy from the press until the run's end shows. */}
+          <If when={state.selectedRunStop()}>
+            {(stop) => (
+              <Button
+                variant="outlined"
+                size="xs"
+                icon="PhStop"
+                label={stop().pending ? t("todo_action_stopping") : t("todo_action_stop")}
+                title={t("todo_stop_hint")}
+                loading={stop().pending}
+                testID="todo-stop"
+                onPress={() => void state.stopSelectedRun()}
+              />
+            )}
+          </If>
           <Button
             variant="primary"
             size="xs"

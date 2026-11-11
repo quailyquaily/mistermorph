@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/configstore"
 
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
@@ -993,6 +994,13 @@ func applyAgentSettingsUpdateDocument(doc *yaml.Node, current FileSettings, valu
 		if enabled := toolEnabledUpdateValue(values.Tools.ImageEdit); enabled != nil {
 			configbootstrap.SetMappingBoolPath(toolsNode, "image_edit", "enabled", *enabled)
 		}
+		if values.Tools.AgentNameSet != nil {
+			set, err := normalizeAgentNameSetUpdate(*values.Tools.AgentNameSet)
+			if err != nil {
+				return err
+			}
+			configbootstrap.SetOrDeleteMappingScalar(toolsNode, "agent_name_set", set)
+		}
 	}
 	if values.MCP != nil && values.MCP.Servers != nil {
 		servers, err := normalizeMCPServers(*values.MCP.Servers)
@@ -1428,6 +1436,18 @@ func LLMSettingsPayloadAsNonEmptyUpdate(values LLMSettingsPayload) LLMSettingsUp
 func stringPointer(value string) *string {
 	next := value
 	return &next
+}
+
+// agentNameSetConfigPath is the shared name set preference of the spawn and coder tools.
+const agentNameSetConfigPath = "tools.agent_name_set"
+
+// normalizeAgentNameSetUpdate checks a saved name set: one of agent.WorkerNameSets, any case.
+func normalizeAgentNameSetUpdate(value string) (string, error) {
+	set := strings.ToLower(strings.TrimSpace(value))
+	if !slices.Contains(agent.WorkerNameSets(), set) {
+		return "", fmt.Errorf("tools.agent_name_set must be one of %s", strings.Join(agent.WorkerNameSets(), ", "))
+	}
+	return set, nil
 }
 
 func toolEnabledUpdateValue(update *ToolEnabledUpdate) *bool {
@@ -2557,6 +2577,7 @@ func readAgentSettingsFromReader(r interface {
 			PowerShell:    ToolEnabledPayload{Enabled: r.GetBool("tools.powershell.enabled")},
 			ImageGenerate: ToolEnabledPayload{Enabled: r.GetBool("tools.image_generate.enabled")},
 			ImageEdit:     ToolEnabledPayload{Enabled: r.GetBool("tools.image_edit.enabled")},
+			AgentNameSet:  agent.NormalizeWorkerNameSet(r.GetString(agentNameSetConfigPath)),
 		},
 	}, nil
 }

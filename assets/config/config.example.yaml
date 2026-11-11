@@ -361,6 +361,11 @@ tools:
       codex: false
       # Claude Code --dangerously-skip-permissions.
       claude: false
+  # The names new spawn subagents and coder workers get, shared by both tools:
+  # "scientists" (Einstein, Curie, ...), "musicians" (Bach, Mozart, ...) or "artists"
+  # (Leonardo, Michelangelo, ...). A missing or unknown value means "scientists". Changing it
+  # affects only workers started by later tasks; workers already named keep their names.
+  agent_name_set: "scientists"
   contacts_send:
     # Enable contacts_send tool.
     enabled: true
