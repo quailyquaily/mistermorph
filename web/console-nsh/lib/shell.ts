@@ -85,15 +85,6 @@ export function closeMobileMore() {
 
 export const inShellless = () => route()?.meta.shellless === true;
 
-/**
- * The top-level page shown ("chat", "settings", ...): a new page settles in when it changes, but
- * not when another topic or settings section opens within it (core/page-transitions.js).
- */
-export const currentPageKey = computed(() => {
-  const path = route()?.path || "";
-  const page = endpointPagePath(path) || path;
-  return String(page).split("/")[1] || "";
-});
 export const inOverview = () => route()?.path === "/overview";
 export const inSetup = () => {
   const path = route()?.path || "";
@@ -208,7 +199,8 @@ export function goTo(item: NavItem, restoreChatTopic = true) {
   if (!next) return;
   closeMobileMore();
   if (untracked(() => route()?.path) !== next) {
-    void navigate(next);
+    // The navigation's pages move in its order (lib/navMotion.ts).
+    void navigate(next, { tab: true });
   }
 }
 
@@ -238,7 +230,7 @@ export function goOverview() {
 export function goSettings() {
   closeMobileMore();
   const next = endpointRoutePath(endpointState.selectedRef, "/settings");
-  if (next && untracked(() => route()?.path) !== next) void navigate(next);
+  if (next && untracked(() => route()?.path) !== next) void navigate(next, { tab: true });
 }
 
 function preloadSharedResources() {
