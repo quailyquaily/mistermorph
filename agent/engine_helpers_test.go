@@ -1,6 +1,9 @@
 package agent
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestToolArgsSummary_ContactsSendSafeSummary(t *testing.T) {
 	opts := DefaultLogOptions()
@@ -124,5 +127,29 @@ func TestToolDisplayArgsSummary_FallbackSanitizesUnknownTool(t *testing.T) {
 	}
 	if got["query"] != "alpha" {
 		t.Fatalf("query = %#v, want alpha", got["query"])
+	}
+}
+
+func TestToolDisplayArgsSummary_WorkerTaskKeptWhole(t *testing.T) {
+	opts := DefaultLogOptions()
+	task := strings.Repeat("Refactor the parser and keep the tests green. ", 20)
+	for _, name := range []string{"spawn", "coder"} {
+		got := toolDisplayArgsSummary(name, map[string]any{
+			"task":  task,
+			"coder": "codex",
+			"note":  strings.Repeat("x", 400),
+		}, opts)
+		if got["task"] != strings.TrimSpace(task) {
+			t.Fatalf("%s: task cut to %d chars, want the whole %d", name, len(got["task"].(string)), len(strings.TrimSpace(task)))
+		}
+		// Other values keep the display cap.
+		if note, _ := got["note"].(string); len(note) >= 400 {
+			t.Fatalf("%s: note = %d chars, want it cut", name, len(note))
+		}
+	}
+	// Another tool's long value is still cut.
+	got := toolDisplayArgsSummary("custom_tool", map[string]any{"task": task}, opts)
+	if s, _ := got["task"].(string); len(s) >= len(strings.TrimSpace(task)) {
+		t.Fatalf("custom_tool task = %d chars, want it cut", len(s))
 	}
 }
