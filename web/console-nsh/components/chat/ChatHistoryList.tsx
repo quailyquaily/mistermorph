@@ -111,12 +111,22 @@ export function ChatHistoryList(props: {
     });
   });
   const arriving = (id: string) => (arrivingUntil.get(id) ?? 0) > Date.now();
-  // Whether the reader is at the newest message (within the threshold), as the last scroll report
-  // says. The list follows the end only then: nsh 0.4's `maintainVisibleContentPosition` compares
-  // its old end with an offset already moved for rows that changed above the viewport, so with it
-  // on, a reader scrolled up by less than an older page's height (or a row above that grew) was sent
-  // to the bottom. Off, the list keeps what is on screen in place; turned on again, it starts over.
+  // Whether the list follows the newest message. The list follows the end only then: nsh 0.4's
+  // `maintainVisibleContentPosition` compares its old end with an offset already moved for rows
+  // that changed above the viewport, so with it on, a reader scrolled up by less than an older
+  // page's height (or a row above that grew) was sent to the bottom. Off, the list keeps what is on
+  // screen in place; turned on again, it starts over.
+  //
+  // Only the reader lets go of the end: following stops when the view moves up (a wheel, a drag, a
+  // scroll bar; growing content and the list's own scrolls only ever move it down), unless the old
+  // offset no longer fits (the content shrank or the view grew, and the offset was clamped). It
+  // starts again within the threshold of the end. A scroll report that lands as a reply grows by
+  // more than the threshold (the view a moment short of the new end), or the view changing size
+  // (the composer growing, a panel docking under the page), is not the reader: the list stays on
+  // and goes to the end again.
   const following = signal(true);
+  let list: ListRef | undefined;
+  let last = { offset: 0, view: 0, content: 0 };
   return (
     <If when={!props.loading} else={<Skeleton label={props.loadingText} />}>
       <List
@@ -124,6 +134,8 @@ export function ChatHistoryList(props: {
           // Before the first frame: the conversation opens at its newest message, its end shown.
           node.scrollToEnd({ animated: false });
           following.set(true);
+          list = node;
+          last = { offset: 0, view: 0, content: 0 };
           props.onListRef?.(node);
         }}
         each={rows()}
@@ -143,7 +155,14 @@ export function ChatHistoryList(props: {
         scrollEventThrottle={100}
         onScroll={(event) => {
           const distance = Math.max(0, event.contentSize.height - event.offset.y - event.size.height);
-          following.set(distance <= HISTORY_FOLLOW_THRESHOLD);
+          const known = last.view > 0;
+          const resized = Math.abs(event.size.height - last.view) > 0.5 || Math.abs(event.contentSize.height - last.content) > 0.5;
+          const clamped = last.offset > event.contentSize.height - event.size.height + 0.5;
+          const movedUp = known && !clamped && event.offset.y < last.offset - 0.5;
+          if (distance <= HISTORY_FOLLOW_THRESHOLD) following.set(true);
+          else if (movedUp) following.set(false);
+          else if (known && resized && untracked(following)) list?.scrollToEnd({ animated: false });
+          last = { offset: event.offset.y, view: event.size.height, content: event.contentSize.height };
           props.onScrollFromEnd?.(distance, event.size.height);
         }}
         class="flex-1"
