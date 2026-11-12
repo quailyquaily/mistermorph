@@ -21,6 +21,12 @@
 // clears as it goes back shows it through `held`, or lets it go once the pane has gone
 // (`settled`). A change during a slide turns it round from where the panes are; a resize, a
 // rotation or reduced motion ends it at once.
+//
+// Only the pane going out changes its `zIndex` (under the item sliding in, over the list it
+// reveals); the pane that stays keeps 0 from the slide's start to its end. nsh orders siblings by
+// moving their native views, and a view moved takes the focus off a text field inside it (Android
+// keeps the keyboard up, with no field to type in): a new topic's composer, focused as its pane
+// slid in, lost the focus where the slide ended.
 import type { Motion } from "nsh";
 import { batch, createMotion, effect, Keyboard, reduceMotion, signal, untracked, windowSize } from "nsh";
 import { currentX, FILL, nativeSlide, pageSlideMs, slideFrames, type SlideDriver } from "./pageSlide";
@@ -63,7 +69,6 @@ export function createPaneStack(
   const motions: Motion[] = Array.from({ length: LEVELS }, () => createMotion());
   const exiting = signal<number | null>(null);
   const sliding = signal<"push" | "pop" | null>(null);
-  const top = signal<number | null>(null);
   // The level fully shown: the one before while a slide runs, the new one once it has ended.
   const shownLevel = signal<number | null>(untracked(level));
   let generation = 0;
@@ -91,7 +96,6 @@ export function createPaneStack(
     batch(() => {
       exiting.set(null);
       sliding.set(null);
-      top.set(null);
       shownLevel.set(untracked(level));
     });
     stopMotions();
@@ -131,7 +135,6 @@ export function createPaneStack(
       batch(() => {
         exiting.set(prev);
         sliding.set(kind);
-        top.set(kind === "push" ? next : prev);
         shownLevel.set(prev);
       });
       const gen = generation;
@@ -173,7 +176,8 @@ export function createPaneStack(
       return {
         ...motions[at].style,
         ...(out ? FILL : {}),
-        zIndex: top() === null ? 0 : top() === at ? 2 : 1,
+        // The pane that stays is never restacked (above).
+        zIndex: out ? (sliding() === "push" ? -1 : 1) : 0,
         pointerEvents: out ? "none" : "auto",
       };
     },

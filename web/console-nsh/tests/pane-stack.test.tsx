@@ -129,3 +129,34 @@ test("a level the page arrives with switches at once: no slide while the page ar
   expect(app.count("id:pane.1")).toBe(1);
   expect(read(app, "plays=")).toBe("");
 });
+
+// nsh orders sibling views by moving their native views, and a native view moved takes the focus
+// off a text field inside it (Android leaves the keyboard up with no field to type in). Only the
+// pane going out changes its zIndex: the one coming in or staying keeps 0 from the slide's start
+// to its end, so a field focused in it (a new topic's composer) keeps the focus.
+test("only the pane going out changes its zIndex; the pane coming in or staying keeps 0 through the slide's end", async () => {
+  const app = await openPanes();
+  expect(read(app, "z=")).toBe("0,0,0");
+  // Further in: the list goes under the item, which has 0 from its first frame.
+  await app.press("id:open");
+  expect(read(app, "z=")).toBe("-1,0,0");
+  await app.press("id:finish");
+  await app.waitUntil(() => app.count("id:pane.0.out") === 0);
+  expect(read(app, "z=")).toBe("0,0,0");
+  // Back: the item goes out over the list, which stays at 0.
+  await app.press("id:back");
+  expect(read(app, "z=")).toBe("0,1,0");
+  await app.press("id:finish");
+  await app.waitUntil(() => app.count("id:pane.1.out") === 0);
+  expect(read(app, "z=")).toBe("0,0,0");
+  // Turned round mid-slide, the item going out again is the one above.
+  await app.press("id:open");
+  await app.press("id:back");
+  expect(read(app, "z=")).toBe("0,1,0");
+  await app.press("id:finish");
+  await app.waitUntil(() => app.count("id:pane.1.out") === 0);
+  expect(read(app, "z=")).toBe("0,0,0");
+  // Side by side, no zIndex at all.
+  await app.press("id:wide");
+  expect(read(app, "z=")).toBe("-,-,-");
+});
