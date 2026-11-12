@@ -1,13 +1,14 @@
-// The workbench: a sheet docked along the foot of the whole window on wide windows (as a
-// dashboard's workbench), under the sidebar and whatever page is open. It is the frame's, not a
-// page's: a page puts what it shows there (`useWorkbench`), such as a reply's plan, progress,
+// The workbench: a sheet docked along the foot of the page's column (as a dashboard's workbench),
+// under whatever page is open, beside the sidebar, which keeps the window's height (shortened, its
+// drawn edge, the selected row's band, was stretched by the layout motion). It is the frame's, not
+// a page's: a page puts what it shows there (`useWorkbench`), such as a reply's plan, progress,
 // reasoning or a worker's output from the chat, and takes it out when it closes or the page goes.
 //
-// It does not cover the page: the sidebar and the page shorten above it, so a conversation and its
-// composer stay in use while the output is read. It opens at half of the window's room and keeps
-// the height the reader drags its top edge to, as a share of that room (remembered across visits),
-// within a minimum at either end: its head and a few lines, and room for a composer above. The edge
-// is a separator that takes the focus: the up and down arrows move it too.
+// It does not cover the page: the page shortens above it, so a conversation and its composer stay
+// in use while the output is read. It opens at half of the column's height and keeps the height
+// the reader drags its top edge to, as a share of that height (remembered across visits), within a
+// minimum at either end: its head and a few lines, and room for a composer above. The edge is a
+// separator that takes the focus: the up and down arrows move it too.
 //
 // It slides in from the foot of the window and back out, in one native layout motion with the page
 // above: its slot (always there, 0 tall while it is shut) grows to the sheet's height or shrinks
