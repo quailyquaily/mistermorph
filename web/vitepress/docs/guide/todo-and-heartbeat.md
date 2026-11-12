@@ -11,7 +11,7 @@ MisterMorph provides two awareness mechanisms: Heartbeat and TODOs. Heartbeat is
 
 One-off or recurring scheduled work is better stored as a TODO.
 
-You can edit `cron.yaml` directly, edit it through the Console GUI, or let the agent use the `todo_update` tool when it needs to add or remove a TODO.
+You can edit `cron.yaml` directly, edit it through the Console GUI, or let the agent use the `todo_update` tool when it needs to add, edit or remove a TODO. The agent edits a TODO in place by its `id` (`action=update`), changing only the fields it passes, so settings such as `bash_env` and `workspace_dir` are kept.
 
 Each TODO contains a title, schedule rule, timezone, and content. The content is the text actually handed to the agent, and it can include contact references such as `[John](tg:@john)`.
 

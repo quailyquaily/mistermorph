@@ -82,7 +82,9 @@ func (t *TodoUpdateTool) SetAddContext(ctx todo.AddResolveContext) {
 func (t *TodoUpdateTool) Name() string { return "todo_update" }
 
 func (t *TodoUpdateTool) Description() string {
-	return "Updates the TODO list (scheduled agent tasks). Supports add_once, add_recurring, and delete actions."
+	return "Updates the TODO list (scheduled agent tasks). Supports add_once, add_recurring, update, and delete actions. " +
+		"To change an existing task (its content, schedule, title, or bash_env), use update with the task id: " +
+		"it changes only the fields you pass and keeps everything else. Never delete and re-add a task to edit it."
 }
 
 func (t *TodoUpdateTool) ParameterSchema() string {
@@ -90,32 +92,55 @@ func (t *TodoUpdateTool) ParameterSchema() string {
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
-				"type":        "string",
-				"description": "Action: add_once|add_recurring|delete.",
+				"type": "string",
+				"enum": []string{"add_once", "add_recurring", "update", "delete"},
+				"description": "Action: add_once|add_recurring|update|delete. " +
+					"update edits an existing task by id in place: pass only the fields to change; every omitted field " +
+					"(including bash_env, workspace_dir, schedule, tz, chat_id and title) keeps its current value, and the id stays the same. " +
+					"Do not delete and re-add a task to edit it.",
 			},
 			"content": map[string]any{
-				"type":        "string",
-				"description": "Task content. Required for add_once, add_recurring, and delete without id.",
+				"type": "string",
+				"description": "Task content. Required for add_once, add_recurring, and delete without id. " +
+					"For update, the new content, stored exactly as given (people references are not resolved; keep existing `[Name](ref)` references as they are).",
 			},
 			"title": map[string]any{
 				"type":        "string",
-				"description": "Optional short task title. When omitted, a default title is used.",
+				"description": "Optional short task title. When omitted on add, a default title is used. For update, \"\" resets it to the default title.",
 			},
 			"at": map[string]any{
-				"type":        "string",
-				"description": "One-time schedule for add_once, in YYYY-MM-DD HH:mm.",
+				"type": "string",
+				"description": "One-time schedule for add_once, in YYYY-MM-DD HH:mm. " +
+					"For update, setting at alone makes the task one-time and clears its cron.",
 			},
 			"cron": map[string]any{
-				"type":        "string",
-				"description": "Five-field numeric cron expression for add_recurring.",
+				"type": "string",
+				"description": "Five-field numeric cron expression for add_recurring. " +
+					"For update, setting cron alone makes the task recurring and clears its at.",
 			},
 			"tz": map[string]any{
 				"type":        "string",
-				"description": "Optional IANA timezone or UTC offset, for example Asia/Tokyo or UTC+8. Omit to use runtime local timezone.",
+				"description": "Optional IANA timezone or UTC offset, for example Asia/Tokyo or UTC+8. Omit to use runtime local timezone. For update, \"\" clears it.",
 			},
 			"id": map[string]any{
 				"type":        "string",
-				"description": "Optional stable task id. Required for precise delete; generated on add when omitted.",
+				"description": "Stable task id. Required for update and for precise delete; optional on add, generated when omitted.",
+			},
+			"bash_env": map[string]any{
+				"type": "array",
+				"description": "Optional environment variables injected into the bash tool when the task runs, as [{\"name\": \"REPORT_MODE\", \"value\": \"weekly\"}]. " +
+					"Values may reference environment variables as ${NAME}; prefer that over literal secrets. " +
+					"For update, the list replaces the task's whole bash_env, [] clears it, and omitting bash_env keeps it unchanged. " +
+					"Values are never shown in tool results.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name":  map[string]any{"type": "string", "description": "Variable name: letters, digits and underscores, not starting with a digit."},
+						"value": map[string]any{"type": "string", "description": "Variable value."},
+					},
+					"required":             []string{"name", "value"},
+					"additionalProperties": false,
+				},
 			},
 			"people": map[string]any{
 				"type": "array",
@@ -129,11 +154,11 @@ func (t *TodoUpdateTool) ParameterSchema() string {
 			},
 			"workspace_dir": map[string]any{
 				"type":        "string",
-				"description": "Optional workspace directory for the task's runs (absolute path or ~/...). Pass `workspace_dir` to use the workspace attached to the current conversation. Omit to use the runtime default workspace.",
+				"description": "Optional workspace directory for the task's runs (absolute path or ~/...). Pass `workspace_dir` to use the workspace attached to the current conversation. Omit to use the runtime default workspace. For update, \"\" clears it back to the runtime default.",
 			},
 			"chat_id": map[string]any{
 				"type":        "string",
-				"description": "Optional task notification chat id (for example tg:-1001234567890). Defaults to " + cronstore.ConsoleNotificationChatID + " in Console runtime.",
+				"description": "Optional task notification chat id (for example tg:-1001234567890). Defaults to " + cronstore.ConsoleNotificationChatID + " in Console runtime on add. For update, \"\" clears it; there is no default.",
 			},
 		},
 		"required": []string{"action"},
@@ -206,10 +231,15 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if workspaceErr != nil {
 			return "", workspaceErr
 		}
+		bashEnv, bashEnvErr := parseTodoUpdateBashEnvOptional(params)
+		if bashEnvErr != nil {
+			return "", bashEnvErr
+		}
 		slog.Default().Debug("todo_update_add_start",
 			"content_len", len(content),
 			"chat_id", chatID,
 			"people_count", len(people),
+			"bash_env_count", len(bashEnv),
 			"context_channel", t.AddContext.Channel,
 			"context_chat_type", t.AddContext.ChatType,
 			"context_chat_id", t.AddContext.ChatID,
@@ -222,12 +252,9 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		result, err = store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir})
-		if err == nil && len(warnings) > 0 {
-			addResult := result.(cronstore.AddResult)
-			addResult.Warnings = append(addResult.Warnings, warnings...)
-			result = addResult
-		}
+		addResult, addErr := store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
+		addResult.Warnings = append(addResult.Warnings, warnings...)
+		result, err = todoUpdateAddOutput(addResult), addErr
 	case "add_recurring":
 		if content == "" {
 			return "", fmt.Errorf("content is required")
@@ -266,15 +293,37 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if workspaceErr != nil {
 			return "", workspaceErr
 		}
+		bashEnv, bashEnvErr := parseTodoUpdateBashEnvOptional(params)
+		if bashEnvErr != nil {
+			return "", bashEnvErr
+		}
 		rewritten, warnings, resolveErr := t.resolveAddContent(ctx, content, people, contactsDir, false)
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		result, err = store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir})
-		if err == nil && len(warnings) > 0 {
-			recurringResult := result.(cronstore.AddResult)
-			recurringResult.Warnings = append(recurringResult.Warnings, warnings...)
-			result = recurringResult
+		addResult, addErr := store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
+		addResult.Warnings = append(addResult.Warnings, warnings...)
+		result, err = todoUpdateAddOutput(addResult), addErr
+	case "update":
+		id, idErr := parseTodoUpdateString(params, "id")
+		if idErr != nil {
+			return "", fmt.Errorf("update needs the id of the task to change: %w", idErr)
+		}
+		patch, patchErr := parseTodoUpdatePatch(ctx, params)
+		if patchErr != nil {
+			return "", patchErr
+		}
+		updateResult, updateErr := store.Update(ctx, id, patch)
+		if updateErr != nil {
+			return "", updateErr
+		}
+		slog.Default().Debug("todo_update_update", "id", id, "fields", strings.Join(updateResult.Fields, ","))
+		result = todoUpdateOutput{
+			OK:        updateResult.OK,
+			Action:    updateResult.Action,
+			TaskCount: updateResult.TaskCount,
+			Task:      redactTodoUpdateTask(updateResult.Task),
+			Fields:    updateResult.Fields,
 		}
 	case "delete":
 		id, idErr := parseTodoUpdateOptionalString(params, "id")
@@ -296,7 +345,13 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 			resolver.DecisionModel = strings.TrimSpace(t.DecisionModel)
 			store.Semantics = resolver
 		}
-		result, err = store.Delete(ctx, id, content)
+		deleteResult, deleteErr := store.Delete(ctx, id, content)
+		result, err = todoUpdateOutput{
+			OK:        deleteResult.OK,
+			Action:    deleteResult.Action,
+			TaskCount: deleteResult.TaskCount,
+			Deleted:   redactTodoUpdateTask(deleteResult.Deleted),
+		}, deleteErr
 	default:
 		return "", fmt.Errorf("invalid action: %s", action)
 	}
@@ -591,6 +646,10 @@ func parseTodoUpdateWorkspaceDir(ctx context.Context, params map[string]any) (st
 	if err != nil || raw == "" {
 		return "", err
 	}
+	return resolveTodoUpdateWorkspaceDir(ctx, raw)
+}
+
+func resolveTodoUpdateWorkspaceDir(ctx context.Context, raw string) (string, error) {
 	if strings.EqualFold(raw, "workspace_dir") {
 		current, ok := pathroots.WorkspaceDirFromContext(ctx)
 		if !ok {
