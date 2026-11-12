@@ -129,3 +129,15 @@ notes:
 - Installs: none. One probe restored pinned Go modules before caches were explicitly supplied; no manifest/dependency changes.
 - Residual limits: live interactive chat and live-model guidance compliance not checked. Arbitrary script output/error text, conversation/run state and debug request dumps remain outside ordinary argument redaction. Environment names remain visible; a value incorrectly placed in a name can be exposed. Unknown/miscased tool names fail dispatch but their arguments are not covered by exact-name redaction. Unknown update fields remain ignored. No live tasks or actual credentials touched.
 - Round 3 of 3: review/ → ready/. No linked GitHub issue or PR identified. Not merged or released.
+
+
+## factory · 2026-11-12 19:31
+Owner-approved ship completed: ready/ → done/.
+- Merged into master, oldest item first, at 52cc9136b870afa5004617124436976df484604f. Final tested and pushed master: b144074055b66270ba6d6f17e894531206155919 (previous base: 416ed2d15d1126a42dd989c85c1a1f1a45105438).
+- Released with annotated tag v0.3.101; master and tag pushed atomically and verified through the GitHub API.
+- Validation: FT97 affected-package tests passed (agent, chatcmd, integration, cron, builtin); combined configured gate passed: gofmt clean, go vet ./... and go test ./.... Console nsh 0.4.0 check passed; nsh test --web-host tests/noHost.js passed all 802 tests, zero failures. Scripted tests used an absolute throwaway HOME/TMPDIR and existing Go caches.
+- No linked GitHub issues or PRs in the item; no closures required. Open PR lookup by this item's branch also returned none.
+- Branch retained: ship uses the default merge/tag/push actions; clean is not configured. No branches deleted. Ship worktree removed after recording the board update; build/review worktrees left untouched under the ship-directory-only restriction.
+- Recovery: checkout was clean, no unfinished operations or registered stale worktrees, unpublished tags or stopped board commits needed recovery. Existing unrelated run artifacts were preserved.
+- Installs/code fixes: none. No dependency or protected-path changes. Two foreground Console attempts were interrupted by execution time limits (2 and 10 minutes), not assertion failures; the uninterrupted background run finished successfully in 18m 53s. A fetch credential-helper attempt lacked repository-path context; command-scoped credential.useHttpPath=true fixed it, without persistent configuration changes.
+- Not checked in this ship: fresh browser or physical-device visual verification, live interactive chat, live-model guidance compliance, live tasks or real credentials. Prior review residual limits remain documented above; automated tests do not prove physical-device geometry or safe-area rendering.
