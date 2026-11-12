@@ -22,6 +22,10 @@ export interface SetupPickerItem {
   [key: string]: unknown;
 }
 
+/** The list's height: as tall as its rows, between these (unless `minListHeight` raises the least). */
+const LIST_MIN = 44;
+const LIST_MAX = 440;
+
 export interface SetupPickerDialogContentProps {
   items: SetupPickerItem[];
   loading?: boolean;
@@ -37,6 +41,12 @@ export interface SetupPickerDialogContentProps {
   allowCustom?: boolean;
   /** "{value}" is the typed text. */
   customLabel?: string;
+  /**
+   * The least height of what is under the filter (the list, or the loading line, an error or the
+   * empty note in its place): the dialog keeps its size while the list loads, a filter narrows it
+   * or nothing matches, instead of collapsing to a row. Default: none (a short list's own height).
+   */
+  minListHeight?: number;
   onSelect?: (item: SetupPickerItem) => void;
   onClose?: () => void;
 }
@@ -201,33 +211,35 @@ export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
         leadingIcon="PhMagnifyingGlass"
         testID="setup-picker-filter"
       />
-      <If when={props.loading}>
-        <LoadingLine label={t("setup_llm_test_target_loading")} />
-      </If>
-      <If when={props.error}>
-        <InlineNotice type="error" text={props.error ?? ""} testID="setup-picker-error" />
-      </If>
-      <If when={!props.loading}>
-        <List
-          ref={(node: ListRef) => {
-            list = node;
-          }}
-          each={entries()}
-          keyExtractor={(entry) => entry.key}
-          estimatedItemSize={36}
-          role="listbox"
-          testID="setup-picker-list"
-          class="-mx-1.5"
-          style={{ height: Math.min(440, Math.max(44, entries().length * 40)) }}
-          contentClass="gap-px px-1.5 pb-0.5"
-          onViewableItemsChange={({ viewableItems }) => {
-            const indexes = viewableItems.map((token) => token.index);
-            visible = indexes.length ? [Math.min(...indexes), Math.max(...indexes)] : [0, -1];
-          }}
-        >
-          {(entry) => <PickerEntry entry={entry()} />}
-        </List>
-      </If>
+      <View class="gap-3" style={{ minHeight: props.minListHeight ?? 0 }} testID="setup-picker-body">
+        <If when={props.loading}>
+          <LoadingLine label={t("setup_llm_test_target_loading")} />
+        </If>
+        <If when={props.error}>
+          <InlineNotice type="error" text={props.error ?? ""} testID="setup-picker-error" />
+        </If>
+        <If when={!props.loading}>
+          <List
+            ref={(node: ListRef) => {
+              list = node;
+            }}
+            each={entries()}
+            keyExtractor={(entry) => entry.key}
+            estimatedItemSize={36}
+            role="listbox"
+            testID="setup-picker-list"
+            class="-mx-1.5"
+            style={{ height: Math.min(LIST_MAX, Math.max(props.minListHeight ?? LIST_MIN, entries().length * 40)) }}
+            contentClass="gap-px px-1.5 pb-0.5"
+            onViewableItemsChange={({ viewableItems }) => {
+              const indexes = viewableItems.map((token) => token.index);
+              visible = indexes.length ? [Math.min(...indexes), Math.max(...indexes)] : [0, -1];
+            }}
+          >
+            {(entry) => <PickerEntry entry={entry()} />}
+          </List>
+        </If>
+      </View>
     </View>
   );
 
@@ -350,6 +362,7 @@ export function SetupPickerDialog(props: SetupPickerDialogProps) {
           groupByPrefix={props.groupByPrefix}
           allowCustom={props.allowCustom}
           customLabel={props.customLabel}
+          minListHeight={props.minListHeight}
           resetKey={openCount()}
           onSelect={(item) => {
             props.onSelect?.(item);

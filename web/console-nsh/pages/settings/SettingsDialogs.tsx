@@ -174,6 +174,8 @@ export function SettingsDialogs(props: { s: SettingsStore }) {
         groupByPrefix
         allowCustom
         customLabel={t("setup_llm_model_picker_custom")}
+        // A model list loads, and a filter narrows it: the dialog keeps a steady size meanwhile.
+        minListHeight={280}
         onSelect={(item) => s.applyModelOption(item)}
       />
 
