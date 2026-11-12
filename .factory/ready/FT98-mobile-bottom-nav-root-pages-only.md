@@ -43,3 +43,12 @@ Installs: no unpinned installs reported.
 Tests: manager independently reran the full configured gate with a throwaway HOME: gofmt clean, go vet ./... passed, go test ./... passed. Console nsh check passed; nsh test --web-host tests/noHost.js passed all 802 tests. The coder's earlier run observed an intermittent TestAttachmentInterrupted failure and two outdated navigation tests; the final independent full runs passed after those UI tests were updated.
 
 Visual verification: coder reports Chrome checks of root/detail visibility, settings refresh/history and desktop behavior. One scripted new-topic layout expectation was incorrect because that form is intentionally centered. Manager did not independently inspect screenshots or verify a physical Android device; physical-device rendering remains unchecked.
+
+## factory · review · 2026-11-12 18:44
+head: 17e3458a2251c4a88d3be0eb4c3fd433c27f6428
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (base 416ed2d15d1126a42dd989c85c1a1f1a45105438), all 15 changed files. No verified actionable findings; speculative observations are not counted as P3 defects.
+- Validation with throwaway HOME: gofmt clean; go vet ./... passed; go test ./... passed (72 packages); nsh check passed; nsh test --web-host tests/noHost.js passed (802 tests, zero failures). No installs or manifest/lock changes. Manager verified reviewed HEAD and clean worktree.
+- Residual risks: no fresh browser or physical-device visual verification during this review; real geometry, transition appearance and non-Android safe-area rendering remain unverified. The skills query-loading state and existing Settings browser-Back pane behavior were examined but no introduced defect was verified.
+- No linked GitHub issues or PRs were identified in the item. Moved review/ → ready/.
