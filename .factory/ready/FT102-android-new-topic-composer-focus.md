@@ -46,3 +46,14 @@ Built in c2b58560 and 7558fece; head: 7558fece455f07de61e2338b95c5457b3a3ce97f.
 - Installs: no new installs reported or evidenced; reused existing pinned nsh 0.5.0/runtime and existing browser tooling. No manifest or lockfile changes.
 - Browser probe/screenshot artifacts cover a narrow touch viewport with typing. Android device/emulator and native soft-keyboard behaviour were NOT verified; desktop/mobile-web visual acceptance was not comprehensively checked. Owner should inspect Android new-topic entry, draft reopening, keyboard dismissal and focus stability on hardware.
 - Manager verified commits are confined to this item's Console code/tests/docs and no protected paths changed. Branch pushed; moved new/ → review/.
+
+## factory · review · 2026-11-13 05:31
+head: 7558fece455f07de61e2338b95c5457b3a3ce97f
+verdict: pass
+notes:
+- Claude Code reviewed all nine changed files against origin/master (8b021ee4); no confirmed P0/P1/P2/P3 findings. Verified native restacking semantics against pinned nsh 0.5.0 sources and reviewed transition ordering, cancellation, stale/read-only composer guards and draft caret preservation.
+- Validation: gofmt/vet/go-test gate passed; nsh check passed; final full Console run passed 828/828 with pinned nsh 0.5.0 and a throwaway HOME. Initial Console run passed 827/828, with android-voice.test.tsx failing: "no pressable view matches label:Voice input". Targeted repeats and source tracing indicated load-sensitive async route readiness outside this change; final idle full rerun passed. This transient failure remains a validation caveat, not a confirmed introduced defect.
+- Installs: none; reused existing pinned tooling. Reviewer changed no tracked files or commits; manager confirmed clean worktree and unchanged head.
+- Not verified: Android device/emulator/native keyboard/caret behaviour, browser or desktop visual acceptance. Headless tests cannot reproduce native restacking focus loss. Owner should check Android entry, draft reopening, keyboard dismissal and focus stability on hardware.
+- Residual uncertainty: selecting a non-popup, non-composer control during the initial slide was not reproduced; no confirmed defect reported. No linked GitHub issue or PR in the item.
+- Moved review/ → ready/; no merge or deployment performed.
