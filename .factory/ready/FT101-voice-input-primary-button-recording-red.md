@@ -43,3 +43,14 @@ Built and pushed `20712aef69a24fce0669c5152e311210866d5ecb`; moved new/ → revi
 - Tests: configured Go gate passed (gofmt, go vet ./..., go test ./...), independently repeated by manager. nsh check passed; nsh test --web-host tests/noHost.js passed, 819/819.
 - Visual checks: coder exercised idle/recording and hover in headless Chrome at desktop and narrow widths. Not verified: actual dark theme in Chrome, a visible keyboard focus outline, physical Android device, native desktop app. These remain owner/reviewer checks; automated dark-theme state coverage is not a visual dark-theme check.
 - Push initially failed because credentials lacked a repository path; retry with command-local credential.useHttpPath=true succeeded. No persistent git settings changed.
+
+## factory · review · 2026-11-13 03:24
+head: 20712aef69a24fce0669c5152e311210866d5ecb
+verdict: pass
+notes:
+- Claude Code reviewed all six changed files on origin/master...HEAD against the request and plan; base: 8b021ee48d7ebb6f25a581934e117a7711b3b797. No qualifying P0/P1/P2 findings. Nonblocking observations about fixture self-checks and inherited disabled/hover styling were not classified as introduced defects.
+- Validation passed: gofmt listed no files; go vet ./... and go test ./... exited 0. nsh 0.5.0 check passed; nsh test --web-host tests/noHost.js passed, 819/819. Tests used throwaway HOME directories. Review worktree remained unchanged.
+- Installs: none reported; reused existing tools and shared Go caches.
+- Residual risks: reviewer could not visually inspect the composer because available browser attempts failed; no verified composer screenshot. Idle/recording/transcribing appearance, hover, keyboard focus, narrow layout and dark-theme rendering still need visual checks; headless state/style tests are not visual verification. Native desktop and physical Android were not exercised.
+- Process: first coder return omitted its substantive report; a second Claude Code invocation recovered the existing test evidence and rechecked the diff without rerunning the long suite.
+- Moved review/ → ready/. No linked GitHub issues or PRs were identified in the item.
