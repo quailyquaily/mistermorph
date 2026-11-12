@@ -5,7 +5,7 @@
 // questions and password requests, the topic and workspace panel, and the mobile split.
 //
 // It runs in the ChatPage component's body: its effects, timers and sockets go with the page.
-import { batch, cleanup, computed, effect, LayoutAnimation, signal, untracked } from "nsh";
+import { batch, cleanup, computed, effect, LayoutAnimation, platform, signal, untracked } from "nsh";
 import { MOTION_SLOW, motionMs } from "../../components/motion/tokens";
 import type { ListRef } from "nsh";
 import { approvalDetailsByID, taskApprovalState } from "../../lib/core/chat-approvals.js";
@@ -109,6 +109,8 @@ import { isMobile } from "../../lib/shell";
 import { dismissSoftKeyboard } from "../../lib/softKeyboard";
 import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
 import type { ComposerFileItem, ComposerHandle, ComposerProfileItem } from "../../components/chat/ChatComposer";
+import { popupOpen } from "../../components/ui";
+import { createEntryFocus } from "./entryFocus";
 import type { ChatRowContext, HistoryItem } from "../../components/chat/ChatHistoryItem";
 import type { ElevationAnswer, ElevationState } from "../../components/chat/ChatElevationCard";
 import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQuestionCard";
@@ -479,6 +481,8 @@ export function createChatController() {
   const streamSockets = new Map<string, { socket: WebSocket; historyID: string; endpointRef: string; closing: boolean }>();
   const approvalDetailAttempts = new Set<string>();
   let composer: ComposerHandle | null = null;
+  // The focus a new topic's composer asks for as it opens (focusComposerOnEntry).
+  const entryFocus = createEntryFocus(focusComposer);
   let historyList: ListRef | null = null;
   const composerCommands = signal<any[]>([]);
   const composerCommandsLoading = signal(false);
@@ -1115,6 +1119,7 @@ export function createChatController() {
 
   function showTopicsView() {
     if (!untracked(hasSidebarTopics)) return;
+    cancelEntryFocus();
     syncMobileTopicView({ preferTopics: true });
     void syncChatRoute("", { replace: true });
   }
@@ -2946,6 +2951,7 @@ export function createChatController() {
   function selectTopic(topicID: string) {
     const id = normalizeTopicID(topicID);
     if (!id) return;
+    cancelEntryFocus();
     batch(() => {
       topicDeleteError.set("");
       topicDeleteDialogOpen.set(false);
@@ -2977,8 +2983,31 @@ export function createChatController() {
     resetHeartbeatReveal();
     syncMobileTopicView({ preferChat: true });
     void loadHistory();
-    focusComposer();
+    focusComposerOnEntry();
     void syncChatRoute("", { replace: true });
+  }
+
+  // A new topic opens with its composer focused, on every screen. The focus goes to the composer
+  // the new topic shows, which may not exist yet when it is asked for: the view renders as the
+  // effects of this change run (on the web after this call returns, a new pane's composer or the
+  // landing one in place of a topic's), so it is asked for a microtask later. On the phone apps
+  // the conversation also slides in over the topic list (ChatPage's panes): the field is focused
+  // once it is in place, and the keyboard comes up for the field the user sees, its draft and
+  // caret as kept. The web does not wait for the slide, so the tap that asked is recent (a browser
+  // raises its keyboard for a field focused right after the user's tap). One request per entry
+  // (entryFocus.ts), dropped if the user went on meanwhile (back to the list, another topic, a new
+  // topic again, a send, a sheet or dialog opened, the field already tapped): it never comes back
+  // after the keyboard was lowered.
+  let conversationEntry: (() => Promise<void> | null) | null = null;
+  function setConversationEntry(next: (() => Promise<void> | null) | null) {
+    conversationEntry = next;
+  }
+  function cancelEntryFocus() {
+    entryFocus.cancel();
+  }
+  function focusComposerOnEntry() {
+    const arrived = Promise.resolve().then(() => (platform.os === "web" ? null : conversationEntry?.()));
+    entryFocus.request(arrived, () => viewActive && untracked(creatingTopic) && !untracked(popupOpen) && !composer?.focused());
   }
 
   async function stopActiveTask() {
@@ -3006,6 +3035,7 @@ export function createChatController() {
   // `keyboardDismissed`: Send lowered a touch keyboard, so the field is not focused again after the
   // send, even where the window is wide enough for the desktop layout.
   async function submitTask(options: { keyboardDismissed?: boolean } = {}) {
+    cancelEntryFocus();
     const draftText = String(untracked(taskInput) || "");
     const task = draftText.trim();
     if (!task || untracked(sending) || untracked(composerFilesPending)) return;
@@ -3357,6 +3387,7 @@ export function createChatController() {
 
   return {
     setConversationExit,
+    setConversationEntry,
     // state
     mobileMode,
     chatHistoryItems,

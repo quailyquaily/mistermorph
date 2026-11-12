@@ -86,6 +86,8 @@ function Stack() {
       <Text testID="plays">{`plays=${plays().join(" ")}`}</Text>
       <Text testID="settled">{`settled=${settledCount()}`}</Text>
       <Text testID="mounts">{`mounts=${mounts().join(",")}`}</Text>
+      {/* Each level's zIndex ("-" with no style: side by side). */}
+      <Text testID="z">{`z=${[0, 1, 2].map((at) => String(panes.style(at)?.zIndex ?? "-")).join(",")}`}</Text>
       <View class="flex-1 flex-row">
         {pane(0, () => level() === 0 || level() === null, () => <Text>list</Text>)}
         {pane(1, () => level() === 1 || level() === null, () => <Text>{`item=${shownItem()}`}</Text>)}

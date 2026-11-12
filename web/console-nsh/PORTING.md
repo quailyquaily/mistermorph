@@ -250,6 +250,15 @@ Headless tests prove behaviour, not the look.
   phone detail view does the same. Headless steps do not wait for a slide on the system clock: a
   test that checks a page or pane has gone waits for it (`{ state: "gone" }`), and a press on
   the list during the slide's last frame can be lost headless (not in a browser).
+- nsh orders sibling views by `zIndex` by moving their native views (a DOM `insertBefore` on the
+  web, a remove and add on Android): changing the `zIndex` of a view holding a focused field takes
+  the focus off it (Android keeps the keyboard up, with nothing to type in). PaneStack restacks
+  only the pane going out. Headless runs keep the focus in the core and show none of it; `nsh test
+  --trace` lists the moves (`Insert` of a view already placed).
+- A view rendered by a state change may not exist yet when the change returns (on the web it
+  renders after a press handler): a focus asked for in the same handler goes to the composer that
+  was there before, or to none. Ask a microtask later, for the one there then
+  (`focusComposerOnEntry`). Headless runs render at once and pass either way; check in Chrome.
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
   then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
   blurs it and lowers the keyboard as it closes, and focuses it as it opens
