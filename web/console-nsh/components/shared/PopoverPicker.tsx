@@ -2,7 +2,9 @@
 // optional filter, a spaced mono section label, rounded rows (an icon, a title, a mono subtitle),
 // and a tail on its edge facing the trigger, pointing to it. The composer's LLM profile picker is
 // one (a value, the chosen row marked); its add menu another (actions: no `value`, `onChange`
-// hears the row pressed).
+// hears the row pressed); the agent switchers a third (components/frame/AgentSwitcher.tsx: offline
+// agents as disabled rows, the overview as a `footer` row, opening below the sidebar's top and above
+// the phone's bottom bar).
 //
 // Why not nsh's Select: on the desktops it opens as the system's own drop-down does, the chosen row
 // over the trigger on macOS and below it elsewhere, whatever `placement` says. This opens where it
@@ -20,7 +22,10 @@
 // its picker): the offset is that plus `gap`.
 //
 // Keys: the filter takes the focus as it opens; Up and Down move the highlight (from the filter
-// too), Enter picks it, Escape closes.
+// too) over the rows that are not disabled, the footer's included, Enter picks it, Escape closes.
+//
+// The popup is never wider than the window less its margins, and the tail stays off the popup's
+// rounded corners (a trigger near the window's edge: the tail leans to the popup's side of it).
 import type { JSX, ViewRef } from "nsh";
 import { Canvas, cleanup, effect, keymap, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton, Input, Popover } from "nsh/base";
@@ -33,6 +38,16 @@ export interface PickerItem {
   subtitle?: string;
   /** Before the title (a logo, an icon). */
   icon?: JSX.Element;
+  /** After the title (a status mark, a caret). */
+  trailing?: JSX.Element;
+  /** Shown dimmed, not pressable; the keys pass over it. */
+  disabled?: boolean;
+  /** A hairline above the row: the first of another group. */
+  separated?: boolean;
+  /** More text the filter matches, not shown (an id). */
+  keywords?: string;
+  /** The row's test id (default `<partID>-option-<value>`). */
+  testID?: string;
 }
 
 export type PickerSide = "top" | "bottom";
@@ -86,6 +101,10 @@ const POPUP_INSET = 8 + 1;
 /** How far the tail's canvas reaches back over the popup: its border row and one inside it, so
  *  the fill covers the border under the tail wherever the edge falls on the pixels. */
 const TAIL_OVERLAP = 2;
+/** The popup's corner radius (`rounded-[16px]`), which the tail keeps off. */
+const POPUP_RADIUS = 16;
+/** The margin the popover keeps from the window's edges. */
+const POPUP_MARGIN = 8;
 
 /**
  * The tail, drawn pointing down (`up` flips it), on a canvas reaching back over the popup's edge
@@ -145,6 +164,16 @@ export function PopoverPicker(props: {
   filterPlaceholder?: string;
   /** Shown while the filter matches nothing. */
   emptyText?: string;
+  /** The filter takes the focus as the list opens (default true; touch screens: false, so the
+   *  keyboard comes up only once the filter is pressed). */
+  filterAutoFocus?: boolean;
+  /** Rows under the list, after a hairline: never filtered out, always shown (the overview). They
+   *  are picked through `onChange` as the list's rows are. */
+  footer?: PickerItem[];
+  /** More classes for every row (taller rows for a finger). */
+  rowClass?: string;
+  /** The trigger's tooltip (default: `accessibilityLabel` above it); `false` for none. */
+  tooltip?: JSX.Element | false;
   disabled?: boolean;
   /** The side the list goes on when it has the room (default `top`). */
   placement?: PickerSide;
@@ -160,7 +189,11 @@ export function PopoverPicker(props: {
   /** Controlled open state; without it the picker keeps its own. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** The trigger's test id. */
   testID?: string;
+  /** What the parts' test ids start with (`-list`, `-filter`, `-tail`, `-option-<value>`;
+   *  default `testID`). */
+  partID?: string;
 }) {
   const ownOpen = signal(false);
   const open = () => props.open ?? ownOpen();
@@ -204,17 +237,35 @@ export function PopoverPicker(props: {
   // The side the popover took and where (it reports them), for the tail.
   const shownSide = signal<PickerSide>("top");
   const popupLeft = signal<number | null>(null);
+  const popupWidth = signal(0);
+  const part = (name: string) => {
+    const id = props.partID ?? props.testID;
+    return id ? `${id}-${name}` : undefined;
+  };
 
-  // The rows: filtered, one highlighted.
+  // The rows: filtered, then the footer's; one highlighted (never a disabled one; -1: none).
   const query = signal("");
   const active = signal(0);
+  const footer = () => props.footer ?? [];
   const shown = () => {
     const text = query().trim().toLowerCase();
     if (!text) return props.items;
-    return props.items.filter((item) => `${item.title} ${item.subtitle ?? ""}`.toLowerCase().includes(text));
+    return props.items.filter((item) =>
+      `${item.title} ${item.subtitle ?? ""} ${item.keywords ?? ""}`.toLowerCase().includes(text),
+    );
+  };
+  const rows = () => [...shown(), ...footer()];
+  /** The next row from `from` by `by` (1 or -1, round the ends) that is not disabled; `from` if none. */
+  const step = (from: number, by: number) => {
+    const list = untracked(rows);
+    for (let i = 1; i <= list.length; i += 1) {
+      const at = (((from + by * i) % list.length) + list.length) % list.length;
+      if (!list[at].disabled) return at;
+    }
+    return from;
   };
   function choose(item: PickerItem | undefined) {
-    if (!item) return;
+    if (!item || item.disabled) return;
     props.onChange(item.value);
     setOpen(false);
   }
@@ -222,16 +273,57 @@ export function PopoverPicker(props: {
     if (!open()) return;
     untracked(() => {
       query.set("");
-      active.set(Math.max(0, props.items.findIndex((item) => item.value === props.value)));
+      const chosen = rows().findIndex((item) => item.value === props.value && !item.disabled);
+      active.set(chosen >= 0 ? chosen : step(-1, 1));
     });
-    const move = (by: number) => {
-      const count = untracked(shown).length;
-      if (count) active.set((untracked(active) + by + count) % count);
-    };
+    const move = (by: number) => active.set(step(untracked(active), by));
     cleanup(
-      keymap.bind({ up: () => move(-1), down: () => move(1), enter: () => choose(untracked(shown)[untracked(active)]) }, { when: "always" }),
+      keymap.bind({ up: () => move(-1), down: () => move(1), enter: () => choose(untracked(rows)[untracked(active)]) }, { when: "always" }),
     );
   });
+  // Where the tail stands along the popup's edge (in its content box): over the trigger's middle,
+  // kept off the rounded corners.
+  const tailLeft = () => {
+    const left = anchorMiddle() - (popupLeft() ?? 0) - POPUP_INSET - TAIL_WIDTH / 2;
+    const width = popupWidth();
+    if (width <= 0) return left;
+    const least = POPUP_RADIUS - POPUP_INSET;
+    const most = width - POPUP_INSET - POPUP_RADIUS - TAIL_WIDTH;
+    return Math.max(least, Math.min(most, left));
+  };
+
+  /** One row: the list's (`index` among the shown) or the footer's (after them). */
+  const row = (item: () => PickerItem, index: () => number) => (
+    <View
+      onMouseEnter={() => {
+        if (!item().disabled) active.set(index());
+      }}
+      class={item().separated ? "mt-1 border-t border-line-faint pt-1.5" : ""}
+    >
+      <BaseButton
+        role="option"
+        selected={props.value !== undefined && item().value === props.value}
+        disabled={!!item().disabled}
+        accessibilityLabel={item().title}
+        testID={item().testID ?? part(`option-${item().value}`)}
+        onPress={() => choose(item())}
+        class={`rounded-[10px] px-3 py-2 transition-colors duration-[120ms] hover:bg-hover selected:bg-selection disabled:opacity-70 ${
+          active() === index() ? "bg-hover" : ""
+        } ${props.rowClass ?? ""}`}
+      >
+        <View class="flex-row items-center gap-2">
+          <If when={item().icon}>{item().icon}</If>
+          <View class="flex-1">
+            <Text class={`text-sm ${item().disabled ? "text-muted-foreground" : "text-foreground"}`}>{item().title}</Text>
+            <If when={item().subtitle}>
+              <Text class="font-mono text-xs text-muted-foreground">{item().subtitle ?? ""}</Text>
+            </If>
+          </View>
+          <If when={item().trailing}>{item().trailing}</If>
+        </View>
+      </BaseButton>
+    </View>
+  );
 
   const anchorView = () => (
     <View
@@ -251,30 +343,36 @@ export function PopoverPicker(props: {
         placement={placement().side}
         align={props.align ?? "end"}
         offset={placement().offset}
-        margin={8}
+        margin={POPUP_MARGIN}
         onPosition={({ placement: side, bounds }) => {
           shownSide.set(side === "bottom" ? "bottom" : "top");
           popupLeft.set(bounds.origin.x);
+          popupWidth.set(bounds.size.width);
         }}
         popupClass={`${props.widthClass ?? "w-72"} rounded-[16px] border border-line-faint bg-dialog p-2 transition duration-120`}
-        popupStyle={{ ...MENU_POPUP_STYLE, maxHeight: placement().maxHeight }}
+        popupStyle={{ ...MENU_POPUP_STYLE, maxHeight: placement().maxHeight, maxWidth: windowSize().width - 2 * POPUP_MARGIN }}
         popupStartingClass={MENU_STARTING}
         popupEndingClass="opacity-0"
         trigger={
-          <View role="button" accessibilityLabel={props.accessibilityLabel} tooltip={<Tip text={props.accessibilityLabel} />} testID={props.testID}>
+          <View
+            role="button"
+            accessibilityLabel={props.accessibilityLabel}
+            tooltip={props.tooltip === false ? undefined : (props.tooltip ?? <Tip text={props.accessibilityLabel} />)}
+            testID={props.testID}
+          >
             {anchorView()}
           </View>
         }
       >
-        <View class="relative flex-1 gap-1" testID={props.testID ? `${props.testID}-list` : undefined}>
+        <View class="relative flex-1 gap-1" testID={part("list")}>
           <If when={popupLeft() !== null}>
             <PickerTail
               up={shownSide() === "bottom"}
               style={{
-                left: anchorMiddle() - (popupLeft() ?? 0) - POPUP_INSET - TAIL_WIDTH / 2,
+                left: tailLeft(),
                 ...(shownSide() === "top" ? { bottom: -(POPUP_INSET + TAIL_HEIGHT) } : { top: -(POPUP_INSET + TAIL_HEIGHT) }),
               }}
-              testID={props.testID ? `${props.testID}-tail` : undefined}
+              testID={part("tail")}
             />
           </If>
           <If when={props.filterPlaceholder}>
@@ -282,13 +380,13 @@ export function PopoverPicker(props: {
               value={query()}
               onChange={({ value }) => {
                 query.set(value);
-                active.set(0);
+                active.set(step(-1, 1));
               }}
-              onSubmit={() => choose(untracked(shown)[untracked(active)])}
+              onSubmit={() => choose(untracked(rows)[untracked(active)])}
               placeholder={props.filterPlaceholder}
               accessibilityLabel={props.filterPlaceholder}
-              autoFocus
-              testID={props.testID ? `${props.testID}-filter` : undefined}
+              autoFocus={props.filterAutoFocus !== false}
+              testID={part("filter")}
               class="mx-1 mb-1 rounded-full border border-input px-3 py-1.5 text-sm text-foreground placeholder:text-placeholder"
             />
           </If>
@@ -298,38 +396,28 @@ export function PopoverPicker(props: {
               {String(props.label ?? "").toLocaleUpperCase()}
             </Text>
           </If>
-          <Scroll class="shrink" style={{ maxHeight: Math.max(80, placement().maxHeight - (props.filterPlaceholder ? 96 : 48)) }}>
+          <Scroll
+            class="shrink"
+            style={{
+              maxHeight: Math.max(80, placement().maxHeight - (props.filterPlaceholder ? 96 : 48) - footer().length * 44),
+            }}
+          >
             <View class="gap-0.5" role="listbox" accessibilityLabel={props.label ?? props.accessibilityLabel}>
               <Each of={shown()} key={(item) => item.value}>
-                {(item, index) => (
-                  <View onMouseEnter={() => active.set(index())}>
-                    <BaseButton
-                      role="option"
-                      selected={props.value !== undefined && item().value === props.value}
-                      accessibilityLabel={item().title}
-                      onPress={() => choose(item())}
-                      class={`rounded-[10px] px-3 py-2 transition-colors duration-[120ms] hover:bg-hover selected:bg-selection ${
-                        active() === index() ? "bg-hover" : ""
-                      }`}
-                    >
-                      <View class="flex-row items-center gap-2">
-                        <If when={item().icon}>{item().icon}</If>
-                        <View class="flex-1">
-                          <Text class="text-sm text-foreground">{item().title}</Text>
-                          <If when={item().subtitle}>
-                            <Text class="font-mono text-xs text-muted-foreground">{item().subtitle ?? ""}</Text>
-                          </If>
-                        </View>
-                      </View>
-                    </BaseButton>
-                  </View>
-                )}
+                {(item, index) => row(item, index)}
               </Each>
               <If when={shown().length === 0}>
                 <Text class="px-3 py-2 text-sm text-muted-foreground">{props.emptyText ?? "—"}</Text>
               </If>
             </View>
           </Scroll>
+          <If when={footer().length > 0}>
+            <View class="gap-0.5 border-t border-line-faint pt-1">
+              <Each of={footer()} key={(item) => item.value}>
+                {(item, index) => row(item, () => shown().length + index())}
+              </Each>
+            </View>
+          </If>
         </View>
       </Popover>
     </If>

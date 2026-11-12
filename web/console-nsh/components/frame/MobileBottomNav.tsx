@@ -2,8 +2,9 @@
 // AppMobileAgentSwitcher): icons at the foot of the window, the primary pages, More, and the agent,
 // in a capsule that floats on the page (the layout of Telegram's tab bar, without its labels;
 // design/ui-refresh.html §4). A lighter pill behind the active slot slides to it, and its icon fills.
-// More and the agent each open a sheet that rises above the bar, over a scrim; Escape, Android's
-// Back or the scrim closes it.
+// More opens a sheet that rises above the bar, over a scrim; the agent opens the sidebar switcher's
+// popover bubble above its slot, its tail down to it (AgentSwitcher's `AgentPicker`). Escape,
+// Android's Back or a press outside closes either.
 import type { JSX } from "nsh";
 import { computed, createAnimatedValue, effect, keymap, platform, signal, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
@@ -26,8 +27,8 @@ import {
 import { onSystemBack } from "../../lib/systemBack";
 import { MOTION_EASE, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
-import { Icon, TextField, Tip, TipButton, type IconName } from "../ui";
-import { AgentAvatar, AgentOptionList, filterAgentItems, normalizeAgentItems, OverviewRow } from "./AgentSwitcher";
+import { Icon, Tip, TipButton, type IconName } from "../ui";
+import { AGENT_PICKER_GAP, AgentAvatar, AgentPicker } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
 import { uiSlots } from "./slots";
@@ -40,15 +41,11 @@ const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 const PRIMARY_PAGE_PATHS = ["/chat", "/contacts", "/todo"];
 const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
 
-// The agent sheet; More's state is lib/shell's (navigation closes it).
+// The agent popover; More's state is lib/shell's (navigation closes it).
 const agentMenuOpen = signal(false);
-const agentFilter = signal("");
 
 function setAgentMenuOpen(open: boolean) {
-  if (open) {
-    closeMobileMore();
-    agentFilter.set("");
-  }
+  if (open) closeMobileMore();
   agentMenuOpen.set(open);
 }
 
@@ -168,12 +165,9 @@ function SheetLayer(props: {
   );
 }
 
-/** The sheets over the page; put it last in the content area so they cover the page, not the strip. */
+/** The More sheet over the page; put it last in the content area so it covers the page, not the strip. */
 export function MobileBottomMenus() {
   const BottomLeft = uiSlots["sidebar.bottom_left"];
-  const items = computed(() => normalizeAgentItems(endpointItems()));
-  const showFilter = () => items().length > 8;
-  const filtered = () => filterAgentItems(items(), agentFilter());
   return (
     <>
       <BottomSheet open={mobileMoreOpen()} label={t("nav_more")} onClose={closeMobileMore} testID="mobile-more">
@@ -185,38 +179,6 @@ export function MobileBottomMenus() {
             </View>
           </If>
         </View>
-      </BottomSheet>
-      <BottomSheet open={agentMenuOpen()} label={t("endpoint_switcher_title")} onClose={() => setAgentMenuOpen(false)} testID="mobile-agents">
-        <If when={showFilter()}>
-          <TextField
-            class="mx-2.5 mb-2 mt-1"
-            value={agentFilter()}
-            onChange={(value) => agentFilter.set(String(value || ""))}
-            placeholder={t("endpoint_switcher_filter_placeholder")}
-            testID="mobile-agents-filter"
-          />
-        </If>
-        <View class="shrink">
-          <AgentOptionList
-            items={filtered()}
-            selectedValue={String(selectedEndpointItem()?.value || "").trim()}
-            rowClass="min-h-12 px-4"
-            testPrefix="mobile-agent-option"
-            onSelect={(item) => {
-              if (!item.connected) return;
-              setAgentMenuOpen(false);
-              switchEndpoint(item.value);
-            }}
-          />
-        </View>
-        <OverviewRow
-          class="min-h-12 px-4"
-          testID="mobile-agents-overview"
-          onPress={() => {
-            setAgentMenuOpen(false);
-            goOverview();
-          }}
-        />
       </BottomSheet>
     </>
   );
@@ -240,6 +202,10 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
   const moreIcon = (): IconName => (moreCurrentItem()?.icon as IconName) || "PhSquaresFour";
   const moreLabel = () =>
     moreActive() ? `${moreCurrentItem()?.title} · ${t("nav_more")}` : t("nav_more");
+
+  // Android's Back closes the agents' bubble before it leaves the page (nsh's popover takes Back
+  // itself where it can; this is for where it does not).
+  onSystemBack(() => agentMenuOpen(), () => setAgentMenuOpen(false));
 
   const selectedName = () => selectedEndpointItem()?.title || t("nav_agent");
   const selectedAvatar = () => personaAvatarURL() || selectedEndpointItem()?.image || defaultEndpointAvatar;
@@ -337,21 +303,49 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
           >
             <Icon name={moreIcon()} size={24} filled={activeSlot() === primaryItems().length} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
           </TipButton>
-          <TipButton
-            selected={activeSlot() === slotCount() - 1}
-            onPress={() => setAgentMenuOpen(!agentMenuOpen())}
-            accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
-            testID="mobile-nav-agent"
-            tooltip={tip(selectedName())}
-            class={slotClass(false)}
-            style={slotStyle()}
-            onLayout={report("mobile-nav-agent")}
-          >
-            {/* The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing
-                to it (no ring, no status mark, no press fill); the pill behind it marks it selected,
-                and the switcher's list shows whether the agent is connected. */}
-            <AgentAvatar image={selectedAvatar()} size={28} />
-          </TipButton>
+          {/* The agent's slot opens the agents' bubble above it. The popover opens on a press of
+              the view around its trigger, so the slot is a plain view, not a button; the frame the
+              strip reports is its stretch of the row. */}
+          <View style={slotStyle()} onLayout={report("mobile-nav-agent")}>
+            <AgentPicker
+              items={endpointItems()}
+              selectedValue={String(selectedEndpointItem()?.value || "").trim()}
+              onSelect={(item) => {
+                setAgentMenuOpen(false);
+                switchEndpoint(item.value);
+              }}
+              onOverview={() => {
+                setAgentMenuOpen(false);
+                goOverview();
+              }}
+              trigger={() => (
+                // The portrait alone, as Telegram's profile slot: selecting or pressing it adds
+                // nothing to it (no ring, no status mark, no press fill); the pill behind it marks it
+                // selected, and the list shows whether the agent is connected.
+                <View class={slotClass(false)} style={{ ...slotStyle(), height: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }}>
+                  <AgentAvatar image={selectedAvatar()} size={28} />
+                </View>
+              )}
+              accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
+              tooltip={tip(selectedName())}
+              // Above the bar (the sidebar's switcher opens below), clear of the capsule around
+              // the slot, at the window's right edge as the slot is.
+              placement="top"
+              align="end"
+              clearance={{ top: BAR_INSET }}
+              gap={AGENT_PICKER_GAP}
+              // Rows a finger can take (44pt); the filter (long lists) raises the keyboard only
+              // once it is pressed.
+              rowClass="min-h-11 justify-center"
+              filterAutoFocus={platform.desktop}
+              open={agentMenuOpen()}
+              onOpenChange={(open) => setAgentMenuOpen(open)}
+              testID="mobile-nav-agent"
+              partID="mobile-agents"
+              optionPrefix="mobile-agent-option"
+              overviewTestID="mobile-agents-overview"
+            />
+          </View>
         </View>
       </View>
     </View>

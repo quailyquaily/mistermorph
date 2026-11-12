@@ -13,6 +13,16 @@ const REMOTE = {
   can_submit: true,
   avatar_url: "",
 };
+const THIRD = {
+  endpoint_ref: "ep_third",
+  name: "Third",
+  url: "https://third.example.com",
+  connected: true,
+  agent_name: "Borealis",
+  mode: "console",
+  can_submit: true,
+  avatar_url: "",
+};
 const OFFLINE = {
   endpoint_ref: "ep_offline",
   name: "Sleepy",
@@ -30,23 +40,46 @@ function lastLocation(app: { host: { calls(): { name: string; data: any }[] } })
   return String(writes.at(-1)?.data?.url || "");
 }
 
-test("the agent switcher lists online agents first, switches to one, and opens the overview", async () => {
+test("the agent switcher's bubble switches to each online agent, again and again, and opens the overview", async () => {
   const { app } = await openConsole({
     location: "/e/default/todo",
-    endpoints: [localEndpoint(), REMOTE, OFFLINE],
+    endpoints: [localEndpoint(), REMOTE, THIRD, OFFLINE],
     api: { "GET /proxy:/tasks": { body: { items: [] } } },
   });
   await app.waitFor("id:nav-todo");
   // The trigger shows the persona's name from identity.yaml.
   await app.waitFor("id:agent-switcher-trigger >> text:Morph");
   await app.press("id:agent-switcher-trigger");
-  await app.waitFor("text:Atlas");
-  expect(app.shows("text:Sleepy")).toBe(true);
-  expect(app.shows("text:No matching agents")).toBe(false);
-  // Offline agents are not selectable.
+  await app.waitFor("id:agent-switcher-list");
+  // The bubble's tail, the section label, the agents and the overview row.
+  expect(app.shows("id:agent-switcher-tail")).toBe(true);
+  expect(app.shows("id:agent-switcher-list >> text:AGENTS")).toBe(true);
+  expect(app.shows("id:agent-switcher-option-ep_remote")).toBe(true);
+  expect(app.shows("id:agent-switcher-overview")).toBe(true);
+  // Online agents first, the offline one last, shown but not selectable.
+  const texts = app.texts();
+  expect(texts.indexOf("Atlas")).toBeLessThan(texts.indexOf("Sleepy"));
+  expect(texts.indexOf("Borealis")).toBeLessThan(texts.indexOf("Sleepy"));
+  expect(app.enabled("id:agent-switcher-option-ep_offline")).toBe(false);
   await expect(app.press("label:Sleepy")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
-  await app.press("label:Atlas");
+  expect(app.shows("text:No matching agents")).toBe(false);
+  // No filter for a short list.
+  expect(app.shows("id:agent-switcher-filter")).toBe(false);
+
+  // Each agent row switches and closes the bubble; the switcher then shows the new agent's name.
+  await app.press("id:agent-switcher-option-ep_remote");
   await app.waitUntil(() => lastLocation(app).startsWith("/e/ep_remote/todo"));
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("id:agent-switcher-list");
+  await app.press("label:Borealis");
+  await app.waitUntil(() => lastLocation(app).startsWith("/e/ep_third/todo"));
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
+  await app.press("id:agent-switcher-trigger");
+  // Back to the local agent, whose routes say "default".
+  await app.press("id:agent-switcher-option-ep_console_local");
+  await app.waitUntil(() => lastLocation(app).startsWith("/e/default/todo"));
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
 
   await app.press("id:agent-switcher-trigger");
   await app.press("label:Overview");
@@ -55,7 +88,39 @@ test("the agent switcher lists online agents first, switches to one, and opens t
   await app.waitFor("id:sidebar", { state: "gone" });
 });
 
-test("more than eight agents open a dialog with a filter", async () => {
+test("the agent switcher's keys pass over offline agents to the overview, and Escape closes it", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/todo",
+    endpoints: [localEndpoint(), REMOTE, OFFLINE],
+    api: { "GET /proxy:/tasks": { body: { items: [] } } },
+  });
+  await app.waitFor("id:agent-switcher-trigger >> text:Morph");
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("id:agent-switcher-list");
+  await app.keyboard.press("escape");
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
+  expect(lastLocation(app)).toBe("/e/default/todo");
+
+  // The highlight starts on the current agent: Down goes to Atlas, Down again past Sleepy
+  // (offline) to the overview, Up back to Atlas, which Enter picks.
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("id:agent-switcher-list");
+  await app.keyboard.press("down");
+  await app.keyboard.press("down");
+  await app.keyboard.press("up");
+  await app.keyboard.press("enter");
+  await app.waitUntil(() => lastLocation(app).startsWith("/e/ep_remote/todo"));
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
+
+  // From Atlas (current now), Down twice: past Sleepy to the overview, and Enter opens it.
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("id:agent-switcher-list");
+  await app.keyboard.press("down");
+  await app.keyboard.press("enter");
+  await app.waitUntil(() => lastLocation(app) === "/overview");
+});
+
+test("more than eight agents put a filter in the bubble; the overview stays when nothing matches", async () => {
   const many = Array.from({ length: 9 }, (_, index) => ({
     ...REMOTE,
     endpoint_ref: `ep_${index}`,
@@ -66,13 +131,38 @@ test("more than eight agents open a dialog with a filter", async () => {
   await app.press("id:agent-switcher-trigger");
   await app.waitFor("id:agent-switcher-filter");
   await app.type("id:agent-switcher-filter", "Agent 7");
-  await app.waitFor("id:agent-switcher-dialog >> text:Agent 7");
-  expect(app.shows("id:agent-switcher-dialog >> text:Agent 3")).toBe(false);
+  await app.waitFor("id:agent-switcher-list >> text:Agent 7");
+  expect(app.shows("id:agent-switcher-list >> text:Agent 3")).toBe(false);
+  // The filter matches refs too.
   await app.clear("id:agent-switcher-filter");
+  await app.type("id:agent-switcher-filter", "ep_5");
+  await app.waitFor("id:agent-switcher-list >> text:Agent 5");
+  expect(app.shows("id:agent-switcher-list >> text:Agent 7")).toBe(false);
+  await app.press("id:agent-switcher-option-ep_5");
+  await app.waitUntil(() => lastLocation(app).startsWith("/e/ep_5/"));
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
+
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("id:agent-switcher-filter");
   await app.type("id:agent-switcher-filter", "nobody");
   await app.waitFor("text:No matching agents");
+  expect(app.shows("id:agent-switcher-overview")).toBe(true);
   await app.press("id:agent-switcher-overview");
   await app.waitUntil(() => lastLocation(app) === "/overview");
+});
+
+test("the folded sidebar's switcher opens the same bubble", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/todo",
+    kv: { "mistermorph.sidebarCollapsed": "1" },
+    endpoints: [localEndpoint(), REMOTE],
+    api: { "GET /proxy:/tasks": { body: { items: [] } } },
+  });
+  await app.waitFor("id:agent-switcher-trigger");
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("id:agent-switcher-list");
+  await app.press("label:Atlas");
+  await app.waitUntil(() => lastLocation(app).startsWith("/e/ep_remote/todo"));
 });
 
 test("dragging the sidebar's edge folds it to its icons, and the choice is remembered", async () => {
@@ -115,7 +205,7 @@ test("on a phone the bottom navigation opens More and the agents", async () => {
     location: "/e/default/todo",
     width: 420,
     height: 860,
-    endpoints: [localEndpoint(), REMOTE, OFFLINE],
+    endpoints: [localEndpoint(), REMOTE, THIRD, OFFLINE],
     api: { "GET /proxy:/tasks": { body: { items: [] } } },
   });
   await app.waitFor("id:mobile-bottom-nav");
@@ -128,15 +218,25 @@ test("on a phone the bottom navigation opens More and the agents", async () => {
   // On a page kept under More, the More slot says where you are.
   await app.waitFor("label:Memories · More");
 
+  // The agent slot opens the agents' bubble above it.
   await app.press("id:mobile-nav-agent");
-  await app.waitFor("id:mobile-agents");
+  await app.waitFor("id:mobile-agents-list");
+  expect(app.shows("id:mobile-agents-tail")).toBe(true);
+  expect(app.shows("id:mobile-more")).toBe(false);
   await app.keyboard.press("escape");
-  await app.waitFor("id:mobile-agents", { state: "gone" });
+  await app.waitFor("id:mobile-agents-list", { state: "gone" });
 
   await app.press("id:mobile-nav-agent");
+  await app.waitFor("id:mobile-agents-list");
   await expect(app.press("id:mobile-agent-option-ep_offline")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
   await app.press("id:mobile-agent-option-ep_remote");
   await app.waitUntil(() => lastLocation(app) === "/e/ep_remote/memories");
+  await app.waitFor("id:mobile-agents-list", { state: "gone" });
+
+  // Again, to another agent.
+  await app.press("id:mobile-nav-agent");
+  await app.press("id:mobile-agent-option-ep_third");
+  await app.waitUntil(() => lastLocation(app) === "/e/ep_third/memories");
 
   await app.press("id:mobile-nav-agent");
   await app.press("id:mobile-agents-overview");
@@ -169,7 +269,7 @@ test("on a 320pt phone every slot of the bottom navigation takes its press", asy
   await app.press("id:mobile-nav-more");
   await app.waitFor("id:mobile-more", { state: "gone" });
   await app.press("id:mobile-nav-agent");
-  await app.waitFor("id:mobile-agents");
+  await app.waitFor("id:mobile-agents-list");
   await app.press("id:mobile-agent-option-ep_remote");
   await app.waitUntil(() => lastLocation(app) === "/e/ep_remote/todo");
 });

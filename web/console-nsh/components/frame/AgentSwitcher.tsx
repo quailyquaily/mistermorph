@@ -1,14 +1,22 @@
 // The agent switcher at the top of the sidebar (the Vue console's AgentSwitcher): the selected
-// agent's avatar and name; pressed, a menu of the agents, online ones first and offline ones
-// dimmed and not selectable, and a last row to the overview of every agent. With more than eight
-// agents it opens a dialog with a filter instead. Folded, the sidebar shows the avatar only.
+// agent's avatar and name; pressed, the agents in the composer's popover bubble (PopoverPicker),
+// opening below with its tail up to the switcher: online agents first, offline ones dimmed and not
+// selectable, the current one marked, and a last row to the overview of every agent. With more than
+// eight agents a filter heads the list. Folded, the sidebar shows the avatar only. The phone's
+// bottom bar opens the same list above its agent slot (MobileBottomNav, `AgentPicker`).
+//
+// Why not nsh's Menu: on the desktop app (GPUI) the menu's agent rows took no clicks while its
+// Overview row did. The rows were in a `Scroll` inside the menu's popup, and under the console's
+// scroll bar theme (`Scrollbar.setTheme(SCROLLBAR)`, App.tsx) that scroll view's built-in hover bar
+// left every item in it unclickable there; Overview, outside the scroll view, worked. Chrome and the
+// headless tests never showed it.
 import type { ImageAsset, JSX } from "nsh";
-import { computed, Image, Scroll, signal, Text, View } from "nsh";
-import { Button as BaseButton, Menu, MenuItem, MenuSeparator } from "nsh/base";
+import { computed, Image, signal, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import type { EndpointItem } from "../../lib/shell";
 import { FadeText } from "../motion/FadeText";
-import { bottomSheetStyle, Icon, Modal, TextField, Tip, TipButton, trackPopup } from "../ui";
+import { PopoverPicker, type PickerItem, type PickerSide } from "../shared/PopoverPicker";
+import { Icon, Tip, trackPopup } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -39,13 +47,6 @@ export function normalizeAgentItems(items: EndpointItem[]): AgentOption[] {
     .filter((item) => item.value);
 }
 
-/** Items whose title or ref holds `query`, ignoring case. */
-export function filterAgentItems(items: AgentOption[], query: string) {
-  const needle = normalizeText(query).toLocaleLowerCase();
-  if (!needle) return items;
-  return items.filter((item) => [item.title, item.value].some((value) => value.toLocaleLowerCase().includes(needle)));
-}
-
 /** A round avatar, or an empty disc when there is none. */
 export function AgentAvatar(props: { image: string | ImageAsset; size: number; dim?: boolean }) {
   return (
@@ -73,98 +74,114 @@ export function ConnectionMark(props: { online: boolean; class?: string }) {
   );
 }
 
-/** One agent's row: avatar, name, connection mark. */
-function AgentRowContent(props: { item: AgentOption }) {
-  return (
-    <>
-      <AgentAvatar image={props.item.image} size={24} dim={!props.item.connected} />
-      <Text class={`flex-1 text-sm font-semibold line-clamp-1 ${props.item.connected ? "text-foreground" : "text-muted-foreground"}`}>
-        {props.item.title}
-      </Text>
+/** The overview row's value: no agent's (refs are trimmed, so none starts with a space). */
+export const OVERVIEW_VALUE = " overview";
+
+/**
+ * The agents as the picker's rows: online first, then offline ones (disabled, after a hairline when
+ * both are there), each with its avatar and connection mark; the filter matches the title or ref.
+ */
+export function agentPickerItems(items: AgentOption[], testPrefix: string): PickerItem[] {
+  const online = items.filter((item) => item.connected);
+  const offline = items.filter((item) => !item.connected);
+  const row = (item: AgentOption, separated: boolean): PickerItem => ({
+    value: item.value,
+    title: item.title,
+    keywords: item.value,
+    disabled: !item.connected,
+    separated,
+    testID: `${testPrefix}-${item.value}`,
+    icon: <AgentAvatar image={item.image} size={24} dim={!item.connected} />,
+    trailing: (
       <View class="w-3.5 items-center">
-        <ConnectionMark online={props.item.connected} />
+        <ConnectionMark online={item.connected} />
       </View>
-    </>
-  );
+    ),
+  });
+  return [...online.map((item) => row(item, false)), ...offline.map((item, index) => row(item, index === 0 && online.length > 0))];
 }
 
-/** The last row of every switcher: the overview of all agents. */
-function OverviewRowContent() {
-  return (
-    <>
+/** The overview row under the agents. */
+export function overviewPickerItem(testID: string): PickerItem {
+  return {
+    value: OVERVIEW_VALUE,
+    title: t("nav_overview"),
+    testID,
+    icon: (
       <View class="w-6 items-center">
         <Icon name="PhNetwork" size={15} color="muted-foreground" />
       </View>
-      <Text class="flex-1 text-sm font-semibold text-foreground line-clamp-1">{t("nav_overview")}</Text>
-      <Icon name="PhCaretRight" size={14} color="muted-foreground" />
-    </>
-  );
+    ),
+    trailing: <Icon name="PhCaretRight" size={14} color="muted-foreground" />,
+  };
 }
 
-/** The agents grouped as online, then offline, for a dialog or a sheet (plain buttons). */
-export function AgentOptionList(props: {
-  items: AgentOption[];
+/**
+ * The agents in the popover bubble, for the sidebar's switcher and the phone's agent slot: picking
+ * an online agent hears `onSelect`, the overview row `onOverview`; both close it.
+ */
+export function AgentPicker(props: {
+  items: EndpointItem[];
   selectedValue: string;
   onSelect: (item: AgentOption) => void;
+  onOverview: () => void;
+  trigger: (state: { open: boolean }) => JSX.Element;
+  accessibilityLabel: string;
+  tooltip?: JSX.Element | false;
+  placement: PickerSide;
+  align: "start" | "center" | "end";
+  clearance?: { top?: number; bottom?: number };
+  gap?: number;
+  widthClass?: string;
   rowClass?: string;
-  testPrefix?: string;
+  filterAutoFocus?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** The trigger's test id. */
+  testID: string;
+  /** What the list's, filter's and tail's test ids start with. */
+  partID: string;
+  /** What each agent row's test id starts with (`<optionPrefix>-<ref>`). */
+  optionPrefix: string;
+  overviewTestID: string;
 }) {
-  const online = () => props.items.filter((item) => item.connected);
-  const offline = () => props.items.filter((item) => !item.connected);
-  const row = (item: () => AgentOption) => (
-    <BaseButton
-      role="option"
-      selected={item().value === props.selectedValue}
-      disabled={!item().connected}
-      onPress={() => props.onSelect(item())}
-      accessibilityLabel={item().title}
-      testID={`${props.testPrefix ?? "agent-option"}-${item().value}`}
-      class={`flex-row items-center gap-2.5 border-y border-transparent hover:bg-hover focus:bg-hover selected:border-blue-lighter selected:bg-selection disabled:opacity-70 ${
-        props.rowClass ?? "min-h-9 px-3.5 py-1"
-      }`}
-    >
-      <AgentRowContent item={item()} />
-    </BaseButton>
-  );
+  const items = computed(() => normalizeAgentItems(props.items));
   return (
-    <View role="list" accessibilityLabel={t("endpoint_switcher_title")}>
-      <If when={online().length > 0}>
-        <View accessibilityLabel={t("endpoint_switcher_online")}>
-          <Each of={online()} key={(item) => item.value}>
-            {(item) => row(item)}
-          </Each>
-        </View>
-      </If>
-      <If when={offline().length > 0}>
-        <View
-          accessibilityLabel={t("endpoint_switcher_offline")}
-          class={online().length > 0 ? "mt-1 border-t border-line-faint pt-1" : ""}
-        >
-          <Each of={offline()} key={(item) => item.value}>
-            {(item) => row(item)}
-          </Each>
-        </View>
-      </If>
-      <If when={props.items.length === 0}>
-        <Text class="px-3.5 py-2.5 text-xs text-muted-foreground">{t("endpoint_switcher_empty")}</Text>
-      </If>
-    </View>
+    <PopoverPicker
+      items={agentPickerItems(items(), props.optionPrefix)}
+      footer={[overviewPickerItem(props.overviewTestID)]}
+      value={props.selectedValue}
+      onChange={(value) => {
+        if (value === OVERVIEW_VALUE) {
+          props.onOverview();
+          return;
+        }
+        const item = items().find((entry) => entry.value === value);
+        if (item?.connected) props.onSelect(item);
+      }}
+      trigger={props.trigger}
+      accessibilityLabel={props.accessibilityLabel}
+      tooltip={props.tooltip}
+      label={t("endpoint_switcher_title")}
+      filterPlaceholder={items().length > 8 ? t("endpoint_switcher_filter_placeholder") : undefined}
+      filterAutoFocus={props.filterAutoFocus}
+      emptyText={t("endpoint_switcher_empty")}
+      placement={props.placement}
+      align={props.align}
+      clearance={props.clearance}
+      gap={props.gap}
+      widthClass={props.widthClass}
+      rowClass={props.rowClass}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      testID={props.testID}
+      partID={props.partID}
+    />
   );
 }
 
-/** The overview row of a dialog or a sheet. */
-export function OverviewRow(props: { onPress: () => void; class?: string; testID?: string }) {
-  return (
-    <BaseButton
-      onPress={props.onPress}
-      accessibilityLabel={t("nav_overview")}
-      testID={props.testID}
-      class={`flex-row items-center gap-2.5 border-t border-line-faint hover:bg-hover focus:bg-hover ${props.class ?? "min-h-9 px-3.5"}`}
-    >
-      <OverviewRowContent />
-    </BaseButton>
-  );
-}
+/** How far the bubble opens from its switcher: past the tail (9pt) with a little air. */
+export const AGENT_PICKER_GAP = 12;
 
 export interface AgentSwitcherProps {
   items: EndpointItem[];
@@ -182,15 +199,9 @@ export interface AgentSwitcherProps {
 }
 
 export function AgentSwitcher(props: AgentSwitcherProps) {
-  const menuOpen = signal(false);
-  trackPopup(menuOpen);
-  const dialogOpen = signal(false);
-  const filter = signal("");
+  const open = signal(false);
+  trackPopup(open);
 
-  const items = computed(() => normalizeAgentItems(props.items));
-  const online = () => items().filter((item) => item.connected);
-  const offline = () => items().filter((item) => !item.connected);
-  const longMode = () => items().length > 8;
   const selectedValue = () => normalizeText(props.selectedItem?.value);
   const triggerName = () =>
     normalizeText(props.selectedName) ||
@@ -202,26 +213,8 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
     if (own && (typeof own !== "string" || own.trim())) return own;
     return props.selectedItem?.image || "";
   };
-  const open = () => menuOpen() || dialogOpen();
-  const filtered = () => filterAgentItems(items(), filter());
 
-  const select = (item: AgentOption) => {
-    if (!item?.connected) return;
-    menuOpen.set(false);
-    dialogOpen.set(false);
-    props.onChange?.(item);
-  };
-  const openOverview = () => {
-    menuOpen.set(false);
-    dialogOpen.set(false);
-    props.onOverview?.();
-  };
-  const openDialog = () => {
-    menuOpen.set(false);
-    filter.set("");
-    dialogOpen.set(true);
-  };
-
+  // The trigger itself is a plain view: the popover opens on a press of the view around it.
   const trigger = (): JSX.Element => (
     <View
       class={`h-14 flex-row items-center gap-2 ${props.compact && !open() ? "justify-center px-0" : "px-[13px]"} ${
@@ -247,110 +240,31 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
     </View>
   );
 
-  const triggerTooltip = () => (props.compact ? <Tip text={triggerName()} placement="right" /> : undefined);
-
   return (
     <View class={`h-[57px] border-b border-line-soft ${props.class ?? ""}`} testID="agent-switcher">
-      <If
-        when={longMode()}
-        else={
-          <Menu
-            open={menuOpen()}
-            onOpenChange={({ open: next }) => menuOpen.set(next)}
-            placement="bottom"
-            align="start"
-            offset={0}
-            popupClass="w-68 max-h-96 border border-line-soft bg-card shadow-lg"
-            popupStyle={bottomSheetStyle(0, { contentMax: 384 })}
-            trigger={
-              <View
-                class="h-14"
-                role="button"
-                accessibilityLabel={t("endpoint_switcher_label")}
-                accessibilityState={{ expanded: menuOpen() }}
-                testID="agent-switcher-trigger"
-                tooltip={triggerTooltip()}
-              >
-                {trigger()}
-              </View>
-            }
-          >
-            <Scroll class="shrink" contentClass="py-1">
-              <If when={online().length > 0}>
-                <Each of={online()} key={(item) => item.value}>
-                  {(item) => (
-                    <MenuItem
-                      checked={item().value === selectedValue() ? true : null}
-                      onSelect={() => select(item())}
-                      accessibilityLabel={item().title}
-                      class="min-h-9 flex-row items-center gap-2.5 border-y border-transparent px-3.5 py-1 hover:bg-hover focus:bg-hover checked:border-blue-lighter checked:bg-selection"
-                    >
-                      <AgentRowContent item={item()} />
-                    </MenuItem>
-                  )}
-                </Each>
-              </If>
-              <If when={offline().length > 0}>
-                <If when={online().length > 0}>
-                  <MenuSeparator class="my-1 h-px bg-line-faint" />
-                </If>
-                <Each of={offline()} key={(item) => item.value}>
-                  {(item) => (
-                    <MenuItem
-                      disabled
-                      accessibilityLabel={item().title}
-                      class="min-h-9 flex-row items-center gap-2.5 px-3.5 py-1 opacity-70"
-                    >
-                      <AgentRowContent item={item()} />
-                    </MenuItem>
-                  )}
-                </Each>
-              </If>
-              <If when={items().length === 0}>
-                <Text class="px-3.5 py-2.5 text-xs text-muted-foreground">{t("endpoint_switcher_empty")}</Text>
-              </If>
-            </Scroll>
-            <MenuItem
-              onSelect={openOverview}
-              accessibilityLabel={t("nav_overview")}
-              class="min-h-9 flex-row items-center gap-2.5 border-t border-line-faint px-3.5 hover:bg-hover focus:bg-hover"
-            >
-              <OverviewRowContent />
-            </MenuItem>
-          </Menu>
-        }
-      >
-        <TipButton
-          onPress={openDialog}
-          accessibilityLabel={t("endpoint_switcher_label")}
-          testID="agent-switcher-trigger"
-          tooltip={triggerTooltip()}
-          class="h-14"
-        >
-          {trigger()}
-        </TipButton>
-      </If>
-      <Modal
-        open={dialogOpen()}
-        onClose={() => dialogOpen.set(false)}
-        title={t("endpoint_switcher_title")}
-        size="sm"
-        closeLabel={t("action_close")}
-        testID="agent-switcher-dialog"
-      >
-        <TextField
-          value={filter()}
-          onChange={(value) => filter.set(String(value || ""))}
-          placeholder={t("endpoint_switcher_filter_placeholder")}
-          testID="agent-switcher-filter"
-        />
-        <View class="rounded-(--radius) border border-line-soft bg-card">
-          <View class="p-1">
-            <AgentOptionList items={filtered()} selectedValue={selectedValue()} onSelect={select} />
-          </View>
-          <OverviewRow onPress={openOverview} testID="agent-switcher-overview" />
-        </View>
-      </Modal>
+      <AgentPicker
+        items={props.items}
+        selectedValue={selectedValue()}
+        onSelect={(item) => props.onChange?.(item)}
+        onOverview={() => props.onOverview?.()}
+        trigger={() => trigger()}
+        accessibilityLabel={t("endpoint_switcher_label")}
+        // Folded, the name the avatar stands for; unfolded the name is shown.
+        tooltip={props.compact ? <Tip text={triggerName()} placement="right" /> : false}
+        // Below the switcher (the composer's profile picker opens above its pill), clear of the
+        // sidebar's hairline under it.
+        placement="bottom"
+        align="start"
+        clearance={{ bottom: 1 }}
+        gap={AGENT_PICKER_GAP}
+        widthClass="w-68"
+        open={open()}
+        onOpenChange={(next) => open.set(next)}
+        testID="agent-switcher-trigger"
+        partID="agent-switcher"
+        optionPrefix="agent-switcher-option"
+        overviewTestID="agent-switcher-overview"
+      />
     </View>
   );
 }
