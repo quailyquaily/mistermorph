@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -69,5 +70,49 @@ func TestCodeModeSourceIsWithheldFromLogsAndEvents(t *testing.T) {
 	}
 	if out, _ := json.Marshal(toolDisplayArgsSummary(codeModeToolName, map[string]any{"code": []any{secret}}, opts)); strings.Contains(string(out), secret) {
 		t.Fatalf("malformed code shown: %s", out)
+	}
+}
+
+func TestRedactToolParamsForDisplayIsIdempotentAndLeavesTheCallAlone(t *testing.T) {
+	const secret = "synthetic-secret-value-0004"
+	todo := map[string]any{"action": "update", "id": "report",
+		"bash_env": []any{map[string]any{"name": "API_TOKEN", "value": secret}}}
+	code := "const t = \"" + secret + "\";\nreturn t.length"
+	script := map[string]any{"code": code}
+
+	for name, params := range map[string]map[string]any{"todo_update": todo, "codemode": script} {
+		once := RedactToolParamsForDisplay(name, params)
+		twice := RedactToolParamsForDisplay(name, once)
+		first, _ := json.Marshal(once)
+		second, _ := json.Marshal(twice)
+		if strings.Contains(string(first), secret) || string(first) != string(second) {
+			t.Fatalf("%s: once = %s, twice = %s", name, first, second)
+		}
+		// Through JSON, as a remote tool event arrives, sizes stay the same too.
+		var decoded map[string]any
+		_ = json.Unmarshal(first, &decoded)
+		if again, _ := json.Marshal(RedactToolParamsForDisplay(name, decoded)); string(again) != string(first) {
+			t.Fatalf("%s: after JSON = %s, want %s", name, again, first)
+		}
+	}
+	if todo["bash_env"].([]any)[0].(map[string]any)["value"] != secret || script["code"] != code {
+		t.Fatal("display redaction changed the call's parameters")
+	}
+	if got := RedactToolParamsForDisplay("codemode", script); got["code_chars"] != len([]rune(code)) || got["code_lines"] != 2 {
+		t.Fatalf("codemode display = %#v", got)
+	}
+
+	// Sizes that are not plain numbers are dropped, not shown.
+	odd := RedactToolParamsForDisplay("codemode", map[string]any{"code": "[withheld]", "code_chars": secret, "code_lines": json.Number(secret)})
+	if shown, _ := json.Marshal(odd); strings.Contains(string(shown), secret) || len(odd) != 1 {
+		t.Fatalf("odd codemode display = %s", shown)
+	}
+	// Other tools pass through as they are.
+	plain := map[string]any{"path": "a.txt"}
+	if got := RedactToolParamsForDisplay("read_file", plain); !reflect.DeepEqual(got, plain) {
+		t.Fatalf("read_file display = %#v", got)
+	}
+	if got := RedactToolParamsForDisplay("todo_update", nil); got != nil {
+		t.Fatalf("nil params display = %#v", got)
 	}
 }

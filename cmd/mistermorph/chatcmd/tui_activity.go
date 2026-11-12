@@ -152,7 +152,7 @@ func configureChatSessionCallbacks(sess *chatSession, logger *slog.Logger) {
 
 func formatChatToolActivity(call agent.ToolCall) string {
 	parts := []string{chatToolName(call)}
-	inline, block := formatChatToolParams(call.Params)
+	inline, block := formatChatToolParams(chatToolDisplayParams(call))
 	for _, line := range append(inline, block...) {
 		if line = strings.TrimSpace(line); line != "" {
 			parts = append(parts, line)
@@ -162,7 +162,7 @@ func formatChatToolActivity(call agent.ToolCall) string {
 }
 
 func formatChatToolTranscript(call agent.ToolCall, width int) string {
-	inline, block := formatChatToolParams(call.Params)
+	inline, block := formatChatToolParams(chatToolDisplayParams(call))
 	summary := chatToolName(call)
 	if len(inline) > 0 {
 		summary += " · " + strings.Join(inline, " · ")
@@ -181,6 +181,13 @@ func wrapChatToolSummary(summary string, width int) []string {
 		wrapped[index] = "  " + wrapped[index]
 	}
 	return wrapped
+}
+
+// chatToolDisplayParams is what the chat shows of a call's parameters: the agent's display
+// redaction, as in tool events and logs (todo_update's bash_env values and a codemode script's
+// source are hidden). The hooks pass the call as it runs, so its own Params are left unchanged.
+func chatToolDisplayParams(call agent.ToolCall) map[string]any {
+	return agent.RedactToolParamsForDisplay(call.Name, call.Params)
 }
 
 func chatToolName(call agent.ToolCall) string {
