@@ -163,7 +163,10 @@ test("a cancelled leave moves nothing", async () => {
   await app.press("id:settings-tool-web_search-switch");
   await app.waitFor("id:settings-save-bar");
 
-  await app.press("id:mobile-nav-contacts");
+  // An open section has no bottom navigation (lib/shell.ts markMobileDetail): leave through the
+  // navigation's keyboard shortcut (a hardware keyboard), which opens Contacts as its slot does.
+  expect(app.count("id:mobile-bottom-nav")).toBe(0);
+  await app.keyboard.press("ctrl+2");
   await app.waitFor("id:dialog-action-cancel");
   await app.press("id:dialog-action-cancel");
   await app.waitFor("id:dialog-action-cancel", { state: "gone" });

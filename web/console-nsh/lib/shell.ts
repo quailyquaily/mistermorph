@@ -1,16 +1,18 @@
 // The app frame's state, as the Vue console's useAppShell had it: which endpoint is selected,
 // the navigation, and the shared data every workspace page preloads.
-import { batch, computed, effect, keyboardFrame, LayoutAnimation, platform, reduceMotion, safeArea, signal, untracked, windowSize } from "nsh";
+import { batch, cleanup, computed, effect, keyboardFrame, LayoutAnimation, platform, reduceMotion, safeArea, signal, untracked, windowSize } from "nsh";
 import defaultEndpointAvatar from "../assets/images/app_logo_current.svg";
 import { lastTopicID } from "./core/chat-topic-memory.js";
 import { endpointDisplayItem, visibleEndpoints } from "./core/endpoints.js";
 import { endpointPagePath, endpointRoutePath, endpointSwitchPath } from "./core/endpoint-routes.js";
 import { authValid, endpointState, ensureEndpointsLoaded, runtimeEndpointByRef, translate } from "./core/context.js";
-import { NAV_ITEMS_META, navigate, route, currentPath } from "./router";
+import { NAV_ITEMS_META, navigate, route, currentPath, type Route } from "./router";
+import { NAV_TAB_PATHS } from "./navOrder";
 import { useContactsStore } from "./stores/contactsStore.js";
 import { usePersonaStore } from "./stores/personaStore.js";
 import { localStore } from "./platform";
 import { frameInsets, rightSheetInsets } from "./systemInsets";
+import { SystemBackScope } from "./systemBack";
 
 export { currentPath };
 
@@ -92,8 +94,52 @@ export const inSetup = () => {
   return page === "/setup" || page.startsWith("/setup/");
 };
 export const inStandalone = () => inOverview() || inSetup();
-export const mobileBottomNavVisible = () =>
-  isMobile() && !inStandalone() && !inShellless() && route()?.meta.mobileBottomNav !== false;
+
+/**
+ * Whether `route` is one of the navigation's own pages (lib/navOrder.ts), the pages the phone's
+ * bottom navigation belongs to: `/e/<ref>/contacts` is, an open topic, the skill store or a page
+ * reached from Settings (logs) are not, and neither is an address that matches no page. A route's
+ * `mobileBottomNav` meta overrides the address: `true` for an address below a navigation page that
+ * still shows that page (Settings' section address, whose sections list shows after Back), `false`
+ * for one that never does. Where the page's own list gives way to one of its items, the page says
+ * so as well (`markMobileDetail`).
+ */
+export function isMobileNavRoot(route: Pick<Route, "path" | "meta" | "page"> | null | undefined) {
+  if (!route || route.page === "notFound") return false;
+  if (route.meta.mobileBottomNav !== undefined) return route.meta.mobileBottomNav;
+  const page = normalizeNavPath(endpointPagePath(route.path) || route.path);
+  return NAV_TAB_PATHS.includes(page);
+}
+
+// The pages' own detail levels on phones: a navigation page whose list gave way to one of its
+// items (an open contact, a subject, a task, a skill, a log, a settings section, a new topic over
+// the topic list) is no longer the navigation's page, whatever its address says.
+const mobileDetails = signal<(() => boolean)[]>([]);
+
+/**
+ * While the calling component lives, `when` says whether its page shows one of its items in place
+ * of its list on a phone (the level its bar's back arrow leaves), which hides the bottom
+ * navigation. Call it in a page's body; it is removed with the page, and a page on its way out
+ * (SystemBackScope) no longer counts, so it never hides the navigation of the page coming in.
+ */
+export function markMobileDetail(when: () => boolean) {
+  const shown = SystemBackScope();
+  const entry = shown ? () => shown() && when() : when;
+  mobileDetails.update((list) => [...list, entry]);
+  cleanup(() => mobileDetails.update((list) => list.filter((item) => item !== entry)));
+}
+
+/** Whether a page shown now has one of its items open in place of its list (`markMobileDetail`). */
+export const mobileDetailOpen = computed(() => mobileDetails().some((when) => when()));
+
+/**
+ * Whether the phone's bottom navigation shows: on a phone, on a navigation page's own list. Its
+ * room at the foot of the pages (components/frame/mobileBar.tsx) and Android's bottom inset
+ * (`systemInsets`) follow the same answer.
+ */
+export const mobileBottomNavVisible = computed(
+  () => isMobile() && !inStandalone() && !inShellless() && isMobileNavRoot(route()) && !mobileDetailOpen(),
+);
 
 /** Android draws the app under its status and navigation bars (lib/systemInsets.ts). */
 export const EDGE_TO_EDGE = platform.os === "android";

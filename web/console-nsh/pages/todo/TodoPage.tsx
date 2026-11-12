@@ -4,7 +4,7 @@
 import { effect, Scroll, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
-import { isMobile } from "../../lib/shell";
+import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { BackButton, Button, Fab, type MessageAction, MessageDialog, Page, PageBar, PageTitle } from "../../components/ui";
 import { createPaneStack } from "../../components/motion/PaneStack";
@@ -172,6 +172,8 @@ export function TodoPage() {
     () => state.mobileShowBack(),
     () => state.showIndexView(),
   );
+  // An open task is not the navigation's page: the bottom navigation steps aside.
+  markMobileDetail(() => state.mobileShowBack());
   effect(() => untracked(() => void state.start()));
   // On phones the list (0) and a task (1) are levels of the page that slide (PaneStack); the task
   // keeps its bar while it goes out.

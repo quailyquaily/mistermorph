@@ -13,6 +13,7 @@ import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { onSystemBack } from "../../lib/systemBack";
+import { markMobileDetail } from "../../lib/shell";
 import { provideShortcut } from "../../lib/shortcuts";
 import { createChatController, type ChatController } from "./chatController";
 import { FilePreviewDialog } from "./FilePreviewDialog";
@@ -263,6 +264,9 @@ export function ChatPage() {
   const barShowsBack = panes.held(1, () => c.mobileShowBack());
   const barTitle = panes.held(1, () => (c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")));
   const barShowsWorkspace = panes.held(1, () => c.mobileTopicSplitEnabled() && c.showChatPane() && c.workspaceSidebarAvailable());
+  // A conversation over the topic list (an open topic, a new one) is not the navigation's page:
+  // the bottom navigation steps aside. Without topics the conversation is the page itself.
+  markMobileDetail(() => c.mobileShowBack());
   // Android's Back from an open topic goes to the topic list, as the bar's back arrow does.
   onSystemBack(
     () => c.mobileShowBack(),

@@ -254,9 +254,17 @@ Headless tests prove behaviour, not the look.
 - The phone's bottom navigation floats over the foot of every page that shows it
   (`mobileBottomNavVisible`), so nothing there is laid out above it by itself: a page's list ends
   with `MobileBarSpacer`, and so does a column with a fixed control at its foot (the chat's composer
-  on a new topic). Headless `app.press` reaches a view the bar covers (no hit test) and reports no
+  on a first topic). Headless `app.press` reaches a view the bar covers (no hit test) and reports no
   frames: test that the room is there (`MobileBarSpacer`'s `testID`) and look at the geometry in a
   browser.
+- The bar shows on the navigation's own pages only (`isMobileNavRoot`: the paths of
+  `lib/navOrder.ts`, route meta `mobileBottomNav` where the path does not say). A page whose phone
+  layout swaps its list for one of its items in place (a PaneStack level 1: a contact, a task, a
+  settings section, a new topic over the topics) calls `markMobileDetail(...)` with the condition
+  its back arrow shows on, so the bar, its room and Android's bottom inset follow. A new page with
+  a list and items needs that call too. In `nsh test` the app's modules are another realm (a test's
+  import of `lib/shell` is not the app's state): the frame's bottom padding is readable as the
+  `app-frame.bottom-<pt>` testID.
 
 ### Android (nsh 0.4.0)
 

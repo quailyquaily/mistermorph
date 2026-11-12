@@ -96,7 +96,10 @@ test("a page going out does not take Back: it goes to the place before, not the 
   await app.waitFor("id:skill-detail");
   await app.waitUntil(() => location(app) === "/e/default/skills?skill=weather");
 
-  await app.press("id:mobile-nav-todo");
+  // An open skill has no bottom navigation (lib/shell.ts markMobileDetail): leave through the
+  // navigation's keyboard shortcut (a hardware keyboard), which opens TODO as its slot does.
+  expect(app.count("id:mobile-bottom-nav")).toBe(0);
+  await app.keyboard.press("ctrl+3");
   await app.waitUntil(() => location(app) === "/e/default/todo");
   await app.waitFor("id:todo-page");
   // Skills, with its skill and the skill's back arrow, is still sliding out.

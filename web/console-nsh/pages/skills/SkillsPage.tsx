@@ -53,7 +53,7 @@ import { SKILL_DOC_PATH, skillFileURL, useSkillFilePreview } from "../../lib/cor
 import { openExternal } from "../../lib/platform";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { createPaneStack } from "../../components/motion/PaneStack";
-import { isMobile } from "../../lib/shell";
+import { isMobile, markMobileDetail } from "../../lib/shell";
 import { scrollIntoViewNearest } from "./scroll";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
@@ -138,6 +138,8 @@ const previewData = (state: PreviewState) => (state && state.status === "ready" 
 
 export function SkillsPage() {
   const loading = signal(false);
+  // Set once the first list has come (or failed): until then an address naming a skill is a skill.
+  const listed = signal(false);
   const saving = signal(false);
   const err = signal("");
   const unsupported = signal(false);
@@ -187,6 +189,9 @@ export function SkillsPage() {
     return skills().find((skill) => skill.id.toLowerCase() === id) || null;
   });
   const panes = createPaneStack(() => (isMobile() ? (routeSelected() ? 1 : 0) : null));
+  // A skill (or one named by the address, while the list still loads) is not the navigation's
+  // page: the bottom navigation steps aside. A name the list does not have shows the list.
+  markMobileDetail(() => isMobile() && Boolean(selectedID()) && (Boolean(routeSelected()) || !listed()));
   const selected = panes.held(1, routeSelected);
   const selectedKey = computed(() => selected()?.id || "");
 
@@ -300,7 +305,12 @@ export function SkillsPage() {
         err.set(e?.message || t("msg_load_failed"));
       }
     } finally {
-      if (seq === listSeq) loading.set(false);
+      if (seq === listSeq) {
+        batch(() => {
+          loading.set(false);
+          listed.set(true);
+        });
+      }
     }
   }
 
