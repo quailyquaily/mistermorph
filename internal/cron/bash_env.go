@@ -74,9 +74,14 @@ func yamlScalarString(node *yaml.Node) string {
 func validateBashEnvRefs(refs []BashEnvRef) error {
 	seen := map[string]bool{}
 	for i, ref := range refs {
-		name := shellenv.NormalizeName(strings.TrimSpace(ref.Name))
-		if name == "" {
+		raw := strings.TrimSpace(ref.Name)
+		if raw == "" {
 			return fmt.Errorf("bash_env[%d] name is required", i)
+		}
+		name := shellenv.NormalizeName(raw)
+		if name == "" {
+			// The name is not repeated: a malformed entry may hold a value where its name should be.
+			return fmt.Errorf("bash_env[%d] name must be letters, digits and underscores, not starting with a digit", i)
 		}
 		if seen[name] {
 			return fmt.Errorf("duplicate bash_env name: %s", name)
