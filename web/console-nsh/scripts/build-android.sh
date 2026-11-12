@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Builds the phone app: the console as an Android app (APK, or an App Bundle for Google Play).
 # The app is a client of a `morph console serve` elsewhere, whose address the user enters on the
-# login page (lib/mobileHost.ts). Needs the nsh 0.4.0 distribution (its Android runtime and
-# embed/android/nsh.aar), Node, a JDK and the Android SDK (build tools and `platforms;android-35`,
-# found through ANDROID_HOME); no NDK, no Gradle. The app's own Java (android/src: voice input's
+# login page (lib/mobileHost.ts). Needs nsh 0.5.0 with its Android runtime (`nsh component add
+# android`, added here when missing) and that release's nsh.aar (embedding SDK, fetched and checked
+# here when missing), Node, a JDK, curl, unzip and the Android SDK (build tools and
+# `platforms;android-35`, found through ANDROID_HOME); no NDK, no Gradle. The app's own Java (android/src: voice input's
 # recorder, the task notifications' background watcher) goes into the runtime's classes.dex
 # (scripts/android-host.sh).
 #
@@ -57,10 +58,37 @@ build_tools=${build_tools%/}
 # classes the app's Java compiles against.
 nsh_bin=$(command -v nsh) || { echo "nsh not found" >&2; exit 1; }
 nsh_root=$(cd "$(dirname "$(readlink -f "$nsh_bin")")/.." && pwd)
+nsh_version=$(nsh --version | awk '{print $2}')
 runtime="${NSH_RUNTIME:-$nsh_root/runtime}/android/release"
-aar="$nsh_root/embed/android/nsh.aar"
+# nsh 0.5 ships the platforms' runtimes as components, added on demand.
+if [[ ! -f "$runtime/classes.dex" && -z "${NSH_RUNTIME:-}" ]]; then
+  nsh component add android
+fi
+# ...and the embedding SDKs apart from its archive: nsh.aar comes from the release's
+# nsh-embed-android.zip, checked against its published SHA-256 and kept for the next build
+# (NSH_ANDROID_AAR names one instead; nsh 0.4 had it at embed/android/nsh.aar).
+aar="${NSH_ANDROID_AAR:-$nsh_root/embed/android/nsh.aar}"
+if [[ ! -f "$aar" && -z "${NSH_ANDROID_AAR:-}" ]]; then
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}/mistermorph/nsh-embed-android/$nsh_version"
+  aar="$cache/nsh.aar"
+  if [[ ! -f "$aar" ]]; then
+    fetch=$(mktemp -d)
+    url="https://github.com/longbridge/nsh/releases/download/v$nsh_version/nsh-embed-android.zip"
+    echo "fetching nsh.aar ($url)" >&2
+    curl -fsSL "$url" -o "$fetch/nsh-embed-android.zip"
+    curl -fsSL "$url.sha256" -o "$fetch/nsh-embed-android.zip.sha256"
+    if ! (cd "$fetch" && sha256sum -c nsh-embed-android.zip.sha256 >/dev/null); then
+      echo "the checksum of nsh-embed-android.zip does not match" >&2
+      rm -rf "$fetch"
+      exit 1
+    fi
+    mkdir -p "$cache"
+    unzip -o -j -q "$fetch/nsh-embed-android.zip" "nsh-embed-android/nsh.aar" -d "$cache"
+    rm -rf "$fetch"
+  fi
+fi
 if [[ ! -f "$runtime/classes.dex" || ! -f "$aar" ]]; then
-  echo "no Android runtime or embed/android/nsh.aar in the nsh at $nsh_root: put the nsh distribution's bin/nsh first on PATH" >&2
+  echo "no Android runtime ($runtime) or nsh.aar ($aar) for nsh $nsh_version" >&2
   exit 1
 fi
 
