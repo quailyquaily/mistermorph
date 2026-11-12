@@ -250,9 +250,16 @@ export function ChatComposer(props: ChatComposerProps) {
     }, 0);
   }
 
+  // The focus goes to the field a moment after it is asked for. A composer gone by then (its topic
+  // or its pane left) or turned read-only (a send under way) raises no keyboard.
+  let gone = false;
+  cleanup(() => {
+    gone = true;
+  });
   function focus(options: { preserveSelection?: boolean } = {}) {
     if (props.disabled) return;
     setTimeout(() => {
+      if (gone || props.disabled) return;
       field?.focus();
       if (!options.preserveSelection) {
         const length = untracked(value).length;

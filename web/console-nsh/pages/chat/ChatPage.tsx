@@ -278,6 +278,9 @@ export function ChatPage() {
   // Asked as the route lets the topic go: the slide has started by then (or starts as the effects
   // of this change run), so look a microtask later.
   c.setConversationExit(() => Promise.resolve().then(() => (untracked(panes.exiting) === 1 ? panes.settled() : undefined)));
+  // Asked a microtask after a new topic opens (the slide has started by then): while the
+  // conversation slides in over the list, once it is in place; null when nothing slides.
+  c.setConversationEntry(() => (untracked(panes.sliding) === "push" ? panes.settled() : null));
   // A reply's details open in the frame's workbench, under every column, on every screen.
   useWorkbench(
     () => c.activityDetailVisible(),
