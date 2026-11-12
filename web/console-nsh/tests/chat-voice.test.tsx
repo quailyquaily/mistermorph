@@ -269,16 +269,17 @@ test("a recording under way keeps its stop when the route check fails; a new one
   expect(starts()).toBe(2);
 });
 
-// The mic's glyph carries a testID naming its icon and tint (tests/chat-voice-icon.test.tsx).
-const MIC = "id:chat-composer-voice-icon.PhMicrophone.subtle";
-const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.danger";
+// The mic's glyph carries a testID naming its icon, look and tint (tests/chat-voice-icon.test.tsx):
+// MIC, the primary button's white microphone; RED_MIC, the white microphone on red.
+const MIC = "id:chat-composer-voice-icon.PhMicrophone.primary.primary-foreground";
+const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.recording.destructive-foreground";
 
-test("the mic turns red while it records and back once the recording ends, is discarded or fails", async () => {
+test("the mic button turns red while it records and back once the recording ends, is discarded or fails", async () => {
   let upload: unknown = { ok: true, status: 200, statusText: "OK", body: JSON.stringify({ text: "book a table" }) };
   const { app } = await openRecording(READY, { host: { "morph.file.upload": () => upload } });
   await app.waitFor(MIC);
   expect(app.count(RED_MIC)).toBe(0);
-  // Recording: the red microphone on the button that stops it.
+  // Recording: the button turns red (its microphone white) and still stops it.
   await app.press("label:Voice input");
   await app.waitFor(RED_MIC);
   expect(app.count(MIC)).toBe(0);
@@ -309,7 +310,7 @@ test("the mic turns red while it records and back once the recording ends, is di
   expect(app.value("id:chat-composer-input")).toBe("");
 });
 
-test("a recorder that cannot start never shows the red mic", async () => {
+test("a recorder that cannot start never turns the mic button red", async () => {
   const { app } = await openRecording(READY, {
     runtime: "desktop",
     features: ["pickFile", "saveFile", "voiceRecord"],

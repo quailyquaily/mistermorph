@@ -25,6 +25,7 @@ import {
   TipButton,
   MENU_POPUP_STYLE,
   trackPopup,
+  type CircleButtonVariant,
   type IconName,
 } from "../ui";
 import {
@@ -132,6 +133,8 @@ export interface ChatComposerProps {
   testID?: string;
 }
 
+type TokenName = Parameters<typeof token>[0];
+
 function sameContext(a: any, b: any) {
   return a?.type === b?.type && a?.query === b?.query && a?.start === b?.start && a?.end === b?.end;
 }
@@ -146,6 +149,23 @@ function namedImages(files: File[]) {
       const extension = subtype === "jpeg" ? "jpg" : subtype.replace(/[^a-z0-9]/gi, "");
       return new File([file], `clipboard-image-${index + 1}.${extension || "img"}`, { type: file.type });
     });
+}
+
+/**
+ * The voice button's look in each voice state: idle, the primary circle button (Send's, ready to
+ * send) with a white glyph; recording, the danger circle (red) with the glyph still white;
+ * transcribing, the busy primary button (Send's while sending: a soft box, an ink glyph, the beam).
+ * `look` names it for the glyph's testID.
+ */
+export function voiceButtonLook(state: "idle" | "recording" | "transcribing" | undefined): {
+  look: "primary" | "recording" | "busy";
+  variant: CircleButtonVariant;
+  tint: TokenName;
+  busy: boolean;
+} {
+  if (state === "recording") return { look: "recording", variant: "danger", tint: "destructive-foreground", busy: false };
+  if (state === "transcribing") return { look: "busy", variant: "plain", tint: busyLook("primary").text, busy: true };
+  return { look: "primary", variant: "primary", tint: "primary-foreground", busy: false };
 }
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -574,13 +594,13 @@ export function ChatComposer(props: ChatComposerProps) {
     </CircleButton>
   );
 
-  // The mic, a circle button drawn as the add and send controls are (a 38-point circle, a 14-point
-  // glyph) whose presses count 3 points around it: a 44-point target for a finger. While it records
-  // it is selected and its microphone turns red (pressing it still stops); while the recording is
-  // transcribed it is a busy plain button (BusyBeam, busyLook): its disabled microphone with the
-  // beam round it. The glyph's testID names its tint, for tests (no headless image query).
-  const voiceTint = () =>
-    props.voiceState === "transcribing" ? busyLook("plain").text : props.voiceState === "recording" ? "danger" : "subtle";
+  // The mic, the primary circle button Send is once there is something to send (a 38-point circle
+  // of ink, a white 14-point glyph) whose presses count 3 points around it: a 44-point target for a
+  // finger. While it records it turns red, its glyph still white (voiceButtonLook), and is selected
+  // for screen readers (pressing it still stops); while the recording is transcribed it is the busy
+  // primary button Send is while sending (BusyBeam, busyLook). The glyph's testID names its look
+  // and tint, for tests (no headless image query).
+  const voiceLook = () => voiceButtonLook(props.voiceState);
   const voiceControl = () => (
     <CircleButton
       onPress={() => props.onVoice?.()}
@@ -589,10 +609,16 @@ export function ChatComposer(props: ChatComposerProps) {
       title={props.voiceLabel ?? ""}
       hitSlop={VOICE_HIT_SLOP}
       testID="chat-composer-voice"
-      class={`selected:bg-selection ${props.voiceState === "transcribing" ? "" : "disabled:opacity-45"}`}
+      variant={voiceLook().variant}
+      class={voiceLook().busy ? `border ${busyLook("primary").box}` : "disabled:opacity-45"}
     >
-      <Icon name="PhMicrophone" size={14} color={voiceTint()} testID={`chat-composer-voice-icon.PhMicrophone.${voiceTint()}`} />
-      <BusyBeam busy={props.voiceState === "transcribing"} variant="plain" short radius={19} testID="chat-composer-voice-beam" />
+      <Icon
+        name="PhMicrophone"
+        size={14}
+        color={voiceLook().tint}
+        testID={`chat-composer-voice-icon.PhMicrophone.${voiceLook().look}.${voiceLook().tint}`}
+      />
+      <BusyBeam busy={voiceLook().busy} short radius={19} testID="chat-composer-voice-beam" />
     </CircleButton>
   );
 

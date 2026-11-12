@@ -1,8 +1,9 @@
 // The real ChatComposer's voice button in each voice state, set by the buttons above it: idle,
-// recording, transcribing, and the composer disabled. The report counts the button's presses. tests/chat-voice-icon.test.tsx reads it.
-import { mount, signal, Text, View } from "nsh";
+// recording, transcribing, and the composer disabled. The report counts the button's presses and
+// gives the colour its glyph is drawn in, in the theme shown. tests/chat-voice-icon.test.tsx reads it.
+import { mount, signal, Text, token, View } from "nsh";
 import { Button } from "nsh/base";
-import { ChatComposer } from "../../components/chat/ChatComposer";
+import { ChatComposer, voiceButtonLook } from "../../components/chat/ChatComposer";
 
 type VoiceState = "idle" | "recording" | "transcribing";
 
@@ -38,6 +39,6 @@ mount(() => (
       voiceLabel={label()}
       onVoice={() => presses.update((count) => count + 1)}
     />
-    <Text>{JSON.stringify({ presses: presses() })}</Text>
+    <Text>{JSON.stringify({ presses: presses(), tint: String(token(voiceButtonLook(state()).tint)).toLowerCase() })}</Text>
   </View>
 ));

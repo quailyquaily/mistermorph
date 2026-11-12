@@ -442,8 +442,9 @@ export function BusyBeam(props: {
 /** A circle button's side: `md` 38pt (the composer's controls), `sm` 32pt. */
 export const CIRCLE_BUTTON_SIZES = { md: 38, sm: 32 } as const;
 export type CircleButtonSize = keyof typeof CIRCLE_BUTTON_SIZES;
-/** `plain`: bare, the plain button's fill on hover and press; `outlined`: a hairline ring; `primary`: filled ink. */
-export type CircleButtonVariant = "plain" | "outlined" | "primary";
+/** `plain`: bare, the plain button's fill on hover and press; `outlined`: a hairline ring; `primary`:
+ * filled ink; `danger`: filled red (the danger button's), lighter on hover. */
+export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger";
 
 /**
  * A circle button's look, for a control that draws its own box (a menu's trigger): round, the
@@ -454,10 +455,12 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
   const look =
     options.variant === "primary"
       ? "border border-primary bg-primary hover:bg-ink"
-      : options.variant === "outlined"
-        ? "border border-line-soft bg-transparent hover:bg-hover active:bg-press"
-        : // The plain button's look (BUTTON_VARIANTS.plain): a fill on hover, a deeper one pressed.
-          "hover:bg-hover active:bg-press";
+      : options.variant === "danger"
+        ? "border border-destructive bg-destructive hover:bg-danger-light hover:border-danger-light"
+        : options.variant === "outlined"
+          ? "border border-line-soft bg-transparent hover:bg-hover active:bg-press"
+          : // The plain button's look (BUTTON_VARIANTS.plain): a fill on hover, a deeper one pressed.
+            "hover:bg-hover active:bg-press";
   return `relative ${side} items-center justify-center rounded-full transition-colors duration-[180ms] ${look}`;
 }
 
