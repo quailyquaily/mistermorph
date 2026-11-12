@@ -1,6 +1,6 @@
 ---
 branch: factory/FT97-todo-update-preserve-bash-environment
-round: 2
+round: 3
 ---
 # Fix todo_update losing configured Bash Environment when editing tasks
 
@@ -97,3 +97,23 @@ notes:
 - Validation: coder and manager independently passed test -z "$(gofmt -l .)" && go vet ./... && go test ./... with absolute throwaway HOME/TMPDIR under the review run directory. Coder's initial GOFLAGS-modified attempt was stopped and rerun without that override; the completed gate passed. No protected paths changed; only item-related history.
 - Installs: none. No UI sources changed; no visual inspection or nsh checks. Live-model guidance compliance not checked. Arbitrary codemode output/error text, conversation/run state and debug LLM request dumps remain outside ordinary argument redaction; syntax-error source quoting was not separately verified. Unknown update parameters remain silently ignored.
 - Round 2 of 3: returned to new/ for the next fix round. No linked GitHub issue or PR identified. Not merged or released.
+
+
+## factory · plan · 2026-11-12 17:09
+
+Fix round 3 addendum:
+- Address the latest review P1 by applying shared safe display redaction to both chat activity and persistent terminal transcript formatters, without changing execution parameters or raw hook semantics.
+- Reuse the existing agent redaction rules for direct/nested todo_update and outer codemode; retain safe fields and script size when formatting already-redacted events.
+- Cover real engine-to-hook-to-formatter execution, persistence of original environment values, malformed parameters and non-disclosure using synthetic credentials. No unrelated UI changes.
+
+## factory · 2026-11-12 17:09
+
+Fix round 3 built and pushed at 0d3428fe (commits a4cc9da0 and 0d3428fe). Moved new/ → review/.
+- Fixed the latest P1: both CLI chat formatters use exported shared agent display redaction. Bash Environment values and outer codemode source are withheld; original execution/hook parameters are untouched. Existing event/log redaction remains in place.
+- Redaction is idempotent for already-withheld codemode event arguments, preserving numeric script-size metadata only. Environment names and other safe task fields stay visible. Malformed parameter shapes are withheld conservatively.
+- Added real engine/codemode/todo_update integration coverage through chat callbacks: direct calls, nested calls with computed values, outer scripts with literal values, malformed inputs, event reformatting and persistence of original values. Coder reports all seven cases fail with the old formatter. English tool documentation updated.
+- Validation: coder and manager independently passed test -z "$(gofmt -l .)" && go vet ./... && go test ./... with absolute throwaway HOME/TMPDIR under the build run directory. Worktree clean; item-only history; no protected paths changed. No merge required because origin/master is an ancestor.
+- Installs: none; no dependency changes. Coder's initial cache-path setup failed, then the clean rerun with explicit cache paths passed.
+- Coder reported the complete board-thread path unavailable and worked from the manager-supplied exact latest fix list and plan; manager had read the full thread and verified the resulting scope.
+- Not checked: live interactive chat and live-model prompt compliance. No Console sources changed, so no visual inspection or nsh checks. Approval prompts, arbitrary script output/errors, internal conversation/run state and debug request dumps are not newly redacted by this fix. No live tasks or actual credentials touched.
+Next: review the CLI non-disclosure regression and unchanged execution/persistence behavior. Round 3 of 3; not merged or released.
