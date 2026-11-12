@@ -1,18 +1,18 @@
 // The terminal's typed text (the detail panel's dark terminal, ChatTerminal.tsx): a run's values
 // and output drawn as a dashboard's readout, each kind of term in its own neon on the dark ink.
 //
-//   URLs           cyan      copy on press
-//   IDs            magenta   copy on press (UUIDs, prefixed ids such as task_8f3k2l, hex hashes)
-//   paths          amber     copy on press
-//   numbers        green     (values only)
-//   true/false/null orange   (values only)
+//   URLs             cyan
+//   IDs              magenta   (UUIDs, prefixed ids such as task_8f3k2l, hex hashes)
+//   paths            amber
+//   numbers          green     (values only)
+//   true/false/null  orange    (values only)
 //
-// A pressed term is copied whole and flashes green with a check for a moment. Output and errors
-// mark only the terms worth copying (`copyOnly`): a table of figures in neon would be noise.
+// Every coloured term is copied whole on a press, and flashes green for a moment. Output and
+// errors colour only URLs, IDs and paths (`copyOnly`): a table of figures in neon would be noise.
 //
 // `StatusTag` is a run's state as a bracketed mono tag ([DONE] [RUN ] [FAIL] [STOP] [WAIT]), and
 // `KindChip` an entry's kind as a small outlined chip.
-import { signal, Text } from "nsh";
+import { signal, Text, View } from "nsh";
 import { copyText } from "../../lib/platform";
 import { t } from "./i18n";
 
@@ -45,7 +45,8 @@ const COLOR: Record<Exclude<TermKind, "plain">, string> = {
   literal: NEON.orange,
 };
 
-const COPYABLE = new Set<TermKind>(["url", "id", "path"]);
+/** The kinds output and errors colour (`copyOnly`). */
+const OUTPUT_KINDS = new Set<TermKind>(["url", "id", "path"]);
 
 // One pass over the text, the kinds in order of precedence at a position: a URL before the path
 // inside it, a UUID before the hex runs inside it.
@@ -65,7 +66,7 @@ const KINDS: TermKind[] = ["url", "id", "id", "id", "path", "number", "literal"]
 // A path starts a word: at the start, after a space, a quote, `=`, `:` or an opening bracket.
 const PATH_BEFORE = /[\s"'`=:([{,]/;
 
-/** The text as terms. `copyOnly` keeps only the kinds worth copying (output and errors). */
+/** The text as terms. `copyOnly` keeps only URLs, IDs and paths (output and errors). */
 export function terminalTerms(text: string, options: { copyOnly?: boolean } = {}): Term[] {
   const terms: Term[] = [];
   let plainFrom = 0;
@@ -80,7 +81,7 @@ export function terminalTerms(text: string, options: { copyOnly?: boolean } = {}
     if (kind === "path" && at > 0 && !PATH_BEFORE.test(text[at - 1])) continue;
     // A lone "/" or a bare "./" is not a path worth a colour.
     if (kind === "path" && match[0].replace(/[~./]/g, "") === "") continue;
-    if (options.copyOnly && !COPYABLE.has(kind)) continue;
+    if (options.copyOnly && !OUTPUT_KINDS.has(kind)) continue;
     pushPlain(at);
     terms.push({ kind, text: match[0] });
     plainFrom = at + match[0].length;
@@ -90,8 +91,8 @@ export function terminalTerms(text: string, options: { copyOnly?: boolean } = {}
 }
 
 /**
- * At most `limit` characters of terms: plain text is cut (with "..."), a term worth copying is
- * kept whole or left out, so a press never copies part of one.
+ * At most `limit` characters of terms: plain text is cut (with "..."), a coloured term is kept
+ * whole or left out, so a press never copies part of one.
  */
 export function limitTerms(terms: Term[], limit: number): Term[] {
   const out: Term[] = [];
@@ -102,7 +103,7 @@ export function limitTerms(terms: Term[], limit: number): Term[] {
       used += term.text.length;
       continue;
     }
-    if (!COPYABLE.has(term.kind)) out.push({ ...term, text: term.text.slice(0, Math.max(0, limit - used)) });
+    if (term.kind === "plain") out.push({ ...term, text: term.text.slice(0, Math.max(0, limit - used)) });
     out.push({ kind: "plain", text: "..." });
     break;
   }
@@ -110,10 +111,12 @@ export function limitTerms(terms: Term[], limit: number): Term[] {
 }
 
 const COPIED_MS = 1200;
+/** A term pressed or just copied: green on a green tint. */
+const COPIED_STYLE = { color: NEON.ok, backgroundColor: "rgba(61, 220, 151, 0.14)" };
 
 /**
- * Typed text on the terminal: its terms coloured by kind, the ones worth copying pressable. `class`
- * styles the whole run (its size, font and the plain text's colour).
+ * Typed text on the terminal: its terms coloured by kind, each pressable to copy it. `class` styles
+ * the whole run (its size, font and the plain text's colour).
  */
 export function TerminalText(props: { text: string; class?: string; copyOnly?: boolean; limit?: number; testID?: string }) {
   const copied = signal(-1);
@@ -122,11 +125,13 @@ export function TerminalText(props: { text: string; class?: string; copyOnly?: b
     const all = terminalTerms(props.text, { copyOnly: props.copyOnly });
     return props.limit ? limitTerms(all, props.limit) : all;
   };
+  // The flash first, the clipboard a tick later: the system's clipboard can take a moment, and
+  // the colour must not wait for it. (The press itself shows at once: `activeStyle`.)
   const copy = (index: number, text: string) => {
-    void copyText(text);
     copied.set(index);
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => copied.set(-1), COPIED_MS);
+    setTimeout(() => void copyText(text), 0);
   };
   return (
     <Text class={props.class} testID={props.testID}>
@@ -134,25 +139,20 @@ export function TerminalText(props: { text: string; class?: string; copyOnly?: b
       <Each of={terms()} key="index">
         {(term, index) => (
           <If when={term().kind !== "plain"} else={<Text>{term().text}</Text>}>
-            <If
-              when={COPYABLE.has(term().kind)}
-              else={<Text style={{ color: COLOR[term().kind as Exclude<TermKind, "plain">] }}>{term().text}</Text>}
+            <Text
+              role="button"
+              accessibilityLabel={`${t("action_copy")} ${term().text}`}
+              onPress={() => copy(index(), term().text)}
+              class="hover:underline"
+              activeStyle={COPIED_STYLE}
+              style={{
+                color: copied() === index() ? COPIED_STYLE.color : COLOR[term().kind as Exclude<TermKind, "plain">],
+                backgroundColor: copied() === index() ? COPIED_STYLE.backgroundColor : undefined,
+              }}
+              testID={`terminal-copy-${term().kind}`}
             >
-              <Text
-                role="button"
-                accessibilityLabel={`${t("action_copy")} ${term().text}`}
-                onPress={() => copy(index(), term().text)}
-                class="hover:underline"
-                style={{
-                  color: copied() === index() ? NEON.ok : COLOR[term().kind as Exclude<TermKind, "plain">],
-                  backgroundColor: copied() === index() ? "rgba(61, 220, 151, 0.14)" : undefined,
-                }}
-                testID={`terminal-copy-${term().kind}`}
-              >
-                {term().text}
-                {copied() === index() ? " ✓" : ""}
-              </Text>
-            </If>
+              {term().text}
+            </Text>
           </If>
         )}
       </Each>
@@ -193,12 +193,15 @@ export function StatusTag(props: { status: string; testID?: string }) {
 /** An entry's kind (TOOL, SUBTASK, CODER…): a small outlined mono chip in its own colour. */
 export function KindChip(props: { label: string; tone?: "cyan" | "violet" | "idle" }) {
   const color = () => (props.tone === "violet" ? NEON.violet : props.tone === "idle" ? NEON.idle : NEON.cyan);
+  // The outline is a view around the word, not the text's own border: a text laid out with a
+  // border and padding of its own took them out of the word's room on the desktop app, and the
+  // last letter wrapped. The word is upper-cased here (not with `uppercase`): it is measured as
+  // written. The chip keeps its width in its row (shrink-0).
   return (
-    <Text
-      class="rounded-[2px] border px-1 font-mono text-[10px] uppercase leading-[14px] tracking-[0.08em]"
-      style={{ color: color(), borderColor: `${color()}66` }}
-    >
-      {props.label}
-    </Text>
+    <View class="shrink-0 self-center rounded-[2px] border px-1" style={{ borderColor: `${color()}66` }}>
+      <Text class="font-mono text-[10px] leading-[14px]" style={{ color: color() }}>
+        {props.label.toLocaleUpperCase()}
+      </Text>
+    </View>
   );
 }

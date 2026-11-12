@@ -110,7 +110,9 @@ test("plan, progress, reasoning and each worker open in the panel, never inside 
   await app.waitFor("id:chat-detail-reasoning");
   expect(inPanel(app, "First I looked at the biggest folders.")).toBe(true);
   expect(inConversation(app, "First I looked at the biggest folders.")).toBe(false);
-  expect(inPanel(app, "Clean the disk")).toBe(true);
+  // Reasoning is the run's own, as progress is: the message it answers is not repeated above it.
+  expect(hasContext(app)).toBe(false);
+  expect(inPanel(app, "Clean the disk")).toBe(false);
 
   // A coder's output: its name, avatar, output and close, without the message either.
   await app.press("label:Curie · Coder · Done");
@@ -370,7 +372,7 @@ test("a worker's panel is its conversation: what the agent asked, the calls it m
   await app.press("label:Noether · Subagent · Done");
   await app.waitFor("id:chat-worker-ask");
   // What the agent asked, whole, and the call's settings.
-  expect(app.shows("id:chat-worker-ask >> text:/Morph → Noether/i")).toBe(true);
+  expect(app.shows("id:chat-worker-ask >> text:/^Morph > Noether$/i")).toBe(true);
   expect(app.texts()).toContain(TASK);
   expect(app.shows("id:chat-worker-ask >> text:bash, read_file")).toBe(true);
   expect(app.shows("id:chat-worker-ask >> text:fast")).toBe(true);

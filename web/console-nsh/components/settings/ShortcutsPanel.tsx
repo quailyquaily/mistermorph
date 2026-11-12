@@ -306,10 +306,11 @@ function ShortcutRow(props: {
           when={props.recording}
           else={
             <Button
-              variant="outlined"
+              variant="plain"
               size="xs"
-              label={t("shortcuts_change")}
-              accessibilityLabel={t("shortcuts_change_label", { action: title() })}
+              iconOnly
+              icon="PhPencilSimple"
+              title={t("shortcuts_change_label", { action: title() })}
               onPress={props.onRecord}
               testID={`shortcut-change-${part}`}
             />
@@ -327,8 +328,9 @@ function ShortcutRow(props: {
         <Button
           variant="plain"
           size="xs"
-          label={t("shortcuts_clear")}
-          accessibilityLabel={t("shortcuts_clear_label", { action: title() })}
+          iconOnly
+          icon="PhTrash"
+          title={t("shortcuts_clear_label", { action: title() })}
           disabled={!props.binding.keys}
           onPress={props.onClear}
           testID={`shortcut-clear-${part}`}

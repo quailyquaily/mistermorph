@@ -35,7 +35,7 @@ test("a long value is cut in its plain text, never inside a URL or an ID", () =>
   expect(roomy.find((term) => term.kind === "url")?.text).toBe("https://example.com/a/very/long/url");
 });
 
-test("in the panel, a pressed URL is copied whole and marked copied (IDs inside output: the terms above)", async () => {
+test("in the panel, a pressed URL or number is copied whole (IDs inside output: the terms above)", async () => {
   const NOW = new Date().toISOString();
   const TASK = {
     id: "t1",
@@ -54,7 +54,7 @@ test("in the panel, a pressed URL is copied whole and marked copied (IDs inside 
             kind: "tool",
             name: "url_fetch",
             status: "done",
-            args: { url: "https://example.com/report?id=42" },
+            args: { url: "https://example.com/report?id=42", retries: 3 },
             output: "saved as task_8f3k2l",
           },
         ],
@@ -75,5 +75,9 @@ test("in the panel, a pressed URL is copied whole and marked copied (IDs inside 
   // The value is the URL alone: pressing it copies it whole.
   await app.press("id:chat-detail-activity >> text:https://example.com/report?id=42");
   expect(app.clipboard()).toBe("https://example.com/report?id=42");
-  await app.waitUntil(() => app.texts().includes("https://example.com/report?id=42 ✓"));
+  // Marked copied by its colour alone: no mark beside it.
+  expect(app.texts().some((text) => text.includes("✓"))).toBe(false);
+  // A number is a coloured term too: it copies.
+  await app.press("id:chat-detail-activity >> text:3");
+  expect(app.clipboard()).toBe("3");
 });

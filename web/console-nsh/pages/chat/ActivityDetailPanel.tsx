@@ -12,8 +12,8 @@
 // grows at the end (progress, output, reasoning being written) unless the reader scrolled up.
 //
 // Its head is its title (the panel's name, or the worker's), what it belongs to (the message the
-// reply answers; not for progress or a coder's output, see `showContext`) and close; Escape closes
-// it beside the conversation, and on phones the sheet's own Escape, Back and scrim do.
+// reply answers; not for progress, reasoning or a coder's output, see `showContext`) and close;
+// Escape closes it, and on phones Android's Back does.
 import { cleanup, effect, Image, keymap, Text, View } from "nsh";
 import { Icon, popupOpen, StatusMark, Tip, TipButton } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
@@ -52,7 +52,7 @@ function CloseButton(props: { phone?: boolean; dark?: boolean; onPress: () => vo
       tooltip={<Tip text={t("action_close")} />}
       onPress={props.onPress}
       testID="chat-detail-close"
-      class={`${props.phone ? "size-8" : props.dark ? "size-[30px]" : "size-[38px]"} items-center justify-center rounded-(--radius) transition-colors duration-[180ms] ${props.dark ? "hover:bg-white/10" : "hover:bg-hover-soft"}`}
+      class={`${props.phone ? "size-8" : props.dark ? "size-[30px]" : "size-[38px]"} items-center justify-center ${props.dark ? "rounded-full bg-white/8 hover:bg-white/16" : "rounded-(--radius) hover:bg-hover-soft"} transition-colors duration-[180ms]`}
     >
       {/* On the dark panel the terminal's light ink (no theme token is light on it). */}
       <If when={props.dark} else={<Icon name="PhX" size={props.phone ? 16 : 14} color="subtle" />}>
@@ -144,12 +144,12 @@ export function ActivityDetailPanel(props: {
   // scroller starts there and follows until the reader scrolls up (PinnedScroll). A finished plan
   // reads from its first step.
   const startPinned = () => kind() === "activity" || kind() === "worker" || ((kind() === "reasoning" || kind() === "plan") && streaming());
-  // Progress and a coder's output are the run itself, read beside the conversation that already
-  // shows the message they answer: their head is only the title, the mark and close. A plan, the
-  // reasoning and a subagent still name what they answer.
+  // Progress, reasoning and a coder's output are the run itself, read beside the conversation that
+  // already shows the message they answer: their head is only the title, the mark and close. A plan
+  // and a subagent still name what they answer.
   const showContext = () => {
     if (!props.context) return false;
-    if (kind() === "activity") return false;
+    if (kind() === "activity" || kind() === "reasoning") return false;
     if (kind() === "worker" && worker()?.kind === "coder") return false;
     return true;
   };

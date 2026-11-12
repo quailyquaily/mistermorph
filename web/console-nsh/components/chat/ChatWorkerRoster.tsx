@@ -114,15 +114,18 @@ export function ChatWorkerRoster(props: {
 /** A worker as the detail panel shows it, on the panel's terminal (ChatTerminal) as its progress
  *  is: its kind, state and processes, then its output by section (the panel scrolls it and follows
  *  its end). */
-/** A speaker line of the worker's conversation: `▸ MORPH → CURIE`, the time at its end. */
-function Speaker(props: { mark: string; from: string; to: string; fromColor: string; toColor: string; at?: string; testID?: string }) {
+/**
+ * A speaker line of the worker's conversation, `MORPH > CURIE`, the time at its end: plain mono
+ * ASCII, so it lines up as the rest of the readout does.
+ */
+function Speaker(props: { from: string; to: string; fromColor: string; toColor: string; at?: string; testID?: string }) {
   return (
     <View class="flex-row items-center gap-2" testID={props.testID}>
-      <Text class="font-mono text-[11px] uppercase leading-[18px] tracking-[0.06em]">
-        <Text style={{ color: NEON.idle }}>{props.mark} </Text>
-        <Text style={{ color: props.fromColor }}>{props.from}</Text>
-        <Text style={{ color: NEON.idle }}> → </Text>
-        <Text style={{ color: props.toColor }}>{props.to}</Text>
+      {/* Upper-cased here, not with the `uppercase` style: the text is measured as written. */}
+      <Text class="font-mono text-[11px] leading-[18px]">
+        <Text style={{ color: props.fromColor }}>{props.from.toLocaleUpperCase()}</Text>
+        <Text style={{ color: NEON.idle }}>{" > "}</Text>
+        <Text style={{ color: props.toColor }}>{props.to.toLocaleUpperCase()}</Text>
       </Text>
       <View class="flex-1" />
       <If when={props.at}>
@@ -178,7 +181,7 @@ export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; a
       {/* What the agent asked: the task as it was sent, the call's settings under it. */}
       <If when={props.ask?.task || props.ask?.settings.length}>
         <View class="gap-1.5" testID="chat-worker-ask">
-          <Speaker mark="▸" from={agent()} to={name()} fromColor={NEON.ok} toColor={tone()} at={clock(props.ask?.at ?? "")} />
+          <Speaker from={agent()} to={name()} fromColor={NEON.ok} toColor={tone()} at={clock(props.ask?.at ?? "")} />
           <If when={props.ask?.task}>
             <View selectable class="border-l-2 pl-2.5" style={{ borderColor: `${NEON.ok}80` }}>
               <TerminalText text={props.ask?.task ?? ""} copyOnly class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`} testID="chat-worker-task" />
@@ -218,7 +221,7 @@ export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; a
 
       {/* What it answered: its result, or its error; while it runs, that it is running. */}
       <View class="gap-1.5" testID="chat-worker-answer">
-        <Speaker mark="◂" from={name()} to={agent()} fromColor={tone()} toColor={NEON.ok} />
+        <Speaker from={name()} to={agent()} fromColor={tone()} toColor={NEON.ok} />
         <If
           when={answer().length > 0}
           else={
