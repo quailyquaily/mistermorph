@@ -24,7 +24,7 @@ import { createArrivalTracker, createChangeTracker, createHighlightWindow } from
 import { taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
 import { isVisible } from "../../lib/platform";
 import { navigate } from "../../lib/router";
-import { isMobile } from "../../lib/shell";
+import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
 import { RawJsonDialogContent } from "../../components/shared/RawJsonDialog";
@@ -106,6 +106,8 @@ export function AuditPage() {
   const showIndexPane = () => !isMobile() || !mobileLedgerVisible();
   const showLedgerPane = () => !isMobile() || mobileLedgerVisible();
   const mobileShowBack = () => isMobile() && mobileLedgerVisible();
+  // An open log is not the navigation's page: the bottom navigation steps aside.
+  markMobileDetail(mobileShowBack);
   // Android's Back from a ledger goes to the files, as the bar's back arrow does.
   onSystemBack(mobileShowBack, () => mobileLedgerVisible.set(false));
   // On phones the index (0) and the open log (1) are levels of the page that slide (PaneStack).

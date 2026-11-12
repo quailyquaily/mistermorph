@@ -38,7 +38,7 @@ import {
 } from "../../lib/core/memories-view.js";
 import { currentRoute, navigate } from "../../lib/router";
 import { createPaneStack } from "../../components/motion/PaneStack";
-import { isMobile } from "../../lib/shell";
+import { isMobile, markMobileDetail } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
@@ -131,6 +131,8 @@ export function MemoriesPage() {
   const showIndexPane = () => !isMobile() || !mobileDetailVisible();
   const showMainPane = () => !isMobile() || mobileDetailVisible();
   const mobileShowBack = () => isMobile() && mobileDetailVisible();
+  // A subject or the journal is not the navigation's page: the bottom navigation steps aside.
+  markMobileDetail(mobileShowBack);
   const mobileBarTitle = () => {
     if (!mobileShowBack()) return t("memories_title");
     if (onJournal()) return t("memories_tab_journal");

@@ -28,7 +28,7 @@ import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { useNotice } from "../../lib/core/notices.js";
 import { copyText } from "../../lib/platform";
 import { locationOf, navigate } from "../../lib/router";
-import { isMobile } from "../../lib/shell";
+import { isMobile, markMobileDetail } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import {
   channelHandles,
@@ -191,6 +191,8 @@ export function ContactsPage() {
   const showIndexPane = () => !isMobile() || !mobileEditorVisible();
   const showEditorPane = () => !isMobile() || mobileEditorVisible();
   const mobileShowBack = () => isMobile() && mobileEditorVisible();
+  // An open contact is not the navigation's page: the bottom navigation steps aside.
+  markMobileDetail(mobileShowBack);
   const mobileBarTitle = () => (mobileShowBack() && selectedContact() ? displayName(selectedContact()) : t("contacts_title"));
   const deleteDialogText = () => t("contacts_delete_confirm", { name: displayName(deleteTarget() || selectedContact()) });
 
@@ -713,7 +715,7 @@ export function ContactsPage() {
                   </DetailCard>
                 )}
               </If>
-              <MobileBarSpacer />
+              <MobileBarSpacer testID="contact-detail-bar-room" />
             </Scroll>
           </View>
         </If>

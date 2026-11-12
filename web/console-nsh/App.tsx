@@ -33,6 +33,8 @@ function frameStyle() {
   }
   return isMobile() ? { paddingBottom: keyboardFrame().height } : undefined;
 }
+/** The frame's bottom padding, in its testID for the tests (they read no styles). */
+const frameTestID = () => `app-frame.bottom-${Math.round(Number(frameStyle()?.paddingBottom) || 0)}`;
 
 function App() {
   startShell();
@@ -54,7 +56,7 @@ function App() {
     // the composer and the fields stay above it (dialogs make room themselves, in their own layer).
     // On Android the surface also runs under the status and navigation bars: the frame keeps the
     // pages out from under them.
-    <View class="flex-1 bg-background" style={frameStyle()}>
+    <View class="flex-1 bg-background" style={frameStyle()} testID={frameTestID()}>
       <If when={route()}>
         <Shell shellless={inShellless()} standalone={inStandalone()}>
           <PageView />

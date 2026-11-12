@@ -10,7 +10,7 @@ import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { buildSettingsSearchIndex, searchSettings } from "../../lib/core/settings-search.js";
 import { previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
-import { isMobile } from "../../lib/shell";
+import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
 import { BackButton, confirm, Icon, type IconName, MessageDialog, Page, PageBar, PageTitle } from "../../components/ui";
@@ -126,10 +126,14 @@ export function SettingsPage() {
   });
 
   const mobile = () => isMobile();
-  const mobilePanelVisible = signal(false);
+  // An address that names a section opens on it (the route effect below), from the first frame.
+  const mobilePanelVisible = signal(untracked(mobile) && Boolean(untracked(routeSection)));
   const showIndexPane = () => !mobile() || !mobilePanelVisible();
   const showPanelPane = () => !mobile() || mobilePanelVisible();
   const mobileShowBack = () => mobile() && mobilePanelVisible();
+  // A section is not the navigation's page (its address may stay after Back shows the sections):
+  // the bottom navigation steps aside while one is open.
+  markMobileDetail(mobileShowBack);
   // On phones the sections (0) and a section (1) are levels of the page that slide (PaneStack).
   const panes = createPaneStack(() => (mobile() ? (mobilePanelVisible() ? 1 : 0) : null));
   // Android's Back from a section goes to the sections, as the bar's back arrow does. A section

@@ -55,6 +55,10 @@ export interface RouteMeta {
   shellless?: boolean;
   endpointScoped?: boolean;
   setupStage?: string;
+  /**
+   * Whether the address is a page of the navigation for the phone's bottom navigation, where its
+   * own path does not say (lib/shell.ts `isMobileNavRoot`).
+   */
   mobileBottomNav?: boolean;
 }
 
@@ -107,7 +111,9 @@ const ROUTES: RouteDef[] = [
   { pattern: `${ENDPOINT_SCOPE}/skills`, page: "skills", meta: { endpointScoped: true } },
   { pattern: `${ENDPOINT_SCOPE}/skills/store`, page: "skillStore", meta: { endpointScoped: true } },
   { pattern: `${ENDPOINT_SCOPE}/contacts`, page: "contacts", meta: { endpointScoped: true } },
-  { pattern: `${ENDPOINT_SCOPE}/settings/:section`, page: "settings", meta: { endpointScoped: true } },
+  // A section's address stays when Back shows the sections list again (SettingsPage), so the page
+  // itself says whether a section is open (markMobileDetail).
+  { pattern: `${ENDPOINT_SCOPE}/settings/:section`, page: "settings", meta: { endpointScoped: true, mobileBottomNav: true } },
   { pattern: `${ENDPOINT_SCOPE}/settings`, page: "settings", meta: { endpointScoped: true } },
   { pattern: "/setup", redirect: "/setup" },
   { pattern: "/setup/llm", redirect: "/setup/llm" },
