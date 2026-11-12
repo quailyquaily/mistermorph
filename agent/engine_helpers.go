@@ -280,9 +280,61 @@ func toolDisplayArgsSummary(toolName string, params map[string]any, opts LogOpti
 	if maxStr <= 0 || maxStr > 240 {
 		maxStr = 240
 	}
-	sanitized, _ := sanitizeValue(params, maxStr, opts.RedactKeys, "").(map[string]any)
+	sanitized, _ := sanitizeValue(redactToolParamValues(toolName, params), maxStr, opts.RedactKeys, "").(map[string]any)
 	if len(sanitized) == 0 {
 		return nil
 	}
 	return sanitized
+}
+
+// redactToolParamValues returns params with the values a tool keeps secret replaced, for logs
+// and tool events: todo_update's bash_env values, which may be credentials. The names stay.
+func redactToolParamValues(toolName string, params map[string]any) map[string]any {
+	if strings.TrimSpace(toolName) != "todo_update" {
+		return params
+	}
+	raw, ok := params["bash_env"]
+	if !ok || raw == nil {
+		return params
+	}
+	var entries []any
+	switch v := raw.(type) {
+	case []any:
+		entries = v
+	case []map[string]any:
+		for _, entry := range v {
+			entries = append(entries, entry)
+		}
+	default:
+		// Not the documented shape; nothing in it is shown.
+		out := make(map[string]any, len(params))
+		for k, v := range params {
+			out[k] = v
+		}
+		out["bash_env"] = "[redacted]"
+		return out
+	}
+	redacted := make([]any, 0, len(entries))
+	for _, entry := range entries {
+		item, ok := entry.(map[string]any)
+		if !ok {
+			redacted = append(redacted, "[redacted]")
+			continue
+		}
+		copied := make(map[string]any, len(item))
+		for k, v := range item {
+			if k == "name" {
+				copied[k] = v
+			} else {
+				copied[k] = "[redacted]"
+			}
+		}
+		redacted = append(redacted, copied)
+	}
+	out := make(map[string]any, len(params))
+	for k, v := range params {
+		out[k] = v
+	}
+	out["bash_env"] = redacted
+	return out
 }
