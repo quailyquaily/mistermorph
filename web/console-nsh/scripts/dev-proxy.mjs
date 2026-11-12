@@ -62,10 +62,13 @@ const server = http.createServer((req, res) => {
 });
 
 // WebSockets (the Console's streams, nsh's hot updates): pass the upgrade through as raw bytes.
+// nsh's dev server (0.5) takes a WebSocket only when its page's Origin matches the Host it was
+// asked at: the browser's own pair (this proxy's address) goes through to it unchanged, as
+// a transparent proxy would. The Console's streams go to the API at its own address.
 server.on("upgrade", (req, socket, head) => {
   const to = upstream(req.url || "/");
   const peer = net.connect(to.port, to.host, () => {
-    const headers = { ...req.headers, host: `${to.host}:${to.port}` };
+    const headers = to === app ? { ...req.headers } : { ...req.headers, host: `${to.host}:${to.port}` };
     const lines = [`${req.method} ${req.url} HTTP/1.1`, ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`)];
     peer.write(`${lines.join("\r\n")}\r\n\r\n`);
     if (head?.length) peer.write(head);
