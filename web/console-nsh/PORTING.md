@@ -144,6 +144,12 @@ Headless tests prove behaviour, not the look.
   (`MenuIconTrigger`, ui.tsx) and pass `disabled` to the `DropdownMenu`. On the web Enter/Space on
   a focused trigger open it and Escape closes it with the focus back on the trigger, but its items
   take no arrow keys.
+- On the desktop app (GPUI, nsh 0.5.0), `MenuItem`s inside a `Scroll` in a `Menu` take no clicks
+  under the console's scroll bar theme (`Scrollbar.setTheme(SCROLLBAR)`, App.tsx): that scroll
+  view's built-in hover bar leaves them dead, while items outside it work. Chrome and headless tests
+  never show it (headless presses do no hit test). `scrollbar={false}` on that `Scroll` brings the
+  clicks back; the agent switcher left the menu for `PopoverPicker`, whose rows took every click
+  in a GPUI window with the theme on.
 - nsh/base's `Select` opens its list over the field on the web (`placement` is ignored there):
   `SelectField` is a `Menu` below the field, as Vue's dropdown; only the searchable one is a Select.
 - A `TextView` table can't be narrower than column floors nsh estimates from character counts

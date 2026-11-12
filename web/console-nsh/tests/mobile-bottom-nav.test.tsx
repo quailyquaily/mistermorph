@@ -83,12 +83,12 @@ for (const [label, width, height] of [
     expectHighlightOn(frames(), "mobile-nav-more");
 
     await app.press("id:mobile-nav-agent");
-    await app.waitFor("id:mobile-agents");
+    await app.waitFor("id:mobile-agents-list");
     await app.waitFor("id:mobile-more", { state: "gone" });
     await app.waitUntil(() => Math.abs(frames().highlight.x - frames()["mobile-nav-agent"].x) < 0.5);
     expectHighlightOn(frames(), "mobile-nav-agent");
     await app.keyboard.press("escape");
-    await app.waitFor("id:mobile-agents", { state: "gone" });
+    await app.waitFor("id:mobile-agents-list", { state: "gone" });
     // (The primary pages' slots navigate: tests/shell.test.tsx presses them in the console at 320pt.)
   });
 }

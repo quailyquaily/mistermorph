@@ -180,18 +180,18 @@ test("while a dialog is over the page, Escape is not the panel's", async () => {
 
 // Escape is the topmost popup's: a menu or dialog opened over the page, or the composer's
 // suggestions, take it before the panel beside the conversation, whichever opened first.
-test("Escape closes the agent menu opened over the panel before the panel", async () => {
+test("Escape closes the agent bubble opened over the panel before the panel", async () => {
   const { app } = await openChat();
   await app.press("id:chat-status-plan");
   await app.waitFor("id:chat-detail-panel");
   await app.press("id:agent-switcher-trigger");
   await app.waitFor("label:Overview");
   await app.keyboard.press("escape");
-  await app.wait(300);
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
   expect(app.shows("id:chat-detail-panel")).toBe(true);
 });
 
-test("Escape is the agent dialog's, opened over the panel from outside the chat page", async () => {
+test("Escape is the agent bubble's (with its filter), opened over the panel from outside the chat page", async () => {
   const agents = Array.from({ length: 8 }, (_, index) => ({
     endpoint_ref: `ep_${index}`,
     name: `Remote ${index}`,
@@ -208,9 +208,8 @@ test("Escape is the agent dialog's, opened over the panel from outside the chat 
   await app.waitFor("id:chat-detail-panel");
   await app.press("id:agent-switcher-trigger");
   await app.waitFor("id:agent-switcher-filter");
-  // (Headless, Escape never reaches nsh's dialog itself: only that the panel leaves it alone.)
   await app.keyboard.press("escape");
-  await app.wait(300);
+  await app.waitFor("id:agent-switcher-list", { state: "gone" });
   expect(app.shows("id:chat-detail-panel")).toBe(true);
 });
 

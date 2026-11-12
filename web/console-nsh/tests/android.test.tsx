@@ -67,9 +67,9 @@ test("Back closes the More and agent sheets before it leaves the page", async ()
   expect(location(app)).toBe("/e/default/todo");
 
   await app.press("id:mobile-nav-agent");
-  await app.waitFor("id:mobile-agents");
+  await app.waitFor("id:mobile-agents-list");
   await app.back();
-  await app.waitFor("id:mobile-agents", { state: "gone" });
+  await app.waitFor("id:mobile-agents-list", { state: "gone" });
   await expectSystemBack(app);
 });
 
