@@ -3,6 +3,7 @@ package releaseworkflow
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -291,7 +292,6 @@ func readRepoFile(t *testing.T, parts ...string) string {
 func TestDesktopReleasesBuildTheNshShell(t *testing.T) {
 	setup := readRepoFile(t, ".github", "actions", "setup-desktop-build", "action.yml")
 	for _, token := range []string{
-		"default: v0.4.0",
 		"releases/download/${NSH_VERSION}/install.sh",
 		"releases/download/$env:NSH_VERSION/install.ps1",
 		"workspaces: desktop/nsh -> target",
@@ -300,9 +300,14 @@ func TestDesktopReleasesBuildTheNshShell(t *testing.T) {
 			t.Errorf("desktop build setup missing %q", token)
 		}
 	}
+	// The CI setup installs the nsh release the shell's crates pin, whichever it is.
+	installed := regexp.MustCompile(`(?m)^\s*default: v(\d+\.\d+\.\d+)\s*$`).FindStringSubmatch(setup)
+	if installed == nil {
+		t.Fatal("desktop build setup names no nsh release (`default: vX.Y.Z`)")
+	}
 	cargo := readRepoFile(t, "desktop", "nsh", "Cargo.toml")
-	if !strings.Contains(cargo, `nsh-engine = { version = "=0.4.0"`) {
-		t.Error("desktop/nsh pins another nsh version than the CI setup installs")
+	if !strings.Contains(cargo, `nsh-engine = { version = "=`+installed[1]+`"`) {
+		t.Errorf("desktop/nsh pins another nsh version than the CI setup installs (v%s)", installed[1])
 	}
 
 	for _, workflow := range []string{"release.yml", "windows-signing.yml", "build_app.yaml"} {
