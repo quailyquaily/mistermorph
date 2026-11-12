@@ -107,10 +107,10 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
   );
 }
 
-// The panel toggle: a 38pt square with a 14pt icon, as the Topics head's view toggles, on the
-// header line at the top right, in the same place whether the panel is shut (over the
-// conversation) or open (at the end of the panel's tab row). Open, a blue icon on a blue tint. The
-// drawn sidebar is mirrored: the panel opens on the right.
+// The panel toggle: a 38pt square with a 14pt icon, on the header line at the top right, in the
+// same place whether the panel is shut (over the conversation) or open (at the end of the panel's
+// tab row). Open, a blue icon on a blue tint. The drawn sidebar is mirrored: the panel opens on the
+// right.
 function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
   const open = () => props.c.workspaceSidebarOpen();
   return (

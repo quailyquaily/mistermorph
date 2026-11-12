@@ -14,7 +14,7 @@
 // on a touch screen once a finger has rested on it (a swipe stays the list's scroll).
 import { Image, Scroll, signal, Text, token, View, type InputRef, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
+import { BAR_ICON_SIZE, Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
@@ -33,13 +33,14 @@ import { createTopicDrag } from "./topicDrag";
 import { provideShortcut, shortcutLabel } from "../../lib/shortcuts";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../../components/shared/partProbe";
 
-// A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
-// a blue tint. While TODO runs are running, the TODO toggle's alarm clock has its hands turning, as
-// a clock's do while it is being set (components/motion/AdjustingClock.tsx), in place of a loading
-// look: no busy beam or hairline (the plain button's, FT61) and no ring off the icon's corner, so
-// the square keeps its size, fill and icon. It stays enabled: running is a status, not a pending
-// press (a press only switches the list, nothing is sent). The count is in its name and tooltip.
-// Exported for tests/fixtures/cron-toggle-app.tsx.
+// A view toggle in the head: a 38pt square with a 16pt icon (BAR_ICON_SIZE, a regular icon-only
+// Button's), the buttons flush; on, a blue icon on a blue tint. While TODO runs are running, the
+// TODO toggle's alarm clock has its hands turning, as a clock's do while it is being set
+// (components/motion/AdjustingClock.tsx), in place of a loading look: no busy beam or hairline (the
+// plain button's, FT61) and no ring off the icon's corner, so the square keeps its size, fill and
+// icon. It stays enabled: running is a status, not a pending press (a press only switches the list,
+// nothing is sent). The count is in its name and tooltip. Exported for
+// tests/fixtures/cron-toggle-app.tsx.
 export function ViewToggle(props: {
   icon: "PhRobot" | "PhAlarm" | "PhTag";
   label: string;
@@ -73,14 +74,15 @@ export function ViewToggle(props: {
       {props.icon === "PhAlarm" ? (
         <AdjustingClock
           adjusting={!!props.running}
-          size={14}
+          size={BAR_ICON_SIZE}
           color={color()}
           testID="chat-cron-clock"
           adjustingTestID="chat-cron-running"
           probe={props.clockProbe}
+          onLayout={props.onIconFrame}
         />
       ) : (
-        <Icon name={props.icon} size={14} color={color()} onLayout={props.onIconFrame} />
+        <Icon name={props.icon} size={BAR_ICON_SIZE} color={color()} onLayout={props.onIconFrame} />
       )}
     </TipButton>
   );
@@ -162,6 +164,9 @@ export function topicRowPaddingRight(mobile: boolean): number {
   return topicStatusAxisInset(mobile) - TOPIC_STATUS_SIZE / 2 - (mobile ? 0 : TOPIC_LIST_GUTTER) - TOPIC_ROW_BORDER;
 }
 
+/** The head's buttons, as `onPartLayout` names them (`head-<key>`, `head-<key>-icon`). */
+type HeadKey = "agents" | "cron" | "tags" | "new";
+
 /** A part's frame on the page, for `onPartLayout`. */
 export type TopicPartFrame = PartFrame;
 
@@ -172,7 +177,8 @@ export function TopicSidebar(props: {
   style?: Record<string, unknown>;
   hidden?: boolean;
   /** Hears where parts lie on the page (tests): `sidebar`, `head-action` (the head's last button),
-   * `head-icon` (its icon), `status-<topic id>` and `title-<topic id>`. */
+   * `head-icon` (its icon), `head-<agents|cron|tags|new>` and `head-<…>-icon` (each head button and
+   * its icon), `status-<topic id>` and `title-<topic id>`. */
   onPartLayout?: PartLayoutListener;
 }) {
   const c = props.c;
@@ -207,26 +213,30 @@ export function TopicSidebar(props: {
   const rowPadding = () => (c.mobileMode() ? "pl-3" : "pl-3.5");
   const rightInset = () => topicRightInset(c.mobileMode());
   // The probe for `onPartLayout`: a view's frame on the page as it lays out. The head's buttons
-  // take no ref: the last one's frame in the head row, and its icon's in it, are placed from the
-  // row's.
+  // take no ref: each one's frame in the head row, and its icon's in it, are placed from the row's.
   const parts = createPartProbe(() => props.onPartLayout);
   const probe = parts.probe;
   let headRow: ViewRef | undefined;
-  let lastButton: PartFrame | undefined;
-  let lastIcon: PartFrame | undefined;
-  const headButtonLayout = (last: () => boolean) => (event: LayoutBounds) => {
-    if (!last()) return;
-    lastButton = boundsFrame(event);
-    parts.report("head-action", headRow, () => lastButton);
-    parts.report("head-icon", headRow, headIcon);
+  const headParts: Partial<Record<HeadKey, { button?: PartFrame; icon?: PartFrame }>> = {};
+  const headIcon = (key: HeadKey) => () => {
+    const part = headParts[key];
+    return part?.button && part.icon ? { ...part.icon, x: part.button.x + part.icon.x, y: part.button.y + part.icon.y } : undefined;
   };
-  const headIconLayout = (last: () => boolean) => (event: LayoutBounds) => {
+  const reportHead = (key: HeadKey, last: () => boolean) => {
+    parts.report(`head-${key}`, headRow, () => headParts[key]?.button);
+    parts.report(`head-${key}-icon`, headRow, headIcon(key));
     if (!last()) return;
-    lastIcon = boundsFrame(event);
-    parts.report("head-icon", headRow, headIcon);
+    parts.report("head-action", headRow, () => headParts[key]?.button);
+    parts.report("head-icon", headRow, headIcon(key));
   };
-  const headIcon = () =>
-    lastButton && lastIcon ? { ...lastIcon, x: lastButton.x + lastIcon.x, y: lastButton.y + lastIcon.y } : undefined;
+  const headButtonLayout = (key: HeadKey, last: () => boolean) => (event: LayoutBounds) => {
+    (headParts[key] ??= {}).button = boundsFrame(event);
+    reportHead(key, last);
+  };
+  const headIconLayout = (key: HeadKey, last: () => boolean) => (event: LayoutBounds) => {
+    (headParts[key] ??= {}).icon = boundsFrame(event);
+    reportHead(key, last);
+  };
   // The search is the list's first view, scrolling with it, never the head's (the head keeps the
   // title and its buttons). On a touch phone it hides until the list is pulled down from its top;
   // on a desktop (and a desktop's window narrowed to the phone layout) it always shows.
@@ -439,6 +449,8 @@ export function TopicSidebar(props: {
               onPress={() => toggle("agents")}
               testID="chat-topics-view-agents"
               onCenter={placeToggle("agents")}
+              onFrame={headButtonLayout("agents", () => false)}
+              onIconFrame={headIconLayout("agents", () => false)}
             />
           </If>
           <ViewToggle
@@ -450,6 +462,8 @@ export function TopicSidebar(props: {
             onPress={() => toggle("cron")}
             testID="chat-topics-view-cron"
             onCenter={placeToggle("cron")}
+            onFrame={headButtonLayout("cron", () => false)}
+            onIconFrame={headIconLayout("cron", () => false)}
           />
           <ViewToggle
             icon="PhTag"
@@ -459,8 +473,8 @@ export function TopicSidebar(props: {
             onPress={() => toggle("tags")}
             testID="chat-topics-view-tags"
             onCenter={placeToggle("tags")}
-            onFrame={headButtonLayout(() => c.mobileTopicSplitEnabled())}
-            onIconFrame={headIconLayout(() => c.mobileTopicSplitEnabled())}
+            onFrame={headButtonLayout("tags", () => c.mobileTopicSplitEnabled())}
+            onIconFrame={headIconLayout("tags", () => c.mobileTopicSplitEnabled())}
           />
           <If when={!c.mobileTopicSplitEnabled()}>
             <TipButton
@@ -468,10 +482,10 @@ export function TopicSidebar(props: {
               accessibilityLabel={t("chat_topic_new")}
               tooltip={<Tip text={t("chat_topic_new")} shortcut={shortcutLabel("chat.newTopic")} />}
               testID="chat-topic-new"
-              onLayout={headButtonLayout(() => true)}
+              onLayout={headButtonLayout("new", () => true)}
               class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
             >
-              <Icon name="PhPlus" size={14} color="subtle" onLayout={headIconLayout(() => true)} />
+              <Icon name="PhPlus" size={BAR_ICON_SIZE} color="subtle" onLayout={headIconLayout("new", () => true)} />
             </TipButton>
           </If>
         </View>

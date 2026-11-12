@@ -399,6 +399,8 @@ export interface ButtonProps {
   onPress?: () => void;
   /** The button's frame in its parent. */
   onLayout?: BaseButtonProps["onLayout"];
+  /** Its icon's frame in it (layout probes in tests). */
+  onIconLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
   /** Anything after the label (a count, a caret). */
   children?: JSX.Element;
 }
@@ -564,7 +566,7 @@ export function Button(props: ButtonProps) {
         testID={props.testID ? `${props.testID}-loading` : undefined}
       />
       <If when={props.icon}>
-        <Icon name={props.icon!} size={size().icon} color={iconColor()} />
+        <Icon name={props.icon!} size={size().icon} color={iconColor()} onLayout={props.onIconLayout} />
       </If>
       <If when={props.label && !props.iconOnly}>
         <Text
@@ -2055,6 +2057,12 @@ export function PageTitle(props: { text: string; class?: string }) {
  * Button's default, a 38pt square with a 16pt icon.
  */
 export const BAR_BUTTON_SIZE: ButtonSize = "sm";
+
+/**
+ * The icon of a BAR_BUTTON_SIZE button (16pt), for bar buttons drawn without Button (the Topics
+ * head's view toggles and New) so their icons match the regular icon buttons'.
+ */
+export const BAR_ICON_SIZE = BUTTON_SIZES[BAR_BUTTON_SIZE].icon;
 
 /**
  * A page bar's back arrow: a plain icon-only Button. On a phone it is the size of the bar's other
