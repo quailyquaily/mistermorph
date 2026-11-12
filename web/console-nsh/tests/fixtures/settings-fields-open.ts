@@ -14,7 +14,15 @@ export type FixtureHandler = StubResponse | ((call: FixtureCall) => StubResponse
 export async function openFixture(
   location: string,
   api: Record<string, FixtureHandler> = {},
-  options: { runtime?: "web" | "desktop"; host?: Record<string, unknown>; width?: number; height?: number; visual?: boolean } = {},
+  options: {
+    runtime?: "web" | "desktop";
+    host?: Record<string, unknown>;
+    width?: number;
+    height?: number;
+    visual?: boolean;
+    /** The Console language (en by default). */
+    language?: string;
+  } = {},
 ): Promise<{ app: App; calls: FixtureCall[] }> {
   const calls: FixtureCall[] = [];
   const routes: Record<string, FixtureHandler> = {
@@ -36,7 +44,7 @@ export async function openFixture(
           origin: "http://console.test",
           basePath: "/",
           location,
-          kv: { "quail-language": "en" },
+          kv: { "quail-language": options.language ?? "en" },
           session: {},
           languages: ["en-US"],
           desktopVersion: "",

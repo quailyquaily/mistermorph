@@ -1,11 +1,12 @@
 // A field whose value comes from an environment variable (the Vue console's EnvManagedField): a
 // locked, read-only box with the variable's name (and value, for a field that is not secret).
-// Pressing it copies the name. Children sit at its end, such as the secret picker's button.
+// Pressing it copies the name. Children sit at its end, such as the secret picker's button. It is
+// as tall as a regular field (TextField), and a long name is cut short rather than pushing them out.
 import type { JSX } from "nsh";
 import { cleanup, signal, Text, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import { copyText } from "../../lib/platform";
-import { Icon, Tip, TipButton } from "../ui";
+import { FIELD_HEIGHT, Icon, Tip, TipButton } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -47,7 +48,7 @@ export function EnvManagedField(props: EnvManagedFieldProps) {
   return (
     <View
       testID={props.testID}
-      class={`min-h-9 flex-row items-center gap-0.5 rounded-(--radius) border border-line-faint bg-muted pr-1 hover:border-line ${
+      class={`${FIELD_HEIGHT} flex-row items-center gap-0.5 rounded-(--radius) border border-line-faint bg-muted pr-1 hover:border-line ${
         props.class ?? ""
       }`}
     >
@@ -60,10 +61,10 @@ export function EnvManagedField(props: EnvManagedFieldProps) {
         class="flex-1 min-w-0 flex-row items-center gap-2 py-2 pl-3 pr-2"
       >
         <Icon name="PhLockSimple" size={15} color="muted-foreground" />
-        <Text class="flex-1 font-mono text-xs text-subtle" style={{ numberOfLines: 1 }}>
+        <Text class="min-w-0 flex-1 font-mono text-xs text-subtle" style={{ numberOfLines: 1 }}>
           {label()}
         </Text>
-        <Text class={`font-mono text-xs uppercase tracking-wide ${copied() ? "text-ok" : "text-muted-foreground"}`}>
+        <Text class={`shrink-0 font-mono text-xs uppercase tracking-wide ${copied() ? "text-ok" : "text-muted-foreground"}`}>
           {copied() ? t("settings_env_managed_copied") : t("settings_env_managed_tag")}
         </Text>
       </TipButton>
