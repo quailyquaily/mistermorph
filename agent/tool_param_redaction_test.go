@@ -43,3 +43,31 @@ func TestTodoUpdateBashEnvValuesAreRedactedFromLogsAndEvents(t *testing.T) {
 		t.Fatalf("another tool's params redacted: %s", out)
 	}
 }
+
+// A codemode script may pass bash_env values to todo_update, written as literals or built in any
+// expression, so its source is never shown: only its size.
+func TestCodeModeSourceIsWithheldFromLogsAndEvents(t *testing.T) {
+	const secret = "synthetic-secret-value-0005"
+	code := "const v = \"synthetic-secret\" + \"-value-0005\";\n" +
+		"return await tools.todo_update({action: \"update\", id: \"r\", bash_env: [{name: \"API_TOKEN\", value: \"" + secret + "\"}]});\n"
+	params := map[string]any{"code": code, "bash_env": secret}
+	opts := normalizeLogOptions(DefaultLogOptions())
+
+	display := toolDisplayArgsSummary(codeModeToolName, params, opts)
+	logged := paramsAsJSON(redactToolParamValues(codeModeToolName, params), opts.MaxJSONBytes, opts.MaxStringValueChars, opts.RedactKeys)
+	shown, _ := json.Marshal(display)
+	for _, out := range []string{string(shown), logged} {
+		if strings.Contains(out, "synthetic-secret") || strings.Contains(out, "todo_update") {
+			t.Fatalf("codemode params show the source: %s", out)
+		}
+	}
+	if display["code"] != "[withheld]" || display["code_lines"] != 2 || display["code_chars"] != len([]rune(code)) {
+		t.Fatalf("display = %#v, want the withheld source and its size", display)
+	}
+	if params["code"] != code {
+		t.Fatal("redaction changed the tool's own parameters")
+	}
+	if out, _ := json.Marshal(toolDisplayArgsSummary(codeModeToolName, map[string]any{"code": []any{secret}}, opts)); strings.Contains(string(out), secret) {
+		t.Fatalf("malformed code shown: %s", out)
+	}
+}

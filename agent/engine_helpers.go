@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -288,9 +289,14 @@ func toolDisplayArgsSummary(toolName string, params map[string]any, opts LogOpti
 }
 
 // redactToolParamValues returns params with the values a tool keeps secret replaced, for logs
-// and tool events: todo_update's bash_env values, which may be credentials. The names stay.
+// and tool events: todo_update's bash_env values, which may be credentials (the names stay), and
+// a codemode script's source, which may hold the values the script passes to such a tool.
 func redactToolParamValues(toolName string, params map[string]any) map[string]any {
-	if strings.TrimSpace(toolName) != "todo_update" {
+	switch strings.TrimSpace(toolName) {
+	case codeModeToolName:
+		return withheldCodeModeParams(params)
+	case "todo_update":
+	default:
 		return params
 	}
 	raw, ok := params["bash_env"]
@@ -337,4 +343,24 @@ func redactToolParamValues(toolName string, params map[string]any) map[string]an
 	}
 	out["bash_env"] = redacted
 	return out
+}
+
+// withheldCodeModeParams replaces a codemode call's parameters with the size of its script. Which
+// values a script passes to its calls is only known once it runs, and it may build them in any
+// expression, so no part of the source is shown; each call the script makes is shown on its own,
+// with its own redaction. Parameters codemode does not take are left out as well.
+func withheldCodeModeParams(params map[string]any) map[string]any {
+	raw, ok := params["code"]
+	if !ok {
+		return map[string]any{}
+	}
+	code, isString := raw.(string)
+	if !isString {
+		return map[string]any{"code": "[withheld]"}
+	}
+	return map[string]any{
+		"code":       "[withheld]",
+		"code_chars": utf8.RuneCountInString(code),
+		"code_lines": strings.Count(strings.TrimRight(code, "\n"), "\n") + 1,
+	}
 }
