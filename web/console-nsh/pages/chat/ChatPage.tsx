@@ -3,7 +3,7 @@
 // in the frame's workbench, docked under the window (components/frame/Workbench.tsx). On phones (≤ 980 points) the topic list and the
 // conversation are separate views, and the workspace panel is the right sheet. The behaviour is in
 // chatController.
-import { Text, untracked, View } from "nsh";
+import { signal, Text, untracked, View } from "nsh";
 import { BackButton, Fab, Icon, Kicker, MessageDialog, Page, PageBar, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
@@ -157,7 +157,7 @@ function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string
   );
 }
 
-function History(props: { c: ChatController; topInset: number }) {
+function History(props: { c: ChatController; topInset: number; endInset: number }) {
   const c = props.c;
   return (
     <ChatHistoryList
@@ -175,6 +175,7 @@ function History(props: { c: ChatController; topInset: number }) {
       // The same room at the top whether the panel is open or not, so opening it never moves the
       // conversation down or up.
       topInset={props.topInset}
+      endInset={props.endInset}
     />
   );
 }
@@ -201,33 +202,46 @@ function ChatMain(props: { c: ChatController }) {
   const placeholder = () => c.showChatPlaceholder() && !c.chatLoadErrorFull();
   const dockVisible = () =>
     c.consoleTopicsEnabled() && !placeholder() && c.workspaceSidebarAvailable() && !c.mobileMode() && c.showChatPane();
+  // The composer floats over the conversation's foot: the history keeps its height (with the fade
+  // over it) as room under the newest message, so that message scrolls clear of both, and the room
+  // follows the composer as it grows.
+  const composerRoom = signal(0);
   return (
     <View class="flex-1" testID="chat-main">
       <If
         when={placeholder()}
         else={
-          <View class="flex-1">
-            <If when={c.chatLoadErrorFull()} else={<History c={c} topInset={dockVisible() ? 64 : 20} />}>
+          <View class="relative flex-1">
+            <If when={c.chatLoadErrorFull()} else={<History c={c} topInset={dockVisible() ? 64 : 20} endInset={composerRoom()} />}>
               <LoadError c={c} testID="chat-load-error" />
             </If>
-            <View class="w-full max-w-[832px] self-center" style={{ paddingLeft: chatGutter(), paddingRight: chatGutter() }}>
-              <If when={c.chatLoadErrorKind() !== "" && !c.chatLoadErrorFull()}>
-                <LoadError c={c} compact testID="chat-load-error-strip" />
-              </If>
-              <If
-                when={c.selectedTopicIsAgent()}
-                else={
-                  <If when={c.selectedTopicIsCron()} else={<Composer c={c} />}>
-                    <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
-                      {t("chat_topic_cron_readonly", { name: c.deskTitle() })}
-                    </Text>
-                  </If>
-                }
-              >
-                <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
-                  {t("chat_topic_agent_readonly", { name: c.deskTitle() })}
-                </Text>
-              </If>
+            {/* Over the history's foot, fading from it to the page (what scrolls behind the footer
+                line stays readable); presses on the fade reach the history. */}
+            <View
+              class="absolute bottom-0 left-0 right-0 bg-linear-to-b from-transparent to-background pt-6"
+              style={{ pointerEvents: "box-none" }}
+              onLayout={({ bounds }) => composerRoom.set(bounds.size.height)}
+              testID="chat-composer-float"
+            >
+              <View class="w-full max-w-[832px] self-center" style={{ paddingLeft: chatGutter(), paddingRight: chatGutter() }}>
+                <If when={c.chatLoadErrorKind() !== "" && !c.chatLoadErrorFull()}>
+                  <LoadError c={c} compact testID="chat-load-error-strip" />
+                </If>
+                <If
+                  when={c.selectedTopicIsAgent()}
+                  else={
+                    <If when={c.selectedTopicIsCron()} else={<Composer c={c} />}>
+                      <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
+                        {t("chat_topic_cron_readonly", { name: c.deskTitle() })}
+                      </Text>
+                    </If>
+                  }
+                >
+                  <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
+                    {t("chat_topic_agent_readonly", { name: c.deskTitle() })}
+                  </Text>
+                </If>
+              </View>
             </View>
           </View>
         }

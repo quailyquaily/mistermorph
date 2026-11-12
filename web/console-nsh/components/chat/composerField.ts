@@ -56,5 +56,9 @@ export function composerFrameBorder(mobile: boolean): "border-line" | "border-in
  *  light border while the field had the focus, and the frame only got it back when it lost the
  *  focus. Only the shadow eases (`transition-shadow`), so the border never animates. */
 export function composerFrameClass(mobile: boolean): string {
-  return `relative rounded-(--radius) border ${composerFrameBorder(mobile)} bg-field transition-shadow duration-[260ms] focus-within:shadow-md`;
+  return `relative rounded-[27px] border ${composerFrameBorder(mobile)} bg-field transition-shadow duration-[260ms] focus-within:shadow-md`;
 }
+
+/** The frame's corner radius: half the one-row height, so one row is a pill; its round controls
+ *  sit 8pt in, concentric with the corners (19 + 8). */
+export const COMPOSER_RADIUS = 27;

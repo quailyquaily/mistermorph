@@ -256,14 +256,17 @@ function expectComplete(report: Record<string, any>, name: string, step: string)
   near(field.x, ROW_PADDING);
   near(field.w, row.w - 2 * ROW_PADDING);
   expect(field.w).toBeGreaterThan(state.measures.oneRowWidth + 1);
-  // As tall as what it shows at that width (one line at least), and the controls below it.
-  // Headless engines measure a line break as no break at all: such a draft is held at two lines.
-  const shown = Math.max(state.shown, (lineBreak ? 2 : 1) * COMPOSER_LINE_HEIGHT);
+  // As tall as what it shows at that width, two lines at least (room to grow into), and the
+  // controls below it. Headless engines measure a line break as no break at all: such a draft's
+  // text is held at two lines.
+  const text = Math.max(state.shown, (lineBreak ? 2 : 1) * COMPOSER_LINE_HEIGHT);
+  const shown = Math.max(text, 2 * COMPOSER_LINE_HEIGHT);
   near(field.h, Math.min(shown, 24 * COMPOSER_LINE_HEIGHT));
   near(state.height, shown);
   const controls = report[`${name}-controls`] as Frame;
   expect(controls.y).toBeGreaterThanOrEqual(field.y + field.h - 0.5);
-  return oneLine(shown) ? "two:1" : "two:n";
+  // The stage is the text's: one line across the row, or more.
+  return oneLine(text) ? "two:1" : "two:n";
 }
 
 /** At most one drawn change since `before`: the rows, the field's height and its laid-out width
@@ -536,14 +539,14 @@ test("the composer's frame differs between a phone and a desktop only in its bor
   const phone = composerFrameClass(true);
   const desktop = composerFrameClass(false);
   // The desktop's frame: its resting `input` border in every state, the shadow for focus.
-  expect(desktop).toBe("relative rounded-(--radius) border border-input bg-field transition-shadow duration-[260ms] focus-within:shadow-md");
+  expect(desktop).toBe("relative rounded-[27px] border border-input bg-field transition-shadow duration-[260ms] focus-within:shadow-md");
   expect(phone.replace("border-line", "border-input")).toBe(desktop);
   for (const frame of [phone, desktop]) {
     const classes = frame.split(" ");
     // One 1pt border, the same radius, and the focus look over the resting colour.
     expect(classes).toContain("border");
     expect(classes.filter((name) => /^border-\d/.test(name))).toEqual([]);
-    expect(classes).toContain("rounded-(--radius)");
+    expect(classes).toContain("rounded-[27px]");
     expect(classes).toContain("focus-within:shadow-md");
     expect(classes).toContain("bg-field");
   }

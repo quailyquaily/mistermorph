@@ -59,12 +59,15 @@ test("speaking fills the draft, and discarding keeps it as it was", async () => 
   await app.press("id:chat-composer-voice");
   await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
   await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
-  // A discarded recording leaves the draft alone.
+  // With a draft the row's end is Send; emptied, the mic is back. A discarded recording leaves the
+  // draft as it was.
+  await app.clear("id:chat-composer-input");
+  await app.waitFor("label:Voice input");
   await app.press("id:chat-composer-voice");
   await app.hear("never mind");
   await app.press("label:Discard recording");
   await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
-  expect(app.value("id:chat-composer-input")).toBe("book a table");
+  expect(app.value("id:chat-composer-input")).toBe("");
 });
 
 test("a voice input error says why: no secure connection, no recorder, blocked, refused on the phone, no microphone, busy", async () => {
@@ -99,14 +102,15 @@ test("with a ready transcription route the mic is an icon button that records in
   await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
   // The recording goes once it was sent.
   expect(app.host.calls().some((call) => call.name === "morph.file.release" && (call.data as any)?.id === "rec-1")).toBe(true);
-  // A discarded recording is never sent.
+  // A discarded recording is never sent (the draft emptied first: the mic shows only then).
+  await app.clear("id:chat-composer-input");
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
   await app.press("label:Discard recording");
   await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
   expect(app.host.calls().some((call) => call.name === "morph.voice.cancel")).toBe(true);
   expect(app.host.calls().filter((call) => call.name === "morph.file.upload").length).toBe(1);
-  expect(app.value("id:chat-composer-input")).toBe("book a table");
+  expect(app.value("id:chat-composer-input")).toBe("");
 });
 
 test("without a ready transcription route there is no mic: unset or failed", async () => {
@@ -248,6 +252,7 @@ test("a recording under way keeps its stop when the route check fails; a new one
   expect(starts()).toBe(1);
   // The same while the route is unset rather than failing.
   route = READY;
+  await app.clear("id:chat-composer-input");
   await app.host.send("morph.visibility", { visible: false, focused: false });
   await app.host.send("morph.visibility", { visible: true, focused: true });
   await app.waitFor("id:chat-composer-voice");
@@ -284,7 +289,8 @@ test("the mic turns red while it records and back once the recording ends, is di
   await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
   await app.waitFor(MIC);
   expect(app.count(RED_MIC)).toBe(0);
-  // Discarded.
+  // The draft emptied, the mic is back at the row's end. Discarded.
+  await app.clear("id:chat-composer-input");
   await app.press("label:Voice input");
   await app.waitFor(RED_MIC);
   await app.press("label:Discard recording");
@@ -300,7 +306,7 @@ test("the mic turns red while it records and back once the recording ends, is di
   await app.waitFor(MIC);
   expect(app.count(RED_MIC)).toBe(0);
   expect(app.count("label:Voice input")).toBe(1);
-  expect(app.value("id:chat-composer-input")).toBe("book a table");
+  expect(app.value("id:chat-composer-input")).toBe("");
 });
 
 test("a recorder that cannot start never shows the red mic", async () => {

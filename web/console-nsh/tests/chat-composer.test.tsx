@@ -182,10 +182,10 @@ test("one line beside the controls is one row, whatever the wider field would ho
   expect(composerLayout("hello", measured("hello", LINE + 3, LINE + 3)).rows).toBe("one");
 });
 
-test("a line that wraps beside the controls is two rows at once, as tall as it is across the row, even one line", () => {
+test("a line that wraps beside the controls is two rows at once, two lines tall at least, even one line across the row", () => {
   const text = "a line that wraps beside the buttons";
   const layout = composerLayout(text, measured(text, 2 * LINE, LINE));
-  expect(layout).toEqual(TWO(LINE));
+  expect(layout).toEqual(TWO(2 * LINE));
   // Laid out again (the field above the controls now), the measures are the same: so is the layout.
   for (let pass = 0; pass < 10; pass += 1) expect(composerLayout(text, measured(text, 2 * LINE, LINE), layout)).toEqual(layout);
   // Longer, it grows across the row.

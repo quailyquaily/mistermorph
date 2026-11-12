@@ -57,7 +57,8 @@ export function composerOneLine(height: number): boolean {
 export function composerLayout(text: string, measures: ComposerMeasures, current: ComposerLayout = ONE_ROW): ComposerLayout {
   if (text === "") return ONE_ROW;
   const lineBreak = text.includes("\n");
-  const minimum = lineBreak ? 2 * COMPOSER_LINE_HEIGHT : COMPOSER_LINE_HEIGHT;
+  // Two rows hold two lines at least: a draft that left one row has room to grow into at once.
+  const minimum = 2 * COMPOSER_LINE_HEIGHT;
   if (measures.text !== text) {
     // Not measured yet: keep what shows, unless the text alone says otherwise.
     if (!lineBreak) return current;

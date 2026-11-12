@@ -82,6 +82,8 @@ export function ChatHistoryList(props: {
   onScrollFromEnd?: (distance: number, viewport: number) => void;
   /** Room above the oldest message, for a control floating over the top corner (default 20). */
   topInset?: number;
+  /** Room under the newest message for what floats over the list's foot (the composer). */
+  endInset?: number;
   /** Each row's view as its cell is made, and the id it shows now (cells are recycled). For tests. */
   onRowRef?: (ref: ViewRef, id: () => string) => void;
 }) {
@@ -168,7 +170,7 @@ export function ChatHistoryList(props: {
         class="flex-1"
         // The Vue history: 20pt around the conversation and between turns; above the oldest
         // message, room for the panel toggle.
-        contentStyle={{ paddingTop: props.topInset ?? 20, paddingBottom: HISTORY_END_PADDING, paddingLeft: chatGutter(), paddingRight: chatGutter(), gap: 20 }}
+        contentStyle={{ paddingTop: props.topInset ?? 20, paddingBottom: HISTORY_END_PADDING + (props.endInset ?? 0), paddingLeft: chatGutter(), paddingRight: chatGutter(), gap: 20 }}
         testID="chat-history"
         header={() => (
           <If when={props.hasOlder}>

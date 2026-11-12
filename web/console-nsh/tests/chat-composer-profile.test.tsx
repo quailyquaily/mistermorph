@@ -49,6 +49,8 @@ async function pick(app: App, from: string, title: string) {
   expect(app.texts()).toContain("gpt-5-mini");
   await app.press(`text:${title}`);
   await app.waitFor(`label:LLM profile: ${title}`);
+  // The choice closes the list (on desktops a popover, which fades out).
+  await app.waitUntil(() => !app.texts().includes("gpt-5-mini"));
 }
 
 test("on a desktop the closed picker shows the profile's mark and name, and a new choice shows its own", async () => {

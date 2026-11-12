@@ -10,8 +10,23 @@ import type { InputRef, JSX } from "nsh";
 import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, platform, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { BorderBeam } from "../motion/BorderBeam";
+import { PopoverPicker } from "../shared/PopoverPicker";
 import { ICONS } from "../icons";
-import { bottomSheetStyle, Button, BusyBeam, busyLook, DropdownMenu, Icon, Tip, TipButton, trackPopup, type IconName } from "../ui";
+import {
+  bottomSheetStyle,
+  Button,
+  BusyBeam,
+  busyLook,
+  CircleButton,
+  circleButtonClass,
+  DropdownMenu,
+  Icon,
+  Tip,
+  TipButton,
+  MENU_POPUP_STYLE,
+  trackPopup,
+  type IconName,
+} from "../ui";
 import {
   buildComposerSuggestionItems,
   composerSuggestionInsertText,
@@ -19,7 +34,7 @@ import {
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
 import { isMobile } from "../../lib/shell";
-import { composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { COMPOSER_RADIUS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
 import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
 import { followComposerLayout, ONE_ROW, type ComposerLayout } from "./composerRows";
@@ -27,6 +42,12 @@ import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheet
 import { t } from "./i18n";
 
 // Around the 38-point mic, for a 44-point touch target.
+/** The gap between the composer's edge and a list beyond it (the profile picker's, the add menu's). */
+const POPUP_GAP = 8;
+/** The place of the controls that open those lists, in the frame in both layouts: 38pt tall, above
+ *  the row's 8pt bottom padding and the frame's 1pt border. */
+const CONTROL_SIZE = 38;
+const CONTROL_FROM_BOTTOM = CONTROL_SIZE + 8 + 1;
 const VOICE_HIT_SLOP = 3;
 
 export interface ComposerFileItem {
@@ -354,13 +375,14 @@ export function ChatComposer(props: ChatComposerProps) {
   // for a sheet opened from a text field. The text and its caret stay; the field takes the focus
   // back when the sheet closes without leading elsewhere (cancelled, a model chosen), so typing goes
   // on. Upload and Attach go on to a picker or a dialog, and leave the keyboard down. The desktops'
-  // popups open at their trigger and leave the field as it is.
+  // popups open at their trigger; the field takes the focus back after them too.
   const touchScreen = () => !platform.desktop;
   let refocusAfterSheet = false;
   function sheetOpened() {
-    if (!touchScreen()) return;
+    // On every screen: a list with a search field (the profile picker) takes the focus as it opens
+    // (nsh 0.5), and the field gets it back once the list is gone.
     refocusAfterSheet = untracked(focused);
-    Keyboard.dismiss();
+    if (touchScreen()) Keyboard.dismiss();
   }
   function sheetClosed() {
     if (!refocusAfterSheet) return;
@@ -386,10 +408,19 @@ export function ChatComposer(props: ChatComposerProps) {
   });
   // Above the navigation bar or gesture handle as every bottom sheet (bottomSheetStyle), and above
   // the keyboard instead once it lifts: the keyboard covers that bar, so the two are never added.
+  // The profile picker's and the add menu's lists open beyond the whole composer (as a dock's panel
+  // over the dock): what they clear above and below their button is the frame around it
+  // (PopoverPicker). Both sit at the frame's foot the same way, in both layouts.
+  const frameHeight = signal(0);
+  const composerClearance = () => ({
+    top: Math.max(0, frameHeight() - CONTROL_FROM_BOTTOM),
+    bottom: CONTROL_FROM_BOTTOM - CONTROL_SIZE,
+  });
   const profileSheetStyle = () =>
     bottomSheetStyle(PROFILE_SHEET_PADDING, {
       contentMax: PROFILE_SHEET_MAX_HEIGHT,
       keyboard: touchScreen() && profileSheetLifts() ? keyboardFrame().height : 0,
+      style: MENU_POPUP_STYLE,
     });
   function profileSheetOpenChange(open: boolean) {
     batch(() => {
@@ -414,14 +445,16 @@ export function ChatComposer(props: ChatComposerProps) {
     { id: "chat-composer-add-workspace", label: props.attachLabel || "", icon: "PhCube" as IconName, onSelect: () => leaveFromSheet(() => props.onAttach?.()) },
   ];
 
-  // The add button: a bare "+" in a 38pt square, its label for screen readers only (the Vue
-  // console's `.chat-composer-add-menu`); the line-soft fill while the menu is open or a workspace
-  // is attached.
-  const addTrigger = (): JSX.Element => (
+  // The add button: a bare "+" in a 38pt circle (circleButtonClass, the menu's trigger draws its
+  // own box), its label for screen readers only (the Vue console's `.chat-composer-add-menu`); the
+  // line-soft fill while the menu is open or a workspace is attached. `named`: it carries the label
+  // and testID itself (the touch screens' menu); PopoverPicker's trigger carries them on desktops.
+  const addOpen = signal(false);
+  const addTrigger = (named = true): JSX.Element => (
     <View
-      class={`size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft aria-expanded:bg-segment ${props.attachActive ? "bg-segment" : ""}`}
-      accessibilityLabel={props.addLabel}
-      testID="chat-composer-add"
+      class={`${circleButtonClass()} aria-expanded:bg-segment ${props.attachActive || addOpen() ? "bg-segment" : ""}`}
+      accessibilityLabel={named ? props.addLabel : undefined}
+      testID={named ? "chat-composer-add" : undefined}
     >
       <Icon name="PhPlus" size={14} color={props.attachActive ? "foreground" : "subtle"} />
     </View>
@@ -433,28 +466,54 @@ export function ChatComposer(props: ChatComposerProps) {
       else={
         // Uploading, it is a busy plain button (BusyBeam, busyLook).
         <View
-          class={`relative size-[38px] items-center justify-center rounded-(--radius) ${props.uploading ? "" : "opacity-45"}`}
+          class={`${circleButtonClass()} ${props.uploading ? "" : "opacity-45"}`}
           accessibilityLabel={props.addLabel}
           accessibilityState={{ busy: !!props.uploading }}
           testID="chat-composer-add"
         >
           <Icon name="PhPlus" size={14} color={props.uploading ? busyLook("plain").text : "subtle"} />
-          <BusyBeam busy={!!props.uploading} variant="plain" short testID="chat-composer-add-beam" />
+          <BusyBeam busy={!!props.uploading} variant="plain" short radius={19} testID="chat-composer-add-beam" />
         </View>
       }
     >
-      <DropdownMenu
-        trigger={addTrigger()}
-        items={addItems()}
-        placement="top"
-        align="start"
-        onOpenChange={(open) => (open ? sheetOpened() : sheetClosed())}
-      />
+      {/* Desktops: the shared popover beyond the composer (as the profile picker's), its tail to
+          the button; touch screens: the menu's sheet at the bottom. */}
+      <If
+        when={!touchScreen()}
+        else={
+          <DropdownMenu
+            trigger={addTrigger()}
+            items={addItems()}
+            placement="top"
+            align="start"
+            onOpenChange={(open) => (open ? sheetOpened() : sheetClosed())}
+          />
+        }
+      >
+        <PopoverPicker
+          items={addItems().map((item) => ({ value: item.id, title: item.label, icon: <Icon name={item.icon} size={16} color="subtle" /> }))}
+          onChange={(id) => addItems().find((item) => item.id === id)?.onSelect()}
+          trigger={() => addTrigger(false)}
+          accessibilityLabel={props.addLabel ?? ""}
+          placement="top"
+          align="start"
+          clearance={composerClearance()}
+          gap={POPUP_GAP}
+          widthClass="w-60"
+          open={addOpen()}
+          onOpenChange={(open) => {
+            addOpen.set(open);
+            if (open) sheetOpened();
+            else sheetClosed();
+          }}
+          testID="chat-composer-add"
+        />
+      </If>
     </If>
   );
 
-  // Send, through three states by its look rather than by swapping parts (the Vue console's
-  // `.chat-composer-send`): nothing to send, a hairline square with a muted plane nudged down-left;
+  // Send, a circle button through three states by its look rather than by swapping parts (the Vue
+  // console's `.chat-composer-send`): nothing to send, a hairline ring with a muted plane nudged down-left;
   // ready, filled ink with the plane settled; running, the same fill with the plane crossfading into
   // the stop square. While a message is being sent it is a busy primary button (BusyBeam, busyLook).
   const sendBusy = () => !!props.sending && !props.stopMode;
@@ -476,15 +535,15 @@ export function ChatComposer(props: ChatComposerProps) {
     props.onSubmit?.({ keyboardDismissed: true });
   }
   const sendControl = () => (
-    <TipButton
+    <CircleButton
       onPress={send}
       disabled={props.stopMode ? false : props.sendDisabled || sendBusy()}
-      accessibilityLabel={props.sendLabel}
-      tooltip={<Tip text={props.sendLabel ?? ""} />}
+      title={props.sendLabel ?? ""}
       testID="chat-composer-send"
-      class={`relative size-[38px] items-center justify-center rounded-(--radius) border transition-colors duration-[180ms] ${
-        sendBusy() ? busyLook("primary").box : sendEmpty() ? "border-line-soft bg-transparent" : "border-primary bg-primary hover:bg-ink"
-      } ${!sendEmpty() && props.sendDisabled && !props.stopMode && !sendBusy() ? "opacity-45" : ""}`}
+      variant={sendBusy() ? "plain" : sendEmpty() ? "outlined" : "primary"}
+      class={`${sendBusy() ? `border ${busyLook("primary").box}` : ""} ${
+        !sendEmpty() && props.sendDisabled && !props.stopMode && !sendBusy() ? "opacity-45" : ""
+      }`}
     >
         <Image
           src={ICONS.PhPaperPlaneTilt}
@@ -511,11 +570,11 @@ export function ChatComposer(props: ChatComposerProps) {
             scale: props.stopMode ? 1 : 0.6,
           }}
         />
-        <BusyBeam busy={sendBusy()} short testID="chat-composer-send-beam" />
-    </TipButton>
+        <BusyBeam busy={sendBusy()} short radius={19} testID="chat-composer-send-beam" />
+    </CircleButton>
   );
 
-  // The mic, an icon button drawn as the add and send controls are (a 38-point square, a 14-point
+  // The mic, a circle button drawn as the add and send controls are (a 38-point circle, a 14-point
   // glyph) whose presses count 3 points around it: a 44-point target for a finger. While it records
   // it is selected and its microphone turns red (pressing it still stops); while the recording is
   // transcribed it is a busy plain button (BusyBeam, busyLook): its disabled microphone with the
@@ -523,74 +582,158 @@ export function ChatComposer(props: ChatComposerProps) {
   const voiceTint = () =>
     props.voiceState === "transcribing" ? busyLook("plain").text : props.voiceState === "recording" ? "danger" : "subtle";
   const voiceControl = () => (
-    <TipButton
+    <CircleButton
       onPress={() => props.onVoice?.()}
       disabled={props.disabled || props.voiceState === "transcribing"}
       selected={props.voiceState === "recording"}
-      accessibilityLabel={props.voiceLabel}
-      tooltip={<Tip text={props.voiceLabel ?? ""} />}
+      title={props.voiceLabel ?? ""}
       hitSlop={VOICE_HIT_SLOP}
       testID="chat-composer-voice"
-      class={`relative size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-selection ${
-        props.voiceState === "transcribing" ? "" : "disabled:opacity-45"
-      }`}
+      class={`selected:bg-selection ${props.voiceState === "transcribing" ? "" : "disabled:opacity-45"}`}
     >
       <Icon name="PhMicrophone" size={14} color={voiceTint()} testID={`chat-composer-voice-icon.PhMicrophone.${voiceTint()}`} />
-      <BusyBeam busy={props.voiceState === "transcribing"} variant="plain" short testID="chat-composer-voice-beam" />
-    </TipButton>
+      <BusyBeam busy={props.voiceState === "transcribing"} variant="plain" short radius={19} testID="chat-composer-voice-beam" />
+    </CircleButton>
   );
+
+  // The profile picker's pill: the profile's mark, its name while the composer is empty on wide
+  // windows (the mark alone at phone widths and once there is a draft, to leave the field room;
+  // the label and tip still name the profile), and a caret.
+  const profilePill = () => (
+    <View
+      class={`h-[38px] flex-row items-center gap-1.5 rounded-full px-3 transition-colors duration-[180ms] hover:bg-hover active:bg-press ${
+        profileSheetOpen() ? "bg-hover" : ""
+      }`}
+    >
+      <View testID={`chat-composer-profile-icon.${selectedProfile()?.image ? "image" : "PhCpu"}`}>{profileGlyph(selectedProfile())}</View>
+      <If when={!isMobile() && value().trim() === ""}>
+        <Text testID="chat-composer-profile-name" class="max-w-40 text-xs text-subtle line-clamp-1">
+          {selectedProfile()?.title || props.llmProfileLabel || ""}
+        </Text>
+      </If>
+      <Icon name="PhCaretDown" size={11} color="muted-foreground" />
+    </View>
+  );
+
+  // Touch screens: nsh's Select, a bottom sheet over the keyboard's place.
+  function ProfileSheet() {
+    return (
+      <Select
+        items={profiles().map((item) => ({ value: item.value, title: item.title }))}
+        value={String(selectedProfile()?.value ?? "")}
+        searchable
+        disabled={props.disabled}
+        accessibilityLabel={profileTitle()}
+        tooltip={<Tip text={profileTitle()} />}
+        onChange={({ value: next }) => next !== null && props.onLLMProfileChange?.(String(next).trim())}
+        onOpenChange={({ open }) => profileSheetOpenChange(open)}
+        testID="chat-composer-profile"
+        placement="top"
+        align="end"
+        class="rounded-full disabled:opacity-45"
+        popupClass="min-w-64 rounded-[16px] border border-line-faint bg-dialog p-2"
+        popupStyle={profileSheetStyle()}
+        itemClass="rounded-[10px] px-3 py-2 hover:bg-hover focus:bg-hover selected:bg-selection"
+        searchClass="mx-1 mb-2 rounded-full border border-input px-3 py-1.5 text-sm"
+        searchPlaceholder="Filter"
+        renderItem={(entry) => profileRow(profiles()[entry.index], entry.title)}
+        trigger={profilePill()}
+      />
+    );
+  }
+
+  /** A profile's row: its mark, its title, its model in mono under it. */
+  const profileRow = (profile: ComposerProfileItem | undefined, title: string) => (
+    <View class="flex-row items-center gap-2">
+      {profileGlyph(profile)}
+      <View class="flex-1">
+        <Text class="text-sm text-foreground">{title}</Text>
+        <If when={profile?.subtitle}>
+          <Text class="font-mono text-xs text-muted-foreground">{profile?.subtitle ?? ""}</Text>
+        </If>
+      </View>
+    </View>
+  );
+
+  // Desktops: a popover beyond the composer, as the add menu opens (nsh's Select lays its list over
+  // or under the trigger, as the system's drop-down does, whatever `placement` says): it clears the
+  // frame above the picker (below it where the room above is short), its tail to the pill.
+  function ProfilePopover() {
+    return (
+      <PopoverPicker
+        items={profiles().map((item) => ({
+          value: String(item.value ?? ""),
+          title: item.title,
+          subtitle: item.subtitle,
+          icon: profileGlyph(item),
+        }))}
+        value={String(selectedProfile()?.value ?? "")}
+        onChange={(next) => props.onLLMProfileChange?.(next.trim())}
+        trigger={() => profilePill()}
+        accessibilityLabel={profileTitle()}
+        label={String(props.llmProfileLabel ?? "").trim()}
+        filterPlaceholder="Filter"
+        disabled={props.disabled}
+        placement="top"
+        align="end"
+        clearance={composerClearance()}
+        gap={POPUP_GAP}
+        open={profileSheetOpen()}
+        onOpenChange={(open) => profileSheetOpenChange(open)}
+        testID="chat-composer-profile"
+      />
+    );
+  }
+
+  // Voice and Send share the row's end: the mic while there is nothing to send (no text, no
+  // files) or while it records or transcribes, Send once there is something to send and while a
+  // task runs (it is Stop then). Both stay in place, one over the other, and cross-fade with a
+  // slight scale (opacity and transform, run natively); the hidden one takes no presses and is
+  // hidden from screen readers. Without voice input it is always Send.
+  const voiceShown = () =>
+    !!props.voiceAvailable && !props.stopMode && (voiceActive() || (value().trim() === "" && !(props.fileItems ?? []).length));
+  const turn = (shown: boolean) => ({
+    opacity: shown ? 1 : 0,
+    scale: shown ? 1 : 0.6,
+    pointerEvents: shown ? ("auto" as const) : ("none" as const),
+  });
+  function VoiceOrSend() {
+    return (
+      <View class="relative size-[38px]" testID="chat-composer-voice-send">
+        <If when={props.voiceAvailable}>
+          <View
+            class="absolute inset-0 transition duration-[220ms]"
+            style={turn(voiceShown())}
+            accessibilityElementsHidden={!voiceShown() || undefined}
+            importantForAccessibility={voiceShown() ? undefined : "no-hide-descendants"}
+          >
+            {voiceControl()}
+          </View>
+        </If>
+        <View
+          class="absolute inset-0 transition duration-[220ms]"
+          style={turn(!voiceShown())}
+          accessibilityElementsHidden={voiceShown() || undefined}
+          importantForAccessibility={voiceShown() ? "no-hide-descendants" : undefined}
+        >
+          {sendControl()}
+        </View>
+      </View>
+    );
+  }
 
   const actions = () => (
     <View class="shrink-0 flex-row items-center gap-2" onLayout={({ bounds }) => actionsWidth.set(bounds.size.width)}>
             <If when={profiles().length > 1}>
-              <Select
-                items={profiles().map((item) => ({ value: item.value, title: item.title }))}
-                value={String(selectedProfile()?.value ?? "")}
-                searchable
-                disabled={props.disabled}
-                accessibilityLabel={profileTitle()}
-                tooltip={<Tip text={profileTitle()} />}
-                onChange={({ value: next }) => next !== null && props.onLLMProfileChange?.(String(next).trim())}
-                onOpenChange={({ open }) => profileSheetOpenChange(open)}
-                testID="chat-composer-profile"
-                placement="top"
-                align="end"
-                class="min-h-8 flex-row items-center gap-1 rounded-(--radius) px-2 hover:bg-hover disabled:opacity-45"
-                popupClass="min-w-60 max-h-80 rounded-(--radius) border border-border bg-popover py-1 shadow-md"
-                popupStyle={profileSheetStyle()}
-                itemClass="px-3 py-1.5 hover:bg-hover focus:bg-hover selected:bg-selection"
-                searchClass="mx-2 mb-1 rounded-(--radius) border border-input px-2 py-1 text-sm"
-                searchPlaceholder="Filter"
-                renderItem={(entry) => {
-                  const profile = profiles()[entry.index];
-                  return (
-                    <View class="flex-row items-center gap-2">
-                      {profileGlyph(profile)}
-                      <View class="flex-1">
-                        <Text class="text-sm text-foreground">{entry.title}</Text>
-                        <If when={profile?.subtitle}>
-                          <Text class="font-mono text-xs text-muted-foreground">{profile?.subtitle ?? ""}</Text>
-                        </If>
-                      </View>
-                    </View>
-                  );
-                }}
-                trigger={
-                  <View class="flex-row items-center gap-1">
-                    <View testID={`chat-composer-profile-icon.${selectedProfile()?.image ? "image" : "PhCpu"}`}>{profileGlyph(selectedProfile())}</View>
-                    {/* Phone widths show the mark alone, to leave the field room; the label and tip still name the profile. */}
-                    <If when={!isMobile()}>
-                      <Text testID="chat-composer-profile-name" class="max-w-40 text-xs text-subtle line-clamp-1">
-                        {selectedProfile()?.title || props.llmProfileLabel || ""}
-                      </Text>
-                    </If>
-                    <Icon name="PhCaretDown" size={11} color="muted-foreground" />
-                  </View>
-                }
-              />
+              {/* The profile picker: a 38pt pill as tall as the buttons beside it, the plain button's
+                  hover and press, the whole of it the trigger. On desktops its list opens beyond the
+                  composer (ProfilePopover); on touch screens it is a bottom sheet (ProfileSheet). */}
+              <If when={!touchScreen()} else={<ProfileSheet />}>
+                <ProfilePopover />
+              </If>
             </If>
-            <If when={props.voiceAvailable}>{voiceControl()}</If>
-      {sendControl()}
+            {/* Voice and Send take turns in one place, the row's end (VoiceOrSend). */}
+            <VoiceOrSend />
     </View>
   );
 
@@ -598,6 +741,7 @@ export function ChatComposer(props: ChatComposerProps) {
     <View class={`gap-2 ${props.landing ? "w-full" : "pb-2.5"}`} testID={props.testID}>
       <View
         class={composerFrameClass(isMobile())}
+        onLayout={({ bounds }) => frameHeight.set(bounds.size.height)}
         onPress={() => focus({ preserveSelection: true })}
       >
         <If when={suggestionsVisible()}>
@@ -756,7 +900,7 @@ export function ChatComposer(props: ChatComposerProps) {
         </View>
         {/* While a task runs, the border beam travels the frame (design/ui-refresh.html §5). */}
         <If when={props.stopMode}>
-          <BorderBeam length={96} testID="chat-composer-beam" />
+          <BorderBeam length={96} radius={COMPOSER_RADIUS} testID="chat-composer-beam" />
         </If>
       </View>
       <If when={props.footerText}>

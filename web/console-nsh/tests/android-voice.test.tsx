@@ -55,34 +55,34 @@ const named = (app: { host: { calls(): { name: string; data: unknown }[] } }, na
   app.host.calls().filter((call) => call.name === name);
 const shows = (app: { texts(): string[] }, start: string) => app.texts().some((text) => text.startsWith(start));
 
-test("the native part records, the agent transcribes, and the words join the draft without sending it", async () => {
+test("the native part records, the agent transcribes, and the words fill the draft without sending it", async () => {
   const { app, calls } = await openPhone(nativeHost());
-  await app.type("id:chat-composer-input", "Note: ");
+  // The mic is there while the composer is empty (with a draft, the row's end is Send).
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
   expect(named(app, "morph.voice.start").length).toBe(1);
   // No live words on the phone: nothing to show or hide.
   expect(app.count("label:Hide live text") + app.count("label:Show live text")).toBe(0);
   await app.press("label:Stop and transcribe");
-  await app.waitUntil(() => app.value("id:chat-composer-input") === "Note: book a table");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
   await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
   // Sent by the native part, not by the app's fetch; the draft is not sent.
   expect(named(app, "morph.voice.upload").length).toBe(1);
   expect(calls.some((call) => call.method === "POST" && call.uri === "/voice/transcribe")).toBe(false);
   expect(calls.some((call) => call.method === "POST" && String(call.uri || "").startsWith("/tasks"))).toBe(false);
-  // The mic is ready for the next one.
+  // With the words in the draft the row's end is Send; emptied, the mic is back for the next one.
+  await app.clear("id:chat-composer-input");
   await app.waitFor("label:Voice input");
 });
 
 test("nothing heard leaves the draft as it was", async () => {
   const { app } = await openPhone(nativeHost({ "morph.voice.upload": SAID("") }));
-  await app.type("id:chat-composer-input", "keep me");
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
   await app.press("label:Stop and transcribe");
   await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
   await app.waitFor("label:Voice input");
-  expect(app.value("id:chat-composer-input")).toBe("keep me");
+  expect(app.value("id:chat-composer-input")).toBe("");
   // A recording without audio is no file: nothing to send.
   const silent = await openPhone(nativeHost({ "morph.voice.stop": null }));
   await silent.app.press("label:Voice input");
@@ -94,7 +94,6 @@ test("nothing heard leaves the draft as it was", async () => {
 test("refused microphone: asks again on the next tap, then points to Settings once blocked", async () => {
   const answers = [{ ok: false, error: "permission-denied" }, { ok: false, error: "permission-blocked" }, { ok: true }];
   const { app } = await openPhone(nativeHost({ "morph.voice.start": () => answers.shift() }));
-  await app.type("id:chat-composer-input", "draft");
   await app.press("label:Voice input");
   await app.waitUntil(() => shows(app, "Voice input needs the microphone. Tap the mic again"));
   expect(app.count("id:chat-composer-voice-strip")).toBe(0);
@@ -106,7 +105,7 @@ test("refused microphone: asks again on the next tap, then points to Settings on
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
   expect(named(app, "morph.voice.start").length).toBe(3);
-  expect(app.value("id:chat-composer-input")).toBe("draft");
+  expect(app.value("id:chat-composer-input")).toBe("");
 });
 
 test("a phone without a microphone says so instead of recording; a busy one says why", async () => {
@@ -138,7 +137,6 @@ test("without the native part, or without a ready route, there is no recording m
 
 test("leaving the app ends the recording: microphone released, nothing sent, draft kept", async () => {
   const { app } = await openPhone(nativeHost());
-  await app.type("id:chat-composer-input", "draft");
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
   await app.setLifecycle("background");
@@ -148,7 +146,7 @@ test("leaving the app ends the recording: microphone released, nothing sent, dra
   await app.waitFor("label:Voice input");
   expect(named(app, "morph.voice.stop").length).toBe(0);
   expect(named(app, "morph.voice.upload").length).toBe(0);
-  expect(app.value("id:chat-composer-input")).toBe("draft");
+  expect(app.value("id:chat-composer-input")).toBe("");
   // A permission question only makes the app inactive: that ends nothing.
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
@@ -175,7 +173,6 @@ test("the native part ending a recording by itself: an error says so, leaving sa
 
 test("another conversation ends the recording; the words go into the draft they were spoken for", async () => {
   const { app } = await openPhone(nativeHost());
-  await app.type("id:chat-composer-input", "first draft");
   await app.press("label:Voice input");
   await app.waitFor("id:chat-composer-voice-strip");
   // Back to the topics, into another one: the recording is thrown away, nothing is sent. (The
@@ -189,14 +186,16 @@ test("another conversation ends the recording; the words go into the draft they 
   expect(named(app, "morph.voice.cancel").length).toBeGreaterThan(0);
   expect(named(app, "morph.voice.upload").length).toBe(0);
   expect(app.value("id:chat-composer-input")).toBe("");
-  // Recorded here, the words go into this topic's draft; the first topic keeps its own.
+  // Recorded here, the words go into this topic's draft; the first topic's stays empty.
   await app.press("label:Voice input");
   await app.press("label:Stop and transcribe");
   await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
   await app.back();
   await app.waitFor("id:chat-conversation-pane", { state: "gone" });
   await app.press("Voice");
-  await app.waitUntil(() => app.value("id:chat-composer-input") === "first draft");
+  await app.waitFor("id:chat-composer-input");
+  await app.wait(100);
+  expect(app.value("id:chat-composer-input")).toBe("");
 });
 
 test("the mic is red only while recording: a refused microphone leaves it as it was", async () => {
@@ -223,7 +222,8 @@ test("the mic is red only while recording: a refused microphone leaves it as it 
   await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
   await looks(MIC);
   expect(app.count(RED_MIC)).toBe(0);
-  // Ended by the native part with an error.
+  // Ended by the native part with an error (the draft emptied first: the mic shows only then).
+  await app.clear("id:chat-composer-input");
   await app.press("label:Voice input");
   await looks(RED_MIC);
   await app.host.send("morph.voice.ended", { reason: "error", message: "The recorder stopped (1, -1)." });

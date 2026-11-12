@@ -413,7 +413,15 @@ const LOADING_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink"
  * hairline of `busyLook`), or, for the bare variants, draws a faint hairline of its own to ride.
  * `short` is the 40pt beam of xs/xxs and icon-sized controls (else 64).
  */
-export function BusyBeam(props: { busy: boolean; variant?: ButtonVariant; short?: boolean; border?: number; testID?: string }) {
+export function BusyBeam(props: {
+  busy: boolean;
+  variant?: ButtonVariant;
+  short?: boolean;
+  border?: number;
+  /** The box's corner radius (a circle button's: half its side). */
+  radius?: number;
+  testID?: string;
+}) {
   const variant = () => BUTTON_VARIANTS[props.variant ?? "primary"];
   return (
     <If when={props.busy}>
@@ -422,9 +430,71 @@ export function BusyBeam(props: { busy: boolean; variant?: ButtonVariant; short?
         tone={variant().beam}
         track={variant().loadingTrack ? String(token(variant().loadingTrack!)) : undefined}
         border={props.border ?? (variant().loadingTrack ? 0 : variant().loadingText ? 0.5 : 1)}
+        radius={props.radius}
         testID={props.testID}
       />
     </If>
+  );
+}
+
+/* ---------- circle buttons ---------- */
+
+/** A circle button's side: `md` 38pt (the composer's controls), `sm` 32pt. */
+export const CIRCLE_BUTTON_SIZES = { md: 38, sm: 32 } as const;
+export type CircleButtonSize = keyof typeof CIRCLE_BUTTON_SIZES;
+/** `plain`: bare, the plain button's fill on hover and press; `outlined`: a hairline ring; `primary`: filled ink. */
+export type CircleButtonVariant = "plain" | "outlined" | "primary";
+
+/**
+ * A circle button's look, for a control that draws its own box (a menu's trigger): round, the
+ * glyph in the middle, the variant's fill and ring.
+ */
+export function circleButtonClass(options: { size?: CircleButtonSize; variant?: CircleButtonVariant } = {}): string {
+  const side = options.size === "sm" ? "size-8" : "size-[38px]";
+  const look =
+    options.variant === "primary"
+      ? "border border-primary bg-primary hover:bg-ink"
+      : options.variant === "outlined"
+        ? "border border-line-soft bg-transparent hover:bg-hover active:bg-press"
+        : // The plain button's look (BUTTON_VARIANTS.plain): a fill on hover, a deeper one pressed.
+          "hover:bg-hover active:bg-press";
+  return `relative ${side} items-center justify-center rounded-full transition-colors duration-[180ms] ${look}`;
+}
+
+/**
+ * The standard round icon button: `icon` in the middle (14pt, `iconColor`), or a glyph of its own
+ * as `children`; `title` is its tooltip and its accessible name. `class` adds to the look (a
+ * selected fill, a busy box).
+ */
+export function CircleButton(props: {
+  title: string;
+  icon?: IconName;
+  iconColor?: TokenName;
+  size?: CircleButtonSize;
+  variant?: CircleButtonVariant;
+  selected?: boolean;
+  disabled?: boolean;
+  hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
+  onPress?: () => void;
+  class?: string;
+  testID?: string;
+  children?: JSX.Element;
+}) {
+  return (
+    <TipButton
+      onPress={() => props.onPress?.()}
+      disabled={props.disabled}
+      selected={props.selected}
+      accessibilityLabel={props.title}
+      tooltip={<Tip text={props.title} />}
+      hitSlop={props.hitSlop as any}
+      testID={props.testID}
+      class={`${circleButtonClass({ size: props.size, variant: props.variant })} ${props.class ?? ""}`}
+    >
+      <If when={props.children} else={<Icon name={props.icon ?? "PhPlus"} size={14} color={props.iconColor ?? "subtle"} />}>
+        {props.children}
+      </If>
+    </TipButton>
   );
 }
 
@@ -1853,7 +1923,12 @@ export function ConfirmHost() {
 
 /* ---------- notices ---------- */
 
-/** The floating notice stack (the Vue console's AppNoticeHost), fed by lib/core/notices.js. */
+/**
+ * The floating notice stack (the Vue console's AppNoticeHost), fed by lib/core/notices.js: at the
+ * bottom right on wide windows; on phones under the top bar, the screen's width less the gutter,
+ * where it covers neither the bar's buttons (Back) nor the bottom navigation and the composer (a
+ * notice saying to tap the mic again sat on the mic).
+ */
 export function NoticeHost(props: { class?: string }) {
   const tone = (type: string) =>
     type === "error" ? "border-danger" : type === "warning" ? "border-warn" : type === "success" ? "border-ok" : "border-blue";
@@ -1862,7 +1937,11 @@ export function NoticeHost(props: { class?: string }) {
   const color = (type: string): TokenName =>
     type === "error" ? "danger" : type === "warning" ? "warn-dark" : type === "success" ? "ok" : "blue";
   return (
-    <View class={`absolute bottom-4 right-4 w-80 max-w-[90%] gap-2 ${props.class ?? ""}`} style={{ pointerEvents: "box-none" }}>
+    <View
+      class={`absolute gap-2 ${isMobile() ? "left-3 right-3" : "bottom-4 right-4 w-80 max-w-[90%]"} ${props.class ?? ""}`}
+      style={{ pointerEvents: "box-none", top: isMobile() ? CHROME_BAR_HEIGHT + 8 : undefined }}
+      testID="notice-host"
+    >
       <Each of={noticeState.items as { id: string; type: string; text: string; label: string }[]} key={(item) => item.id}>
         {(item) => (
           <View
