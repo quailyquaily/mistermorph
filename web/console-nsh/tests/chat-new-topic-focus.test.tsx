@@ -33,12 +33,13 @@ async function fieldFocused(app: App) {
   return true;
 }
 
-async function openTopicList(options: { platform?: "android"; width?: number } = {}) {
+async function openTopicList(options: { platform?: "android"; width?: number; slowSlides?: boolean } = {}) {
   const opened = await openConsole({
     location: "/e/default/chat",
     width: options.width ?? 390,
     height: 844,
     ...(options.platform ? { platform: options.platform, safeArea: BARS } : {}),
+    ...(options.slowSlides ? { slowSlides: true } : {}),
     api: { "GET /proxy:/topics": TOPICS, "GET /proxy:/tasks": EMPTY, "GET /proxy:/todo/tasks": EMPTY, "GET /proxy:/llm/profiles": EMPTY },
   });
   const { app } = opened;
@@ -95,12 +96,18 @@ test("on the Android phone the focus stays with the field as the viewport change
 });
 
 test("on the Android phone a sheet opened while the new topic slides in keeps the keyboard down", async () => {
-  const { app } = await openTopicList({ platform: "android" });
+  // The slide lasts a minute (tests/slowSlidesConsole.tsx), so the add press surely lands during
+  // it: at the system clock's pace a slow run could end the slide first, the field rightly
+  // focused, and the sheet then gives that focus back as it closes.
+  const { app } = await openTopicList({ platform: "android", slowSlides: true });
   await app.press("id:chat-topic-new-fab");
   // Tapped before the slide ends: the add menu, a sheet at the foot of the screen.
   await app.press("id:chat-composer-add");
   await app.waitFor("text:Upload Files");
+  // The pane arrives with the sheet open: a resize ends the slide at once (PaneStack).
+  await app.setViewport(390, 843);
   await slidIn(app);
+  await app.waitFor("text:Upload Files");
   await app.wait(400);
   expect(await fieldFocused(app)).toBe(false);
   // Closed without a choice: the field had no focus when it opened, and gets none.
