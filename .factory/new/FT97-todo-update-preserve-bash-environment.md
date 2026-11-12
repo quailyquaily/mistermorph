@@ -85,3 +85,15 @@ Fix round 2 built and pushed at 0769aaa3 (commits 7e65c709 and 0769aaa3). Moved 
 - Not checked: live-model prompt compliance. No UI sources changed; no visual inspection or nsh checks. Conversation/run state still retain script source by design; arbitrary script output/returned text/thrown error text is not automatically scrubbed. No live tasks or user credentials touched.
 - Manager's first verification command was blocked by a local path guard; the replacement checked the full changed-path list and passed the same test gate.
 Next: review the security fix and its intentional observability tradeoff. Not merged or released.
+
+## factory · review · 2026-11-12 16:52
+head: 0769aaa3e6fe2cb3a36d6a86debef5180bb4aad5
+verdict: fix
+fix:
+- [P1] agent/engine_helpers.go:293: tool parameter redaction covers events/logs but not the raw ToolCall hooks consumed by chatcmd/tui_activity.go:155,165. Direct and nested todo_update calls print bash_env credential values in the chat activity and persistent terminal transcript, and outer codemode calls print the script source. Apply shared display redaction to both chat formatters (without altering execution parameters) and add direct/nested/codemode regression coverage. Verified synthetic API_TOKEN value synthetic-secret-value-0777 appears in both activity and transcript in all three cases.
+notes:
+- Claude Code reviewed all 16 changed files on origin/master...HEAD. The previous outer-codemode event/log P1 and English docs P3 are fixed. No other findings reported. Manager classifies the newly verified CLI disclosure as P1 rather than coder P2: this is the same newly accepted credential material exposed through ordinary tool display, contrary to the explicit no-disclosure requirement; it is not deliberate internal run-state retention.
+- Probe used a temporary detached worktree under the review run directory and synthetic credentials only; the probe copy is retained in the run artifacts. Coder removed the temporary worktree and left the source worktree clean. Manager inspected the raw ToolCall hook consumers and confirmed both display formatters bypass redaction.
+- Validation: coder and manager independently passed test -z "$(gofmt -l .)" && go vet ./... && go test ./... with absolute throwaway HOME/TMPDIR under the review run directory. Coder's initial GOFLAGS-modified attempt was stopped and rerun without that override; the completed gate passed. No protected paths changed; only item-related history.
+- Installs: none. No UI sources changed; no visual inspection or nsh checks. Live-model guidance compliance not checked. Arbitrary codemode output/error text, conversation/run state and debug LLM request dumps remain outside ordinary argument redaction; syntax-error source quoting was not separately verified. Unknown update parameters remain silently ignored.
+- Round 2 of 3: returned to new/ for the next fix round. No linked GitHub issue or PR identified. Not merged or released.
