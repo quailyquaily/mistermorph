@@ -45,3 +45,13 @@ Checks: configured gofmt check, go vet ./... and go test ./... passed with throw
 Visual checks reported by coder: before/after isolated component fixtures in headless Chrome at 320 and 1280 widths, English and Japanese, screenshots inspected and phone taps/desktop clicks exercised. Password prompt visually checked in English only. Full Console, native desktop and Android device/emulator were not visually checked; review should inspect those contexts. No changes outside the planned six Console component/fixture/test paths or to forbidden paths.
 
 Initial branch push failed because the credential request lacked a repository path; command-local credential.useHttpPath=true resolved it on the single retry. No persistent git settings changed.
+
+## factory · review · 2026-11-13 01:22
+head: ab607c31b8e9c39716a26e89607e6d6bd988cbc2
+verdict: pass
+notes:
+- Claude Code reviewed all six changed files against origin/master...HEAD (merge base 8b021ee4); no qualifying P0/P1/P2/P3 findings introduced by this change. Branch merges cleanly with the fetched base; no code changes or commits made during review.
+- Validation with throwaway HOME: configured gofmt check, go vet ./... and go test ./... passed; nsh check passed; nsh test --web-host tests/noHost.js passed (826 passed, 0 failed), including all 10 new layout regression tests. Used existing pinned nsh 0.5.0; no installs or manifest changes.
+- Independent headless layout probes measured revealed 200-character secrets at 320 and 1280 widths in web and desktop runtime configurations: field height 44 matched regular input and actions stayed inside. Reviewed shared TextField callers and secret behavior preservation.
+- Pre-existing residual issue, reproduced on origin/master: a picked plain-text key hint can shrink to zero at 320 width with a long source label. Not introduced by this diff; not a blocking finding.
+- Review limitations: no screenshots or full Console visual inspection; native desktop and Android device/emulator not checked. Fixtures isolate controls rather than mounting real settings pages. Owner should visually check real settings at mobile/desktop widths, especially translated labels and password prompts.
