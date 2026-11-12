@@ -35,3 +35,15 @@ Checks: configured gofmt/vet/go test gate passed (independently rerun by manager
 Installs: none.
 Not checked: real Android device/emulator, live desktop window, dark mode, full-app human visual inspection; hover/press colours only indirectly covered by unchanged styling.
 First branch push lacked a repository-scoped credential path; retry with command-local credential.useHttpPath succeeded. No repository credential settings changed.
+
+## factory · review · 2026-11-13 06:09
+head: 1cc8dd26b0359504dd2f6f63a9af83873fdaffe5
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (7 changed files); no findings reported. The worktree remains clean and the head merges cleanly with origin/master.
+- Configured gofmt/vet/go test gate passed (gate exit=0). nsh 0.5.0 check passed; nsh test --web-host tests/noHost.js passed: 823 tests, 823 passed, 0 failed. Both test runners used throwaway HOME directories.
+- All seven topic-head-icons tests and six topic-status-alignment tests passed, including desktop/narrow layout measurements, names, tooltips and presses.
+- Review output was truncated to a background completion acknowledgment; a follow-up Claude Code call recovered command results from run artifacts and reconfirmed PASS. The original per-file written reasoning was not recoverable.
+- No installs are recorded by the recovered validation scripts; earlier session install history could not be independently confirmed.
+- Review did not perform screenshot/pixel comparison, full-app human visual inspection, desktop-shell execution or real Android/emulator validation. Headless size/position checks are not a substitute for those visual checks.
+- Moved review/ → ready/. No linked GitHub issues or PRs were identified in the item.
