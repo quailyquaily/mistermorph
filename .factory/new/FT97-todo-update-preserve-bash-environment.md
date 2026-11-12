@@ -55,3 +55,15 @@ Built and pushed branch factory/FT97-todo-update-preserve-bash-environment at 62
 - Not checked: live-model prompt compliance. No UI sources changed; no visual inspection or nsh checks needed. Translated docs not changed. Existing Console editor API and conversation/run state still retain environment values where required; no live tasks or user values were touched.
 - Push credential helper initially required repository-path context; retry with command-local credential.useHttpPath=true succeeded. No persistent git configuration changed.
 Next: review preservation/rollback semantics and redaction coverage before shipping. Not merged or released.
+
+## factory · review · 2026-11-12 16:07
+head: 629e199f077937af18dbda9ef242b500296dd2ba
+verdict: fix
+fix:
+- [P1] agent/engine_helpers.go:292: Bash Environment credentials bypass redaction when todo_update is invoked through codemode: the outer code string is returned unchanged and reaches tool_start/tool_done Args and, with include_tool_params enabled, tool_call_params logs. Redact the outer script arguments safely or exclude this sensitive tool from code mode, and cover that path with an integration regression test. Verified example: a codemode script calling todo_update(action=update, id=weekly-report, bash_env=[{name:API_TOKEN,value:synthetic-secret-value-0099}]) exposes the synthetic value in outer events/logs although inner todo_update arguments are redacted.
+notes:
+- [P3] docs/tools.md:287: English todo_update reference still lists only add_once/add_recurring/delete and omits bash_env, partial-update/clear semantics and redacted result shape; align it with the updated tool and vitepress documentation.
+- Claude Code reviewed all 14 changed files on origin/master...HEAD and verified the code-mode leak with a synthetic-value integration probe. Manager classifies that finding P1 (coder suggested P2): code mode is enabled by default and the newly accepted credential values are exposed in ordinary tool events, violating the explicit no-disclosure requirement. No actual user secrets or live tasks used.
+- Validation: manager independently ran test -z "$(gofmt -l .)" && go vet ./... && go test ./... with throwaway HOME; all passed. Coder's initial test run failed without identifying a package due to truncated output; subsequent full and uncached runs passed. Initial failure cause remains unknown, not proven unrelated.
+- Installs: none. Source worktree remains clean; no UI changes, visual checks or nsh checks. Live-model compliance not checked. Run state/transcripts/approval persistence still retain values by design; unknown update parameters are ignored. Coder reported using a temporary scratch copy outside the assigned run directory for its probe and deleting it; that location did not comply with the run-directory rule.
+- Round 1 of 3: returned to new/ for the next build to fix the P1 before shipping. No linked GitHub issue or PR identified. Not merged or released.
