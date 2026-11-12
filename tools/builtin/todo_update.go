@@ -135,6 +135,17 @@ func (t *TodoUpdateTool) ParameterSchema() string {
 				"type":        "string",
 				"description": "Optional task notification chat id (for example tg:-1001234567890). Defaults to " + cronstore.ConsoleNotificationChatID + " in Console runtime.",
 			},
+			"bash_env": map[string]any{
+				"type":        "array",
+				"description": "Optional environment variables injected into bash for this task run only. Each entry has name and value. Values support ${ENV} expansion at run time.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name":  map[string]any{"type": "string"},
+						"value": map[string]any{"type": "string"},
+					},
+				},
+			},
 		},
 		"required": []string{"action"},
 	}
@@ -206,6 +217,10 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if workspaceErr != nil {
 			return "", workspaceErr
 		}
+		bashEnv, bashEnvErr := parseTodoUpdateBashEnvOptional(params)
+		if bashEnvErr != nil {
+			return "", bashEnvErr
+		}
 		slog.Default().Debug("todo_update_add_start",
 			"content_len", len(content),
 			"chat_id", chatID,
@@ -222,7 +237,7 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		result, err = store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir})
+		result, err = store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
 		if err == nil && len(warnings) > 0 {
 			addResult := result.(cronstore.AddResult)
 			addResult.Warnings = append(addResult.Warnings, warnings...)
@@ -266,11 +281,15 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if workspaceErr != nil {
 			return "", workspaceErr
 		}
+		bashEnv, bashEnvErr := parseTodoUpdateBashEnvOptional(params)
+		if bashEnvErr != nil {
+			return "", bashEnvErr
+		}
 		rewritten, warnings, resolveErr := t.resolveAddContent(ctx, content, people, contactsDir, false)
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		result, err = store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir})
+		result, err = store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
 		if err == nil && len(warnings) > 0 {
 			recurringResult := result.(cronstore.AddResult)
 			recurringResult.Warnings = append(recurringResult.Warnings, warnings...)
@@ -525,6 +544,33 @@ func normalizeTodoUpdateUsernames(input []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+func parseTodoUpdateBashEnvOptional(params map[string]any) ([]cronstore.BashEnvRef, error) {
+	raw, exists := params["bash_env"]
+	if !exists || raw == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("bash_env must be an array of objects")
+	}
+	var refs []cronstore.BashEnvRef
+	if err := json.Unmarshal(encoded, &refs); err != nil {
+		return nil, fmt.Errorf("bash_env must be an array of objects")
+	}
+	out := make([]cronstore.BashEnvRef, 0, len(refs))
+	for _, ref := range refs {
+		name := strings.TrimSpace(ref.Name)
+		if name == "" && strings.TrimSpace(ref.Value) == "" {
+			continue
+		}
+		out = append(out, cronstore.BashEnvRef{Name: name, Value: ref.Value})
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
 }
 
 func parseTodoUpdatePeopleOptional(params map[string]any) ([]string, error) {

@@ -249,6 +249,142 @@ func TestTodoUpdateDeleteByIDDoesNotRequireLLM(t *testing.T) {
 	}
 }
 
+func TestTodoUpdateAddWritesBashEnv(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]any
+		want   cronstore.Task
+	}{
+		{
+			name: "add_once",
+			params: map[string]any{
+				"action":  "add_once",
+				"id":      "submit-report",
+				"content": "Remind Alice to submit the report.",
+				"at":      "2026-05-12 09:00",
+				"tz":      "Asia/Tokyo",
+				"bash_env": []any{
+					map[string]any{"name": "REPORT_MODE", "value": "weekly"},
+					map[string]any{"name": "API_KEY", "value": "${OPENAI_API_KEY}"},
+				},
+			},
+			want: cronstore.Task{
+				ID:      "submit-report",
+				At:      "2026-05-12 09:00",
+				TZ:      "Asia/Tokyo",
+				Content: "Remind Alice to submit the report.",
+				BashEnv: []cronstore.BashEnvRef{
+					{Name: "REPORT_MODE", Value: "weekly"},
+					{Name: "API_KEY", Value: "${OPENAI_API_KEY}"},
+				},
+			},
+		},
+		{
+			name: "add_recurring",
+			params: map[string]any{
+				"action":  "add_recurring",
+				"id":      "weekly-report",
+				"content": "Prepare weekly report.",
+				"cron":    "0 10 * * 1",
+				"tz":      "UTC",
+				"bash_env": []any{
+					map[string]any{"name": "REPORT_MODE", "value": "weekly"},
+				},
+			},
+			want: cronstore.Task{
+				ID:      "weekly-report",
+				Cron:    "0 10 * * 1",
+				TZ:      "UTC",
+				Content: "Prepare weekly report.",
+				BashEnv: []cronstore.BashEnvRef{
+					{Name: "REPORT_MODE", Value: "weekly"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			cronPath := filepath.Join(root, "cron.yaml")
+			update := NewTodoUpdateToolWithLLM(true, cronPath, filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
+			if _, err := update.Execute(context.Background(), tt.params); err != nil {
+				t.Fatalf("todo_update %s error = %v", tt.name, err)
+			}
+			file, _, err := cronstore.NewStore(cronPath).Read()
+			if err != nil {
+				t.Fatalf("read cron file: %v", err)
+			}
+			if len(file.Tasks) != 1 {
+				t.Fatalf("tasks = %#v, want 1", file.Tasks)
+			}
+			got := file.Tasks[0]
+			if got.ID != tt.want.ID || got.At != tt.want.At || got.Cron != tt.want.Cron || got.TZ != tt.want.TZ || got.Content != tt.want.Content {
+				t.Fatalf("task core fields = %#v, want %#v", got, tt.want)
+			}
+			if len(got.BashEnv) != len(tt.want.BashEnv) {
+				t.Fatalf("bash_env = %#v, want %#v", got.BashEnv, tt.want.BashEnv)
+			}
+			for i, ref := range tt.want.BashEnv {
+				if got.BashEnv[i] != ref {
+					t.Fatalf("bash_env[%d] = %#v, want %#v", i, got.BashEnv[i], ref)
+				}
+			}
+		})
+	}
+}
+
+func TestTodoUpdateAddOmitsBashEnv(t *testing.T) {
+	root := t.TempDir()
+	cronPath := filepath.Join(root, "cron.yaml")
+	update := NewTodoUpdateToolWithLLM(true, cronPath, filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
+	if _, err := update.Execute(context.Background(), map[string]any{
+		"action":  "add_recurring",
+		"id":      "tennis",
+		"content": "去打网球。",
+		"cron":    "0 15 * * 4",
+		"tz":      "Asia/Tokyo",
+	}); err != nil {
+		t.Fatalf("todo_update add_recurring error = %v", err)
+	}
+	file, _, err := cronstore.NewStore(cronPath).Read()
+	if err != nil {
+		t.Fatalf("read cron file: %v", err)
+	}
+	if len(file.Tasks) != 1 {
+		t.Fatalf("tasks = %#v, want 1", file.Tasks)
+	}
+	if len(file.Tasks[0].BashEnv) != 0 {
+		t.Fatalf("bash_env = %#v, want empty", file.Tasks[0].BashEnv)
+	}
+}
+
+func TestTodoUpdateAddRejectsInvalidBashEnv(t *testing.T) {
+	root := t.TempDir()
+	cronPath := filepath.Join(root, "cron.yaml")
+	update := NewTodoUpdateToolWithLLM(true, cronPath, filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
+	_, err := update.Execute(context.Background(), map[string]any{
+		"action":  "add_recurring",
+		"id":      "weekly-report",
+		"content": "Prepare weekly report.",
+		"cron":    "0 10 * * 1",
+		"bash_env": []any{
+			map[string]any{"name": "REPORT_MODE", "value": "weekly"},
+			map[string]any{"name": "REPORT_MODE", "value": "daily"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "duplicate bash_env name") {
+		t.Fatalf("error = %v, want duplicate bash_env name", err)
+	}
+	file, _, readErr := cronstore.NewStore(cronPath).Read()
+	if readErr != nil {
+		t.Fatalf("read cron file: %v", readErr)
+	}
+	if len(file.Tasks) != 0 {
+		t.Fatalf("tasks = %#v, want empty after rejected add", file.Tasks)
+	}
+}
+
 func TestTodoUpdateCompleteActionRemoved(t *testing.T) {
 	root := t.TempDir()
 	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "cron.yaml"), filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")

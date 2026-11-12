@@ -294,6 +294,7 @@ Parameters:
 | `people` | `array<string>` | No | None | Mentioned people to resolve into explicit reference IDs in added content. |
 | `chat_id` | `string` | No | Empty | Task-context chat ID, for example `tg:-1001234567890`. |
 | `workspace_dir` | `string` | No | Runtime default workspace | Workspace directory for the task's runs: an absolute path or `~/...`, or the literal `workspace_dir` for the workspace attached to the current conversation. The directory must exist when the task is added. |
+| `bash_env` | `array<object>` | No | Empty | Environment variables injected into bash for this task run only. Each entry has `name` and `value`. Values support `${ENV}` expansion at run time. |
 
 Returns:
 
@@ -313,6 +314,7 @@ Constraints:
 
 - Controlled by `tools.todo_update.enabled`.
 - Add actions require an LLM client and model when `people` resolution is needed.
+- Add actions persist optional `bash_env` onto the task.
 - Add actions validate markdown reference IDs before writing.
 - Delete by `id` does not require an LLM.
 - Delete without `id` uses LLM semantic matching on `content`; no match and ambiguous match both return errors.
@@ -331,6 +333,8 @@ Errors (string matching):
 | `missing_reference_id` | Mentioned person cannot be uniquely resolved to a reference ID. |
 | `people must be an array of strings` | `people` is not a string array. |
 | `workspace_dir:` | `workspace_dir` does not exist, is not a directory, or names the current workspace when none is attached. |
+| `bash_env must be an array of objects` | `bash_env` is present but not an object array. |
+| `duplicate bash_env name` | Two `bash_env` entries share the same name. |
 | `invalid reference_resolve response` | Reference insertion LLM returned invalid JSON. |
 | `no matching cron task in cron.yaml` | Delete found no matching task. |
 | `ambiguous cron task match` | Delete without `id` matched multiple candidates. |

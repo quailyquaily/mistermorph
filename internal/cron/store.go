@@ -240,6 +240,7 @@ func (s *Store) AddOnce(task Task) (AddResult, error) {
 		Content:      strings.TrimSpace(task.Content),
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
+		BashEnv:      task.BashEnv,
 	})
 }
 
@@ -253,6 +254,7 @@ func (s *Store) AddRecurring(task Task) (AddResult, error) {
 		Content:      strings.TrimSpace(task.Content),
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
+		BashEnv:      task.BashEnv,
 	})
 }
 
