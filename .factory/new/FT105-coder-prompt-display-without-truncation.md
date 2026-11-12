@@ -16,3 +16,12 @@ Expected behavior:
 Investigation lead: the earlier diagnosis identified `toolDisplayArgsSummary` in `agent/engine_helpers.go` and a 240-byte tool-argument summary cap. Verify the current implementation and all intermediate detail limits before fixing; this is a lead, not a substitute for checking the current code.
 
 Regression checks: prompts longer than 240 bytes, long multiline prompts, and Unicode text must be preserved exactly in activity detail, including their final characters; verify both live updates and restored activity details where supported. Confirm the coding CLI still receives the complete original task.
+
+## factory · 2026-11-13 08:44
+Owner scope update: "FT105 SHOULD also include subagent. Please update."
+
+Extend this issue to subagent (`spawn`) task/prompt display as well as coder (Codex/Claude) prompts. The requirements above apply to both:
+- Opening activity details must reveal the complete original subagent prompt, not an abbreviated tool-argument summary.
+- Preserve the full prompt through backend events, storage/restoration where supported, and the Console detail view; wrapping and scrolling must work on desktop and mobile.
+- Keep the actual prompt passed to the subagent unchanged. Compact previews may stay abbreviated; unrelated output and logging limits remain out of scope.
+- Add regression coverage for both coder and subagent prompts exceeding existing preview/detail caps, including multiline and Unicode prompts with exact final-character preservation, live updates, and restored details where supported.
