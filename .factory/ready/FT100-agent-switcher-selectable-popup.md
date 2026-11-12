@@ -58,3 +58,20 @@ Tests: manager independently verified configured gofmt cleanliness, go vet ./...
 Visual checks: coder checked Chrome desktop and 360pt touch emulation, including popup direction, tail, active indication, switching, outside dismissal, offline rows and touch geometry. Native click evidence is simulated GPUI window tests. The actual desktop app with a real display and a real Android device/emulator were unavailable; real-device touch/keyboard behavior was not verified.
 
 Installs: no unpinned installs or manifest changes. cargo fetch --locked restored pinned dependencies for native GPUI probes only. No source issue/PR links. No base push or deployment.
+
+
+## factory · review · 2026-11-13 02:45
+head: 0268fdb4a2e3b4e5195d048e19636b83bb69f321
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/shared/PopoverPicker.tsx:383: Enter in a nonempty agent filter with no enabled matches selects the Overview footer instead of doing nothing. Verified with nine agents at /e/default/todo: filter `nobody`, press Enter -> /overview; origin/master stays on /e/default/todo. Filter changes auto-highlight the footer through step(-1, 1). Prefer no automatic footer highlight for a nonempty filter, leaving it reachable by arrow keys; add a regression test.
+
+Claude Code reviewed all nine changed files on origin/master...HEAD; no P0/P1 findings. Worktree remains clean with no review commits. Branch merges cleanly with the fetched master; head remains unchanged. No linked source issues/PRs.
+
+Validation (absolute throwaway HOME): gofmt clean; go vet ./... passed; go test ./... passed on full rerun. Initial Go run failed TestAttachmentInterrupted in internal/agentlink with TempDir cleanup directory-not-empty; isolated reproduction failed 2/20 runs and this branch changes no Go files. Record as intermittent test failure, not a confirmed introduced defect. nsh check passed; nsh test --web-host tests/noHost.js passed 819 tests, zero failures, using the pinned nsh 0.5.0 tools.
+
+Residual risks: review could not independently verify real native-desktop click behavior or Android touch/soft-keyboard placement; available GPUI host is version 0.4.0, not the required 0.5.0. Actual touch-row size and accessibility expanded/selected state remain unverified. Two-tap mobile dismissal behavior is intentional per build report.
+
+Installs: no unpinned dependencies or manifest changes. Tool-side incident: despite review-directory-only instructions, coder invoked the web target through a symlink and nsh replaced the sibling build FT99 tool cache's nsh-runtime/web component with its packaged 0.5.0 web component (including nsh-dev.wasm). No tracked source changed. Symlink removed; exact previous from-source runtime was not restored. Owner should rebuild that FT99 runtime before relying on its exact previous build. No further writes outside the review directory were attempted.
+
+Moved review/ -> ready/; P3 and native/mobile verification limits remain for owner inspection.
