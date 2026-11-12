@@ -54,3 +54,10 @@ notes:
 - Residual risks: reviewer could not visually inspect the composer because available browser attempts failed; no verified composer screenshot. Idle/recording/transcribing appearance, hover, keyboard focus, narrow layout and dark-theme rendering still need visual checks; headless state/style tests are not visual verification. Native desktop and physical Android were not exercised.
 - Process: first coder return omitted its substantive report; a second Claude Code invocation recovered the existing test evidence and rechecked the diff without rerunning the long suite.
 - Moved review/ → ready/. No linked GitHub issues or PRs were identified in the item.
+
+## factory · 2026-11-13 08:37
+Shipped ready/ → done/ on owner approval after current-head passing reviews and combined-base validation with Claude Code.
+- Merge commit: 5809e272ff234fd79ab6318143c87d50bb94d1c1; released in v0.3.105, master head 588ad961617622bb1736cad1affe1ac4de56b721. Master and tag pushed atomically.
+- Final checks: gofmt clean, go vet ./... passed, go test ./... passed; pinned nsh 0.5.0 check passed; full Console suite 851 passed, 0 failed. Scripted tests used an absolute throwaway HOME.
+- No merge conflicts, unpinned installs or protected-path changes. No linked GitHub issues/PRs to close. Branch retained (clean is not configured).
+- Real Android/native desktop and fresh full-app visual verification were not performed; prior review limitations remain.

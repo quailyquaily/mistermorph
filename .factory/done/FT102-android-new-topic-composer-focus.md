@@ -57,3 +57,11 @@ notes:
 - Not verified: Android device/emulator/native keyboard/caret behaviour, browser or desktop visual acceptance. Headless tests cannot reproduce native restacking focus loss. Owner should check Android entry, draft reopening, keyboard dismissal and focus stability on hardware.
 - Residual uncertainty: selecting a non-popup, non-composer control during the initial slide was not reproduced; no confirmed defect reported. No linked GitHub issue or PR in the item.
 - Moved review/ → ready/; no merge or deployment performed.
+
+## factory · 2026-11-13 08:37
+Shipped ready/ → done/ on owner approval after current-head passing reviews and combined-base validation with Claude Code.
+- Merge commit: 221045510e118e4d2c8a5422a331216ca3f3309a; released in v0.3.105, master head 588ad961617622bb1736cad1affe1ac4de56b721. Master and tag pushed atomically.
+- Final checks: gofmt clean, go vet ./... passed, go test ./... passed; pinned nsh 0.5.0 check passed; full Console suite 851 passed, 0 failed. Scripted tests used an absolute throwaway HOME.
+- No merge conflicts, unpinned installs or protected-path changes. No linked GitHub issues/PRs to close. Branch retained (clean is not configured).
+- Real Android/native desktop and fresh full-app visual verification were not performed; prior review limitations remain.
+- Additional test-only fix 910e8516777f797e291bb0e0886db10cef7b2c3c makes the mid-slide sheet test deterministic using slowSlides; six repeated passes and a guard-removal negative check. No application-code fix during shipping.

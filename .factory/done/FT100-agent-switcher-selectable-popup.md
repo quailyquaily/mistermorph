@@ -75,3 +75,11 @@ Residual risks: review could not independently verify real native-desktop click 
 Installs: no unpinned dependencies or manifest changes. Tool-side incident: despite review-directory-only instructions, coder invoked the web target through a symlink and nsh replaced the sibling build FT99 tool cache's nsh-runtime/web component with its packaged 0.5.0 web component (including nsh-dev.wasm). No tracked source changed. Symlink removed; exact previous from-source runtime was not restored. Owner should rebuild that FT99 runtime before relying on its exact previous build. No further writes outside the review directory were attempted.
 
 Moved review/ -> ready/; P3 and native/mobile verification limits remain for owner inspection.
+
+## factory · 2026-11-13 08:37
+Shipped ready/ → done/ on owner approval after current-head passing reviews and combined-base validation with Claude Code.
+- Merge commit: 0ef692a883dab3f6c64b5b82b85e270019302140; released in v0.3.105, master head 588ad961617622bb1736cad1affe1ac4de56b721. Master and tag pushed atomically.
+- Final checks: gofmt clean, go vet ./... passed, go test ./... passed; pinned nsh 0.5.0 check passed; full Console suite 851 passed, 0 failed. Scripted tests used an absolute throwaway HOME.
+- No merge conflicts, unpinned installs or protected-path changes. No linked GitHub issues/PRs to close. Branch retained (clean is not configured).
+- Real Android/native desktop and fresh full-app visual verification were not performed; prior review limitations remain.
+- Nonblocking P3 retained: Enter in a nonempty agent filter with no enabled matches selects Overview.
