@@ -8,7 +8,13 @@ description: >
 inputs:
   nsh-version:
     description: The nsh release to install (the nsh-* crates in desktop/nsh/Cargo.toml use the same)
-    default: v0.4.0
+    default: v0.5.0
+  components:
+    description: >
+      The nsh runtimes to add beside the CLI (nsh 0.5 ships them apart): "web" for the web console,
+      "web android" for the Android app. A command that needs one would add it too; adding them
+      here makes a failed download its own step.
+    default: web
   gpui:
     description: '"true" for the desktop shell (GPUI packages, Rust cache); "false" for the console alone (the Android app)'
     default: "true"
@@ -52,6 +58,13 @@ runs:
     - name: Show nsh version
       shell: bash
       run: nsh --version
+
+    - name: Add nsh runtimes
+      if: inputs.components != ''
+      shell: bash
+      env:
+        COMPONENTS: ${{ inputs.components }}
+      run: nsh component add ${COMPONENTS}
 
     - name: Cache the shell's Rust build
       if: inputs.gpui == 'true'

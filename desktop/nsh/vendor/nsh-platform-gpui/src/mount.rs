@@ -174,7 +174,9 @@ impl Mounter {
             }
             MountItem::Frame { id, frame } => {
                 let Some(view) = &self.get(*id) else { return };
-                if *id == ROOT_ID {
+                // The window decides its root's size: the main one, and
+                // each of the app's own ([`crate::window`]).
+                if *id == ROOT_ID || crate::window::is_root(surface, *id) {
                     return;
                 }
                 let mut frame = *frame;
@@ -388,7 +390,9 @@ impl Mounter {
             // The animator's (`Surface::apply`).
             MountItem::Animation(_)
             | MountItem::AnimationBindings { .. }
-            | MountItem::ComponentPropSlots { .. } => {}
+            | MountItem::ComponentPropSlots { .. }
+            | MountItem::TreeOrder(_)
+            | MountItem::ProjectStates { .. } => {}
         }
     }
 
@@ -398,6 +402,7 @@ impl Mounter {
         if crate::navigation::defer_detach(surface, view) {
             return;
         }
+        crate::key_focus::detached(surface, view);
         match view.kind() {
             ViewKind::Modal => return crate::navigation::dismiss(surface, view),
             ViewKind::HeaderItem => return crate::navigation::header_item_removed(surface, view),
@@ -416,15 +421,26 @@ impl Mounter {
         let view = self.views.get(id);
         let view = view.as_ref();
         match command {
-            Command::Focus => view.map_or((), crate::text_input::focus),
+            // An input edits; a stop takes the keyboard focus.
+            Command::Focus => match view {
+                Some(view) if view.kind() == ViewKind::Input => crate::text_input::focus(view),
+                Some(view) => crate::key_focus::focus(surface, view),
+                None => {}
+            },
             Command::Blur => match view {
                 Some(view) if view.kind() == ViewKind::Input => crate::text_input::blur(view),
+                Some(view) if crate::key_focus::blur(surface, view) => {}
                 _ => crate::text_input::blur_all(surface),
             },
             Command::SetSelection { start, end } => {
                 if let Some(view) = view {
                     crate::text_input::set_selection(view, *start, *end);
                 }
+            }
+            // Not carried out on this platform yet: the app's paste is lost,
+            // so say so.
+            Command::InsertText(_) => {
+                log::warn!("insertText is not supported on GPUI yet; nothing inserted")
             }
             Command::ScrollTo { y, .. } if view.is_some_and(|v| v.kind() == ViewKind::Input) => {
                 crate::text_input::scroll_to(view.expect("an input"), *y);
@@ -454,6 +470,7 @@ impl Mounter {
             | Command::StopLoading
             | Command::InjectJavaScript(_)
             | Command::PostMessage(_)
+            | Command::Load(_)
             | Command::Seek(_)
             | Command::Native { .. } => {
                 if let Some(view) = view {
@@ -461,7 +478,7 @@ impl Mounter {
                 }
             }
             Command::Back => crate::navigation::default_back(surface),
-            Command::Desktop(command) => crate::chrome::command(surface, command),
+            Command::Desktop(command) => crate::window::command(surface, id, view, command),
             other => crate::system::command(surface, id, other),
         }
     }

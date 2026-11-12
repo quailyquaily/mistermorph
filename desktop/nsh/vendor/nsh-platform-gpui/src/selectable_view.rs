@@ -25,7 +25,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use nsh_core::{
-    AttributedText, Bounds, EventKind, Points,
+    AttributedText, Bounds, EventKind, EventPayload, NodeId, PayloadValue, Points,
     geometry::{Point, point},
     selection::{SelectionModel, SelectionTexts},
 };
@@ -64,6 +64,8 @@ struct Active {
     highlighted: Vec<NshView>,
     /// The mouse button is down in the area.
     gesture: Option<Gesture>,
+    /// The selected text last reported to the area's `onSelectionChange`.
+    reported: String,
 }
 
 /// A press in an area, while the button is down.
@@ -106,6 +108,10 @@ impl SelectionTexts for AreaTexts {
         &self.texts[i].text.text
     }
 
+    fn copied(&self, i: usize, range: std::ops::Range<u32>) -> String {
+        self.texts[i].text.copied_text(range)
+    }
+
     fn frame(&self, i: usize) -> Bounds<Points> {
         self.texts[i].frame
     }
@@ -118,8 +124,13 @@ impl SelectionTexts for AreaTexts {
             .and_then(|(x, y)| crate::text::caret_at(&t.view.state(), x, y))
             .unwrap_or(0)
     }
+
     fn key(&self, i: usize) -> u64 {
         u64::from(self.texts[i].view.id())
+    }
+
+    fn continues(&self, i: usize) -> bool {
+        self.texts[i].view.state().props.continues_text
     }
 }
 
@@ -258,13 +269,15 @@ fn set_range(view: &NshView, range: Option<(u32, u32)>) {
 /// Makes `area` of `surface` the active area (the one before loses its
 /// selection) and calls `f` with it.
 fn with_area<R>(surface: u64, area: &NshView, f: impl FnOnce(&mut Active) -> R) -> R {
-    ACTIVE.with_borrow_mut(|active| {
+    let (old, r) = ACTIVE.with_borrow_mut(|active| {
+        let mut old = None;
         if active
             .as_ref()
             .is_some_and(|a| a.area != *area || a.surface != surface)
-            && let Some(old) = active.take()
+            && let Some(a) = active.take()
         {
-            unhighlight(&old.highlighted);
+            unhighlight(&a.highlighted);
+            old = Some(a);
         }
         let a = active.get_or_insert_with(|| Active {
             surface,
@@ -273,9 +286,70 @@ fn with_area<R>(surface: u64, area: &NshView, f: impl FnOnce(&mut Active) -> R) 
             seen: Vec::new(),
             highlighted: Vec::new(),
             gesture: None,
+            reported: String::new(),
         });
-        f(a)
-    })
+        (old, f(a))
+    });
+    if let Some(old) = old {
+        cleared(&old);
+    }
+    report(surface);
+    r
+}
+
+/// Reports the selected text of the active area of `surface` to its
+/// `onSelectionChange` when it changed (after the selection's borrow ends:
+/// the handler may change what is shown).
+fn report(surface: u64) {
+    let change = ACTIVE.with_borrow_mut(|active| {
+        let a = active.as_mut().filter(|a| a.surface == surface)?;
+        let (id, listens) = {
+            let s = a.area.state();
+            (s.id, s.events.contains(EventKind::SelectionChange))
+        };
+        if !listens {
+            return None;
+        }
+        let (text, start) = if a.model.is_empty() {
+            (String::new(), 0)
+        } else {
+            AreaTexts::of(&a.area).map_or_else(
+                || (String::new(), 0),
+                |t| (a.model.text(&t), a.model.start_offset(&t)),
+            )
+        };
+        if text == a.reported {
+            return None;
+        }
+        a.reported.clone_from(&text);
+        Some((id, text, start))
+    });
+    if let Some(change) = change {
+        send(surface, change);
+    }
+}
+
+/// Reports `""` for `old`, an area that lost its selection, if it last
+/// reported a selected text and is still shown.
+fn cleared(old: &Active) {
+    if !old.reported.is_empty() && old.area.attached() {
+        let id = old.area.state().id;
+        send(old.surface, (id, String::new(), 0));
+    }
+}
+
+/// Sends `onSelectionChange` with `text` to view `id` of `surface`.
+fn send(surface: u64, (id, text, start): (NodeId, String, u32)) {
+    if let Some(surface) = Surface::by_key(surface) {
+        surface.event(
+            id,
+            EventKind::SelectionChange,
+            EventPayload::Map(vec![
+                ("text", PayloadValue::Str(text)),
+                ("start", PayloadValue::Number(f64::from(start))),
+            ]),
+        );
+    }
 }
 
 /// The selectable view `view` is in (the outermost, as an area inside
@@ -409,6 +483,7 @@ pub(crate) fn pointer(surface: &Rc<Surface>, kind: PointerKind, x: f32, y: f32) 
                 g.scrolling |= scroll;
                 (true, scroll)
             });
+            report(key);
             if scroll {
                 autoscroll(key);
             }
@@ -519,6 +594,7 @@ fn autoscroll(key: u64) {
                 highlight(&mut a.highlighted, &a.model, &texts);
             }
         });
+        report(key);
         autoscroll(key);
     });
 }
@@ -527,6 +603,7 @@ fn autoscroll(key: u64) {
 pub(crate) fn clear_all() {
     if let Some(a) = ACTIVE.with_borrow_mut(Option::take) {
         unhighlight(&a.highlighted);
+        cleared(&a);
     }
 }
 
@@ -570,6 +647,8 @@ pub(crate) fn batch_applied(surface: &Surface) {
     });
     if gone.is_some() {
         clear_all();
+    } else {
+        report(surface.key());
     }
 }
 
@@ -681,6 +760,7 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
                     a.highlighted.clear();
                 }
             });
+            report(key);
         }
         _ => return false,
     }

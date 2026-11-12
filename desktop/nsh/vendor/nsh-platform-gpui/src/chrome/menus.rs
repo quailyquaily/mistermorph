@@ -17,19 +17,26 @@
 //! previous menus), Return / Space choose, Escape closes a level, a
 //! letter highlights the next item starting with it.
 
-use std::{rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use gpui::{
     AnchoredPositionMode, AnyElement, Bounds, CursorStyle, MouseButton, Pixels, TextRun, Window,
     anchored, canvas, deferred, div, point, prelude::*, px,
 };
 use nsh_core::{
-    EventKind, EventPayload, PayloadValue, ROOT_ID,
-    desktop::{Key, MenuAction, MenuItem, MenuRole, Shortcut},
+    Color, EventKind, EventPayload, ImageSource, PayloadValue, ROOT_ID,
+    desktop::{Key, MenuAction, MenuItem, MenuRole, Shortcut, menu_icon},
+    geometry::{DevicePixels, Points, size},
 };
+use rustc_hash::FxHashMap;
 
 use super::{Action, PLATFORM, Platform, Theme};
-use crate::{input::KeyEvent, keys, surface::Surface};
+use crate::{
+    image::{Load, MenuIcon, load_menu_icon},
+    input::KeyEvent,
+    keys,
+    surface::Surface,
+};
 
 /// The menus' text size.
 const FONT_SIZE: f32 = 13.0;
@@ -46,6 +53,9 @@ const INSET: f32 = 4.0;
 /// space between the label and the shortcut, and what is right of the
 /// shortcut (more for a submenu's arrow).
 const LABEL_X: f32 = 28.0;
+/// In a menu with icons they start where the labels would, and the labels
+/// this far on (the icon's side and the gap after it).
+const ICON_ADVANCE: f32 = menu_icon::SIDE.0 + 6.0;
 const SHORTCUT_GAP: f32 = 32.0;
 const RIGHT: f32 = 16.0;
 const ARROW: f32 = 24.0;
@@ -241,8 +251,24 @@ fn next(items: &[MenuItem], from: Option<usize>, step: isize) -> Option<usize> {
     None
 }
 
+/// Where a level's labels start: its icons take a column of their own, so
+/// the labels line up whichever items have one.
+fn label_x(items: &[MenuItem]) -> f32 {
+    let mut icons = false;
+    for item in items {
+        icons |= matches!(item, MenuItem::Action(MenuAction { icon: Some(_), .. }))
+            || matches!(item, MenuItem::Submenu { icon: Some(_), .. });
+    }
+    if icons {
+        LABEL_X + ICON_ADVANCE
+    } else {
+        LABEL_X
+    }
+}
+
 /// A level's size and its items' rows, with `width` measuring a text.
 fn measure(items: &[MenuItem], width: impl Fn(&str) -> f32) -> (f32, f32, Vec<(f32, f32)>) {
+    let label_x = label_x(items);
     let mut y = BORDER + PADDING;
     let mut rows = Vec::with_capacity(items.len());
     let mut w = MIN_WIDTH;
@@ -251,11 +277,11 @@ fn measure(items: &[MenuItem], width: impl Fn(&str) -> f32) -> (f32, f32, Vec<(f
             MenuItem::Separator => SEPARATOR_HEIGHT,
             MenuItem::Action(a) => {
                 let shortcut = shortcut_label(a).map_or(0.0, |s| SHORTCUT_GAP + width(&s));
-                w = w.max(2.0 * (BORDER + INSET) + LABEL_X + width(&label(a)) + shortcut + RIGHT);
+                w = w.max(2.0 * (BORDER + INSET) + label_x + width(&label(a)) + shortcut + RIGHT);
                 ITEM_HEIGHT
             }
             MenuItem::Submenu { label, .. } => {
-                w = w.max(2.0 * (BORDER + INSET) + LABEL_X + width(label) + ARROW);
+                w = w.max(2.0 * (BORDER + INSET) + label_x + width(label) + ARROW);
                 ITEM_HEIGHT
             }
         };
@@ -393,9 +419,72 @@ pub(super) fn bar_open(surface: &Surface) -> bool {
     )
 }
 
+/// The icons of the open menu's rows, by source: an open menu's are drawn
+/// again every frame, and they load as a level first shows, so a menu never
+/// waits for one. They go when the menu closes (the decoded pictures stay
+/// in the image cache, for the next time).
+#[derive(Default)]
+pub(super) struct Icons(FxHashMap<Arc<str>, IconState>);
+
+enum IconState {
+    Loading(Option<Load>),
+    Loaded(MenuIcon),
+    /// Warned about; the item shows none.
+    Failed,
+}
+
+/// Starts loading the icons of `items` that have not started (a load that
+/// is in memory answers before it returns).
+fn load_icons(surface: &Rc<Surface>, items: &[MenuItem], scale: f32) {
+    for item in items {
+        let (MenuItem::Action(MenuAction {
+            icon: Some(icon), ..
+        })
+        | MenuItem::Submenu {
+            icon: Some(icon), ..
+        }) = item
+        else {
+            continue;
+        };
+        load_icon(surface, icon, scale);
+    }
+}
+
+fn load_icon(surface: &Rc<Surface>, source: &ImageSource, scale: f32) {
+    let c = &surface.chrome;
+    let key = source.uri.clone();
+    if c.icons.borrow().0.contains_key(&key) {
+        return;
+    }
+    c.icons
+        .borrow_mut()
+        .0
+        .insert(key.clone(), IconState::Loading(None));
+    let weak = Rc::downgrade(surface);
+    let uri = key.clone();
+    let load = load_menu_icon(surface, source, scale, move |loaded| {
+        let Some(surface) = weak.upgrade() else {
+            return;
+        };
+        let state = match loaded {
+            Ok(icon) => IconState::Loaded(icon),
+            Err(e) => {
+                log::warn!("menu icon {uri}: {e}");
+                IconState::Failed
+            }
+        };
+        surface.chrome.icons.borrow_mut().0.insert(uri, state);
+        surface.invalidate();
+    });
+    if let Some(IconState::Loading(slot)) = c.icons.borrow_mut().0.get_mut(&key) {
+        *slot = load;
+    }
+}
+
 /// Closes the open menu, if any.
 pub(super) fn close(surface: &Surface) {
     let open = surface.chrome.open.borrow_mut().take();
+    surface.chrome.icons.borrow_mut().0.clear();
     if let Some(open) = open {
         if matches!(open.kind, Kind::App) {
             closed_event(surface);
@@ -469,6 +558,7 @@ pub(crate) fn popup_actions(surface: &Surface, items: Vec<LocalItem>) {
                     checked: None,
                     role: None,
                     when: nsh_core::keymap::When::Always,
+                    icon: None,
                 })
             }
         })
@@ -957,7 +1047,7 @@ pub(super) fn bar(surface: &Rc<Surface>, _window: &mut Window, theme: &Theme) ->
 }
 
 /// Lays out the levels drawn for the first time.
-fn lay_out(surface: &Surface, open: &mut Open, window: &mut Window) {
+fn lay_out(surface: &Rc<Surface>, open: &mut Open, window: &mut Window) {
     let viewport = window.viewport_size();
     let (vw, vh) = (f32::from(viewport.width), f32::from(viewport.height));
     for i in 0..open.levels.len() {
@@ -965,6 +1055,7 @@ fn lay_out(surface: &Surface, open: &mut Open, window: &mut Window) {
             continue;
         }
         let (w, h, rows) = measure(&open.levels[i].items, |t| text_width(window, t));
+        load_icons(surface, &open.levels[i].items, window.scale_factor());
         let at = match open.levels[i].anchor {
             Anchor::Point(x, y) => Place::Point(x, y),
             Anchor::Pointer => {
@@ -1022,12 +1113,60 @@ fn glyph(points: &'static [(f32, f32)], w: f32, h: f32, color: gpui::Rgba) -> im
     .h(px(h))
 }
 
+/// An icon, its longer side [`menu_icon::SIDE`] long, centered in a square
+/// of that side.
+fn icon(image: Arc<gpui::RenderImage>, pixels: (u32, u32)) -> impl IntoElement {
+    let side = menu_icon::SIDE.0;
+    let shown = menu_icon::fitted(
+        size(DevicePixels(pixels.0 as i32), DevicePixels(pixels.1 as i32)),
+        Points(side),
+    );
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let at = point(
+                bounds.origin.x + px((side - shown.width.0) / 2.0),
+                bounds.origin.y + px((side - shown.height.0) / 2.0),
+            );
+            let shown = Bounds::new(at, gpui::size(px(shown.width.0), px(shown.height.0)));
+            if let Err(e) =
+                window.paint_image(shown, shown, gpui::Corners::default(), image, 0, false)
+            {
+                log::warn!("menu icon: cannot paint: {e}");
+            }
+        },
+    )
+    .w(px(side))
+    .h(px(side))
+}
+
+/// What a row of text in `color` shows of `source`, once it has loaded.
+fn row_icon(
+    icons: &RefCell<Icons>,
+    source: Option<&ImageSource>,
+    color: gpui::Rgba,
+) -> Option<AnyElement> {
+    let icons = icons.borrow();
+    let IconState::Loaded(loaded) = icons.0.get(&source?.uri)? else {
+        return None;
+    };
+    let channel = |c: f32| (c * 255.0).round() as u8;
+    let texture = loaded.texture(Color::rgba(
+        channel(color.r),
+        channel(color.g),
+        channel(color.b),
+        channel(color.a),
+    ));
+    Some(icon(texture.image().clone(), loaded.size()).into_any_element())
+}
+
 const CHECK: &[(f32, f32)] = &[(0.0, 0.55), (0.36, 0.9), (1.0, 0.1)];
 const CHEVRON: &[(f32, f32)] = &[(0.0, 0.0), (1.0, 0.5), (0.0, 1.0)];
 
 /// One level's panel.
-fn panel(level: &Level, theme: &Theme) -> Option<AnyElement> {
+fn panel(level: &Level, theme: &Theme, icons: &RefCell<Icons>) -> Option<AnyElement> {
     let g = level.geom.as_ref()?;
+    let label_x = label_x(&level.items);
     let mut panel = div()
         .absolute()
         .left(px(g.rect.x))
@@ -1046,7 +1185,7 @@ fn panel(level: &Level, theme: &Theme) -> Option<AnyElement> {
         let top = y - BORDER;
         let left = INSET - BORDER;
         let width = g.rect.w - 2.0 * INSET;
-        let (text, shortcut, checked, submenu, enabled) = match item {
+        let (text, shortcut, checked, submenu, enabled, source) = match item {
             MenuItem::Separator => {
                 panel = panel.child(
                     div()
@@ -1065,10 +1204,14 @@ fn panel(level: &Level, theme: &Theme) -> Option<AnyElement> {
                 a.checked == Some(true),
                 false,
                 a.enabled,
+                a.icon.as_ref(),
             ),
-            MenuItem::Submenu { label, enabled, .. } => {
-                (label.clone(), None, false, true, *enabled)
-            }
+            MenuItem::Submenu {
+                label,
+                enabled,
+                icon,
+                ..
+            } => (label.clone(), None, false, true, *enabled, icon.as_ref()),
         };
         let color = if enabled { theme.text } else { theme.disabled };
         let mut row = div()
@@ -1082,7 +1225,7 @@ fn panel(level: &Level, theme: &Theme) -> Option<AnyElement> {
             .child(
                 div()
                     .absolute()
-                    .left(px(LABEL_X))
+                    .left(px(label_x))
                     .top_0()
                     .h(px(h))
                     .flex()
@@ -1091,6 +1234,15 @@ fn panel(level: &Level, theme: &Theme) -> Option<AnyElement> {
                     .text_color(color)
                     .child(text),
             );
+        if let Some(image) = row_icon(icons, source, color) {
+            row = row.child(
+                div()
+                    .absolute()
+                    .left(px(LABEL_X))
+                    .top(px((h - menu_icon::SIDE.0) / 2.0))
+                    .child(image),
+            );
+        }
         if checked {
             row = row.child(
                 div()
@@ -1176,7 +1328,11 @@ pub(super) fn layer(
             mouse_released(&s4, at(e.position));
             handled(cx);
         })
-        .children(open.levels.iter().filter_map(|l| panel(l, theme)));
+        .children(
+            open.levels
+                .iter()
+                .filter_map(|l| panel(l, theme, &surface.chrome.icons)),
+        );
     Some(
         deferred(
             anchored()
@@ -1204,6 +1360,7 @@ mod tests {
             checked: None,
             role: None,
             when: nsh_core::keymap::When::Always,
+            icon: None,
         })
     }
 
@@ -1250,6 +1407,40 @@ mod tests {
         assert_eq!(w, 2.0 * (BORDER + INSET) + LABEL_X + 280.0 + RIGHT);
         let (w, ..) = measure(&items[..1], |t| t.len() as f32 * 7.0);
         assert_eq!(w, MIN_WIDTH);
+    }
+
+    #[test]
+    fn icons_take_a_column_of_their_own() {
+        let width = |t: &str| t.len() as f32 * 10.0;
+        let plain = [action(1, "A long enough label for the width", true)];
+        let MenuItem::Action(with) = plain[0].clone() else {
+            unreachable!()
+        };
+        let source = ImageSource {
+            uri: "asset:/new.svg".into(),
+            ..ImageSource::default()
+        };
+        let iconic = [MenuItem::Action(MenuAction {
+            icon: Some(source.clone()),
+            ..with
+        })];
+        assert_eq!(label_x(&plain), LABEL_X);
+        assert_eq!(label_x(&iconic), LABEL_X + ICON_ADVANCE);
+        assert_eq!(
+            measure(&iconic, width).0,
+            measure(&plain, width).0 + ICON_ADVANCE
+        );
+        // A submenu's icon counts as well, and one item moves every label.
+        let mixed = [
+            plain[0].clone(),
+            MenuItem::Submenu {
+                label: "More".into(),
+                enabled: true,
+                items: Vec::new(),
+                icon: Some(source),
+            },
+        ];
+        assert_eq!(label_x(&mixed), LABEL_X + ICON_ADVANCE);
     }
 
     #[test]

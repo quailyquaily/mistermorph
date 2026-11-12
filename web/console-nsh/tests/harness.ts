@@ -123,6 +123,8 @@ function defaults(options: ConsoleOptions): Record<string, ApiHandler> {
     "GET /proxy:/contacts/list": { body: { items: [] } },
     "GET /proxy:/topics": { body: { items: [] } },
     "GET /proxy:/topics/activity": { body: { topics: [] } },
+    // The TODO page loads the heartbeat's workflows on every visit.
+    "GET /proxy:/heartbeat/workflows": { body: { items: [] } },
   };
 }
 

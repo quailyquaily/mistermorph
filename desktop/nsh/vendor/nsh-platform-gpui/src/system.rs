@@ -45,7 +45,19 @@
 //!   background while the surface's window is not presented (GPUI's
 //!   `WindowVisibility::Hidden`: minimized, covered or on another desktop,
 //!   as far as the platform reports it), active while one of the windows
-//!   showing a surface is the active one, inactive otherwise.
+//!   showing a surface is the active one, inactive otherwise;
+//! - the preferred languages (`localeSettings()`'s), most preferred first:
+//!   `GetUserPreferredUILanguages` on Windows,
+//!   `CFLocaleCopyPreferredLanguages` on macOS, gettext's list on Linux
+//!   (`LANGUAGE`, then the messages' locale, each with its language alone
+//!   after it);
+//! - the time zone (`localeSettings()`'s), as the native backends name it: on
+//!   Windows the setting's zone (`GetDynamicTimeZoneInformation`) by its
+//!   IANA name from the ICU Windows ships; elsewhere the zone `TZ` names
+//!   (`GMT`, `Europe/Berlin`, as the C library reads it), else the zone
+//!   `/etc/localtime` links to (else `/etc/timezone`).
+//!   GPUI reports no change of it: it is read again whenever a window
+//!   becomes the active one, as the user comes back from changing it.
 //!
 //! On Windows and macOS the settings are read again whenever the window's
 //! appearance changes (GPUI reports no other setting changes); on Linux
@@ -74,14 +86,16 @@ use nsh_core::{
     Points, ROOT_ID,
     platform::{Appearance, clipboard},
 };
-use nsh_engine::{ColorScheme, Edges, Environment, Lifecycle, Locale};
+use nsh_engine::{
+    ColorScheme, Edges, Environment, Languages, Lifecycle, Locale, LocaleSettings, TimeZone,
+};
 
 use crate::{
     app::AppView,
     geom::rect,
     input::{Cursor, KeyEvent, PointerKind},
     render::{DrawCx, border_quad, corners},
-    surface::Surface,
+    surface::{Next, Surface},
     view::{Hosted, ItemPointer},
 };
 
@@ -145,6 +159,7 @@ struct Settings {
     rtl: bool,
     screen_reader: bool,
     locale: Locale,
+    locale_settings: LocaleSettings,
     os_version: (u16, u16),
 }
 
@@ -166,6 +181,9 @@ pub(crate) fn simulate_system_scheme(dark: bool) {
     for surface in surfaces {
         update(&surface);
         surface.invalidate();
+        // Every window of the app's own draws again, its frame in the
+        // scheme unless its `colorScheme` fixes one.
+        crate::window::scheme_simulated(&surface);
     }
 }
 
@@ -217,6 +235,12 @@ fn lifecycle(surface: &Surface, current: Lifecycle) -> Lifecycle {
             Lifecycle::Inactive
         }
     })
+}
+
+/// The system appearance a test switched to (`nsh test --target`), if
+/// any: dark when true.
+pub(crate) fn simulated_scheme() -> Option<bool> {
+    SIMULATED.with(Cell::get)
 }
 
 /// True when the window looks dark (or a test made the system look so).
@@ -278,6 +302,11 @@ pub(crate) fn watch_environment(
         let active = window.is_window_active();
         with_watched(view.surface().key(), |w| w.active = active);
         lifecycle_changed();
+        // What GPUI reports no change of (the time zone) is read again as
+        // the user comes back.
+        if active {
+            update(view.surface());
+        }
         crate::rt::flush(cx);
     })
     .detach();
@@ -380,6 +409,7 @@ fn update(surface: &Surface) {
     };
     env.color_scheme = surface.appearance.get().resolve(system);
     env.locale = settings.locale;
+    env.locale_settings = settings.locale_settings;
     env.font_scale = settings.font_scale;
     env.reduce_motion = settings.reduce_motion;
     env.rtl = settings.rtl;
@@ -389,6 +419,24 @@ fn update(surface: &Surface) {
     env.keyboard_height = Points(0.0);
     env.lifecycle = lifecycle(surface, env.lifecycle);
     surface.set_environment(env);
+}
+
+/// The time zone on POSIX systems: the zone `TZ` names (`GMT`,
+/// `Europe/Berlin`: the process's local times follow it; a POSIX rule such
+/// as `CET-1CEST` names none), else the zone `/etc/localtime` links to, else
+/// `/etc/timezone`'s; `UTC` when none says ([`TimeZone::posix`]).
+#[cfg_attr(windows, allow(dead_code))]
+fn posix_time_zone() -> TimeZone {
+    TimeZone::posix(std::env::var("TZ").ok().as_deref(), || {
+        std::fs::read_link("/etc/localtime")
+            .ok()
+            .and_then(|target| TimeZone::parse(&target.to_string_lossy()))
+            .or_else(|| {
+                std::fs::read_to_string("/etc/timezone")
+                    .ok()
+                    .and_then(|name| TimeZone::parse(name.trim()))
+            })
+    })
 }
 
 /// The user's locale on POSIX systems: the first locale variable set that
@@ -406,6 +454,69 @@ fn posix_locale(var: impl Fn(&str) -> Option<String>) -> Locale {
         .split(':')
         .find_map(Locale::parse)
         .unwrap_or_default()
+}
+
+/// The locale settings of `regional`'s regional preferences, with
+/// `languages` and `time_zone`.
+fn locale_settings(
+    regional: LocaleSettings,
+    languages: Languages,
+    time_zone: TimeZone,
+) -> LocaleSettings {
+    let mut settings = regional;
+    settings.languages = languages;
+    settings.time_zone = time_zone;
+    settings
+}
+
+/// The regional preferences of the POSIX locales: `LC_TIME`'s region's
+/// times and weeks, `LC_MEASUREMENT`'s units (each the first set of
+/// `LC_ALL`, its own and `LANG`), `locale`'s where none is set.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn posix_regional(var: impl Fn(&str) -> Option<String>, locale: Locale) -> LocaleSettings {
+    let of = |category: &str| {
+        ["LC_ALL", category, "LANG"]
+            .iter()
+            .find_map(|v| var(v).filter(|s| !s.is_empty()))
+            .map_or_else(
+                || LocaleSettings::of(locale),
+                |name| LocaleSettings::parse(&name),
+            )
+    };
+    let units = of("LC_MEASUREMENT");
+    let mut regional = of("LC_TIME");
+    regional.measurement_system = units.measurement_system;
+    regional.temperature_unit = units.temperature_unit;
+    regional
+}
+
+/// The user's preferred languages on POSIX systems, as gettext lists them:
+/// `LANGUAGE`'s list (`fr_CA:de`, unless the messages' locale is `C`), then
+/// the first set of `LC_ALL`, `LC_MESSAGES` and `LANG`, each with its
+/// language alone after it (`de_DE.UTF-8`: `de-DE`, then `de`). `None` when
+/// none names a language.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn posix_languages(var: impl Fn(&str) -> Option<String>) -> Option<Languages> {
+    let messages = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|v| var(v).filter(|s| !s.is_empty()));
+    // gettext ignores `LANGUAGE` while the messages' locale is `C`.
+    let plain = messages
+        .as_deref()
+        .is_some_and(|m| m == "C" || m == "POSIX" || m.starts_with("C."));
+    let mut names: Vec<String> = Vec::new();
+    if !plain && let Some(list) = var("LANGUAGE") {
+        names.extend(list.split(':').filter(|n| !n.is_empty()).map(str::to_owned));
+    }
+    names.extend(messages);
+    let mut tags = Vec::new();
+    for locale in names.iter().filter_map(|n| Locale::parse(n)) {
+        tags.push(locale.as_str().to_owned());
+        if let Some((language, _)) = locale.as_str().split_once('-') {
+            tags.push(language.to_owned());
+        }
+    }
+    Languages::parse(tags.iter().map(String::as_str))
 }
 
 /// True when the language of locale `tag` (`ar-EG`, `he`) is written right
@@ -443,12 +554,16 @@ mod os {
     use std::cell::Cell;
 
     use nsh_core::Color;
+    use nsh_engine::HourCycle;
     use zbus::{
         blocking::{Connection, Proxy},
         zvariant::{OwnedValue, Value},
     };
 
-    use super::{Settings, parse_version, posix_locale, rtl_language};
+    use super::{
+        Settings, parse_version, posix_languages, posix_locale, posix_regional, posix_time_zone,
+        rtl_language,
+    };
 
     const PORTAL: &str = "org.freedesktop.portal.Desktop";
     const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -463,6 +578,8 @@ mod os {
         reduce_motion: bool,
         screen_reader: bool,
         accent: Option<Color>,
+        /// GNOME's time format: 12-hour (`Some(true)`), 24-hour, or none.
+        twelve_hour: Option<bool>,
     }
 
     thread_local! {
@@ -473,6 +590,7 @@ mod os {
                 reduce_motion: false,
                 screen_reader: false,
                 accent: None,
+                twelve_hour: None,
             })
         };
         static WATCHING: Cell<bool> = const { Cell::new(false) };
@@ -485,6 +603,7 @@ mod os {
         ReduceMotion(bool),
         ScreenReader(bool),
         Accent(Option<Color>),
+        TwelveHour(Option<bool>),
     }
 
     /// The settings: the locale from the environment, the kernel's
@@ -492,12 +611,31 @@ mod os {
     pub(super) fn settings() -> Settings {
         let locale = posix_locale(|v| std::env::var(v).ok());
         let desktop = DESKTOP.with(Cell::get);
+        let mut regional = posix_regional(|v| std::env::var(v).ok(), locale);
+        // GNOME's time format over the region's hour cycle where they
+        // disagree.
+        if let Some(twelve) = desktop
+            .twelve_hour
+            .filter(|t| *t != regional.hour_cycle.twelve_hour())
+        {
+            regional.hour_cycle = if twelve {
+                HourCycle::H12
+            } else {
+                HourCycle::H23
+            };
+        }
         Settings {
             font_scale: desktop.font_scale,
             reduce_motion: desktop.reduce_motion,
             rtl: rtl_language(locale.as_str()),
             screen_reader: desktop.screen_reader,
             locale,
+            locale_settings: super::locale_settings(
+                regional,
+                posix_languages(|v| std::env::var(v).ok())
+                    .unwrap_or(nsh_engine::Languages::one(locale)),
+                posix_time_zone(),
+            ),
             os_version: os_version(),
         }
     }
@@ -543,6 +681,7 @@ mod os {
                     Change::ReduceMotion(v) => d.reduce_motion = v,
                     Change::ScreenReader(v) => d.screen_reader = v,
                     Change::Accent(v) => d.accent = v,
+                    Change::TwelveHour(v) => d.twelve_hour = v,
                 }
             }
             log::debug!("desktop settings: {d:?}");
@@ -566,6 +705,7 @@ mod os {
         let initial = [
             (INTERFACE, "text-scaling-factor"),
             (INTERFACE, "enable-animations"),
+            (INTERFACE, "clock-format"),
             (APPEARANCE, "accent-color"),
         ];
         send(initial.iter().filter_map(|(n, k)| read(n, k)).collect());
@@ -607,6 +747,13 @@ mod os {
                 Some(Change::FontScale(font_scale(*v)))
             }
             (INTERFACE, "enable-animations", Value::Bool(on)) => Some(Change::ReduceMotion(!on)),
+            (INTERFACE, "clock-format", Value::Str(format)) => {
+                Some(Change::TwelveHour(match format.as_str() {
+                    "12h" => Some(true),
+                    "24h" => Some(false),
+                    _ => None,
+                }))
+            }
             (APPEARANCE, "accent-color", Value::Structure(s)) => {
                 let rgb: Vec<f64> = s
                     .fields()
@@ -663,9 +810,13 @@ mod os {
 mod os {
     use std::ffi::c_void;
 
-    use nsh_engine::Locale;
+    use nsh_engine::{HourCycle, Locale, LocaleSettings, MeasurementSystem, TimeZone, Weekday};
 
     use super::{Settings, rtl_language, text_scale};
+
+    const LOCALE_STIMEFORMAT: u32 = 0x1003;
+    const LOCALE_IFIRSTDAYOFWEEK: u32 = 0x100C;
+    const LOCALE_IMEASURE: u32 = 0x000D;
 
     const SPI_GETSCREENREADER: u32 = 0x0046;
     const SPI_GETCLIENTAREAANIMATION: u32 = 0x1042;
@@ -685,7 +836,17 @@ mod os {
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
+        fn GetDynamicTimeZoneInformation(info: *mut DynamicTimeZoneInformation) -> u32;
+        fn GetUserPreferredUILanguages(
+            flags: u32,
+            count: *mut u32,
+            names: *mut u16,
+            len: *mut u32,
+        ) -> i32;
+        fn LoadLibraryExW(name: *const u16, file: isize, flags: u32) -> isize;
+        fn GetProcAddress(module: isize, name: *const std::ffi::c_char) -> *mut c_void;
         fn GetUserDefaultLocaleName(name: *mut u16, len: i32) -> i32;
+        fn GetLocaleInfoEx(name: *const u16, kind: u32, data: *mut u16, len: i32) -> i32;
         fn GetUserDefaultUILanguage() -> u16;
         fn LCIDToLocaleName(lcid: u32, name: *mut u16, len: i32, flags: u32) -> i32;
     }
@@ -723,10 +884,8 @@ mod os {
     }
 
     pub(super) fn settings() -> Settings {
-        let locale = user_locale_name()
-            .as_deref()
-            .and_then(Locale::parse)
-            .unwrap_or_default();
+        let name = user_locale_name();
+        let locale = name.as_deref().and_then(Locale::parse).unwrap_or_default();
         Settings {
             font_scale: text_scale(reg_dword(
                 "Software\\Microsoft\\Accessibility",
@@ -737,8 +896,157 @@ mod os {
             rtl: ui_language().is_some_and(|l| rtl_language(&l)),
             screen_reader: spi_bool(SPI_GETSCREENREADER) == Some(true),
             locale,
+            locale_settings: super::locale_settings(
+                regional_preferences(name.as_deref()),
+                preferred_languages(locale),
+                time_zone(),
+            ),
             os_version: os_version(),
         }
+    }
+
+    /// The user's regional preferences (`localeSettings()`'s `hourCycle`
+    /// and the like): the regional format's (`name`'s, with the user's changes to it) time
+    /// format, first day of the week and measurement system, over the
+    /// region's; Windows has no temperature unit setting.
+    fn regional_preferences(name: Option<&str>) -> LocaleSettings {
+        let mut preferences = LocaleSettings::parse(name.unwrap_or_default());
+        if let Some(cycle) = locale_info(LOCALE_STIMEFORMAT).and_then(|f| HourCycle::of_pattern(&f))
+        {
+            preferences.hour_cycle = cycle;
+        }
+        // 0 for Monday to 6 for Sunday.
+        let first = locale_info(LOCALE_IFIRSTDAYOFWEEK).and_then(|d| d.trim().parse::<u8>().ok());
+        if let Some(day) = first.and_then(|d| Weekday::from_number(d + 1)) {
+            preferences.first_day_of_week = day;
+        }
+        // 0 metric (as the UK's units are, which Windows does not tell
+        // apart), 1 US.
+        match locale_info(LOCALE_IMEASURE).as_deref().map(str::trim) {
+            Some("0") if preferences.measurement_system == MeasurementSystem::Us => {
+                preferences.measurement_system = MeasurementSystem::Metric;
+            }
+            Some("1") => preferences.measurement_system = MeasurementSystem::Us,
+            _ => {}
+        }
+        preferences
+    }
+
+    /// A value of the user's regional format, with the user's changes to it.
+    fn locale_info(kind: u32) -> Option<String> {
+        let mut buf = [0u16; 80];
+        // SAFETY: the buffer's length is passed with it; no name is the
+        // user's default locale.
+        let len =
+            unsafe { GetLocaleInfoEx(std::ptr::null(), kind, buf.as_mut_ptr(), buf.len() as i32) };
+        // The length counts the terminating null.
+        (len > 1).then(|| String::from_utf16_lossy(&buf[..len as usize - 1]))
+    }
+
+    /// The user's display languages, most preferred first
+    /// (`GetUserPreferredUILanguages`); `locale` alone when Windows lists
+    /// none.
+    fn preferred_languages(locale: Locale) -> nsh_engine::Languages {
+        const MUI_LANGUAGE_NAME: u32 = 0x8;
+        let (mut count, mut len) = (0u32, 0u32);
+        // SAFETY: a size query: no buffer, the length written to `len`.
+        if unsafe {
+            GetUserPreferredUILanguages(
+                MUI_LANGUAGE_NAME,
+                &mut count,
+                std::ptr::null_mut(),
+                &mut len,
+            )
+        } == 0
+            || len == 0
+        {
+            return nsh_engine::Languages::one(locale);
+        }
+        let mut names = vec![0u16; len as usize];
+        // SAFETY: a buffer of the `len` characters the query asked for.
+        if unsafe {
+            GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, names.as_mut_ptr(), &mut len)
+        } == 0
+        {
+            return nsh_engine::Languages::one(locale);
+        }
+        // A list of null-terminated names, ended by an empty one.
+        let names = String::from_utf16_lossy(&names);
+        nsh_engine::Languages::parse(names.split('\0'))
+            .unwrap_or(nsh_engine::Languages::one(locale))
+    }
+
+    /// `DYNAMIC_TIME_ZONE_INFORMATION`.
+    #[repr(C)]
+    struct DynamicTimeZoneInformation {
+        bias: i32,
+        standard_name: [u16; 32],
+        standard_date: [u16; 8],
+        standard_bias: i32,
+        daylight_name: [u16; 32],
+        daylight_date: [u16; 8],
+        daylight_bias: i32,
+        key_name: [u16; 128],
+        dynamic_daylight_time_disabled: u8,
+    }
+
+    /// The setting's Windows zone by its IANA name (`W. Europe Standard
+    /// Time`: `Europe/Berlin`), from the ICU Windows ships, loaded at run
+    /// time so that apps start where it is missing (then `UTC`).
+    fn time_zone() -> TimeZone {
+        // SAFETY: zeroes are a valid value of the plain C structure the call
+        // fills.
+        let mut info: DynamicTimeZoneInformation = unsafe { std::mem::zeroed() };
+        // SAFETY: an out structure of the layout the call writes.
+        if unsafe { GetDynamicTimeZoneInformation(&mut info) } == u32::MAX {
+            return TimeZone::UTC;
+        }
+        let key = &info.key_name;
+        let len = key.iter().position(|&c| c == 0).unwrap_or(key.len());
+        iana_name(&key[..len])
+            .and_then(|name| TimeZone::parse(&name))
+            .unwrap_or_default()
+    }
+
+    fn iana_name(key: &[u16]) -> Option<String> {
+        type ToIana =
+            unsafe extern "C" fn(*const u16, i32, *const u8, *mut u16, i32, *mut i32) -> i32;
+        const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
+        // Looked up once for the process, not once per thread that asks.
+        static TO_IANA: std::sync::OnceLock<Option<ToIana>> = std::sync::OnceLock::new();
+        let to_iana = (*TO_IANA.get_or_init(|| {
+            // SAFETY: system libraries by name, from System32 only; the
+            // function, if there, has the signature above (ICU's C API).
+            unsafe {
+                ["icu.dll", "icuin.dll"]
+                    .into_iter()
+                    .map(wide)
+                    .map(|name| LoadLibraryExW(name.as_ptr(), 0, LOAD_LIBRARY_SEARCH_SYSTEM32))
+                    .find(|module| *module != 0)
+                    .map(|icu| GetProcAddress(icu, c"ucal_getTimeZoneIDForWindowsID".as_ptr()))
+                    .filter(|proc| !proc.is_null())
+                    .map(|proc| std::mem::transmute::<*mut c_void, ToIana>(proc))
+            }
+        }))?;
+        let mut name = [0u16; 64];
+        let mut status = 0i32;
+        // SAFETY: `key` and `name` hold the lengths given; no region (ICU's
+        // default mapping, `001`).
+        let len = unsafe {
+            to_iana(
+                key.as_ptr(),
+                key.len() as i32,
+                std::ptr::null(),
+                name.as_mut_ptr(),
+                name.len() as i32,
+                &mut status,
+            )
+        };
+        // ICU's errors are positive codes, its warnings negative.
+        if status > 0 || len <= 0 {
+            return None;
+        }
+        String::from_utf16(name.get(..len as usize)?).ok()
     }
 
     fn wide(s: &str) -> Vec<u16> {
@@ -827,9 +1135,11 @@ mod os {
 mod os {
     use std::ffi::{CStr, c_char, c_void};
 
-    use nsh_engine::Locale;
+    use nsh_engine::{
+        HourCycle, Locale, LocaleSettings, MeasurementSystem, TemperatureUnit, Weekday,
+    };
 
-    use super::{Settings, parse_version, rtl_language};
+    use super::{Settings, parse_version, posix_time_zone, rtl_language};
 
     type CFTypeRef = *const c_void;
     const UTF8: u32 = 0x0800_0100;
@@ -837,6 +1147,9 @@ mod os {
     #[link(name = "CoreFoundation", kind = "framework")]
     unsafe extern "C" {
         fn CFLocaleCopyCurrent() -> CFTypeRef;
+        fn CFLocaleCopyPreferredLanguages() -> CFTypeRef;
+        fn CFArrayGetCount(array: CFTypeRef) -> isize;
+        fn CFArrayGetValueAtIndex(array: CFTypeRef, index: isize) -> CFTypeRef;
         fn CFLocaleGetIdentifier(locale: CFTypeRef) -> CFTypeRef;
         fn CFStringGetCString(s: CFTypeRef, buf: *mut c_char, size: isize, encoding: u32) -> u8;
         fn CFStringCreateWithCString(
@@ -845,7 +1158,21 @@ mod os {
             encoding: u32,
         ) -> CFTypeRef;
         fn CFPreferencesGetAppBooleanValue(key: CFTypeRef, app: CFTypeRef, valid: *mut u8) -> u8;
+        fn CFPreferencesCopyAppValue(key: CFTypeRef, app: CFTypeRef) -> CFTypeRef;
+        fn CFDateFormatterCreateDateFormatFromTemplate(
+            alloc: CFTypeRef,
+            template: CFTypeRef,
+            options: usize,
+            locale: CFTypeRef,
+        ) -> CFTypeRef;
+        fn CFCalendarCopyCurrent() -> CFTypeRef;
+        fn CFCalendarGetFirstWeekday(calendar: CFTypeRef) -> isize;
+        fn CFLocaleGetValue(locale: CFTypeRef, key: CFTypeRef) -> CFTypeRef;
+        fn CFGetTypeID(cf: CFTypeRef) -> usize;
+        fn CFStringGetTypeID() -> usize;
         fn CFRelease(cf: CFTypeRef);
+        static kCFLocaleMeasurementSystem: CFTypeRef;
+        static kCFPreferencesCurrentApplication: CFTypeRef;
     }
 
     unsafe extern "C" {
@@ -876,8 +1203,140 @@ mod os {
             rtl: rtl_language(locale.as_str()),
             screen_reader: universal_access(c"voiceOverOnOffKey"),
             locale,
+            locale_settings: super::locale_settings(
+                regional_preferences(),
+                preferred_languages(locale),
+                posix_time_zone(),
+            ),
             os_version: os_version(),
         }
+    }
+
+    /// The user's regional preferences (`localeSettings()`'s `hourCycle`
+    /// and the like), as the
+    /// macOS backend reads them: the hours of the time format for the `j`
+    /// template (which 24-hour time changes), the calendar's first weekday,
+    /// the locale's measurement system and the `AppleTemperatureUnit`
+    /// preference, over the region's.
+    fn regional_preferences() -> LocaleSettings {
+        // SAFETY: what is copied or created is released after its text is
+        // read; what is got belongs to the locale, released last.
+        unsafe {
+            let locale = CFLocaleCopyCurrent();
+            if locale.is_null() {
+                return LocaleSettings::default();
+            }
+            let id = string(CFLocaleGetIdentifier(locale)).unwrap_or_default();
+            let mut preferences = LocaleSettings::parse(&id);
+            let template = CFStringCreateWithCString(std::ptr::null(), c"j".as_ptr(), UTF8);
+            if !template.is_null() {
+                let format = CFDateFormatterCreateDateFormatFromTemplate(
+                    std::ptr::null(),
+                    template,
+                    0,
+                    locale,
+                );
+                if let Some(cycle) = string(format).and_then(|f| HourCycle::of_pattern(&f)) {
+                    preferences.hour_cycle = cycle;
+                }
+                release(format);
+                CFRelease(template);
+            }
+            let calendar = CFCalendarCopyCurrent();
+            if !calendar.is_null() {
+                // From 1 for Sunday to 7 for Saturday.
+                let first = match CFCalendarGetFirstWeekday(calendar) {
+                    1 => Some(Weekday::Sunday),
+                    n => u8::try_from(n)
+                        .ok()
+                        .and_then(|n| Weekday::from_number(n.wrapping_sub(1))),
+                };
+                if let Some(day) = first {
+                    preferences.first_day_of_week = day;
+                }
+                CFRelease(calendar);
+            }
+            match string(CFLocaleGetValue(locale, kCFLocaleMeasurementSystem)).as_deref() {
+                Some("Metric") => preferences.measurement_system = MeasurementSystem::Metric,
+                Some("U.S.") => preferences.measurement_system = MeasurementSystem::Us,
+                Some("U.K.") => preferences.measurement_system = MeasurementSystem::Uk,
+                _ => {}
+            }
+            let key =
+                CFStringCreateWithCString(std::ptr::null(), c"AppleTemperatureUnit".as_ptr(), UTF8);
+            if !key.is_null() {
+                // Set once the user picks one.
+                let unit = CFPreferencesCopyAppValue(key, kCFPreferencesCurrentApplication);
+                match string(unit).as_deref() {
+                    Some("Celsius") => preferences.temperature_unit = TemperatureUnit::Celsius,
+                    Some("Fahrenheit") => {
+                        preferences.temperature_unit = TemperatureUnit::Fahrenheit
+                    }
+                    _ => {}
+                }
+                release(unit);
+                CFRelease(key);
+            }
+            CFRelease(locale);
+            preferences
+        }
+    }
+
+    /// The text of `cf`, a CoreFoundation object or null; `None` for null
+    /// or an object that is not a string.
+    ///
+    /// # Safety
+    ///
+    /// `cf` is null or a live CoreFoundation object.
+    unsafe fn string(cf: CFTypeRef) -> Option<String> {
+        // SAFETY: as the caller promises; the buffer's size is passed with
+        // it, and a string written to it is null-terminated.
+        unsafe {
+            if cf.is_null() || CFGetTypeID(cf) != CFStringGetTypeID() {
+                return None;
+            }
+            let mut buf = [0 as c_char; 128];
+            (CFStringGetCString(cf, buf.as_mut_ptr(), buf.len() as isize, UTF8) != 0)
+                .then(|| CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned())
+        }
+    }
+
+    /// Releases `cf` unless it is null.
+    ///
+    /// # Safety
+    ///
+    /// `cf` is null or a CoreFoundation object the caller owns.
+    unsafe fn release(cf: CFTypeRef) {
+        if !cf.is_null() {
+            // SAFETY: as the caller promises.
+            unsafe { CFRelease(cf) };
+        }
+    }
+
+    /// The user's preferred languages, most preferred first
+    /// (`CFLocaleCopyPreferredLanguages`: System Settings' list); `locale`
+    /// alone when it names none.
+    fn preferred_languages(locale: Locale) -> nsh_engine::Languages {
+        let mut tags = Vec::new();
+        // SAFETY: the array is released after its strings (owned by it) are
+        // copied into the buffer, whose size is passed with it.
+        unsafe {
+            let array = CFLocaleCopyPreferredLanguages();
+            if !array.is_null() {
+                for i in 0..CFArrayGetCount(array) {
+                    let mut buf = [0 as c_char; 64];
+                    let tag = CFArrayGetValueAtIndex(array, i);
+                    if !tag.is_null()
+                        && CFStringGetCString(tag, buf.as_mut_ptr(), buf.len() as isize, UTF8) != 0
+                    {
+                        tags.push(CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned());
+                    }
+                }
+                CFRelease(array);
+            }
+        }
+        nsh_engine::Languages::parse(tags.iter().map(String::as_str))
+            .unwrap_or(nsh_engine::Languages::one(locale))
     }
 
     /// The user's region format (`en_US@rg=gbzzzz`), `Intl`'s default.
@@ -1032,6 +1491,7 @@ pub(crate) fn command(surface: &Rc<Surface>, _id: NodeId, command: &Command) {
             });
         }
         Command::PickImages { id, request } => pick_images(surface, *id, *request),
+        Command::PickFiles { id, request } => pick_files(surface, *id, request.clone()),
         Command::FileRequest { id, request } => file_request(surface, *id, request),
         Command::ExitApp => {
             // The window goes after the batch is applied (closing it stops
@@ -1045,9 +1505,13 @@ pub(crate) fn command(surface: &Rc<Surface>, _id: NodeId, command: &Command) {
             }
         }
         Command::Announce(text) => crate::access::announce(surface, text),
+        Command::PerfMonitor(on) => surface.set_stats(*on),
         // The status bar is a phone's; layout animations arrive as mount
         // items. `Back` and `Desktop` are routed by the mounter.
-        Command::StatusBar(_) | Command::SetStatusBar(_) | Command::LayoutAnimation(_) => {}
+        Command::StatusBar(_)
+        | Command::SetStatusBar(_)
+        | Command::LayoutAnimation(_)
+        | Command::CancelPress => {}
         other => log::debug!("gpui: command {other:?} is not supported"),
     }
 }
@@ -1099,6 +1563,43 @@ fn pick_images(surface: &Rc<Surface>, id: u32, request: nsh_core::picker::PickRe
                 .collect();
             std::thread::spawn(move || {
                 let files = nsh_core::picker::read_files(&paths, &request);
+                control.dispatch_event(
+                    ROOT_ID,
+                    EventKind::Pick,
+                    EventPayload::Picked { id, files },
+                );
+            });
+        })
+        .detach();
+    });
+}
+
+/// `Picker.pickFiles`: GPUI's open dialog. It filters nothing, so the files
+/// whose extension the request does not take are left out; they are read on
+/// a thread of their own.
+fn pick_files(surface: &Rc<Surface>, id: u32, request: nsh_core::picker::FilePickRequest) {
+    let mut control = None;
+    surface.control(|c| control = Some(c.clone()));
+    let Some(control) = control else { return };
+    crate::rt::on_app(move |cx| {
+        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: request.multiple(),
+            prompt: None,
+        });
+        cx.spawn(async move |_| {
+            let paths: Vec<_> = paths
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .flatten()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|p| nsh_core::file_dialog::passes(&request.filters, p))
+                .collect();
+            std::thread::spawn(move || {
+                let files = nsh_core::picker::read_picked_files(&paths, &request);
                 control.dispatch_event(
                     ROOT_ID,
                     EventKind::Pick,
@@ -1426,11 +1927,11 @@ fn fade(surface: &Rc<Surface>, serial: u64, to: f32, secs: f64, remove: bool) {
     let mut start = None;
     surface.on_frame(move |surface, now| {
         let Some(kind) = find(serial) else {
-            return false;
+            return Next::Done;
         };
         // A newer fade took over (a dialog answered while fading in).
         if !remove && matches!(&kind, OverlayKind::Dialog(d) if d.closing.get()) {
-            return false;
+            return Next::Done;
         }
         let t0 = *start.get_or_insert(now);
         let t = ((now - t0) / secs).clamp(0.0, 1.0) as f32;
@@ -1438,12 +1939,18 @@ fn fade(surface: &Rc<Surface>, serial: u64, to: f32, secs: f64, remove: bool) {
         kind.opacity().set(from + (to - from) * eased);
         surface.root.changed();
         if t < 1.0 {
-            return true;
+            // Fading in only draws; fading out ends with the overlay gone
+            // (a millisecond past it, whatever the rounding).
+            return if remove {
+                Next::At(t0 + secs + 0.001)
+            } else {
+                Next::Frame
+            };
         }
         if remove {
             drop_overlay(surface, serial);
         }
-        false
+        Next::Done
     });
 }
 
@@ -2422,6 +2929,72 @@ pub(crate) fn set_clipboard_text(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn regional_preferences_follow_the_posix_locales() {
+        let vars = |set: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                set.iter()
+                    .find(|(k, _)| *k == name)
+                    .map(|(_, v)| (*v).to_owned())
+            }
+        };
+        let us = Locale::default();
+        let regional = posix_regional(vars(&[("LANG", "de_DE.UTF-8")]), us);
+        assert_eq!(regional.hour_cycle, nsh_engine::HourCycle::H23);
+        // Times and weeks are `LC_TIME`'s, units `LC_MEASUREMENT`'s.
+        let mixed = posix_regional(
+            vars(&[
+                ("LANG", "en_US.UTF-8"),
+                ("LC_TIME", "en_GB.UTF-8"),
+                ("LC_MEASUREMENT", "de_DE.UTF-8"),
+            ]),
+            us,
+        );
+        assert_eq!(mixed.hour_cycle, nsh_engine::HourCycle::H23);
+        assert_eq!(mixed.first_day_of_week, nsh_engine::Weekday::Monday);
+        assert_eq!(
+            mixed.measurement_system,
+            nsh_engine::MeasurementSystem::Metric
+        );
+        assert_eq!(
+            posix_regional(vars(&[("LC_ALL", "en_US"), ("LC_TIME", "de_DE")]), us),
+            LocaleSettings::default()
+        );
+        // Nothing set: the locale's.
+        assert_eq!(posix_regional(vars(&[]), us), LocaleSettings::default());
+    }
+
+    #[test]
+    fn posix_languages_list_languages_then_messages_with_their_fallbacks() {
+        let vars = |set: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                set.iter()
+                    .find(|(k, _)| *k == name)
+                    .map(|(_, v)| (*v).to_owned())
+            }
+        };
+        let tags =
+            |l: Option<Languages>| l.map(|l| l.iter().map(|l| l.to_string()).collect::<Vec<_>>());
+        assert_eq!(
+            tags(posix_languages(vars(&[("LANG", "de_DE.UTF-8")]))).unwrap(),
+            ["de-DE", "de"]
+        );
+        assert_eq!(
+            tags(posix_languages(vars(&[
+                ("LANGUAGE", "fr_CA:pt"),
+                ("LANG", "en_US.UTF-8")
+            ])))
+            .unwrap(),
+            ["fr-CA", "fr", "pt", "en-US", "en"]
+        );
+        // `LANGUAGE` is ignored while messages are in `C`.
+        assert_eq!(
+            posix_languages(vars(&[("LANGUAGE", "fr"), ("LC_ALL", "C")])),
+            None
+        );
+        assert_eq!(posix_languages(vars(&[])), None);
+    }
 
     #[test]
     fn posix_locales() {

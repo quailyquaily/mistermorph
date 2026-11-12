@@ -19,7 +19,7 @@ stops it on quit.
 ## Build
 
 Needs Rust (the toolchain in `rust-toolchain.toml` is installed by rustup on first use),
-[nsh 0.4.0](https://nsh.dev/docs/installation), Node (for `scripts/generate.mjs`) and Go.
+[nsh 0.5.0](https://nsh.dev/docs/installation), Node (for `scripts/generate.mjs`) and Go.
 
 On Ubuntu or Debian, GPUI also needs these development packages:
 
@@ -113,7 +113,7 @@ quits.
 
 ## Patches to nsh-platform-gpui
 
-`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.4.0 with the patches in `patches/` applied, wired
+`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.5.0 with the patches in `patches/` applied, wired
 in through `[patch.crates-io]` in Cargo.toml. Drop the vendored copy once nsh or GPUI Fast ship
 these. To rebuild it: copy the crate from the cargo registry to `crates/gpui/nsh-platform-gpui` in a
 scratch git repo, `git apply` each patch in order, and copy the result back.
@@ -126,9 +126,8 @@ scratch git repo, `git apply` each patch in order, and copy the result back.
 - `nsh-gpui-masks.patch`: GPUI has no alpha masks, so upstream ignores `maskImage` and the
   console's fade truncation and scroll-edge fades did not show on the desktop. The patch keeps the
   linear masks of the views being drawn and fades each glyph by the mask's alpha at its middle
-  (fills, images and canvases are drawn as they are). It also draws repeating gradients
-  (hatching, the paper grid) at the view's own size up to 4096 pixels a side, instead of
-  stretching a 768-pixel image, which blurred their fine lines.
+  (fills, images and canvases are drawn as they are). (Its other half, repeating gradients drawn
+  at the view's own size up to 4096 pixels a side, is in nsh 0.5.0 and was dropped from it.)
 - `nsh-scroll-speed.patch`: real wheel and touchpad scrolls
   move twice the system's amount (`SCROLL_GAIN` in `src/events.rs`): a wheel notch scrolls 96
   points instead of 48, close to browsers on Windows, and a touchpad gesture and the glide after

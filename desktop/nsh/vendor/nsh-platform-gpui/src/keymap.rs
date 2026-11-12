@@ -30,7 +30,7 @@ use std::{
 
 use nsh_core::{
     EventKind, EventPayload, PayloadValue, ROOT_ID,
-    keymap::{Key, KeyMatch, Keymap, Keystroke, Modifiers},
+    keymap::{Key, Keymap, Keystroke, Modifiers},
     platform::Os,
 };
 
@@ -63,8 +63,9 @@ pub(crate) fn clear(surface: &Surface) {
     surface.keymap.table.borrow_mut().take();
 }
 
-/// A key down: whether it fired (or, held, repeats) one of the bindings;
-/// then it is consumed. `editing`: a text field or a native component has
+/// A key down: whether one of the bindings consumes it (it fired one, or,
+/// held, repeats one). A binding passing the key through fires and leaves
+/// it to the window. `editing`: a text field or a native component has
 /// the keyboard focus.
 pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent, editing: bool) -> bool {
     let repeat = repeats(&surface.keymap, event);
@@ -78,8 +79,10 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent, editing: bool) -> boo
     if cfg!(feature = "dev") && keystroke.reloads(OS) {
         return false;
     }
-    let found = table.find(keystroke, editing, repeat);
-    if let KeyMatch::Fire(id) = found {
+    // Only the bindings of the window the key is in (and JS's) take it.
+    let window = surface.input_root().id();
+    let found = table.find_in(window, keystroke, editing, repeat);
+    if let Some(id) = found.fired() {
         surface.event(
             ROOT_ID,
             EventKind::KeyCommand,
@@ -172,6 +175,40 @@ mod tests {
         assert!(!repeats(&state, &down(0x4C)));
         state.held.set(None);
         assert!(!repeats(&state, &down(0x4C)));
+    }
+
+    #[test]
+    fn a_key_takes_only_the_bindings_of_the_window_it_is_in() {
+        use nsh_core::keymap::{KeyBinding, Keymap, Keystroke, When};
+
+        use super::KeyEvent;
+        use crate::{keys::VK_ESCAPE, surface::Surface, view::NshView};
+
+        let surface = Surface::new(nsh_engine::Environment::default());
+        let escape = Keystroke::parse_with("escape", true).unwrap();
+        // Window 7's binding alone.
+        let binding = KeyBinding::new(1, escape, When::Always, false).in_window(7);
+        *surface.keymap.table.borrow_mut() = Some(std::sync::Arc::new(Keymap::new(vec![binding])));
+        let press = || {
+            super::key(
+                &surface,
+                &KeyEvent {
+                    vk: VK_ESCAPE,
+                    down: true,
+                    repeat: false,
+                    modifiers: Default::default(),
+                },
+                false,
+            )
+        };
+        // Pressed in the main window: not its binding, the key goes on.
+        assert!(!press());
+        surface.keymap.held.set(None);
+        // Pressed in window 7 (what `window::enter` sets): its binding fires.
+        let window = NshView::new(7, nsh_core::ViewKind::View);
+        let outer = surface.input_root.replace(Some(window));
+        assert!(press());
+        *surface.input_root.borrow_mut() = outer;
     }
 
     #[test]

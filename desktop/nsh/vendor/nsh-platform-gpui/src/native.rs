@@ -25,7 +25,11 @@
 //!   handle ([`NativeComponent::focus_handle`]) is a Tab stop among the text
 //!   fields, at its container's place ([`crate::input`], [`apply_focus`]).
 //!   GPUI's content masks are rectangles: a rounded clipping ancestor cuts
-//!   a component's element (and a web view) to its rectangle only. Components emit events and
+//!   a component's element (and a web view) to its rectangle only. Props
+//!   and commands reach a component soon after they arrive, in a main-thread
+//!   task of their own with its window ([`ComponentItem::schedule`]), not
+//!   with the next frame: a host that does not draw the view (hidden, in a
+//!   window in the background) still gets them. Components emit events and
 //!   report their own size through their [`ComponentContext`], from any
 //!   thread. Registries belong to one `AppView` (and the views made from
 //!   the same [`crate::AppOptions`]): no globals.
@@ -48,11 +52,12 @@ use std::{
 };
 
 use gpui::{
-    AnyElement, App, AvailableSpace, Bounds, ContentMask, FocusHandle, HitboxBehavior, IntoElement,
-    ParentElement, Pixels, Styled, Window, px,
+    AnyElement, AnyWindowHandle, App, AvailableSpace, Bounds, ContentMask, FocusHandle,
+    HitboxBehavior, IntoElement, ParentElement, Pixels, Styled, Window, px,
 };
 use nsh_core::{
-    Command, EventKind, EventPayload, NativeProps, NodeId, PayloadValue, Points, Size, ViewKind,
+    Command, EventKind, EventPayload, NativeProps, NodeId, PayloadValue, Points, ROOT_ID, Size,
+    ViewKind,
 };
 use nsh_engine::{Access, EngineControl};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -138,9 +143,10 @@ pub trait NativeComponent {
     }
 
     /// Prop `name` changed (`None`: removed). Every prop the app set comes
-    /// right after the component is made. Delivered with the next frame of
-    /// the surface, before [`NativeComponent::render`], with its window:
-    /// the component may update its entities here.
+    /// right after the component is made. Delivered soon after it changed,
+    /// whether or not the surface draws (before the next
+    /// [`NativeComponent::render`]), with the component's window: the
+    /// component may update its entities here.
     fn set_prop(
         &mut self,
         name: &str,
@@ -381,6 +387,7 @@ pub(crate) fn create(surface: &Rc<Surface>, view: &NshView) {
             component: RefCell::new(None),
             element: RefCell::new(None),
             pending: RefCell::default(),
+            scheduled: std::cell::Cell::new(false),
         })),
     };
     fill(view, &host.item());
@@ -458,6 +465,7 @@ pub(crate) fn component_props(
         pending.push(Pending::Prop(name.clone(), value.clone()));
     }
     drop(pending);
+    item.schedule();
     view.changed();
 }
 
@@ -478,17 +486,20 @@ pub(crate) fn command(surface: &Rc<Surface>, view: &NshView, command: &Command) 
             item.pending
                 .borrow_mut()
                 .push(Pending::Command(name.clone(), args.clone()));
+            item.schedule();
             view.changed();
         }
         _ => {}
     }
 }
 
-/// The surface element's prepaint, after it inserted its own hitbox (and
-/// set its origin and size): lays out and prepaints the components'
-/// elements at their containers' boxes and places the web views, each over
-/// a hitbox that keeps nsh's input away from it.
+/// The surface element's prepaint (or a window of the app's own's, its
+/// input entered), after it inserted its own hitbox (and set its origin
+/// and size): lays out and prepaints the elements of the components in
+/// that window at their containers' boxes and places its web views, each
+/// over a hitbox that keeps nsh's input away from it.
 pub(crate) fn prepaint(surface: &Rc<Surface>, window: &mut Window, cx: &mut App) {
+    let this = surface.input_root().id();
     let hosts: Vec<(NodeId, HostRef)> = {
         let hosts = surface.native.hosts.borrow();
         let mut hosts: Vec<_> = hosts
@@ -503,11 +514,21 @@ pub(crate) fn prepaint(surface: &Rc<Surface>, window: &mut Window, cx: &mut App)
     };
     // Video frames (and images) dropped where nothing draws images.
     crate::image::release_dropped(window, cx);
-    let mut focused = Vec::new();
+    // Those of the other windows stay as their windows' frames left them.
+    let mut focused: Vec<(NodeId, FocusHandle)> =
+        std::mem::take(&mut *surface.native.focused.borrow_mut());
+    focused.retain(|(id, _)| {
+        surface
+            .view(*id)
+            .is_some_and(|v| crate::window::root_of(surface, &v) != this)
+    });
     for (id, host) in hosts {
         let Some(view) = surface.view(id) else {
             continue;
         };
+        if crate::window::root_of(surface, &view) != this {
+            continue;
+        }
         let geometry = geometry(surface, &view);
         match host {
             HostRef::Component(item) => {
@@ -636,7 +657,12 @@ fn geometry(surface: &Surface, view: &NshView) -> Option<Geometry> {
         Some(crate::render::bounds(x + ox, y + oy, bw, bh))
     };
     let document = to_window(view, w, h)?;
-    let (sw, sh) = surface.size();
+    // The window's root: the surface's, or the entered window's.
+    let (sw, sh) = {
+        let root = surface.input_root();
+        let s = root.state();
+        (s.frame.size.width.0, s.frame.size.height.0)
+    };
     let mut visible = document.intersect(&crate::render::bounds(ox, oy, sw, sh));
     let mut node = Some(view.clone());
     while let Some(v) = node {
@@ -674,7 +700,8 @@ pub(crate) fn has_component(surface: &Surface, id: NodeId) -> bool {
 }
 
 /// Bound props that moved (`Animator::write_components`): queued for their
-/// components, delivered with the next frame as props are.
+/// components, delivered with the next frame (or with props and commands
+/// that come before it).
 pub(crate) fn component_animated(
     surface: &Surface,
     moved: Vec<(NodeId, Arc<str>, nsh_core::animation::AnimatedPropValue)>,
@@ -745,8 +772,11 @@ struct ComponentItem {
     /// The element the last prepaint laid out, painted when the tree draws
     /// the container.
     element: RefCell<Option<AnyElement>>,
-    /// Props and commands for the next prepaint, which has the window.
+    /// Props, commands and moved bound props not delivered yet
+    /// ([`ComponentItem::deliver`]).
     pending: RefCell<Vec<Pending>>,
+    /// A task delivering `pending` is on its way ([`ComponentItem::schedule`]).
+    scheduled: std::cell::Cell<bool>,
 }
 
 /// A prop or command waiting for [`ComponentItem::deliver`].
@@ -772,17 +802,56 @@ impl ComponentItem {
         }
     }
 
-    /// Hands the props and commands that came since the last frame to the
-    /// component, in order.
+    /// Delivers what is queued soon, in a main-thread task of its own with
+    /// the component's window, instead of waiting for the next frame: a host
+    /// that hides the view, or a window in the background, draws none, and
+    /// a command waiting for one would never reach the component. One task
+    /// at a time; a frame that comes first delivers the queue itself, and the
+    /// task then finds it empty. Never run inside a frame, so the component
+    /// can update its entities (GPUI updates one at a time).
+    fn schedule(self: &Rc<Self>) {
+        if self.scheduled.replace(true) {
+            return;
+        }
+        let item = Rc::downgrade(self);
+        crate::rt::on_app(move |cx| {
+            let Some(item) = item.upgrade() else {
+                return;
+            };
+            item.scheduled.set(false);
+            // Not in a window yet (a window of the app's own opening): the
+            // window's first frame delivers.
+            let Some(window) = item.window() else {
+                return;
+            };
+            // A window that closed meanwhile keeps the queue, as one that
+            // draws no frames does.
+            let _ = window.update(cx, |_, window, cx| item.deliver(window, cx));
+        });
+    }
+
+    /// The GPUI window the component's container is in.
+    fn window(&self) -> Option<AnyWindowHandle> {
+        let surface = self.surface.upgrade()?;
+        let view = surface.view(self.id)?;
+        match crate::window::root_of(&surface, &view) {
+            ROOT_ID => surface.main_window.get(),
+            id => crate::window::handle_of(&surface, id),
+        }
+    }
+
+    /// Hands the props and commands that came since they were last
+    /// delivered to the component, in order (kept while it is out running
+    /// the app's code).
     fn deliver(&self, window: &mut Window, cx: &mut App) {
-        let pending = std::mem::take(&mut *self.pending.borrow_mut());
-        if pending.is_empty() {
+        if self.pending.borrow().is_empty() {
             return;
         }
         // Taken out while the app's code runs, so it may reach the surface.
         let Some(mut component) = self.component.borrow_mut().take() else {
             return;
         };
+        let pending = std::mem::take(&mut *self.pending.borrow_mut());
         for p in &pending {
             match p {
                 Pending::Prop(name, value) => component.set_prop(name, value.as_ref(), window, cx),

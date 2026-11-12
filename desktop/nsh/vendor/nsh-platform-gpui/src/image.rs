@@ -17,7 +17,7 @@
 //! that grows past its bucket loads the next one. SVG images (sniffed from
 //! their bytes) are drawn by [`nsh_core::svg`] at the bucket's size and
 //! then handled as bitmaps; their size is their intrinsic size in points.
-//! Canvases draw bitmaps only ([`load_bitmap`]).
+//! Canvases draw them as their rasterized bitmap ([`load_bitmap`]).
 //!
 //! A decoded entry's picture on the main thread ([`Image`]) counts what it
 //! adds in its entry ([`nsh_core::image::MemoryCache::add_cost`]): its
@@ -155,6 +155,7 @@ fn context(surface: &Surface, uri: &str) -> Context {
         asset_base: surface.asset_base.borrow().clone(),
         read_asset: None,
         access: surface.access.borrow().clone(),
+        media_files: surface.media_files.borrow().clone(),
         disk: remote
             .then(|| surface.image_cache.borrow().clone())
             .flatten(),
@@ -449,6 +450,18 @@ fn decode(bytes: &[u8], target: &Target) -> Result<Pixels, String> {
     decode_still(bytes, longest)
 }
 
+/// A pixel buffer ([`ImageSrc::rgba`](nsh_core::element::ImageSrc::rgba)),
+/// taken as it is: no decode, at its own size.
+fn from_rgba((w, h, rgba): (u32, u32, &[u8])) -> Result<Pixels, String> {
+    let frame = image::RgbaImage::from_raw(w, h, rgba.to_vec()).ok_or("RGBA of the wrong size")?;
+    Ok(Pixels::new(
+        vec![bgra_frame(frame)],
+        Vec::new(),
+        0,
+        Natural::Pixels(w, h),
+    ))
+}
+
 /// The size `onLoad` and `Image.getSize` report: pixels, or an SVG's whole
 /// points.
 fn reported_size(natural: Natural) -> Size<DevicePixels> {
@@ -522,6 +535,80 @@ impl Drop for Texture {
         let image = self.0.clone();
         let _ = DROPPED.try_with(|d| d.borrow_mut().push(image));
     }
+}
+
+/// A menu item's icon, as drawn for the screen.
+pub(crate) struct MenuIcon {
+    texture: Rc<Texture>,
+    /// An SVG: a template, painted in the color of the menu's text.
+    template: bool,
+    /// Its color's texture, the one a menu's rows last asked for.
+    tinted: RefCell<Vec<(Color, Rc<Texture>)>>,
+}
+
+impl MenuIcon {
+    /// Its size in pixels.
+    pub(crate) fn size(&self) -> (u32, u32) {
+        let size = self.texture.image().size(0);
+        (size.width.0.max(0) as u32, size.height.0.max(0) as u32)
+    }
+
+    /// What a row of text in `color` draws: an SVG in that color, a bitmap
+    /// as it is. A menu shows few colors (its text and its disabled text),
+    /// each painted once.
+    pub(crate) fn texture(&self, color: Color) -> Rc<Texture> {
+        if !self.template {
+            return self.texture.clone();
+        }
+        let mut tinted = self.tinted.borrow_mut();
+        if let Some((_, texture)) = tinted.iter().find(|(c, _)| *c == color) {
+            return texture.clone();
+        }
+        let image = self.texture.image();
+        let frames = image.as_bytes(0).map(|bytes| {
+            let ops = Ops {
+                mip: 0,
+                blur: 0,
+                matrix: None,
+                tint: Some(color),
+                alpha: ALPHA_STEPS,
+            };
+            vec![image::Frame::new(render_frame(bytes, self.size(), &ops))]
+        });
+        let texture = match frames {
+            Some(frames) => Rc::new(Texture::new(Arc::new(RenderImage::new(frames)))),
+            None => self.texture.clone(),
+        };
+        tinted.push((color, texture.clone()));
+        texture
+    }
+}
+
+/// Loads a menu item's icon off the main thread, at `scale` pixels per
+/// point; `done` runs on the main thread, before this returns when the
+/// icon is in memory. Dropping the load gives up.
+pub(crate) fn load_menu_icon(
+    surface: &Surface,
+    source: &ImageSource,
+    scale: f32,
+    done: impl FnOnce(Result<MenuIcon, String>) + 'static,
+) -> Option<Load> {
+    let done = move |result: Result<(Picture, Lease), String>| {
+        done(result.map(|(picture, _)| MenuIcon {
+            texture: picture.texture.clone(),
+            template: matches!(picture.natural, Natural::Vector(_)),
+            tinted: RefCell::default(),
+        }));
+    };
+    fetch(
+        surface,
+        &source.at_pixel_ratio(scale),
+        nsh_core::desktop::menu_icon::want(scale),
+        Frames::First,
+        Priority::Visible,
+        None,
+        Box::new(done),
+    )
 }
 
 /// Removes the textures dropped since the last call from the atlases
@@ -894,7 +981,10 @@ fn images() -> &'static Images<Pixels> {
         Images::with_on_evict(
             nsh_core::image::budget(),
             |bytes: &ImageData, target: &Target| {
-                let pixels = decode(bytes, target)?;
+                let pixels = match bytes.rgba() {
+                    Some(rgba) => from_rgba(rgba)?,
+                    None => decode(bytes, target)?,
+                };
                 let cost = pixels.bytes();
                 Ok((pixels.clone(), pixels.natural, cost))
             },
@@ -1049,8 +1139,8 @@ fn fetch(
 /// Loads the bitmap `uri` (`https://…`, `asset:/…`, a file path, `data:`)
 /// for a canvas off the main thread, at its natural size; `done` runs on
 /// the main thread with the image (every frame of an animation: frame 0
-/// is the first). Canvases draw bitmaps: an SVG is an image that failed
-/// to load.
+/// is the first). An SVG is rasterized by the shared SVG renderer and
+/// handed over as its bitmap.
 ///
 /// A cached image is handed over before this returns: callers must not
 /// hold a borrow of view state that `done` takes.
@@ -1059,14 +1149,8 @@ pub(crate) fn load_bitmap(
     uri: &str,
     done: impl FnOnce(Result<Rc<Texture>, String>) + 'static,
 ) {
-    let name = uri.to_owned();
     let done = move |result: Result<(Picture, Lease), String>| {
-        done(result.and_then(|(p, _)| match p.natural {
-            Natural::Vector(_) => Err(format!(
-                "{name} is an SVG image: canvases draw bitmaps (PNG, JPEG, ...)"
-            )),
-            Natural::Pixels(..) => Ok(p.texture.clone()),
-        }));
+        done(result.map(|(p, _)| p.texture.clone()))
     };
     let source = ImageSource {
         uri: uri.into(),
@@ -1828,7 +1912,7 @@ fn loaded(
         (events, id, image.fade.is_some())
     };
     if fades {
-        surface.on_frame(move |surface, now| fade_tick(surface, id, generation, now));
+        surface.on_draw(move |surface, now| fade_tick(surface, id, generation, now));
     }
     view.changed();
     match &result {
@@ -1995,8 +2079,10 @@ fn draw_one(
     if Rc::ptr_eq(&texture, &picture.texture) && !picture.drawn.replace(true) {
         picture.count(picture.bytes() as isize);
     }
-    let boxed = cx.rect(0.0, 0.0, w, h);
-    let placed = cx.rect(x, y, fw, fh);
+    // GPUI cannot turn a sprite: a rotated or skewed image is drawn
+    // upright at its own size rather than stretched over its bounding box.
+    let boxed = cx.upright(0.0, 0.0, w, h);
+    let placed = cx.upright(x, y, fw, fh);
     // GPUI rounds the sprite itself: the corners of the innermost rounded
     // clip (the view's own, or a rounded parent's) that the part shown
     // reaches.
@@ -2061,6 +2147,19 @@ mod tests {
             frames: Frames::All,
         };
         decode(bytes, &target)
+    }
+
+    #[test]
+    fn takes_rgba_buffers_as_they_are() {
+        let rgba = [255u8, 0, 0, 255, 0, 0, 255, 128];
+        let pixels = from_rgba((2, 1, &rgba)).unwrap();
+        assert_eq!(pixels.natural, Natural::Pixels(2, 1));
+        // BGRA, alpha straight.
+        assert_eq!(
+            pixels.image.as_bytes(0).unwrap(),
+            &[0, 0, 255, 255, 255, 0, 0, 128]
+        );
+        assert!(from_rgba((2, 2, &rgba)).is_err());
     }
 
     #[test]
@@ -2334,15 +2433,14 @@ mod tests {
     }
 
     #[test]
-    fn svg_draws_no_text_or_embedded_images() {
-        // GPUI's own resvg / usvg enable text and raster images: an SVG
-        // still draws neither (no fonts loaded, the resolver resolves
-        // nothing).
-        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><text x="0" y="9" font-size="10" fill="#f00">NSH</text><image width="20" height="10" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="/></svg>"##;
+    fn svg_draws_embedded_raster_images() {
+        // nsh-core's loader decodes inline raster data (text needs a system
+        // font, which a test machine may not have).
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><image width="20" height="10" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="/></svg>"##;
         let decoded = decoded(svg, 20).unwrap();
         assert_eq!(decoded.size(), (20, 10));
         let bytes = decoded.image.as_bytes(0).unwrap();
-        assert!(bytes.iter().all(|&b| b == 0), "nothing drawn");
+        assert!(bytes.iter().any(|&b| b != 0), "the embedded image draws");
     }
 
     #[test]

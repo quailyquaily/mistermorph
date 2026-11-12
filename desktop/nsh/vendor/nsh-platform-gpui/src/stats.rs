@@ -1,5 +1,5 @@
 //! Frame statistics of a surface ([`crate::AppOptions::fps`],
-//! [`crate::AppView::set_fps_monitor`]): once a second, one `nsh::perf`
+//! [`crate::AppView::set_fps_monitor`]): once a second, one `nsh::fps`
 //! line of how often frames were drawn and what each cost on the main
 //! thread.
 //!
@@ -70,7 +70,7 @@ impl FrameStats {
         }
         let n = self.paints.len();
         log::info!(
-            target: "nsh::perf",
+            target: nsh_engine::perf::LOG_TARGET,
             "fps {n} active {}/{n} gap {} tick {} paint {} canvas {:.2} paths {:.1} raf {} notifies {}",
             self.active,
             summary(&mut self.gaps),

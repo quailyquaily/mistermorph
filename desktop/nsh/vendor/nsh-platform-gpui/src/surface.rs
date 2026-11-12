@@ -9,7 +9,12 @@
 //! notifies the GPUI view showing it, which draws the tree in its next
 //! frame ([`crate::render`]). Native animations and JS frame requests tick
 //! on the window's frames ([`Surface::tick`], called while drawing) while
-//! there is something to do.
+//! there is something to do. A window that is not presented (minimized,
+//! hidden, a suspended Wayland toplevel) draws no frames, so what changes
+//! the app's state when an animation ends (a view detached, a screen's
+//! `onDismiss`, an animation's `finished`, a scroll's end) is kept by a
+//! timer instead, which ticks at its deadline if no frame did
+//! ([`Surface::keep_deadline`]).
 
 use std::{
     cell::{Cell, RefCell},
@@ -22,7 +27,9 @@ use std::{
 
 use crossbeam_channel::{Receiver, Sender};
 use nsh_core::{EventKind, EventPayload, MountBatch, MountItem, NodeId, Points, ROOT_ID, Size};
-use nsh_engine::{AppError, Engine, EngineConfig, EngineControl, Environment, MountSink};
+use nsh_engine::{
+    AppError, Engine, EngineConfig, EngineControl, Environment, MainThreadTask, MountSink,
+};
 use rustc_hash::FxHashMap;
 
 use crate::{
@@ -39,6 +46,9 @@ enum Message {
     Frame,
     HotUpdateFailed,
     Handled(u64),
+    /// A function the app runs on the main thread
+    /// ([`MountSink::run_on_main_thread`]), after the batches before it.
+    Run(MainThreadTask),
 }
 
 thread_local! {
@@ -91,11 +101,42 @@ impl MountSink for Sink {
     fn handled(&self, events: u64) {
         self.send(Message::Handled(events));
     }
+
+    fn run_on_main_thread(&self, task: MainThreadTask) {
+        self.send(Message::Run(task));
+    }
 }
 
-/// Called on every frame with the frame's time until it returns false
-/// ([`Surface::on_frame`]).
-pub(crate) type FrameClient = Box<dyn FnMut(&Rc<Surface>, f64) -> bool>;
+/// How long after a deadline the timer that keeps it fires
+/// ([`Surface::keep_deadline`]): more than a frame, so while the window
+/// draws, its frames always come first.
+const LATE: f64 = 0.05;
+
+/// Called on every frame with the frame's time (seconds, [`Surface::clock`])
+/// until it is done ([`Surface::on_frame`]).
+pub(crate) type FrameClient = Box<dyn FnMut(&Rc<Surface>, f64) -> Next>;
+
+/// What a frame client has left after a frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Next {
+    /// Nothing: it is not called again.
+    Done,
+    /// Drawing only (a fade, a shader, a scroll indicator): the next frame,
+    /// when there is one.
+    Frame,
+    /// Something that changes the app's state ends at this time (seconds,
+    /// [`Surface::clock`]: a view detached, an event sent): it is called by
+    /// then even while no frames are drawn ([`Surface::keep_deadline`]),
+    /// and on every frame until then.
+    At(f64),
+}
+
+impl From<bool> for Next {
+    /// Whether it wants the next frame, for drawing only.
+    fn from(more: bool) -> Self {
+        if more { Next::Frame } else { Next::Done }
+    }
+}
 
 /// Called with the new size (points) when the surface is resized.
 pub(crate) type ResizeHandler = Box<dyn Fn(f32, f32)>;
@@ -137,6 +178,10 @@ pub(crate) struct Surface {
     /// The GPUI view drawing the surface ([`crate::app::AppView`]): notified
     /// when the surface changed.
     pub(crate) entity: Cell<Option<gpui::EntityId>>,
+    /// The GPUI window that view is in, as it was made or last drawn: what
+    /// reaches the window between frames uses it (native components' props
+    /// and commands, [`crate::native`]).
+    pub(crate) main_window: Cell<Option<gpui::AnyWindowHandle>>,
     /// The GPUI text system (fonts the engine thread shapes with, and the
     /// main thread draws with).
     pub(crate) text_system: RefCell<Option<Arc<gpui::TextSystem>>>,
@@ -166,9 +211,21 @@ pub(crate) struct Surface {
     pub(crate) appearance: Cell<nsh_core::platform::Appearance>,
     /// JS asked for a display frame.
     js_frame: Cell<bool>,
-    /// Extra frame clients (transitions, glides, spinners): called on every
-    /// frame until they return false ([`Surface::on_frame`]).
-    frame_clients: RefCell<Vec<FrameClient>>,
+    /// Extra frame clients (transitions, glides, spinners), called on every
+    /// frame until they are done, each with its deadline ([`Next::At`]; a
+    /// new one's is when it was added, [`Surface::on_frame`]).
+    frame_clients: RefCell<Vec<(FrameClient, Option<f64>)>>,
+    /// When the last tick ran ([`Surface::clock`]).
+    last_tick: Cell<f64>,
+    /// A tick runs: what it adds is scheduled when it ends.
+    ticking: Cell<bool>,
+    /// A batch was applied since the last tick: it may have moved what the
+    /// frame clients last reported (a transition retargeted), so a tick is
+    /// due at once ([`Surface::deadline`]).
+    restep: Cell<bool>,
+    /// The deadline the scheduled timer waits for
+    /// ([`Surface::keep_deadline`]).
+    keeper: Cell<Option<f64>>,
     /// The GPU device shader views render with, opened when the first
     /// shader is mounted (`None` inside: there is none).
     shader_renderer: std::cell::OnceCell<Option<Rc<nsh_engine::shader::Renderer>>>,
@@ -190,6 +247,9 @@ pub(crate) struct Surface {
     pub(crate) asset_base: RefCell<Option<crate::image::AssetBase>>,
     /// The disk cache of downloaded images ([`crate::image::set_disk_cache`]).
     pub(crate) image_cache: RefCell<Option<nsh_core::image::DiskCache>>,
+    /// The roots the app's `<Image>` files are read under
+    /// ([`nsh_engine::Engine::media_files`]).
+    pub(crate) media_files: RefCell<Arc<nsh_core::access::MediaFiles>>,
     /// What the running app may reach (checked for image redirects).
     pub(crate) access: RefCell<Arc<nsh_core::access::Access>>,
     /// Videos, web views and registered native components.
@@ -223,6 +283,12 @@ pub(crate) struct Surface {
     /// The embedding app's locale and text size, standing in for the
     /// system's ([`crate::AppView::set_locale`], `set_font_scale`).
     pub(crate) host_environment: Cell<nsh_core::platform::HostEnvironment>,
+    /// The app's windows of its own besides the main one, oldest first
+    /// ([`crate::window`]).
+    pub(crate) windows: RefCell<Vec<Rc<crate::window::AppWindow>>>,
+    /// While one of those windows handles input, its root: the views input
+    /// picks are in it ([`Surface::input_root`], [`crate::window::enter`]).
+    pub(crate) input_root: RefCell<Option<NshView>>,
 }
 
 impl Surface {
@@ -246,6 +312,7 @@ impl Surface {
             pending: RefCell::new(Arc::new(AtomicBool::new(false))),
             scale: Cell::new(1.0),
             entity: Cell::new(None),
+            main_window: Cell::new(None),
             text_system: RefCell::new(None),
             origin: Cell::new((0.0, 0.0)),
             invalid: Cell::new(false),
@@ -257,6 +324,10 @@ impl Surface {
             appearance: Cell::default(),
             js_frame: Cell::new(false),
             frame_clients: RefCell::default(),
+            last_tick: Cell::new(f64::NEG_INFINITY),
+            ticking: Cell::new(false),
+            restep: Cell::new(false),
+            keeper: Cell::new(None),
             shader_renderer: std::cell::OnceCell::new(),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
@@ -269,6 +340,7 @@ impl Surface {
             generation: Cell::new(0),
             asset_base: RefCell::new(None),
             image_cache: RefCell::new(None),
+            media_files: RefCell::default(),
             access: RefCell::new(Arc::default()),
             native: Default::default(),
             keymap: Default::default(),
@@ -283,6 +355,8 @@ impl Surface {
             transparent: Cell::new(false),
             host_dark: Cell::new(None),
             host_environment: Cell::default(),
+            windows: RefCell::default(),
+            input_root: RefCell::default(),
         });
         SURFACES.with(|s| s.borrow_mut().insert(key, Rc::downgrade(&surface)));
         let weak = Rc::downgrade(&surface);
@@ -310,14 +384,28 @@ impl Surface {
     }
 
     /// The GPU device shader views render with ([`crate::shader`]), opened
-    /// the first time one asks.
+    /// the first time one asks; without one the app hears that shader views
+    /// draw nothing (`shadersAvailable()`).
     pub(crate) fn shader_renderer(&self) -> Option<Rc<nsh_engine::shader::Renderer>> {
         self.shader_renderer
             .get_or_init(|| {
-                nsh_engine::shader::Renderer::new(nsh_engine::shader::PixelFormat::Bgra)
-                    .map(Rc::new)
+                let renderer =
+                    nsh_engine::shader::Renderer::new(nsh_engine::shader::PixelFormat::Bgra);
+                if renderer.is_none() {
+                    self.control(EngineControl::shaders_unavailable);
+                }
+                renderer.map(Rc::new)
             })
             .clone()
+    }
+
+    /// The root input picks views in: a window's of the app's own while it
+    /// handles input ([`crate::window::enter`]), else the main one.
+    pub(crate) fn input_root(&self) -> NshView {
+        self.input_root
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| self.root.clone())
     }
 
     /// The surface's size in points.
@@ -374,10 +462,14 @@ impl Surface {
             Ok(engine) => {
                 // The app's downloaded images go through its disk cache.
                 crate::image::set_disk_cache(self, engine.image_cache());
+                *self.media_files.borrow_mut() = engine.media_files();
                 // The test moves its clock through the engine.
                 #[cfg(feature = "dev")]
                 if let Some(model) = &*self.test_model.borrow() {
                     model.engine_started(engine.control());
+                }
+                if self.stats.borrow().is_some() {
+                    engine.control().set_perf_monitor(Some(Default::default()));
                 }
                 *self.control.borrow_mut() = Some(engine.control());
                 *self.engine.borrow_mut() = Some(engine);
@@ -393,9 +485,11 @@ impl Surface {
         self.control.borrow_mut().take();
         self.engine.borrow_mut().take();
         self.rx.borrow_mut().take();
+        crate::window::close_all(self);
         self.mounter.borrow_mut().clear();
         self.native.clear();
         crate::system::clear(self);
+        crate::key_focus::forget(self);
         *self.anim.borrow_mut() = UiAnimation::default();
         self.nav.borrow_mut().reset();
         crate::input::reset(self);
@@ -403,12 +497,23 @@ impl Surface {
         crate::text_input::surface_stopped(self.key);
         self.js_frame.set(false);
         self.frame_clients.borrow_mut().clear();
+        self.restep.set(false);
+        // The timer waiting finds it no longer kept.
+        self.keeper.set(None);
         self.events_sent.set(0);
         self.events_handled.set(0);
         self.invalidate();
     }
 
     /// Calls `f` with the engine's control, if an app runs.
+    /// Logs frame statistics once a second, or stops
+    /// ([`crate::AppView::set_fps_monitor`]). The engine measures its
+    /// commits meanwhile, which `fpsEnabled()` follows.
+    pub(crate) fn set_stats(&self, on: bool) {
+        *self.stats.borrow_mut() = on.then(Default::default);
+        self.control(|c| c.set_perf_monitor(on.then(Default::default)));
+    }
+
     pub(crate) fn control(&self, f: impl FnOnce(&EngineControl)) {
         if let Some(control) = &*self.control.borrow() {
             f(control);
@@ -519,19 +624,31 @@ impl Surface {
     /// Hosted items drawn by the frame just drawn, with their window
     /// bounds: tells them, and the ones no longer drawn.
     pub(crate) fn items_placed(&self, drawn: Vec<(Rc<dyn Hosted>, gpui::Bounds<gpui::Pixels>)>) {
-        let mut placed = self.placed.borrow_mut();
-        for old in placed.iter() {
-            if !drawn.iter().any(|(item, _)| Rc::ptr_eq(item, old)) {
-                old.placed(None);
-            }
-        }
-        placed.clear();
-        for (item, rect) in drawn {
-            item.placed(Some(rect));
-            placed.push(item);
+        place_items(&self.placed, drawn);
+    }
+}
+
+/// Hosted items drawn by a window's frame just drawn, with their window
+/// bounds: tells them, and those of `placed` (the window's last frame's)
+/// no longer drawn.
+pub(crate) fn place_items(
+    placed: &RefCell<Vec<Rc<dyn Hosted>>>,
+    drawn: Vec<(Rc<dyn Hosted>, gpui::Bounds<gpui::Pixels>)>,
+) {
+    let mut placed = placed.borrow_mut();
+    for old in placed.iter() {
+        if !drawn.iter().any(|(item, _)| Rc::ptr_eq(item, old)) {
+            old.placed(None);
         }
     }
+    placed.clear();
+    for (item, rect) in drawn {
+        item.placed(Some(rect));
+        placed.push(item);
+    }
+}
 
+impl Surface {
     /// Applies what the engine sent.
     pub(crate) fn drain(self: &Rc<Self>) {
         self.pending.borrow().store(false, Ordering::Release);
@@ -582,12 +699,16 @@ impl Surface {
                     self.events_handled.set(events);
                     crate::text_input::engine_caught_up(self);
                 }
+                Message::Run(task) => task.run(),
             }
         }
         if applied {
             self.write_animations();
             // Views may have come under (or gone from under) a still mouse.
             crate::input::rehover(self);
+            if !self.frame_clients.borrow().is_empty() {
+                self.restep.set(true);
+            }
         }
         self.ensure_ticking();
     }
@@ -633,17 +754,33 @@ impl Surface {
         }
     }
 
-    /// Calls `f` on every frame (with the frame's time) until it returns
-    /// false: transitions, scroll glides, spinners.
-    pub(crate) fn on_frame(self: &Rc<Self>, f: impl FnMut(&Rc<Surface>, f64) -> bool + 'static) {
-        self.frame_clients.borrow_mut().push(Box::new(f));
+    /// Calls `f` on every frame (with the frame's time) until it is done
+    /// ([`Next`]): transitions, scroll glides, navigation; the first time
+    /// by now even while no frames are drawn.
+    pub(crate) fn on_frame(self: &Rc<Self>, f: impl FnMut(&Rc<Surface>, f64) -> Next + 'static) {
+        let now = self.clock();
+        self.frame_clients
+            .borrow_mut()
+            .push((Box::new(f), Some(now)));
         self.ensure_ticking();
     }
 
-    /// [`Surface::on_frame`] while the animation graph is borrowed (its
+    /// Calls `f` on every frame while it returns true, for what only draws
+    /// (a fade, a field waiting to be shown): nothing it does comes due
+    /// without frames ([`Next::Frame`]).
+    pub(crate) fn on_draw(self: &Rc<Self>, mut f: impl FnMut(&Rc<Surface>, f64) -> bool + 'static) {
+        self.frame_clients
+            .borrow_mut()
+            .push((Box::new(move |surface, now| f(surface, now).into()), None));
+        self.ensure_ticking();
+    }
+
+    /// [`Surface::on_draw`] while the animation graph is borrowed (its
     /// writes into the views): asks for a frame without looking at it.
-    pub(crate) fn add_frame_client(&self, f: impl FnMut(&Rc<Surface>, f64) -> bool + 'static) {
-        self.frame_clients.borrow_mut().push(Box::new(f));
+    pub(crate) fn add_frame_client(&self, mut f: impl FnMut(&Rc<Surface>, f64) -> bool + 'static) {
+        self.frame_clients
+            .borrow_mut()
+            .push((Box::new(move |surface, now| f(surface, now).into()), None));
         self.invalidate();
     }
 
@@ -671,17 +808,22 @@ impl Surface {
             || !self.frame_clients.borrow().is_empty()
     }
 
-    /// Draws frames while animations run or JS wants a frame.
+    /// Draws frames while animations run or JS wants a frame, and keeps
+    /// their deadlines while no frames come.
     pub(crate) fn ensure_ticking(self: &Rc<Self>) {
         if self.wants_frames() {
             self.invalidate();
+            self.keep_deadline();
         }
     }
 
     /// One animation frame (called while the surface is drawn, before its
-    /// views are).
+    /// views are, or by [`Surface::keep_deadline`] when no frame came).
     pub(crate) fn tick(self: &Rc<Self>) {
         let now = self.clock();
+        self.last_tick.set(now);
+        self.restep.set(false);
+        self.ticking.set(true);
         if self.anim.borrow().animating() {
             self.anim.borrow_mut().tick(now);
             self.write_animations();
@@ -689,12 +831,90 @@ impl Surface {
         if self.js_frame.replace(false) {
             self.control(|c| c.frame());
         }
-        let mut clients = std::mem::take(&mut *self.frame_clients.borrow_mut());
-        clients.retain_mut(|f| f(self, now));
+        let clients = std::mem::take(&mut *self.frame_clients.borrow_mut());
+        let mut kept: Vec<(FrameClient, Option<f64>)> = clients
+            .into_iter()
+            .filter_map(|(mut f, _)| match f(self, now) {
+                Next::Done => None,
+                Next::Frame => Some((f, None)),
+                Next::At(at) => Some((f, Some(at))),
+            })
+            .collect();
         // Clients added while running stay after the ones kept.
         let mut added = std::mem::take(&mut *self.frame_clients.borrow_mut());
-        clients.append(&mut added);
-        *self.frame_clients.borrow_mut() = clients;
+        kept.append(&mut added);
+        *self.frame_clients.borrow_mut() = kept;
+        self.ticking.set(false);
+        self.keep_deadline();
+    }
+
+    /// When the next thing that changes the app's state comes due without
+    /// a frame (seconds, [`Surface::clock`]): an animation of the graph or
+    /// a frame client ending, or `now` after a batch moved what the frame
+    /// clients reported. `None` when only drawing is left: an animation
+    /// looping forever, a fade, a JS frame request. Batches are applied as
+    /// they arrive ([`Surface::drain`]), never held for a frame.
+    fn deadline(&self, now: f64) -> Option<f64> {
+        let restep = self.restep.get().then_some(now);
+        let clients = self
+            .frame_clients
+            .borrow()
+            .iter()
+            .filter_map(|(_, at)| *at)
+            .reduce(f64::min);
+        [self.anim.borrow().deadline(now), clients, restep]
+            .into_iter()
+            .flatten()
+            .reduce(f64::min)
+    }
+
+    /// Makes what comes due happen on time while no frames are drawn: a
+    /// window that is not presented (minimized, hidden, a suspended Wayland
+    /// toplevel) or a view no longer rendered gets no frames, and
+    /// animations must still end (a transition detaches its views when it
+    /// does, a modal reports its dismissal, an animation its end to JS). A
+    /// timer on the main thread ([`crate::rt::after_ms`]) waits for the
+    /// next deadline ([`Surface::deadline`]) and a little more ([`LATE`]);
+    /// if no tick ran since it came due, it ticks outside the paint, which
+    /// steps everything to the time, ends what ended and gives the next
+    /// deadline. Nothing in a tick needs GPUI's window: what it changes
+    /// only marks the surface invalid, and the window draws it when it
+    /// shows again. While frames come they always tick first and the timer
+    /// only schedules the next; nothing is scheduled for what only draws
+    /// (a spinner, a JS frame request), so a hidden window with an endless
+    /// animation does no work.
+    fn keep_deadline(self: &Rc<Self>) {
+        // The tick schedules when it ends, with every client's deadline.
+        if self.ticking.get() {
+            return;
+        }
+        let now = self.clock();
+        let Some(at) = self.deadline(now) else {
+            return;
+        };
+        // One timer at a time: the one waiting for an earlier deadline
+        // schedules the next when it fires.
+        if self.keeper.get().is_some_and(|pending| pending <= at) {
+            return;
+        }
+        self.keeper.set(Some(at));
+        let key = self.key;
+        let ms = ((at + LATE - now).max(0.0) * 1000.0).ceil() as u64;
+        crate::rt::after_ms(ms, move || {
+            let Some(surface) = Surface::by_key(key) else {
+                return;
+            };
+            // An earlier deadline (or a restart) took its place.
+            if surface.keeper.get() != Some(at) {
+                return;
+            }
+            surface.keeper.set(None);
+            if surface.last_tick.get() < at && surface.wants_frames() {
+                surface.tick();
+            } else {
+                surface.keep_deadline();
+            }
+        });
     }
 }
 
@@ -705,20 +925,22 @@ impl Drop for Surface {
     }
 }
 
-/// Notifies the views of this thread's surfaces that changed.
+/// Notifies the views of this thread's surfaces that changed, and those
+/// of their windows of their own.
 pub(crate) fn flush_all(cx: &mut gpui::App) {
     let ids: Vec<gpui::EntityId> = SURFACES.with(|s| {
-        s.borrow()
-            .values()
-            .filter_map(Weak::upgrade)
-            .filter(|surface| surface.invalid.get())
-            .filter_map(|surface| {
-                if let Some(stats) = surface.stats.borrow_mut().as_mut() {
-                    stats.notified();
-                }
-                surface.entity.get()
-            })
-            .collect()
+        let mut ids = Vec::new();
+        for surface in s.borrow().values().filter_map(Weak::upgrade) {
+            crate::window::changed_windows(&surface, &mut ids);
+            if !surface.invalid.get() {
+                continue;
+            }
+            if let Some(stats) = surface.stats.borrow_mut().as_mut() {
+                stats.notified();
+            }
+            ids.extend(surface.entity.get());
+        }
+        ids
     });
     for id in ids {
         cx.notify(id);

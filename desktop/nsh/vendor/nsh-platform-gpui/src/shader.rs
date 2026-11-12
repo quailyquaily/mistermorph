@@ -5,7 +5,8 @@
 //!
 //! The surface opens the GPU device the first time a shader is mounted
 //! ([`Surface::shader_renderer`]). Each shader view renders on a frame
-//! client of its surface ([`Surface::on_frame`]) while it has a frame to
+//! client of its surface ([`Surface::add_frame_client`], drawing only: no
+//! frames are rendered while none are drawn) while it has a frame to
 //! render or collect ([`ShaderView::wants_frame`]: its uniforms or size
 //! changed, or it reads `nsh.time`), at the window's scale factor. A frame
 //! that comes back is uploaded when it is next drawn (BGRA, straight, the
@@ -140,7 +141,7 @@ fn start(surface: &Surface, view: &NshView) {
         shader.seen.set(true);
     }
     let view = view.clone();
-    // Not `on_frame`: the animator's writes hold the animation graph, which
+    // Not `on_draw`: the animator's writes hold the animation graph, which
     // it looks at.
     surface.add_frame_client(move |surface, _| {
         let go_on = frame(surface, &view);

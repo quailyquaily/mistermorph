@@ -365,6 +365,7 @@ jobs:
         uses: ./.github/actions/setup-desktop-build
         with:
           gpui: "false"
+          components: web android
 
       - name: Install the Android platform
         if: steps.keystore.outputs.ready == 'true'

@@ -94,8 +94,9 @@ pub fn init_logging() {
 
 /// What the session's task handles, in the order it was sent.
 enum Msg {
-    /// From the dev client.
-    Event(DevEvent),
+    /// From the dev client (boxed: a test's setup is far larger than the
+    /// other messages).
+    Event(Box<DevEvent>),
     /// An error of the app.
     RuntimeError(AppError),
     /// The engine could not apply a hot update in place.
@@ -133,6 +134,13 @@ pub(crate) struct DevSession {
     status: Option<(String, u64)>,
     shown: u64,
     error: Option<DevError>,
+    /// An error came since the last message was handled: a hidden window
+    /// shows it.
+    errored: bool,
+    /// The window opened hidden for the app's options ([`open_app_window`](crate::open_app_window)):
+    /// it shows when the first app comes, unless they say it starts hidden,
+    /// or an error does.
+    held: bool,
 }
 
 /// The error overlay's content.
@@ -193,6 +201,7 @@ impl DevSession {
     }
 
     fn show_error(&mut self, title: &str, message: &str, prose: bool) {
+        self.errored = true;
         self.error = Some(DevError {
             title: title.to_owned(),
             message: clean_message(message).into_owned(),
@@ -202,14 +211,16 @@ impl DevSession {
 }
 
 /// Connects `this` to the dev server at `url` (`ws://host:port/ws`),
-/// replacing its session if it had one.
-pub(crate) fn start(this: &AppView, url: String, cx: &mut Context<AppView>) {
+/// replacing its session if it had one. `held`: its window opened hidden
+/// until the app's options come.
+pub(crate) fn start(this: &AppView, url: String, held: bool, cx: &mut Context<AppView>) {
     let (tx, mut rx) = unbounded::<Msg>();
     if let Some(base) = asset_base(&url) {
         this.set_asset_base(Some(AssetBase::Http(base)));
     }
     let surface = this.surface();
     let previous = this.dev.borrow_mut().take();
+    let held = held || previous.as_ref().is_some_and(|p| p.held);
     let reloads = match previous {
         Some(previous) => {
             *previous.reloads.borrow_mut() = tx.clone();
@@ -241,6 +252,8 @@ pub(crate) fn start(this: &AppView, url: String, cx: &mut Context<AppView>) {
         status: None,
         shown: 0,
         error: None,
+        errored: false,
+        held,
     };
     session.show_status(Status::Connecting(&url));
 
@@ -286,7 +299,7 @@ pub(crate) fn start(this: &AppView, url: String, cx: &mut Context<AppView>) {
             DevEvent::Disconnected => CONNECTED.store(false, Ordering::Relaxed),
             _ => {}
         }
-        let _ = events.unbounded_send(Msg::Event(event));
+        let _ = events.unbounded_send(Msg::Event(Box::new(event)));
     });
     match started {
         Ok(client) => {
@@ -390,7 +403,7 @@ fn handle(view: &AppView, msg: Msg) {
     let mut dev = view.dev.borrow_mut();
     let Some(session) = dev.as_mut() else { return };
     let load = match msg {
-        Msg::Event(event) => on_event(view, session, event),
+        Msg::Event(event) => on_event(view, session, *event),
         Msg::RuntimeError(error) => {
             session.show_error(error_title(&error), &error.to_string(), false);
             None
@@ -408,7 +421,29 @@ fn handle(view: &AppView, msg: Msg) {
             None
         }
     };
+    // The window held for the app shows with it, unless its options say
+    // it starts hidden (nsh.json `window.defaultVisible: false`), as the
+    // app's package shows it; or with an error.
+    let show = session.held && (load.is_some() || session.error.is_some()) && {
+        session.held = false;
+        let visible = load.as_ref().is_none_or(|app| {
+            app.main_window()
+                .is_none_or(nsh_core::desktop::MainWindowOptions::visible_at_launch)
+        });
+        if !visible {
+            log::info!("the main window starts hidden (nsh.json window.defaultVisible: false)");
+        }
+        visible
+    };
+    let errored = std::mem::take(&mut session.errored);
     drop(dev);
+    if show {
+        crate::window::main_request(view.surface(), &nsh_core::desktop::WindowRequest::Show);
+    } else if errored {
+        // A window hidden by the app (one hidden since launch whose
+        // startup failed: a tray app before its icon came) shows the error.
+        crate::window::show_main_if_hidden(view.surface());
+    }
     if let Some(app) = load {
         view.load(app);
     }
@@ -468,6 +503,7 @@ fn on_event(view: &AppView, dev: &mut DevSession, event: DevEvent) -> Option<App
             capabilities,
             app_id,
             limits,
+            window,
         } => {
             // A bundle reached through a hot update keeps its "Updated".
             if dev.running != Some((session, version)) {
@@ -495,6 +531,9 @@ fn on_event(view: &AppView, dev: &mut DevSession, event: DevEvent) -> Option<App
             if let Some(map) = source_map {
                 bundle = bundle.with_source_map(map);
             }
+            // nsh.json `window`: the engine applies its attributes to the
+            // window the host opened before the app was known.
+            bundle = bundle.with_main_window(window.as_deref());
             bundle = match bundle
                 .with_app_id(app_id.as_deref())
                 .with_capabilities_json(capabilities.as_deref())

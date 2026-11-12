@@ -9,7 +9,8 @@
 //! The pass's opacity and color filters are in the image's colors (GPUI's
 //! image opacity is not public), so a gradient whose opacity animates is
 //! drawn again each frame; images are at most [`MAX_SIDE`] pixels a side,
-//! stretched beyond (a gradient has no detail finer than its stops).
+//! stretched beyond (a gradient has no detail finer than its stops), and
+//! repeating ones at most [`MAX_REPEATING_SIDE`].
 //!
 //! A rotated, skewed or projected view cannot paint an image in its plane:
 //! its gradient is filled as bands of solid color (strips across a linear
@@ -34,8 +35,10 @@ use crate::{
 /// Most pixels along a side of a gradient's image.
 const MAX_SIDE: f32 = 768.0;
 
-/// Most pixels along a side of a repeating gradient's image.
-const REPEATING_MAX_SIDE: f32 = 4096.0;
+/// Most pixels along a side of a repeating gradient's image: its bands
+/// are as fine as their period (a 1 px hatch line), so stretching the
+/// image would blur and widen them.
+const MAX_REPEATING_SIDE: f32 = 4096.0;
 
 /// How many images are kept before those not drawn lately are let go.
 const MAX_KEPT: usize = 96;
@@ -289,11 +292,8 @@ fn draw_image(
     radii: [f32; 4],
 ) {
     let b = cx.rect(0.0, 0.0, w, h);
-    // A repeating gradient has detail at every period (hatching, a grid):
-    // stretched up from a smaller image its fine lines blur, so it is drawn
-    // at the view's own size, up to REPEATING_MAX_SIDE.
     let max = if ramp.repeating {
-        REPEATING_MAX_SIDE
+        MAX_REPEATING_SIDE
     } else {
         MAX_SIDE
     };

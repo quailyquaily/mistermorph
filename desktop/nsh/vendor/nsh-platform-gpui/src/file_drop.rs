@@ -25,7 +25,7 @@ pub(crate) struct State {
     clearing: Cell<bool>,
 }
 
-fn set_target(surface: &Surface, target: Option<NshView>) {
+fn set_target(surface: &Surface, target: Option<NshView>, paths: &[std::path::PathBuf]) {
     let previous = {
         let mut current = surface.file_drop.target.borrow_mut();
         if current.as_ref().map(NshView::id) == target.as_ref().map(NshView::id) {
@@ -43,7 +43,11 @@ fn set_target(surface: &Surface, target: Option<NshView>) {
     if let Some(next) = &target
         && next.state().events.contains(EventKind::FileDragEnter)
     {
-        surface.event(next.id(), EventKind::FileDragEnter, EventPayload::None);
+        surface.event(
+            next.id(),
+            EventKind::FileDragEnter,
+            EventPayload::FileDrop(uris(paths)),
+        );
     }
 }
 
@@ -60,14 +64,18 @@ pub(crate) fn take_needs_clear(surface: &Surface) -> bool {
 }
 
 /// The drag moved to `(x, y)` (root points).
-pub(crate) fn update(surface: &Surface, x: f32, y: f32) {
-    set_target(surface, crate::input::file_drop_target(surface, x, y));
+pub(crate) fn update(surface: &Surface, x: f32, y: f32, paths: &[std::path::PathBuf]) {
+    set_target(
+        surface,
+        crate::input::file_drop_target(surface, x, y),
+        paths,
+    );
 }
 
 /// The drag left the window or ended.
 pub(crate) fn clear(surface: &Surface) {
     surface.file_drop.clearing.set(false);
-    set_target(surface, None);
+    set_target(surface, None, &[]);
 }
 
 /// The view `id` was removed or stopped listening to drops.
@@ -79,7 +87,7 @@ pub(crate) fn invalidate(surface: &Surface, id: NodeId) {
         .as_ref()
         .is_some_and(|view| view.id() == id);
     if matches {
-        set_target(surface, None);
+        set_target(surface, None, &[]);
     }
 }
 
@@ -100,7 +108,7 @@ pub(crate) fn perform(surface: &Surface, x: f32, y: f32, paths: &[std::path::Pat
         clear(surface);
         return false;
     };
-    set_target(surface, Some(destination.clone()));
+    set_target(surface, Some(destination.clone()), paths);
     surface.event(
         destination.id(),
         EventKind::FileDrop,

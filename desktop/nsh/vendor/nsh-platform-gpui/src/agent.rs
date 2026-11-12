@@ -3,13 +3,20 @@
 //! there, through the handlers real input goes through ([`crate::synth`]).
 //! The agent calls from a thread of its own; each call does its work on
 //! GPUI's main thread ([`crate::rt::invoke`], then with the app) and
-//! returns once it is done.
+//! returns once it is done. Pointer input goes to the window the agent
+//! targets last ([`Native::target_window`]: the main one or one of the
+//! app's own), keys to the focused window.
 
-use std::{rc::Rc, time::Duration};
+use std::{
+    rc::Rc,
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
 
 use gpui::{App, Context, Window, WindowHandle};
 use nsh_core::{
-    NodeId,
+    NodeId, ROOT_ID,
+    desktop::WindowState,
     geometry::{Bounds, Point, Points, Size, point},
 };
 use nsh_testing::agent::{Key, Native};
@@ -33,6 +40,8 @@ const SCROLL_STEP: f32 = 20.0;
 /// The surface the agent acts on, by key (its calls must be `Send`).
 pub(crate) struct GpuiNative {
     key: u64,
+    /// The root node of the window pointer input goes to.
+    target: AtomicU32,
 }
 
 /// The window showing the surface `key`.
@@ -48,7 +57,75 @@ fn window_of(key: u64, cx: &App) -> Option<WindowHandle<AppView>> {
 
 impl GpuiNative {
     pub(crate) fn new(key: u64) -> Self {
-        GpuiNative { key }
+        GpuiNative {
+            key,
+            target: AtomicU32::new(ROOT_ID),
+        }
+    }
+
+    fn target(&self) -> NodeId {
+        self.target.load(Ordering::Relaxed)
+    }
+
+    /// `f` with the surface and the app on the main thread, outside any
+    /// window's update (what it changed drawn after); `None` once the main
+    /// window is gone.
+    fn in_app<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&Rc<Surface>, &mut App) -> R + Send + 'static,
+    ) -> Option<R> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let key = self.key;
+        crate::rt::invoke(move || {
+            crate::rt::on_app(move |cx| {
+                let surface = window_of(key, cx)
+                    .and_then(|h| h.read_with(cx, |view, _| view.surface().clone()).ok());
+                let r = surface.map(|surface| {
+                    let r = f(&surface, cx);
+                    crate::rt::flush(cx);
+                    r
+                });
+                let _ = tx.send(r);
+            });
+        });
+        rx.recv_timeout(MAIN).ok().flatten()
+    }
+
+    /// `f` in the window with the keyboard focus, as a keyboard's input
+    /// goes: the main window (`None`) or one of the app's own (its root
+    /// node and GPUI window; its input root entered).
+    fn in_focused<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&Rc<Surface>, Option<(NodeId, &mut Window)>, &mut App) -> R + Send + 'static,
+    ) -> Option<R> {
+        self.in_app(
+            move |surface, cx| match crate::window::focused(surface, cx) {
+                None => Some(f(surface, None, cx)),
+                Some(id) => crate::window::act_in(surface, id, false, cx, |surface, window, cx| {
+                    f(surface, Some((id, window)), cx)
+                }),
+            },
+        )
+        .flatten()
+    }
+
+    /// Presses key `vk` in the focused window; Escape nothing took closes
+    /// a window of the app's own that says so, as a real one does.
+    fn keystroke(&self, vk: u16, modifiers: Modifiers) -> Option<()> {
+        self.in_focused(move |surface, own, cx| {
+            if let Some((id, _)) = &own
+                && crate::window::blocked(surface, Some(*id), cx)
+            {
+                return;
+            }
+            let taken = synth::press(surface, vk, modifiers);
+            if let Some((id, window)) = own
+                && !taken
+                && vk == crate::keys::VK_ESCAPE
+            {
+                crate::window::escape(surface, Some(id), window, cx);
+            }
+        })
     }
 
     /// `f` with the window's view on the main thread, waited for (what it
@@ -89,30 +166,56 @@ impl GpuiNative {
     /// view, as a real one does ([`crate::events`]).
     fn mouse(&self, kind: PointerKind, at: Point<Points>, button: u8, held: bool) {
         let (x, y) = (at.x.0, at.y.0);
+        let event = move |surface: &Surface| PointerEvent {
+            kind,
+            x,
+            y,
+            button,
+            pointer: 1,
+            touch: false,
+            pen: false,
+            time: surface.clock(),
+            modifiers: Modifiers::default(),
+            clicks: 1,
+            pressed_button: held.then_some(button),
+        };
+        let down = kind == PointerKind::Down;
+        let target = self.target();
+        if target != ROOT_ID {
+            self.in_app(move |surface, cx| {
+                crate::window::act_in(surface, target, down, cx, |surface, window, cx| {
+                    if down {
+                        if crate::window::blocked(surface, Some(target), cx) {
+                            return;
+                        }
+                        // A press activates the window it is in.
+                        if !window.is_window_active() {
+                            cx.activate(true);
+                            window.activate_window();
+                        }
+                    }
+                    crate::input::pointer(surface, event(surface));
+                });
+            });
+            return;
+        }
         self.on_main(move |view, window, cx| {
-            if kind == PointerKind::Down {
+            let surface = view.surface().clone();
+            if down {
+                if crate::window::blocked(&surface, None, cx) {
+                    return;
+                }
+                // A press activates the window it is in, as a real one does.
+                if !window.is_window_active() {
+                    cx.activate(true);
+                    window.activate_window();
+                }
                 let focus = gpui::Focusable::focus_handle(view, cx);
                 if !focus.is_focused(window) {
                     window.focus(&focus, cx);
                 }
             }
-            let surface = view.surface().clone();
-            crate::input::pointer(
-                &surface,
-                PointerEvent {
-                    kind,
-                    x,
-                    y,
-                    button,
-                    pointer: 1,
-                    touch: false,
-                    pen: false,
-                    time: surface.clock(),
-                    modifiers: Modifiers::default(),
-                    clicks: 1,
-                    pressed_button: held.then_some(button),
-                },
-            );
+            crate::input::pointer(&surface, event(&surface));
         });
     }
 
@@ -171,8 +274,9 @@ impl Native for GpuiNative {
         let (dx, dy) = (delta.x.0, delta.y.0);
         // A precise touchpad's events, a frame apart, adding up to it.
         let n = (dx.abs().max(dy.abs()) / SCROLL_STEP).ceil().max(1.0) as u32;
+        let target = self.target();
         for _ in 0..n {
-            self.with_surface(move |surface| {
+            let wheel = move |surface: &Rc<Surface>| {
                 crate::input::wheel(
                     surface,
                     WheelEvent {
@@ -185,7 +289,14 @@ impl Native for GpuiNative {
                         time: surface.clock(),
                     },
                 );
-            });
+            };
+            if target == ROOT_ID {
+                self.with_surface(wheel);
+            } else {
+                self.in_app(move |surface, cx| {
+                    crate::window::act_in(surface, target, false, cx, |s, _, _| wheel(s));
+                });
+            }
             std::thread::sleep(FRAME);
         }
     }
@@ -205,7 +316,7 @@ impl Native for GpuiNative {
 
     fn type_text(&self, text: &str) {
         let text = text.to_owned();
-        self.with_surface(move |surface| crate::text_input::char_input(surface, &text));
+        self.in_focused(move |surface, _, _| crate::text_input::char_input(surface, &text));
     }
 
     fn key(&self, key: Key) {
@@ -220,7 +331,7 @@ impl Native for GpuiNative {
             ctrl: command && !cfg!(target_os = "macos"),
             ..Modifiers::default()
         };
-        self.with_surface(move |surface| synth::press(surface, vk, modifiers));
+        self.keystroke(vk, modifiers);
     }
 
     fn mouse(&self) -> bool {
@@ -270,8 +381,30 @@ impl Native for GpuiNative {
             alt: m.alt,
             meta: m.cmd,
         };
-        self.with_surface(move |surface| synth::press(surface, vk, modifiers))
+        self.keystroke(vk, modifiers)
             .ok_or_else(|| "the window is gone".to_owned())
+    }
+
+    fn target_window(&self, window: NodeId) -> Result<(), String> {
+        let open = window == ROOT_ID
+            || self
+                .in_app(move |surface, _| crate::window::is_open(surface, window))
+                .unwrap_or(false);
+        if !open {
+            return Err(format!("no window of node {window} is open"));
+        }
+        self.target.store(window, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn window_state(&self, window: NodeId) -> Result<Option<WindowState>, String> {
+        self.in_app(move |surface, cx| crate::window::state_now(surface, window, cx))
+            .ok_or_else(|| "the window is gone".to_owned())
+    }
+
+    fn press_window_close(&self, window: NodeId) -> Result<(), String> {
+        self.in_app(move |surface, _| crate::window::press_close_button(surface, window))
+            .unwrap_or_else(|| Err("the window is gone".to_owned()))
     }
 
     fn input_text(&self, id: NodeId) -> Option<String> {
@@ -306,12 +439,27 @@ impl Native for GpuiNative {
     }
 
     fn screenshot(&self) -> Result<Vec<u8>, String> {
+        self.window_screenshot(ROOT_ID)
+    }
+
+    fn window_screenshot(&self, window: NodeId) -> Result<Vec<u8>, String> {
         let (tx, rx) = std::sync::mpsc::channel();
         let key = self.key;
         crate::rt::invoke(move || {
             crate::rt::on_app(move |cx| {
-                let Some(handle) = window_of(key, cx) else {
-                    let _ = tx.send(Err("the window is gone".to_owned()));
+                let main = window_of(key, cx);
+                let handle = match window {
+                    ROOT_ID => main.map(Into::into),
+                    id => main
+                        .and_then(|h| h.read_with(cx, |view, _| view.surface().clone()).ok())
+                        .and_then(|surface| crate::window::handle(&surface, id)),
+                };
+                let Some(handle) = handle else {
+                    let _ = tx.send(Err(if window == ROOT_ID {
+                        "the window is gone".to_owned()
+                    } else {
+                        format!("no window of node {window} is open")
+                    }));
                     return;
                 };
                 cx.spawn(async move |cx| {

@@ -567,9 +567,9 @@ const WORKER_TEXT_JOBS: u32 = 256;
 
 /// This worker's text shaping over the app's text system `system` (the
 /// same fonts, so the same font ids).
-fn worker_text(system: &Arc<gpui::TextSystem>) -> Arc<WindowTextSystem> {
+fn worker_text(system: &Arc<gpui::TextSystem>) -> Rc<WindowTextSystem> {
     thread_local! {
-        static TEXT: RefCell<Option<(usize, u32, Arc<WindowTextSystem>)>> =
+        static TEXT: RefCell<Option<(usize, u32, Rc<WindowTextSystem>)>> =
             const { RefCell::new(None) };
     }
     let key = Arc::as_ptr(system) as usize;
@@ -579,7 +579,7 @@ fn worker_text(system: &Arc<gpui::TextSystem>) -> Arc<WindowTextSystem> {
             t.clone()
         }
         _ => {
-            let t = Arc::new(WindowTextSystem::new(system.clone()));
+            let t = Rc::new(WindowTextSystem::new(system.clone()));
             *text = Some((key, 1, t.clone()));
             t
         }

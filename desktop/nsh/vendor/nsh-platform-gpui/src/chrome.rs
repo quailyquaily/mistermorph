@@ -31,7 +31,7 @@
 //!
 //! Elsewhere than on macOS the application menu is a menu bar drawn above
 //! the app (not while the title bar is hidden or in full screen; with
-//! `Window.setMenuBar("autoHide")` only after Alt alone, or while one of
+//! `Menu.setMenuBar("autoHide")` only after Alt alone, or while one of
 //! its menus is open), and every
 //! menu (the bar's, context menus) is a popup drawn over the window
 //! ([`menus`]), with keyboard access (F10, Alt + a menu's initial, arrows,
@@ -46,7 +46,7 @@
 //! shortcuts after `nsh/keymap`'s bindings ([`shortcut`]), so a binding
 //! wins over a menu item of the same keystroke, then Ctrl+W / Cmd+W, which
 //! closes the window unless the app takes it. Quitting and closing (keys,
-//! roles, `Window.close()`, the close button) go to the embedding app's
+//! roles, `Application.quit()`, the main window's `WindowRef.close()`, the close button) go to the embedding app's
 //! handler instead when it set one ([`crate::AppView::on_close_request`]).
 
 mod menus;
@@ -79,7 +79,10 @@ pub(crate) fn close_menu(surface: &Surface) -> Result<(), String> {
 }
 use nsh_core::{
     EventKind, EventPayload, PayloadValue, ROOT_ID,
-    desktop::{DesktopCommand, Key, MenuBarMode, MenuItem, MenuRole, Shortcut, TitleBarStyle},
+    desktop::{
+        CloseReason, DesktopCommand, Key, MenuBarMode, MenuItem, MenuRole, Shortcut, TitleBarStyle,
+        WindowAttributes, WindowMode,
+    },
     geometry::{Edges as Insets, Points},
 };
 
@@ -144,9 +147,9 @@ enum Op {
     Minimize,
     ToggleMaximize,
     ToggleFullScreen,
-    /// `setFrame`'s width and height (a missing one keeps the window's).
-    Resize(Option<f32>, Option<f32>),
-    Close,
+    /// The user asked to close the window (how), or the app did (`None`,
+    /// `WindowRef.close()`, which `closeOnPress` does not hold back).
+    Close(Option<CloseReason>),
     Quit,
     Hide,
     HideOthers,
@@ -166,10 +169,12 @@ struct AskedSize {
     from: Size<Pixels>,
 }
 
-/// The size `setFrame`'s `width` and `height` make of a window now `current`:
+/// The size `setBounds`' `width` and `height` make of a window now `current`:
 /// one left out keeps the window's, or the size asked last while the platform
 /// has not applied it. Once the window has changed (to that size, a size the
 /// platform allowed, or one the user dragged it to) its own size counts.
+/// Each side is at least 1 point: Wayland's viewport rejects a size under 1
+/// as a fatal protocol error.
 fn frame_size(
     current: Size<Pixels>,
     asked: Option<AskedSize>,
@@ -179,9 +184,15 @@ fn frame_size(
     let kept = asked
         .filter(|asked| asked.from == current)
         .map_or(current, |asked| asked.size);
+    let side = |side: f32| gpui::px(side.max(1.0));
+    // A size the platform can take: finite.
+    let (width, height) = (
+        width.filter(|w| w.is_finite()),
+        height.filter(|h| h.is_finite()),
+    );
     gpui::size(
-        width.map_or(kept.width, gpui::px),
-        height.map_or(kept.height, gpui::px),
+        width.map_or(kept.width, side),
+        height.map_or(kept.height, side),
     )
 }
 
@@ -193,9 +204,17 @@ pub(crate) struct Chrome {
     standalone: Cell<bool>,
     /// Activation must work even while the window is not rendering.
     window: Cell<Option<AnyWindowHandle>>,
+    /// The mode the window opens in, while it waits hidden since it opened
+    /// (nsh.json `window.defaultVisible: false`): it takes it as it first
+    /// shows, as GPUI would show it to apply it ([`crate::open_app_window`]).
+    pub(crate) opening_mode: Cell<Option<WindowMode>>,
     style: Cell<TitleBarStyle>,
-    /// The app's title bar's height (`Window.setTitleBar`'s).
+    /// The app's title bar's height (`titleBar.height`).
     height: Cell<Option<f32>>,
+    /// Where the app puts the traffic lights (`titleBar.controlsOffset`).
+    controls_offset: Cell<Option<(f32, f32)>>,
+    /// The main window's attributes the app set (`currentWindow().set()`).
+    pub(crate) attributes: RefCell<WindowAttributes>,
     /// The window's title (drawn in the title rows).
     title: RefCell<String>,
     /// The application menu.
@@ -206,13 +225,15 @@ pub(crate) struct Chrome {
     entries: RefCell<Vec<(u32, Option<MenuRole>)>>,
     /// Window operations to carry out.
     ops: RefCell<Vec<Op>>,
-    /// The last size `setFrame` asked for.
+    /// The last size `setBounds` asked for.
     asked_size: Cell<Option<AskedSize>>,
     /// The menu open (drawn), if any.
     open: RefCell<Option<menus::Open>>,
+    /// The icons of its rows.
+    icons: RefCell<menus::Icons>,
     /// The menu bar's items, in window coordinates (from the last frame).
     bar_items: RefCell<Vec<Bounds<Pixels>>>,
-    /// When the menu bar shows (`Window.setMenuBar`).
+    /// When the menu bar shows (`Menu.setMenuBar`).
     menu_bar: Cell<MenuBarMode>,
     /// Whether Alt is held across modifier changes.
     alt_down: Cell<bool>,
@@ -246,7 +267,7 @@ pub(crate) fn set_standalone(surface: &Surface, title: &str, window: AnyWindowHa
 
 /// What a GPUI window gets for its title bar when an [`crate::AppView`]
 /// owns it ([`crate::AppView::own_window`]): opened this way, the window
-/// can draw both of `Window.setTitleBar`'s styles later (see the module
+/// can draw both title bar styles (`titleBar.style`) later (see the module
 /// docs).
 pub fn titlebar_options(title: &str) -> gpui::TitlebarOptions {
     gpui::TitlebarOptions {
@@ -258,11 +279,22 @@ pub fn titlebar_options(title: &str) -> gpui::TitlebarOptions {
 }
 
 /// Where the traffic lights go in a bar `height` points tall.
-fn traffic_lights(height: f32) -> gpui::Point<Pixels> {
+pub(crate) fn traffic_lights(height: f32) -> gpui::Point<Pixels> {
     gpui::point(
         px(TRAFFIC_LIGHTS_X),
         px(((height - TRAFFIC_LIGHTS_SIZE.0) / 2.0).max(0.0)),
     )
+}
+
+/// Where the traffic lights go: where the app put them
+/// (`titleBar.controlsOffset`), else centered in a bar `height` points
+/// tall.
+#[cfg(target_os = "macos")]
+fn traffic_lights_at(offset: Option<(f32, f32)>, height: f32) -> gpui::Point<Pixels> {
+    match offset {
+        Some((x, y)) => gpui::point(px(x), px(y)),
+        None => traffic_lights(height),
+    }
 }
 
 fn hidden(surface: &Surface) -> bool {
@@ -331,7 +363,7 @@ fn push(surface: &Surface, op: Op) {
 
 // --- Commands ---------------------------------------------------------------------------
 
-/// A desktop command (on the root).
+/// A desktop command for the main window (on the root).
 pub(crate) fn command(surface: &Rc<Surface>, command: &DesktopCommand) {
     let c = &surface.chrome;
     // The embedding app owns its window: only context menus work there.
@@ -339,45 +371,14 @@ pub(crate) fn command(surface: &Rc<Surface>, command: &DesktopCommand) {
         return;
     }
     match command {
-        DesktopCommand::SetTitle(title) => {
-            *c.title.borrow_mut() = title.clone();
-            push(surface, Op::Title(title.clone()));
-        }
-        DesktopCommand::SetTitleBar { style, height } => {
-            let height = height.map(|h| h.0);
-            let changed = c.height.replace(height) != height;
-            if c.style.replace(*style) != *style || changed {
-                menus::close(surface);
-                push(surface, Op::TitleBar);
-            }
-        }
-        DesktopCommand::Minimize => push(surface, Op::Minimize),
-        DesktopCommand::ToggleMaximize => push(surface, Op::ToggleMaximize),
-        DesktopCommand::ToggleFullScreen => push(surface, Op::ToggleFullScreen),
-        // GPUI sizes a window but leaves its place to the platform (Wayland
-        // windows cannot place themselves), and it has no window levels.
-        DesktopCommand::SetFrame(frame) => {
-            if frame.width.is_some() || frame.height.is_some() {
-                push(
-                    surface,
-                    Op::Resize(frame.width.map(|w| w.0), frame.height.map(|h| h.0)),
-                );
-            }
-        }
-        DesktopCommand::SetLevel(_) => {}
-        DesktopCommand::OrderFront => {
-            if let Some(handle) = c.window.get() {
-                // A minimized window may never render the queued chrome ops.
-                crate::rt::on_app(move |cx| {
-                    let _ = handle.update(cx, |_, window, cx| {
-                        restore_minimized(window);
-                        cx.activate(true);
-                        window.activate_window();
-                    });
-                });
-            }
-        }
-        DesktopCommand::Close => push(surface, Op::Close),
+        DesktopCommand::SetAttributes(attributes) => set_attributes(surface, attributes),
+        DesktopCommand::Request(request) => crate::window::main_request(surface, request),
+        // The main window is open already.
+        DesktopCommand::OpenWindow(_) => {}
+        DesktopCommand::Quit => push(surface, Op::Quit),
+        // The backend for embedding: when the app restarts is the embedding
+        // app's to decide.
+        DesktopCommand::Restart => {}
         DesktopCommand::SetMenu(menu) => {
             *c.menu.borrow_mut() = menu.clone();
             c.menu_changed.set(true);
@@ -399,6 +400,65 @@ pub(crate) fn command(surface: &Rc<Surface>, command: &DesktopCommand) {
             };
             menus::open(surface, menus::Kind::App, items.clone(), anchor, false);
         }
+        // The host app owns the tray and global shortcuts.
+        DesktopCommand::SetTray(_)
+        | DesktopCommand::RegisterGlobalShortcut { .. }
+        | DesktopCommand::UnregisterGlobalShortcut(_) => {}
+        // Commands added later.
+        #[allow(unreachable_patterns)]
+        _ => {}
+    }
+}
+
+/// The app changed the main window's attributes (`currentWindow().set()`):
+/// the title and the title bar are the chrome's, the rest the window's.
+fn set_attributes(surface: &Rc<Surface>, attributes: &WindowAttributes) {
+    let c = &surface.chrome;
+    c.attributes.borrow_mut().merge(attributes);
+    if let Some(title) = &attributes.title {
+        *c.title.borrow_mut() = title.clone();
+        push(surface, Op::Title(title.clone()));
+    }
+    if let Some(bar) = &attributes.title_bar {
+        let height = bar.height.map(|h| h.0);
+        let offset = bar.controls_offset.map(|p| (p.x.0, p.y.0));
+        let changed =
+            c.height.replace(height) != height || c.controls_offset.replace(offset) != offset;
+        if c.style.replace(bar.style) != bar.style || changed {
+            menus::close(surface);
+            push(surface, Op::TitleBar);
+        }
+    }
+    crate::window::main_attributes(surface, attributes);
+    surface.invalidate();
+}
+
+/// The user asked to close the main window (`reason`): the app hears it,
+/// and the window closes unless the app set `closeOnPress: false`.
+/// Answered here, without waiting for JS. True when it closes.
+pub(crate) fn close_press(surface: &Surface, reason: CloseReason) -> bool {
+    let closes = surface.chrome.closes_on_press();
+    crate::window::report_close_press(surface, ROOT_ID, reason, false);
+    closes
+}
+
+impl Chrome {
+    /// A close press closes the main window (`closeOnPress`, true unless
+    /// the app says otherwise).
+    pub(crate) fn closes_on_press(&self) -> bool {
+        self.attributes.borrow().close_on_press.unwrap_or(true)
+    }
+
+    /// The GPUI window, when the surface fills one of its own.
+    pub(crate) fn window(&self) -> Option<AnyWindowHandle> {
+        self.standalone.get().then(|| self.window.get()).flatten()
+    }
+}
+
+/// Asks to close the main window as the user did (`reason`).
+pub(crate) fn press_close(surface: &Rc<Surface>, reason: CloseReason) {
+    if close_press(surface, reason) {
+        push(surface, Op::Close(Some(reason)));
     }
 }
 
@@ -407,7 +467,10 @@ pub(crate) fn command(surface: &Rc<Surface>, command: &DesktopCommand) {
 fn choose(surface: &Rc<Surface>, id: u32, role: Option<MenuRole>) {
     match role {
         Some(MenuRole::Quit) => push(surface, Op::Quit),
-        Some(MenuRole::Close) => push(surface, Op::Close),
+        Some(MenuRole::Close) => match crate::window::entered(surface) {
+            Some(id) => crate::window::close_press(surface, id, CloseReason::Menu),
+            None => press_close(surface, CloseReason::Menu),
+        },
         Some(MenuRole::Minimize) => push(surface, Op::Minimize),
         Some(MenuRole::Zoom) => push(surface, Op::ToggleMaximize),
         Some(MenuRole::ToggleFullScreen) => push(surface, Op::ToggleFullScreen),
@@ -586,7 +649,16 @@ pub(crate) fn window_key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
     match pressed(event).and_then(|p| reserved(PLATFORM, &p)) {
         Some(op) => {
             if !event.repeat {
-                push(surface, op);
+                // A window of the app's own minimizes and goes to full
+                // screen itself; the rest is the app's.
+                let own = crate::window::entered(surface)
+                    .filter(|_| matches!(op, Op::Minimize | Op::ToggleFullScreen));
+                match own {
+                    Some(id) => {
+                        crate::window::reserved_key(surface, id, op == Op::ToggleFullScreen)
+                    }
+                    None => push(surface, op),
+                }
             }
             true
         }
@@ -627,7 +699,10 @@ pub(crate) fn shortcut(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
     }
     if pressed == primary('w') {
         if !event.repeat {
-            push(surface, Op::Close);
+            match crate::window::entered(surface) {
+                Some(id) => crate::window::close_press(surface, id, CloseReason::Shortcut),
+                None => press_close(surface, CloseReason::Shortcut),
+            }
         }
         return true;
     }
@@ -635,29 +710,6 @@ pub(crate) fn shortcut(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
 }
 
 // --- The window -------------------------------------------------------------------------
-
-/// AppKit's activation does not restore a miniaturized window. Other
-/// platforms restore it through GPUI's native activation implementation.
-fn restore_minimized(_window: &Window) {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2_app_kit::NSView;
-        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-        if let Ok(handle) = HasWindowHandle::window_handle(_window)
-            && let RawWindowHandle::AppKit(handle) = handle.as_raw()
-        {
-            // SAFETY: GPUI owns this live NSView, and window updates run on
-            // AppKit's main thread. The borrowed reference stays in this call.
-            let view = unsafe { &*handle.ns_view.as_ptr().cast::<NSView>() };
-            if let Some(window) = view.window()
-                && window.isMiniaturized()
-            {
-                window.deminiaturize(None);
-            }
-        }
-    }
-}
 
 /// Hands `request` to the embedding app's handler, after the event that
 /// asked (the view may be rendering). False when it set none.
@@ -693,11 +745,14 @@ fn apply_ops(surface: &Surface, window: &mut Window, cx: &mut App) {
                     });
                 }
                 #[cfg(target_os = "macos")]
-                window.set_traffic_light_position(traffic_lights(if hide {
-                    surface.chrome.height.get().unwrap_or(MAC_TITLE_HEIGHT)
-                } else {
-                    MAC_TITLE_HEIGHT
-                }));
+                window.set_traffic_light_position(traffic_lights_at(
+                    surface.chrome.controls_offset.get(),
+                    if hide {
+                        surface.chrome.height.get().unwrap_or(MAC_TITLE_HEIGHT)
+                    } else {
+                        MAC_TITLE_HEIGHT
+                    },
+                ));
             }
             Op::Minimize => window.minimize_window(),
             Op::ToggleMaximize => {
@@ -708,14 +763,10 @@ fn apply_ops(surface: &Surface, window: &mut Window, cx: &mut App) {
                 }
             }
             Op::ToggleFullScreen => window.toggle_fullscreen(),
-            Op::Resize(width, height) => {
-                let chrome = &surface.chrome;
-                let from = window.bounds().size;
-                let size = frame_size(from, chrome.asked_size.get(), width, height);
-                window.resize(size);
-                chrome.asked_size.set(Some(AskedSize { size, from }));
-            }
-            Op::Close => {
+            // A maximized or full-screen window keeps the size the platform
+            // gave it. (A tiling compositor's tiles cannot be told apart with
+            // server-side decorations: there the compositor decides.)
+            Op::Close(_) => {
                 if !ask_to_close(surface, CloseRequest::Close, window, cx) {
                     window.remove_window();
                 }
@@ -730,6 +781,28 @@ fn apply_ops(surface: &Surface, window: &mut Window, cx: &mut App) {
             Op::ShowAll => cx.unhide_other_apps(),
         }
     }
+}
+
+/// Sizes the main window's content (`setContentSize`'s width and height,
+/// or `setBounds`' made content sizes by `crate::window::content_size`, a
+/// missing one keeping the window's). A maximized or full-screen window
+/// keeps the size the platform gave it. (A tiling compositor's tiles cannot
+/// be told apart with server-side decorations: there the compositor
+/// decides.)
+pub(crate) fn resize(
+    surface: &Surface,
+    window: &mut Window,
+    width: Option<f32>,
+    height: Option<f32>,
+) {
+    if window.is_maximized() || window.is_fullscreen() || (width.is_none() && height.is_none()) {
+        return;
+    }
+    let chrome = &surface.chrome;
+    let from = window.viewport_size();
+    let size = frame_size(from, chrome.asked_size.get(), width, height);
+    window.resize(size);
+    chrome.asked_size.set(Some(AskedSize { size, from }));
 }
 
 /// A double click on the title bar (a drawn title row, a `windowDrag`
@@ -776,8 +849,78 @@ fn title_bar_area(
     }
 }
 
+/// The title bar's area a window of the app's own reports, as the main
+/// window's: its hidden bar's height and the width its window controls
+/// take (the traffic lights where the app put them on macOS; the drawn
+/// controls on Windows and, with client-side decorations, Linux). All 0
+/// while the system shows its title bar, without a frame, and in full
+/// screen.
+pub(crate) fn own_title_bar_area(
+    hidden: bool,
+    frameless: bool,
+    full_screen: bool,
+    client_decorated: bool,
+    height: Option<f32>,
+    controls_offset: Option<(f32, f32)>,
+) -> Insets<Points> {
+    let mut area = title_bar_area(
+        PLATFORM,
+        hidden && !frameless && !full_screen,
+        client_decorated,
+        height,
+    );
+    if PLATFORM == Platform::Mac
+        && let Some((x, _)) = controls_offset
+        && area.top.0 > 0.0
+    {
+        area.left = Points(x + TRAFFIC_LIGHTS_SIZE.1 + 8.0);
+    }
+    area
+}
+
+/// What a window of the app's own with a hidden title bar draws over its
+/// content, as the main window does: the window controls (Windows; Linux
+/// with client-side decorations) and, on Linux, the edges that resize it.
+pub(crate) fn own_window_parts(
+    surface: &Rc<Surface>,
+    root: nsh_core::NodeId,
+    height: Option<f32>,
+    resizable: bool,
+    window: &Window,
+) -> Vec<AnyElement> {
+    let client = PLATFORM == Platform::Linux
+        && matches!(
+            window.window_decorations(),
+            gpui::Decorations::Client { .. }
+        );
+    if window.is_fullscreen() || !(PLATFORM == Platform::Windows || client) {
+        return Vec::new();
+    }
+    let theme = Theme::new(crate::system::dark(surface));
+    let height = title_bar_area(PLATFORM, true, client, height).top.0;
+    let mut parts = vec![
+        div()
+            .absolute()
+            .top_0()
+            .right_0()
+            .child(controls(
+                surface,
+                Some(root),
+                window.is_maximized(),
+                window.is_window_active(),
+                height,
+                &theme,
+            ))
+            .into_any_element(),
+    ];
+    if client && resizable && !window.is_maximized() {
+        parts.extend(resize_edges());
+    }
+    parts
+}
+
 /// Reads the window's state and tells the app the title bar's area.
-fn observe(surface: &Surface, window: &Window) {
+fn observe(surface: &Rc<Surface>, window: &Window, cx: &App) {
     let c = &surface.chrome;
     let full_screen = window.is_fullscreen();
     if c.full_screen.replace(full_screen) != full_screen {
@@ -800,6 +943,7 @@ fn observe(surface: &Surface, window: &Window) {
         env.title_bar = area;
         surface.set_environment(env);
     }
+    crate::window::observe_main(surface, window, cx);
 }
 
 /// The view renders: carries out the queued operations and wraps the
@@ -812,7 +956,7 @@ pub(crate) fn render(
     cx: &mut App,
 ) -> AnyElement {
     apply_ops(surface, window, cx);
-    observe(surface, window);
+    observe(surface, window, cx);
     let c = &surface.chrome;
     let standalone = c.standalone.get();
     if standalone && PLATFORM == Platform::Mac && c.menu_changed.replace(false) {
@@ -843,17 +987,18 @@ pub(crate) fn render(
         .w_full()
         .relative()
         .child(content)
-        .child(drag_area(surface));
+        .child(drag_area(surface, None));
     let client = PLATFORM == Platform::Linux && c.client_decorated.get();
     if shows_bars && hide && (PLATFORM == Platform::Windows || client) {
         let height = title_bar_area(PLATFORM, true, client, c.height.get()).top;
-        body = body.child(
-            div()
-                .absolute()
-                .top_0()
-                .right_0()
-                .child(controls(surface, height.0, &theme)),
-        );
+        body = body.child(div().absolute().top_0().right_0().child(controls(
+            surface,
+            None,
+            c.maximized.get(),
+            c.active.get(),
+            height.0,
+            &theme,
+        )));
     }
     root = root.child(body);
     if shows_bars && client && !c.maximized.get() {
@@ -867,8 +1012,9 @@ pub(crate) fn render(
 
 /// Listens for presses on `windowDrag` views (over the surface, above its
 /// own listeners): a drag moves the window, a double click maximizes it,
-/// a secondary press opens the window menu (Linux).
-fn drag_area(surface: &Rc<Surface>) -> impl IntoElement {
+/// a secondary press opens the window menu (Linux). `root`: the window of
+/// the app's own it is over (none: the main window).
+pub(crate) fn drag_area(surface: &Rc<Surface>, root: Option<nsh_core::NodeId>) -> impl IntoElement {
     let s = surface.clone();
     let drag = surface.clone();
     canvas(
@@ -877,29 +1023,43 @@ fn drag_area(surface: &Rc<Surface>) -> impl IntoElement {
             // Windows moves the window itself, from its hit test: the
             // drag areas are marked as `HTCAPTION` (which also maximizes
             // and restores on a double click and opens the window menu on
-            // a right click); `start_window_move` does nothing there.
-            let areas: Vec<Hitbox> = if PLATFORM == Platform::Windows {
+            // a right click); `start_window_move` does nothing there. The
+            // views standing for the window's buttons are its buttons
+            // (`HTMAXBUTTON` shows the snap layouts).
+            let mut areas: Vec<(WindowControlArea, Hitbox)> = Vec::new();
+            if PLATFORM == Platform::Windows {
+                let _in = crate::window::enter(&drag, root);
                 let (ox, oy) = drag.origin.get();
-                crate::input::window_drag_rects(&drag)
-                    .into_iter()
-                    .map(|r| {
-                        let b = crate::render::bounds(
-                            ox + r.origin.x.0,
-                            oy + r.origin.y.0,
-                            r.size.width.0,
-                            r.size.height.0,
-                        );
-                        window.insert_hitbox(b.intersect(&bounds), HitboxBehavior::Normal)
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
+                let mut hitbox = |r: nsh_core::Bounds<Points>| {
+                    let b = crate::render::bounds(
+                        ox + r.origin.x.0,
+                        oy + r.origin.y.0,
+                        r.size.width.0,
+                        r.size.height.0,
+                    );
+                    window.insert_hitbox(b.intersect(&bounds), HitboxBehavior::Normal)
+                };
+                if crate::window::movable(&drag, root) {
+                    for r in crate::input::window_drag_rects(&drag) {
+                        areas.push((WindowControlArea::Drag, hitbox(r)));
+                    }
+                }
+                for (part, r) in crate::input::window_part_rects(&drag) {
+                    use nsh_core::desktop::WindowControl as C;
+                    let area = match part {
+                        crate::input::WindowPart::Control(C::Minimize) => WindowControlArea::Min,
+                        crate::input::WindowPart::Control(C::Maximize) => WindowControlArea::Max,
+                        crate::input::WindowPart::Control(C::Close) => WindowControlArea::Close,
+                        _ => continue,
+                    };
+                    areas.push((area, hitbox(r)));
+                }
+            }
             (hitbox, areas)
         },
-        move |_, (hitbox, areas): (Hitbox, Vec<Hitbox>), window, _| {
-            for area in areas {
-                window.insert_window_control_hitbox(WindowControlArea::Drag, area);
+        move |_, (hitbox, areas): (Hitbox, Vec<(WindowControlArea, Hitbox)>), window, _| {
+            for (control, area) in areas {
+                window.insert_window_control_hitbox(control, area);
             }
             let surface = s.clone();
             let h = hitbox.clone();
@@ -907,6 +1067,15 @@ fn drag_area(surface: &Rc<Surface>) -> impl IntoElement {
                 if phase != DispatchPhase::Bubble || !h.is_hovered(window) {
                     return;
                 }
+                // Windows moves the window itself from the press it hit
+                // tests as `HTCAPTION`: the platform hands the press to the
+                // app before `DefWindowProc` sees it, so consuming it keeps
+                // the window from moving at all (`start_window_move` does
+                // nothing on Windows).
+                if PLATFORM == Platform::Windows {
+                    return;
+                }
+                let _in = crate::window::enter(&surface, root);
                 let (ox, oy) = surface.origin.get();
                 let (x, y) = (f32::from(e.position.x), f32::from(e.position.y));
                 if !crate::input::window_drag(&surface, x - ox, y - oy) {
@@ -918,7 +1087,16 @@ fn drag_area(surface: &Rc<Surface>) -> impl IntoElement {
                         title_double_click(window);
                     }
                     MouseButton::Left => surface.chrome.drag.set(Some((x, y))),
-                    MouseButton::Right if PLATFORM == Platform::Linux => {
+                    // (a view of the app's own with a context menu there
+                    // hears the click instead)
+                    MouseButton::Right
+                        if PLATFORM == Platform::Linux
+                            && !crate::input::hears_context_menu(
+                                &surface.input_root(),
+                                x - ox,
+                                y - oy,
+                            ) =>
+                    {
                         window.show_window_menu(e.position);
                     }
                     _ => return,
@@ -940,7 +1118,9 @@ fn drag_area(surface: &Rc<Surface>) -> impl IntoElement {
                 let (x, y) = (f32::from(e.position.x), f32::from(e.position.y));
                 if (x - x0).abs() > DRAG_SLOP || (y - y0).abs() > DRAG_SLOP {
                     surface.chrome.drag.set(None);
-                    window.start_window_move();
+                    if crate::window::movable(&surface, root) {
+                        window.start_window_move();
+                    }
                 }
                 cx.stop_propagation();
             });
@@ -992,6 +1172,14 @@ fn title_row(surface: &Rc<Surface>, theme: &Theme) -> AnyElement {
         .border_b_1()
         .border_color(theme.bar_border)
         .on_mouse_down(MouseButton::Left, move |e, window, cx| {
+            // Windows moves the window itself for a press on the caption
+            // (its hit test answers `HTCAPTION`, which also maximizes on a
+            // double click and opens the window menu): a press the app
+            // consumes never reaches `DefWindowProc`, so the window would
+            // not move, and `Window::start_window_move` does nothing there.
+            if PLATFORM == Platform::Windows {
+                return;
+            }
             title_press(&s, e, window);
             cx.stop_propagation();
         });
@@ -1009,7 +1197,14 @@ fn title_row(surface: &Rc<Surface>, theme: &Theme) -> AnyElement {
                     .whitespace_nowrap()
                     .child(title),
             )
-            .child(controls(surface, WINDOWS_CAPTION_HEIGHT, theme))
+            .child(controls(
+                surface,
+                None,
+                surface.chrome.maximized.get(),
+                surface.chrome.active.get(),
+                WINDOWS_CAPTION_HEIGHT,
+                theme,
+            ))
             .into_any_element(),
         _ => row
             .h(px(MAC_TITLE_HEIGHT))
@@ -1032,9 +1227,17 @@ enum Control {
 
 /// The window controls (Windows' caption buttons, GTK-style window
 /// buttons on Linux), `height` points tall.
-fn controls(surface: &Rc<Surface>, height: f32, theme: &Theme) -> impl IntoElement {
-    let maximized = surface.chrome.maximized.get();
-    let active = surface.chrome.active.get();
+/// The window controls drawn over a hidden title bar (Windows; Linux with
+/// client-side decorations): the main window's (`root` `None`, its state
+/// the chrome's) or those of a window of the app's own.
+fn controls(
+    surface: &Rc<Surface>,
+    root: Option<nsh_core::NodeId>,
+    maximized: bool,
+    active: bool,
+    height: f32,
+    theme: &Theme,
+) -> impl IntoElement {
     let mut row = div()
         .flex()
         .flex_row()
@@ -1049,14 +1252,16 @@ fn controls(surface: &Rc<Surface>, height: f32, theme: &Theme) -> impl IntoEleme
         .enumerate()
     {
         row = row.child(control_button(
-            surface, control, i, height, maximized, active, theme,
+            surface, root, control, i, height, maximized, active, theme,
         ));
     }
     row
 }
 
+#[allow(clippy::too_many_arguments)]
 fn control_button(
     surface: &Rc<Surface>,
+    root: Option<nsh_core::NodeId>,
     control: Control,
     index: usize,
     height: f32,
@@ -1106,7 +1311,10 @@ fn control_button(
             match control {
                 Control::Minimize => window.minimize_window(),
                 Control::Maximize => window.zoom_window(),
-                Control::Close => push(&s, Op::Close),
+                Control::Close => match root {
+                    Some(id) => crate::window::close_press(&s, id, CloseReason::CloseButton),
+                    None => press_close(&s, CloseReason::CloseButton),
+                },
             }
             s.invalidate();
             crate::rt::flush(cx);
@@ -1263,12 +1471,14 @@ fn default_mac_menu(title: &str) -> Arc<[MenuItem]> {
             checked: None,
             role: Some(role),
             when: nsh_core::keymap::When::Always,
+            icon: None,
         })
     };
     let submenu = |label: &str, items: Vec<MenuItem>| MenuItem::Submenu {
         label: label.to_owned(),
         enabled: true,
         items,
+        icon: None,
     };
     vec![
         submenu(
@@ -1342,11 +1552,14 @@ fn gpui_keystroke(s: &Shortcut) -> String {
     out
 }
 
+/// `items` as GPUI's native menus (macOS): GPUI's `MenuItem` has no image,
+/// so these show no icons, unlike the rows [`menus`] draws.
 fn native_items(
     surface: u64,
     items: &[MenuItem],
     entries: &mut Vec<(u32, Option<MenuRole>)>,
     bindings: &mut Vec<gpui::KeyBinding>,
+    cx: &App,
 ) -> Vec<gpui::MenuItem> {
     items
         .iter()
@@ -1359,11 +1572,23 @@ fn native_items(
                 };
                 entries.push((a.id, a.role));
                 if let Some(s) = a.shortcut.or_else(|| a.role.and_then(|r| r.shortcut(true))) {
-                    bindings.push(gpui::KeyBinding::new(
-                        &gpui_keystroke(&s),
-                        action.clone(),
-                        Some(MENU_SHORTCUT_CONTEXT),
-                    ));
+                    // `KeyBinding::new` takes static keystrokes; `load` parses
+                    // this one with the same mapping on macOS, where the menu
+                    // bar is native.
+                    let context = gpui::KeyBindingContextPredicate::parse(MENU_SHORTCUT_CONTEXT)
+                        .unwrap()
+                        .into();
+                    bindings.push(
+                        gpui::KeyBinding::load(
+                            &gpui_keystroke(&s),
+                            Box::new(action.clone()),
+                            Some(context),
+                            false,
+                            None,
+                            cx,
+                        )
+                        .unwrap(),
+                    );
                 }
                 gpui::MenuItem::action(menus::label(a), action)
                     .checked(a.checked == Some(true))
@@ -1373,9 +1598,10 @@ fn native_items(
                 label,
                 enabled,
                 items,
+                ..
             } => gpui::MenuItem::submenu(gpui::Menu {
                 name: label.clone().into(),
-                items: native_items(surface, items, entries, bindings),
+                items: native_items(surface, items, entries, bindings, cx),
                 disabled: !enabled,
             }),
         })
@@ -1415,9 +1641,10 @@ fn set_native_menus(surface: &Surface, cx: &mut App) {
                 label,
                 enabled,
                 items,
+                ..
             } => Some(gpui::Menu {
                 name: label.clone().into(),
-                items: native_items(surface.key(), items, &mut entries, &mut bindings),
+                items: native_items(surface.key(), items, &mut entries, &mut bindings, cx),
                 disabled: !enabled,
             }),
             _ => None,
@@ -1537,8 +1764,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn set_frame_sizes_each_side_at_least_one_point() {
+        let size = |width: f32, height: f32| gpui::size(gpui::px(width), gpui::px(height));
+        let current = size(800.0, 600.0);
+        assert_eq!(
+            frame_size(current, None, Some(0.4), Some(0.4)),
+            size(1.0, 1.0)
+        );
+        assert_eq!(frame_size(current, None, None, Some(0.0)), size(800.0, 1.0));
+        assert_eq!(frame_size(current, None, Some(1.5), None), size(1.5, 600.0));
+    }
+
     #[gpui::test]
-    fn order_front_activates_without_rendering_and_leaves_embedded_windows_alone(
+    fn focus_activates_without_rendering_and_leaves_embedded_windows_alone(
         cx: &mut gpui::TestAppContext,
     ) {
         use gpui::AppContext;
@@ -1557,12 +1796,18 @@ mod tests {
             (Surface::new(Default::default()), target, other, app)
         });
         cx.run_until_parked();
-        command(&surface, &DesktopCommand::OrderFront);
+        command(
+            &surface,
+            &DesktopCommand::Request(nsh_core::desktop::WindowRequest::Focus),
+        );
         cx.run_until_parked();
         cx.update(|cx| assert_eq!(cx.active_window(), Some(other.into())));
 
         set_standalone(&surface, "Target", target.into());
-        command(&surface, &DesktopCommand::OrderFront);
+        command(
+            &surface,
+            &DesktopCommand::Request(nsh_core::desktop::WindowRequest::Focus),
+        );
         // No frame is rendered: activation must not depend on the render queue.
         cx.run_until_parked();
         cx.update(|cx| assert_eq!(cx.active_window(), Some(target.into())));

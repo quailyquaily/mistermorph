@@ -29,7 +29,8 @@
     "host": [
       "morph.*"
     ],
-    "speech": true
+    "speech": true,
+    "statusBar": true
   },
   "web": {
     "host": "./host.js"

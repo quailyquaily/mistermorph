@@ -8,7 +8,9 @@
 //! native scroll value in the same frame. Reports are coalesced to one per
 //! frame by the view's frame client ([`Surface::on_frame`]), which also
 //! runs glides, animated scrolls, the indicator's fade and the refresh
-//! spinner, and stops when none of them is left.
+//! spinner, and stops when none of them is left; it tells the surface when
+//! the motion next ends ([`nsh_core::scroll::deadline`]), so a scroll ends
+//! and reports it on time while no frames are drawn.
 //!
 //! Here are what GPUI and the view tree do: drawing the indicator and
 //! the refresh spinner, the sticky cells' views, and finding the scroll
@@ -30,7 +32,7 @@ use crate::{
     geom::Mat4,
     input::KeyEvent,
     render::DrawCx,
-    surface::Surface,
+    surface::{Next, Surface},
     view::{NshView, ViewState},
 };
 
@@ -120,9 +122,15 @@ impl ScrollHost for Host<'_> {
             if !view.attached() {
                 // Removed: nothing draws it; a later move starts again.
                 shared::detached(&host);
-                return false;
+                return Next::Done;
             }
-            shared::frame(&host, now * 1000.0)
+            let now = now * 1000.0;
+            if !shared::frame(&host, now) {
+                return Next::Done;
+            }
+            // A glide's, an eased move's or a wheel's end; the indicator's
+            // fade and the refresh spinner only draw.
+            shared::deadline(&host, now).map_or(Next::Frame, |ms| Next::At(ms / 1000.0))
         });
     }
 
@@ -534,8 +542,11 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent, x: f32, y: f32) -> bo
     if crate::text_input::focused(surface).is_some() {
         return false;
     }
-    let root = &surface.root;
-    let (w, h) = surface.size();
+    let root = &surface.input_root();
+    let (w, h) = {
+        let s = root.state();
+        (s.frame.size.width.0, s.frame.size.height.0)
+    };
     let (x, y) = if x >= 0.0 && y >= 0.0 && x < w && y < h {
         (x, y)
     } else {

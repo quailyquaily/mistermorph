@@ -29,10 +29,10 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 log = "0.4"
 mime_guess = "2"
 notify-rust = "4"
-nsh-base = "=0.4.0"
-nsh-engine = { version = "=0.4.0", default-features = false }
-nsh-platform-gpui = { version = "=0.4.0", default-features = false, features = ["js"] }
-gpui_platform = { package = "gpui-fast-platform", version = "0.1.9", default-features = false, features = ["font-kit", "wayland", "x11"] }
+nsh-base = "=0.5.0"
+nsh-engine = { version = "=0.5.0", default-features = false }
+nsh-platform-gpui = { version = "=0.5.0", default-features = false, features = ["js"] }
+gpui_platform = { package = "gpui-fast-platform", version = "0.1.13", default-features = false, features = ["font-kit", "wayland", "x11"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
@@ -56,11 +56,11 @@ winresource = "0.1"
 lto = "thin"
 strip = true
 
-# nsh-platform-gpui 0.4.0 with patches/nsh-wayland-touchpad.patch: GPUI's Wayland client
+# nsh-platform-gpui 0.5.0 with patches/nsh-wayland-touchpad.patch: GPUI's Wayland client
 # multiplies touchpad scroll amounts by 3 and reports finger lifts as empty moves, so scrolling
-# ran ahead of other apps and never glided; patches/nsh-gpui-masks.patch (masks, repeating
-# gradients); patches/nsh-scroll-speed.patch (wheel and touchpad scroll twice the system's
-# amount); patches/nsh-selection-copy.patch (the copy keys copy a selected chat bubble's text
-# while the composer keeps the focus). See README.md. Drop this once nsh/GPUI Fast ship the fixes.
+# ran ahead of other apps and never glided; patches/nsh-gpui-masks.patch (masks);
+# patches/nsh-scroll-speed.patch (wheel and touchpad scroll twice the system's amount);
+# patches/nsh-selection-copy.patch (the copy keys copy a selected chat bubble's text while the
+# composer keeps the focus). See README.md. Drop this once nsh/GPUI Fast ship the fixes.
 [patch.crates-io]
 nsh-platform-gpui = { path = "vendor/nsh-platform-gpui" }

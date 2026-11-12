@@ -33,15 +33,16 @@
 //! elements.
 //!
 //! Each element gets a role ([`role_for`]), its name (AccessKit reads a
-//! `Label`'s name from its value), its `accessibilityHint` (and a value text
-//! that is not a range's) as description, its `testID` as author id (UIA's
+//! `Label`'s name from its value), its `accessibilityDescription` and
+//! `accessibilityHint` (and a value text that is not a range's) as
+//! description, its `testID` as author id (UIA's
 //! `AutomationId`, `AXIdentifier`, AT-SPI's accessible id), its states
 //! (disabled, selected, checked as toggled, expanded, busy), a range's
 //! numeric value, a field's value ([`crate::text_input::accessible_value`]),
 //! a scroll view's offsets, the live region it is in, and the actions it
 //! takes: `Click` (its `activate` action, else a press), `Focus`,
 //! `Increment` / `Decrement`, `Expand` / `Collapse`, `ShowContextMenu`
-//! (`longpress`), `SetValue`, custom actions (the other
+//! (`onContextMenu` with no pointer, else `longpress`), `SetValue`, custom actions (the other
 //! `accessibilityActions`, by their labels), scrolling and
 //! `ScrollIntoView`. The listeners are registered as the surface paints
 //! ([`paint`]); each sends the action to the view's node by id, so a
@@ -89,13 +90,14 @@ use gpui::{
     A11ySubtreeBuilder, AnyElement, App, AvailableSpace, FocusHandle, InteractiveElement,
     IntoElement, StatefulInteractiveElement, Styled, Window,
     accesskit::{
-        self, Action, ActionData, AriaCurrent, CustomAction, Live, Node, Role, ScrollUnit, Toggled,
+        self, Action, ActionData, AriaCurrent, CustomAction, Invalid, Live, Node, Role, ScrollUnit,
+        Toggled,
     },
     div, point, px, size,
 };
 use nsh_core::{
     Accessibility, AccessibilityCurrent, AccessibilityRole as AxRole, Checked, Command, EventKind,
-    EventMask, LiveRegion, MountBatch, NodeId, ViewKind, geometry::Points,
+    EventMask, LiveRegion, MountBatch, NodeId, ROOT_ID, ViewKind, geometry::Points,
 };
 use rustc_hash::FxHashMap;
 
@@ -251,6 +253,8 @@ pub(crate) fn role_for(a: &Accessibility, kind: ViewKind, pressable: bool) -> Op
         AxRole::TreeItem => Role::TreeItem,
         AxRole::MenuItemCheckbox => Role::MenuItemCheckBox,
         AxRole::MenuItemRadio => Role::MenuItemRadio,
+        AxRole::Dialog => Role::Dialog,
+        AxRole::AlertDialog => Role::AlertDialog,
     })
 }
 
@@ -330,7 +334,8 @@ fn own_name(view: &NshView, s: &ViewState, role: Option<Role>) -> Option<String>
         return Some(label.to_string());
     }
     if let Some(t) = &s.text {
-        return Some(t.text.text.clone());
+        // Hidden runs are not read.
+        return Some(t.text.visible_text().into_owned());
     }
     if !role.is_some_and(|r| groups(s, r)) {
         return None;
@@ -360,7 +365,8 @@ fn content_name(view: &NshView, out: &mut String) {
                     .accessibility
                     .label
                     .as_deref()
-                    .or(s.text.as_ref().map(|t| t.text.text.as_str())),
+                    .map(std::borrow::Cow::Borrowed)
+                    .or_else(|| s.text.as_ref().map(|t| t.text.visible_text())),
             };
             match own {
                 Some(text) => {
@@ -381,18 +387,15 @@ fn content_name(view: &NshView, out: &mut String) {
     });
 }
 
-/// The description: a value that is not a range's, and the hint.
+/// The description: a value that is not a range's, the description and
+/// the hint.
 pub(crate) fn help_of(a: &Accessibility, role: Role) -> Option<String> {
     let value_text = a
         .value
         .as_ref()
         .and_then(|v| v.text.as_deref())
         .filter(|_| !is_range(role));
-    match (value_text, a.hint.as_deref()) {
-        (Some(v), Some(h)) => Some(format!("{v}. {h}")),
-        (Some(t), None) | (None, Some(t)) => Some(t.to_owned()),
-        (None, None) => None,
-    }
+    a.help_text(value_text)
 }
 
 /// A range's minimum, maximum and current value, or `None` when the
@@ -517,6 +520,9 @@ fn describe(
     if state.busy {
         node.set_busy();
     }
+    if state.invalid {
+        node.set_invalid(Invalid::True);
+    }
     let range = range_of(a, role);
     if let Some((min, max, now)) = range {
         node.set_min_numeric_value(min);
@@ -573,7 +579,10 @@ fn describe(
         if state.expanded.is_some() && (pressable || declares(s, "collapse")) {
             actions.push(Action::Collapse);
         }
-        if declares(s, "longpress") || s.events.contains(EventKind::LongPress) {
+        if declares(s, "longpress")
+            || s.events.contains(EventKind::LongPress)
+            || s.events.contains(EventKind::ContextMenu)
+        {
             actions.push(Action::ShowContextMenu);
         }
         let stepped = range.is_some() && (declares(s, "increment") || declares(s, "decrement"));
@@ -688,7 +697,9 @@ fn walk(
     live: LiveRegion,
     kids: &mut Vec<accesskit::NodeId>,
 ) {
-    for child in &view.child_views() {
+    // A scroll view's content as it is on screen: a list's recycled cells
+    // are not in their rows' order.
+    for child in &view.with_children_in_reading_order(<[NshView]>::to_vec) {
         let Some(s) = child.try_state() else { continue };
         let part = part(&s);
         if part == Part::Hidden {
@@ -829,16 +840,38 @@ struct State {
 }
 
 thread_local! {
-    static STATES: RefCell<FxHashMap<u64, State>> = RefCell::default();
+    /// Per surface and window (its root node): each window has a tree of
+    /// its own.
+    static STATES: RefCell<FxHashMap<(u64, NodeId), State>> = RefCell::default();
+}
+
+/// The window whose tree is built, drawn or acted in now: the window of the
+/// app's own whose input is entered ([`crate::window::enter`]), else the
+/// main window.
+fn current(surface: &Surface) -> NodeId {
+    crate::window::entered(surface).unwrap_or(ROOT_ID)
+}
+
+fn with_window_state<R>(surface: &Surface, window: NodeId, f: impl FnOnce(&mut State) -> R) -> R {
+    STATES.with_borrow_mut(|states| f(states.entry((surface.key(), window)).or_default()))
 }
 
 fn with_state<R>(surface: &Surface, f: impl FnOnce(&mut State) -> R) -> R {
-    STATES.with_borrow_mut(|states| f(states.entry(surface.key()).or_default()))
+    with_window_state(surface, current(surface), f)
 }
 
-/// True when a client was attached when the surface last drew.
+/// True when a client was attached when one of the surface's windows last
+/// drew.
 fn active(surface: &Surface) -> bool {
-    STATES.with_borrow(|s| s.get(&surface.key()).is_some_and(|s| s.active))
+    let key = surface.key();
+    STATES.with_borrow(|s| s.iter().any(|(k, s)| k.0 == key && s.active))
+}
+
+/// Window `window` of the app's own closed: its tree goes.
+pub(crate) fn window_closed(surface: &Surface, window: NodeId) {
+    STATES.with_borrow_mut(|s| {
+        s.remove(&(surface.key(), window));
+    });
 }
 
 /// A view was made.
@@ -871,6 +904,7 @@ pub(crate) fn prepare(_batch: &MountBatch) {}
 pub(crate) fn batch_applied(surface: &Surface) {
     if active(surface) {
         surface.invalidate();
+        crate::window::invalidate_all(surface);
     }
 }
 
@@ -879,23 +913,32 @@ pub(crate) fn focus(surface: &Rc<Surface>, view: &NshView) {
     let Ok(Some(element)) = exposed(view) else {
         return;
     };
-    with_state(surface, |s| s.focus = Some(element.id()));
+    let window = crate::window::root_of(surface, &element);
+    with_window_state(surface, window, |s| s.focus = Some(element.id()));
     surface.invalidate();
+    crate::window::invalidate_all(surface);
 }
 
 /// The keyboard focus moved to `view` (a text field): it takes the
 /// accessibility focus. Called by the modules that move it.
-pub(crate) fn focus_changed(surface: &Rc<Surface>, _view: &NshView) {
-    with_state(surface, |s| s.focus = None);
+pub(crate) fn focus_changed(surface: &Rc<Surface>, view: &NshView) {
+    let window = crate::window::root_of(surface, view);
+    with_window_state(surface, window, |s| s.focus = None);
     surface.invalidate();
+    crate::window::invalidate_all(surface);
 }
 
-/// The element with the accessibility focus.
+/// The element with the accessibility focus in the current window
+/// ([`current`]): the focused text field when it is in that window.
 pub(crate) fn focused(surface: &Surface) -> Option<NshView> {
-    if let Some(field) = crate::text_input::focused(surface) {
+    let window = current(surface);
+    if let Some(field) = crate::text_input::focused(surface)
+        && crate::window::root_of(surface, &field) == window
+    {
         return Some(field);
     }
-    let id = STATES.with_borrow(|s| s.get(&surface.key()).and_then(|s| s.focus))?;
+    let key = (surface.key(), window);
+    let id = STATES.with_borrow(|s| s.get(&key).and_then(|s| s.focus))?;
     let view = surface.view(id)?;
     match exposed(&view) {
         Ok(Some(e)) => Some(e),
@@ -908,16 +951,20 @@ pub(crate) fn announce(surface: &Rc<Surface>, text: &str) {
     if text.is_empty() {
         return;
     }
-    with_state(surface, |s| {
+    // Read where the user is: the window with the keyboard focus.
+    let window = crate::window::focused_root(surface);
+    with_window_state(surface, window, |s| {
         let sequence = s.announcement.as_ref().map_or(0, |a| a.0 + 1);
         s.announcement = Some((sequence, text.to_owned()));
     });
     surface.invalidate();
+    crate::window::invalidate_all(surface);
 }
 
-/// The surface element prepaints (before it registers its focus handle):
-/// follows the client's attachment into the environment and, while one is
-/// attached, builds the nodes and prepaints the focus proxy.
+/// The surface element (or the element of a window of the app's own, its
+/// input entered) prepaints, before it registers its focus handle: follows
+/// the client's attachment into the environment and, while one is
+/// attached, builds the window's nodes and prepaints the focus proxy.
 pub(crate) fn prepaint(
     surface: &Rc<Surface>,
     focus_handle: &FocusHandle,
@@ -925,19 +972,21 @@ pub(crate) fn prepaint(
     cx: &mut App,
 ) {
     let active = window.is_a11y_active();
+    let key = surface.key();
+    with_state(surface, |s| s.active = active);
+    // A client attached to any of its windows.
+    let any = self::active(surface);
     let mut env = surface.environment.get();
-    if env.screen_reader != active {
-        env.screen_reader = active;
+    if env.screen_reader != any {
+        env.screen_reader = any;
         surface.set_environment(env);
     }
-    let key = surface.key();
     STATES.with_borrow_mut(|states| {
         // Surfaces that are gone.
-        states.retain(|k, _| *k == key || Surface::by_key(*k).is_some());
+        states.retain(|k, _| k.0 == key || Surface::by_key(k.0).is_some());
     });
     if !active {
         with_state(surface, |s| {
-            s.active = false;
             s.built = None;
             s.proxied = None;
             s.proxy = None;
@@ -947,7 +996,8 @@ pub(crate) fn prepaint(
     }
     let field = |v: &NshView| crate::text_input::accessible_value(v);
     let scale = window.scale_factor();
-    let mut built = build(key, &surface.root, surface.origin.get(), scale, &field);
+    let root = surface.input_root();
+    let mut built = build(key, &root, surface.origin.get(), scale, &field);
     let mut proxied = None;
     let mut proxy = None;
     if let Some(view) = focused(surface).map(|v| v.id())
@@ -986,7 +1036,6 @@ pub(crate) fn prepaint(
         proxy = Some(element);
     }
     with_state(surface, |s| {
-        s.active = true;
         s.built = Some(built);
         s.proxied = proxied;
         s.proxy = proxy;
@@ -1058,12 +1107,14 @@ pub(crate) fn paint(surface: &Surface, window: &mut Window, cx: &mut App) {
         proxy.paint(window, cx);
     }
     let key = surface.key();
+    let root = crate::window::entered(surface);
     for (node, view, actions) in listeners {
         for action in actions {
             window.on_a11y_action(node, action, move |data, window, cx| {
                 if let Some(surface) = Surface::by_key(key)
                     && let Some(view) = surface.view(view)
                 {
+                    let _in = crate::window::enter(&surface, root);
                     perform(&surface, &view, action, data, window.scale_factor());
                 }
                 crate::rt::flush(cx);
@@ -1157,7 +1208,11 @@ fn perform(
             }
         }
         Action::ShowContextMenu => {
-            if !action_or_press(surface, view, "longpress", false) {
+            // Its context menu (`onContextMenu`, no pointer), else its long
+            // press, as the mobile platforms map the action.
+            if crate::input::hears_show_menu(view) {
+                crate::input::show_context_menu(surface, view);
+            } else if !action_or_press(surface, view, "longpress", false) {
                 surface.event(
                     view.id(),
                     EventKind::LongPress,
@@ -1441,6 +1496,37 @@ mod tests {
             .node
     }
 
+    /// A list's recycled cells are read in the order they show, not in the
+    /// order they were made (bound to rows further down as the list
+    /// scrolled): a scroll view's content is read as it is on screen.
+    #[test]
+    fn a_scroll_views_content_is_read_in_screen_order() {
+        let root = view(0, ViewKind::View, Accessibility::default());
+        root.set_invalidate(Rc::new(|| {}));
+        let list = view(2, ViewKind::Scroll, Accessibility::default());
+        list.insert_before(&root, None);
+        for (id, y) in [(4, 160.0), (6, 200.0), (8, 80.0), (10, 120.0)] {
+            let cell = pressable(id, Accessibility::default());
+            cell.state_mut().frame = crate::geom::rect(0.0, y, 100.0, 40.0);
+            cell.insert_before(&list, None);
+        }
+        let b = built(&root);
+        assert_eq!(
+            node(&b, 2).children(),
+            [8, 10, 4, 6].map(|id| node_id(7, id))
+        );
+        // A list in its parent's viewport is a plain view, looked through:
+        // its cells are read in screen order too.
+        list.unparent();
+        let page = view(12, ViewKind::View, Accessibility::default());
+        page.state_mut().props.screen_order = Some(nsh_core::geometry::Axis::Vertical);
+        page.insert_before(&root, None);
+        for cell in list.child_views() {
+            cell.insert_before(&page, None);
+        }
+        assert_eq!(built(&root).top, [8, 10, 4, 6].map(|id| node_id(7, id)));
+    }
+
     #[test]
     fn hierarchy() {
         let (root, all) = tree();
@@ -1502,6 +1588,8 @@ mod tests {
             (AxRole::TreeItem, Role::TreeItem),
             (AxRole::MenuItemCheckbox, Role::MenuItemCheckBox),
             (AxRole::MenuItemRadio, Role::MenuItemRadio),
+            (AxRole::Dialog, Role::Dialog),
+            (AxRole::AlertDialog, Role::AlertDialog),
         ] {
             assert_eq!(
                 role_for(&with_role(role), ViewKind::View, false),
@@ -1600,7 +1688,17 @@ mod tests {
                 ..Default::default()
             },
         );
-        let field = view(6, ViewKind::Input, labelled("Password"));
+        let field = view(
+            6,
+            ViewKind::Input,
+            Accessibility {
+                state: AccessibilityState {
+                    invalid: true,
+                    ..Default::default()
+                },
+                ..labelled("Password")
+            },
+        );
         slider.insert_before(&root, None);
         off.insert_before(&root, None);
         field.insert_before(&root, None);
@@ -1618,6 +1716,7 @@ mod tests {
         assert_eq!(s.value(), Some("3 of 10"));
         assert_eq!(s.description(), Some("Volume"));
         assert!(s.is_busy());
+        assert_eq!(s.invalid(), None);
         assert_eq!(s.live(), Some(Live::Assertive));
         assert!(s.supports_action(Action::Increment));
         assert!(!s.supports_action(Action::Decrement));
@@ -1637,6 +1736,8 @@ mod tests {
         assert_eq!(f.label(), Some("Password"));
         assert_eq!(f.value(), None);
         assert!(f.supports_action(Action::SetValue));
+        // Its content rejected by the app (ARIA's `aria-invalid`).
+        assert_eq!(f.invalid(), Some(Invalid::True));
     }
 
     /// `visibility: hidden` takes the view and its subtree out of the tree,
@@ -1736,6 +1837,15 @@ mod tests {
         assert_eq!(
             help_of(&button, Role::Button).as_deref(),
             Some("3 of 10. Plays")
+        );
+        // The app's description goes between the value and the hint.
+        let described = Accessibility {
+            description: Some("The whole album".into()),
+            ..button.clone()
+        };
+        assert_eq!(
+            help_of(&described, Role::Button).as_deref(),
+            Some("3 of 10. The whole album. Plays")
         );
         let progress = Accessibility {
             value: Some(AccessibilityValue {

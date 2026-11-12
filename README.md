@@ -114,7 +114,7 @@ Useful commands:
 go test ./...
 ```
 
-Both scripts build the nsh Console (`web/console-nsh/`, which needs nsh 0.4.0) and the nsh desktop app (`desktop/nsh/`, which also needs Rust). See [docs/console.md](docs/console.md) and [docs/app.md](docs/app.md) for build details.
+Both scripts build the nsh Console (`web/console-nsh/`, which needs nsh 0.5.0) and the nsh desktop app (`desktop/nsh/`, which also needs Rust). See [docs/console.md](docs/console.md) and [docs/app.md](docs/app.md) for build details.
 
 ## Configuration Template
 

@@ -1,6 +1,6 @@
 # The Mister Morph console in nsh
 
-One TSX app (nsh 0.4.0, Native Shell) that builds as the web console (`scripts/build-web.sh`, served by
+One TSX app (nsh 0.5.0, Native Shell) that builds as the web console (`scripts/build-web.sh`, served by
 `console serve --console-static-dir`), as the desktop app (`desktop/nsh`, a GPUI shell that embeds
 it and runs the backend) and as the Android app (`scripts/build-android.sh`, a client of a console
 server elsewhere). It reimplements `web/console` (Vue) screen for screen; `web/console/src`

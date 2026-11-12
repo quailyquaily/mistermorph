@@ -23,7 +23,7 @@
 
 ### Console (`web/console-nsh`)
 
-The Console is a TSX app on nsh (0.4.0). The web Console, the desktop app (`desktop/nsh`) and the
+The Console is a TSX app on nsh (0.5.0). The web Console, the desktop app (`desktop/nsh`) and the
 Android app are all built from it; the CLI embeds its web build.
 
 - Type check: `nsh check`; tests: `nsh test --web-host tests/noHost.js` (both in `web/console-nsh`).

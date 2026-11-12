@@ -25,9 +25,9 @@
 //! The final layout ([`GpuiLayout`]) is plain data: per line its metrics,
 //! its clusters' boxes (hit testing, selections, decorations) and glyphs
 //! (font, id, size, position). Colors and decorations are not part of it:
-//! the core reuses a layout for text that only differs in them
-//! (`AttributedText::layout_eq`), so [`draw`] reads them from the drawn
-//! text's spans.
+//! [`draw`] reads them from the drawn text's spans, so the core keeps a
+//! layout for text that only differs in its colors
+//! (`TextEngine::draws_colors_from_text`).
 //!
 //! Selectable text follows desktop conventions, as on Windows and Linux
 //! ([`Selection`]).
@@ -1258,6 +1258,11 @@ impl Builder<'_> {
 impl TextEngine for GpuiTextEngine {
     type Prepared = Prepared;
 
+    fn draws_colors_from_text(&self) -> bool {
+        // Colors and decorations are read from the drawn text's spans.
+        true
+    }
+
     fn prepare(&self, t: &AttributedText) -> Prepared {
         self.prepare_aligned(t, &nsh_core::AttachmentAlignments::default())
     }
@@ -1965,6 +1970,18 @@ pub(crate) struct GpuiLayout {
 }
 
 impl GpuiLayout {
+    /// The glyphs drawn of `text`: all but those of hidden runs
+    /// (`ResolvedTextStyle::hidden`), whose emoji keep their own colors
+    /// and whose shadow and animated color would show them.
+    fn shown_glyphs<'a>(&'a self, text: &'a AttributedText) -> impl Iterator<Item = &'a Glyph> {
+        let hidden = text.has_hidden();
+        self.glyphs
+            .iter()
+            .filter(move |g| !hidden || !text.hidden_at(g.style))
+    }
+}
+
+impl GpuiLayout {
     /// The line at height `y`, if any.
     fn line_at(&self, y: f32) -> Option<&Line> {
         self.lines
@@ -2302,7 +2319,7 @@ pub(crate) fn draw_shadow(cx: &mut DrawCx<'_>, state: &ViewState) {
     }
     let mut glyphs = Vec::with_capacity(layout.glyphs.len() * offsets.len());
     for &(dx, dy) in &offsets {
-        for g in &layout.glyphs {
+        for g in layout.shown_glyphs(&drawn.text) {
             let o = cx.map(ox + dx + g.x, oy + dy + g.y);
             glyphs.push((o, g.font, g.id, px(g.size * k), Some(color)));
         }
@@ -2336,9 +2353,12 @@ pub(crate) fn draw(cx: &mut DrawCx<'_>, state: &ViewState) {
         .or(drawn.area_range)
     {
         let tint = selection_tint(text);
-        layout.selection_rects(range, |x, y, w, h| {
-            cx.fill_rect(crate::geom::rect(ox + x, oy + y, w, h), [0.0; 4], tint);
-        });
+        // Hidden characters show no highlight, as nothing of them shows.
+        for shown in text.visible_ranges(range.0..range.1) {
+            layout.selection_rects((shown.start, shown.end), |x, y, w, h| {
+                cx.fill_rect(crate::geom::rect(ox + x, oy + y, w, h), [0.0; 4], tint);
+            });
+        }
     }
     if layout.boxes.is_empty() {
         return;
@@ -2357,7 +2377,7 @@ pub(crate) fn draw(cx: &mut DrawCx<'_>, state: &ViewState) {
         .color
         .or_else(|| state.live.as_ref()?.text_color());
     let mut glyphs = Vec::with_capacity(layout.glyphs.len());
-    for g in &layout.glyphs {
+    for g in layout.shown_glyphs(text) {
         let o = cx.map(ox + g.x, oy + g.y);
         let color = if g.emoji {
             None
@@ -2419,6 +2439,7 @@ fn decorate(
             let x1 = (boxes[j - 1].x + boxes[j - 1].w).min((line.info.x + line.info.width).0);
             if x1 > x0
                 && let Some(s) = text.spans.get(span)
+                && !s.style.hidden
             {
                 stroke(
                     cx,
@@ -2547,7 +2568,7 @@ pub(crate) fn draw_silhouette(
     let tint = Some(cx.color(color));
     let mut glyphs = Vec::with_capacity(layout.glyphs.len() * offsets.len());
     // Emoji draw in their own colors: they cast no silhouette.
-    for g in layout.glyphs.iter().filter(|g| !g.emoji) {
+    for g in layout.shown_glyphs(&drawn.text).filter(|g| !g.emoji) {
         for &(dx, dy) in offsets {
             let o = cx.map(ox + g.x + dx, oy + g.y + dy);
             glyphs.push((o, g.font, g.id, px(g.size * k), tint));
@@ -2903,13 +2924,12 @@ pub(crate) fn context_menu(surface: &Rc<crate::surface::Surface>, view: &NshView
     );
 }
 
-/// The selected text of `view`, without attachments' placeholders.
+/// The selected text of `view`, without attachments' placeholders and
+/// hidden runs.
 fn selected_text(view: &NshView) -> Option<String> {
     let (a, b) = view_selection(view)?.range.get()?;
     let state = view.state();
-    let text: Vec<u16> = state.text.as_ref()?.text.text.encode_utf16().collect();
-    let part = text.get(a as usize..(b as usize).min(text.len()))?;
-    Some(String::from_utf16_lossy(part).replace(ATTACHMENT_CHAR, ""))
+    Some(state.text.as_ref()?.text.copied_text(a..b)).filter(|t| !t.is_empty())
 }
 
 /// Selects all of `view`'s text.
@@ -4026,6 +4046,36 @@ mod tests {
         let latin = h("Grace");
         assert_eq!(h("Grace你好世界"), latin, "CJK");
         assert_eq!(h("Grace😀"), latin, "emoji");
+    }
+
+    /// Nothing of a hidden run is drawn: not its emoji, which keep their
+    /// own colors, nor (in a shadow or an animated color) its other glyphs.
+    #[test]
+    fn hidden_runs_draw_no_glyphs() {
+        let Some(engine) = engine() else {
+            return;
+        };
+        let mut t = text(&[("ab ", plain(16.0))]);
+        // As the core hides a span.
+        let hidden = ResolvedTextStyle {
+            hidden: true,
+            color: nsh_core::Color::TRANSPARENT,
+            ..plain(16.0)
+        };
+        t.push("\u{1F389} cd", hidden);
+        let (_, layout) = layout_of(&engine, &t, None);
+        let l = layout.downcast::<GpuiLayout>().unwrap();
+        let shown: Vec<u32> = l.shown_glyphs(&t).map(|g| g.style).collect();
+        assert!(
+            !shown.is_empty() && shown.iter().all(|&at| at < 3),
+            "{shown:?}"
+        );
+        assert!(l.shown_glyphs(&t).all(|g| !g.emoji));
+        assert!(l.glyphs.len() > shown.len());
+        // Shown again, all are drawn.
+        let mut t = text(&[("ab ", plain(16.0))]);
+        t.push("\u{1F389} cd", plain(16.0));
+        assert_eq!(l.shown_glyphs(&t).count(), l.glyphs.len());
     }
 
     #[test]

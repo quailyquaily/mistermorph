@@ -1,5 +1,5 @@
 diff --git a/crates/gpui/nsh-platform-gpui/src/events.rs b/crates/gpui/nsh-platform-gpui/src/events.rs
-index 777574e..65fe485 100644
+index cccf148..eeddaa3 100644
 --- a/crates/gpui/nsh-platform-gpui/src/events.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/events.rs
 @@ -39,6 +39,10 @@ const LINE: f32 = 10.0;
@@ -13,7 +13,7 @@ index 777574e..65fe485 100644
  fn gesture_phase(phase: TouchPhase) -> GesturePhase {
      match phase {
          TouchPhase::Started => GesturePhase::Began,
-@@ -308,7 +312,11 @@ pub(crate) fn install(
+@@ -349,7 +353,11 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
          // GPUI's deltas move the content (positive: down / right); nsh's
          // scroll toward the end.
          let (dx, dy, precise) = match e.delta {
@@ -26,22 +26,43 @@ index 777574e..65fe485 100644
              ScrollDelta::Lines(l) => (-l.x * LINE, -l.y * LINE, false),
          };
          let event = WheelEvent {
-@@ -320,7 +328,9 @@ pub(crate) fn install(
+@@ -361,7 +369,14 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
              modifiers: crate::keys::modifiers(&e.modifiers),
              time: s.clock(),
          };
--        if precise {
-+        if precise && cfg!(target_os = "linux") && dx == 0.0 && dy == 0.0 {
+-        let phase = gesture_phase(e.touch_phase);
++        // GPUI's Wayland client reports every touchpad scroll as `Moved` and the fingers' lift
++        // as an empty one: that is the gesture's end.
++        let lifted = precise && cfg!(target_os = "linux") && dx == 0.0 && dy == 0.0;
++        let phase = if lifted {
++            GesturePhase::Ended
++        } else {
++            gesture_phase(e.touch_phase)
++        };
+         // `onWheel` keeps GPUI's unit; positive toward the end, as `dx`.
+         let delta = match e.delta {
+             ScrollDelta::Pixels(_) => nsh_core::WheelDelta::Points(nsh_core::geometry::point(
+@@ -380,8 +395,14 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
+                     dy: 0.0,
+                     ..event
+                 };
+-                crate::input::touchpad(&s, end, phase);
++                if lifted {
++                    crate::input::touchpad_lifted(&s, end);
++                } else {
++                    crate::input::touchpad(&s, end, phase);
++                }
+             }
++        } else if lifted {
 +            crate::input::touchpad_lifted(&s, event);
-+        } else if precise {
-             crate::input::touchpad(&s, event, gesture_phase(e.touch_phase));
+         } else if precise {
+             crate::input::touchpad(&s, event, phase);
          } else {
-             crate::input::wheel(&s, event);
 diff --git a/crates/gpui/nsh-platform-gpui/src/input.rs b/crates/gpui/nsh-platform-gpui/src/input.rs
-index b1f11eb..cbabaea 100644
+index 054de1c..95059ff 100644
 --- a/crates/gpui/nsh-platform-gpui/src/input.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/input.rs
-@@ -2610,6 +2610,15 @@ pub(crate) fn touchpad(surface: &Rc<Surface>, event: WheelEvent, phase: GestureP
+@@ -2898,6 +2898,15 @@ pub(crate) fn touchpad(surface: &Rc<Surface>, event: WheelEvent, phase: GestureP
      }
  }
  

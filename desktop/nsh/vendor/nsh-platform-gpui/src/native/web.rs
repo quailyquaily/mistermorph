@@ -6,7 +6,9 @@
 //! ([`WebItem::prepaint`]), and props and commands wait for it. Settings
 //! wry only takes when it builds (the injected scripts, the user agent,
 //! `javascriptEnabled`) make it anew when they change; a new source loads
-//! in the same one.
+//! in the same one. `incognito` is wry's incognito mode: a non-persistent
+//! `WKWebsiteDataStore` on macOS, an InPrivate controller on Windows, an
+//! ephemeral web context on Linux.
 //!
 //! - **Linux**: WebKitGTK 4.1 on GTK 3, which only embeds into X11
 //!   windows: GPUI must run on X11 (or Xwayland). GTK is started on its X11
@@ -211,6 +213,23 @@ mod imp {
         view::{Hosted, NshView},
     };
 
+    /// `load()`'s headers, for the document request only (wry adds them
+    /// to no subresource or later navigation). `WebLoad` already refused
+    /// names that are not tokens and values with line breaks.
+    fn headers(load: &nsh_core::WebLoad) -> wry::http::HeaderMap {
+        use wry::http::{HeaderMap, HeaderName, HeaderValue};
+        let mut map = HeaderMap::new();
+        for (name, value) in &load.headers {
+            if let (Ok(name), Ok(value)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_bytes(value.as_bytes()),
+            ) {
+                map.append(name, value);
+            }
+        }
+        map
+    }
+
     /// What wry only takes when it builds a web view.
     #[derive(Clone, PartialEq)]
     struct BuildKey {
@@ -218,6 +237,7 @@ mod imp {
         injected_js_before: Option<Arc<str>>,
         user_agent: Option<Arc<str>>,
         javascript_enabled: bool,
+        incognito: bool,
     }
 
     impl BuildKey {
@@ -227,6 +247,7 @@ mod imp {
                 injected_js_before: p.injected_js_before.clone(),
                 user_agent: p.user_agent.clone(),
                 javascript_enabled: p.javascript_enabled,
+                incognito: p.incognito,
             }
         }
     }
@@ -341,7 +362,7 @@ mod imp {
         }
 
         /// `reload()`, `goBack()`, `goForward()`, `stopLoading()`,
-        /// `injectJavaScript()` and `postMessage()`.
+        /// `injectJavaScript()`, `postMessage()` and `load()`.
         pub(crate) fn command(&self, command: &Command) {
             let webview = self.built.borrow().as_ref().map(|b| b.webview.clone());
             let Some(webview) = webview else {
@@ -357,6 +378,7 @@ mod imp {
                 Command::StopLoading => webview.evaluate_script("window.stop();"),
                 Command::InjectJavaScript(js) => webview.evaluate_script(js),
                 Command::PostMessage(data) => webview.evaluate_script(&post_message(data)),
+                Command::Load(load) => webview.load_url_with_headers(&load.src, headers(load)),
                 _ => Ok(()),
             };
             if let Err(err) = result {
@@ -411,6 +433,7 @@ mod imp {
             let key = BuildKey::of(p);
             let mut builder = wry::WebViewBuilder::new()
                 .with_visible(false)
+                .with_incognito(p.incognito)
                 .with_initialization_script_for_main_only(BRIDGE, true);
             if let Some(js) = &p.injected_js_before {
                 builder = builder.with_initialization_script_for_main_only(&**js, true);
@@ -484,6 +507,16 @@ mod imp {
                     if !WARNED.swap(true, Ordering::Relaxed) {
                         log::warn!(target: "js", "web views cannot show: {why}");
                     }
+                    // The app hears it and shows what it has instead.
+                    self.emitter.emit(EventKind::Error, || {
+                        EventPayload::Map(vec![
+                            ("message", PayloadValue::Str(why)),
+                            (
+                                "code",
+                                PayloadValue::Str(nsh_core::element::codes::UNAVAILABLE.into()),
+                            ),
+                        ])
+                    });
                     self.failed.set(Some(shown));
                     self.queued.borrow_mut().clear();
                 }

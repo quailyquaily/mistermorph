@@ -1,8 +1,8 @@
 diff --git a/crates/gpui/nsh-platform-gpui/src/input.rs b/crates/gpui/nsh-platform-gpui/src/input.rs
-index 099aee3e..b835f888 100644
+index 95059ff..a8c8597 100644
 --- a/crates/gpui/nsh-platform-gpui/src/input.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/input.rs
-@@ -1375,6 +1375,7 @@ fn down(
+@@ -1642,6 +1642,7 @@ fn down(
      {
          // Mouse drags in a selectable view select across its texts; its
          // texts never select alone.
@@ -10,7 +10,7 @@ index 099aee3e..b835f888 100644
          crate::selectable_view::down(surface, &area, &hit.view, (x, y), clicks, modifiers.shift);
          item = Some(Item::Area(area));
      }
-@@ -1384,6 +1385,7 @@ fn down(
+@@ -1651,6 +1652,7 @@ fn down(
          } else if !touch && crate::text::selectable(&hit.view.state()) {
              // Mouse drags over selectable text select it rather than
              // pan.
@@ -19,10 +19,10 @@ index 099aee3e..b835f888 100644
          } else {
              None
 diff --git a/crates/gpui/nsh-platform-gpui/src/selectable_view.rs b/crates/gpui/nsh-platform-gpui/src/selectable_view.rs
-index 675a3dd1..bc44c0bc 100644
+index 61ea02b..ca192d7 100644
 --- a/crates/gpui/nsh-platform-gpui/src/selectable_view.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/selectable_view.rs
-@@ -599,6 +599,15 @@ fn selected_text(surface: u64) -> Option<String> {
+@@ -678,6 +678,15 @@ fn selected_text(surface: u64) -> Option<String> {
      })
  }
  
@@ -39,20 +39,20 @@ index 675a3dd1..bc44c0bc 100644
  pub(crate) fn context_menu(surface: &Rc<Surface>, area: &NshView) {
      use nsh_core::desktop::MenuRole;
 diff --git a/crates/gpui/nsh-platform-gpui/src/tests.rs b/crates/gpui/nsh-platform-gpui/src/tests.rs
-index fb014716..0c9deb29 100644
+index 4bcd4ad..1e3dc18 100644
 --- a/crates/gpui/nsh-platform-gpui/src/tests.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/tests.rs
-@@ -202,6 +202,7 @@ fn windows(cx: &mut TestAppContext) {
-     releasing_shift_before_alt_keeps_the_auto_hidden_menu_bar_hidden(cx);
-     the_app_s_state_follows_its_window_s_activation_and_visibility(cx);
-     set_frame_sizes_the_window_and_keeps_the_size_it_leaves_out(cx);
+@@ -206,6 +206,7 @@ fn windows(cx: &mut TestAppContext) {
+     a_secondary_click_on_a_drag_area_reaches_its_on_context_menu(cx);
+     props_and_commands_reach_a_native_component_whose_view_is_not_drawn(cx);
+     a_command_without_a_search_field_takes_the_keyboard_on_focus(cx);
 +    copy_keys_copy_the_page_selection_while_a_field_is_focused(cx);
  }
  
  fn keys_reach_the_fields_of_a_surface_showing_a_native_component(cx: &mut TestAppContext) {
-@@ -1557,3 +1558,192 @@ fn set_frame_sizes_the_window_and_keeps_the_size_it_leaves_out(cx: &mut TestAppC
-     cx.simulate_keystrokes(&format!("shift-{primary}-b"));
-     wait_until_window(cx, "the window at 600x400", |cx| size(cx) == (600.0, 400.0));
+@@ -1873,3 +1874,192 @@ fn a_command_without_a_search_field_takes_the_keyboard_on_focus(cx: &mut TestApp
+         crate::key_focus::focused(view.surface()).is_none()
+     }));
  }
 +
 +/// Two chat bubbles over a focused composer: a plain text in a `selectable`
@@ -244,10 +244,10 @@ index fb014716..0c9deb29 100644
 +    assert_eq!(field_text(&view, cx).as_deref(), Some("draftx"));
 +}
 diff --git a/crates/gpui/nsh-platform-gpui/src/text.rs b/crates/gpui/nsh-platform-gpui/src/text.rs
-index d23b7782..63c89004 100644
+index 3542e70..2938970 100644
 --- a/crates/gpui/nsh-platform-gpui/src/text.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/text.rs
-@@ -2682,6 +2682,14 @@ fn select(surface: u64, view: &NshView, range: Option<(u32, u32)>) {
+@@ -2703,6 +2703,14 @@ fn select(surface: u64, view: &NshView, range: Option<(u32, u32)>) {
      }
  }
  
@@ -263,10 +263,10 @@ index d23b7782..63c89004 100644
  /// area selects: one selection at a time).
  pub(crate) fn clear_selection() {
 diff --git a/crates/gpui/nsh-platform-gpui/src/text_input.rs b/crates/gpui/nsh-platform-gpui/src/text_input.rs
-index 916bf8e6..58b515a2 100644
+index 6995e4e..961d063 100644
 --- a/crates/gpui/nsh-platform-gpui/src/text_input.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/text_input.rs
-@@ -2205,6 +2205,16 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
+@@ -2208,6 +2208,16 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
              }
              false
          }
@@ -283,7 +283,7 @@ index 916bf8e6..58b515a2 100644
          _ if is_command(m) => match vk {
              0x41 => moved(&|model| model.select_all()),
              0x43 => {
-@@ -2251,6 +2261,35 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
+@@ -2254,6 +2264,35 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
      }
  }
  
