@@ -6,7 +6,8 @@
 // Secrets Manager), with the full explanation in its tooltip. The eye shows the stored value (asking
 // for the console password first when it has one) and hides it again after 30 seconds; the pencil
 // opens an empty field for a new value, and the undo arrow beside it keeps the current one. While
-// typing, the eye shows what is typed.
+// typing, the eye shows what is typed. Whatever it shows, the box is a regular field's height
+// (TextField's) and its buttons stay inside it: what goes before them is cut short instead.
 //
 // Where a settings page provides SecretPicker ({ enabled }), the key button opens the secret picker
 // to use a key another field already has. A field that points at a variable, a stored secret or an
@@ -14,14 +15,15 @@
 //
 // Vue to nsh: `modelValue` is `value`, `update:modelValue` is `onChange(value)`. The Vue
 // `provide("secretPicker", { enabled })` is the SecretPicker context, given an accessor.
-import type { InputRef, JSX } from "nsh";
+import type { InputRef, JSX, ViewRef } from "nsh";
 import { batch, cleanup, context, effect, keymap, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton, Tooltip } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { canSwapReference, pickerKeys, referenceEnvName, secretFieldLabel } from "../../lib/core/secret-keys.js";
 import { loadSecretInfo, loadSecretKeys, loadSecretKeysShared, revealSecret } from "../../lib/core/secret-reveal.js";
 import { secretStorageKind } from "../../lib/core/secret-storage.js";
-import { Button, Icon, type IconName, Modal, TextField } from "../ui";
+import { Button, FIELD_HEIGHT, Icon, type IconName, Modal, TextField } from "../ui";
+import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../shared/partProbe";
 import { EnvManagedField } from "./EnvManagedField";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -64,6 +66,9 @@ const REFERENCE_KINDS = new Set(["os", "env", "aws"]);
 const REVEAL_MS = 30000;
 
 const MASK = "••••••••••••";
+// The mask on one line, as many dots as fit (cut, not wrapped or ellipsized), and never fewer than a
+// few: a long storage tag beside it is cut short first.
+const MASK_CLASS = "min-w-12 flex-1 overflow-hidden whitespace-nowrap text-clip line-clamp-1 text-sm tracking-widest";
 
 interface SecretInfo {
   reveal?: boolean;
@@ -90,10 +95,58 @@ export interface SecretInputProps {
   /** For a field taken from an environment variable: "NAME" or "NAME=value"; it then shows locked. */
   envName?: string;
   testID?: string;
+  /**
+   * Hears where its parts lie on the page (tests), by state (`stored`, `typing`, `env`, `picked`,
+   * `ask`): `<state>.field` (the box), `<state>.tag`, `<state>.actions` and `<state>.actions.<button>`.
+   */
+  onPartLayout?: PartLayoutListener;
+}
+
+/**
+ * A row of buttons that reports its own frame as `name` and each button's as `<name>.<button>`
+ * (tests). Buttons take no ref, so they are placed from their `onLayout` bounds in the measured row.
+ */
+function createRowProbe(listener: () => PartLayoutListener | undefined, name: string) {
+  const parts = createPartProbe(listener);
+  let node: ViewRef | undefined;
+  const frames = new Map<string, PartFrame>();
+  const reportButton = (button: string) => parts.report(`${name}.${button}`, node, () => frames.get(button));
+  return {
+    /** Props for the row's view. */
+    row: () =>
+      listener()
+        ? {
+            ref: (value: ViewRef) => {
+              node = value;
+            },
+            onLayout: () => {
+              parts.report(name, node);
+              for (const button of frames.keys()) reportButton(button);
+            },
+          }
+        : {},
+    /** `onLayout` for a button in the row. */
+    button: (button: string) =>
+      listener()
+        ? (event: LayoutBounds) => {
+            frames.set(button, boundsFrame(event));
+            reportButton(button);
+          }
+        : undefined,
+  };
 }
 
 /** A small icon button at the end of a secret field. */
-function ActionButton(props: { icon: IconName; title: string; disabled?: boolean; loading?: boolean; selected?: boolean; testID?: string; onPress: () => void }) {
+function ActionButton(props: {
+  icon: IconName;
+  title: string;
+  disabled?: boolean;
+  loading?: boolean;
+  selected?: boolean;
+  testID?: string;
+  onLayout?: (event: LayoutBounds) => void;
+  onPress: () => void;
+}) {
   return (
     <Button
       variant="plain"
@@ -105,16 +158,18 @@ function ActionButton(props: { icon: IconName; title: string; disabled?: boolean
       loading={props.loading}
       selected={props.selected}
       testID={props.testID}
+      onLayout={props.onLayout}
       onPress={props.onPress}
     />
   );
 }
 
 /** The kept-elsewhere tag: an icon and where the key is, with its explanation as a tooltip. */
-function KindTag(props: { icon: IconName; label: string; tooltip?: string; warn?: boolean }) {
+function KindTag(props: { icon: IconName; label: string; tooltip?: string; warn?: boolean; probe?: Record<string, unknown> }) {
   return (
     <View
-      class="shrink flex-row items-center gap-1"
+      {...(props.probe ?? {})}
+      class="min-w-0 shrink flex-row items-center gap-1"
       tooltip={
         props.tooltip ? (
           <Tooltip class="max-w-xs bg-foreground px-2 py-1">
@@ -125,7 +180,7 @@ function KindTag(props: { icon: IconName; label: string; tooltip?: string; warn?
     >
       <Icon name={props.icon} size={13} color={props.warn ? "warn-dark" : "muted-foreground"} />
       <Text
-        class={`font-mono text-xs font-medium uppercase tracking-wide ${props.warn ? "text-warn-dark" : "text-muted-foreground"}`}
+        class={`min-w-0 shrink font-mono text-xs font-medium uppercase tracking-wide ${props.warn ? "text-warn-dark" : "text-muted-foreground"}`}
         style={{ numberOfLines: 1 }}
       >
         {props.label}
@@ -141,7 +196,10 @@ function PasswordAsk(props: {
   onSubmit: (password: string) => void;
   onCancel: () => void;
   testID?: string;
+  onPartLayout?: PartLayoutListener;
 }) {
+  const parts = createPartProbe(() => props.onPartLayout);
+  const actions = createRowProbe(() => props.onPartLayout, "ask.actions");
   const password = signal("");
   let input: InputRef | undefined;
   keymap.bind("escape", () => props.onCancel(), { when: "always" });
@@ -152,9 +210,9 @@ function PasswordAsk(props: {
     password.set("");
   };
   return (
-    <View class="flex-row items-center gap-1.5">
+    <View class="flex-row flex-wrap items-center gap-1.5" {...parts.probe(() => "ask.field")}>
       <TextField
-        class="flex-1"
+        class="min-w-0 grow basis-48"
         value={password()}
         clearable={Boolean(password())}
         onChange={(value) => password.set(value)}
@@ -167,8 +225,24 @@ function PasswordAsk(props: {
           input = node;
         }}
       />
-      <Button variant="outlined" size="sm" label={props.actionLabel} loading={props.busy} onPress={() => submit()} />
-      <Button variant="plain" size="sm" label={t("secret_reveal_cancel")} disabled={props.busy} onPress={props.onCancel} />
+      <View class="ml-auto shrink-0 flex-row items-center gap-1.5" {...actions.row()}>
+        <Button
+          variant="outlined"
+          size="sm"
+          label={props.actionLabel}
+          loading={props.busy}
+          onLayout={actions.button("submit")}
+          onPress={() => submit()}
+        />
+        <Button
+          variant="plain"
+          size="sm"
+          label={t("secret_reveal_cancel")}
+          disabled={props.busy}
+          onLayout={actions.button("cancel")}
+          onPress={props.onCancel}
+        />
+      </View>
     </View>
   );
 }
@@ -191,6 +265,13 @@ export function SecretInput(props: SecretInputProps) {
   let input: InputRef | undefined;
   let focusTyping = false;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  const parts = createPartProbe(() => props.onPartLayout);
+  const rows = {
+    stored: createRowProbe(() => props.onPartLayout, "stored.actions"),
+    typing: createRowProbe(() => props.onPartLayout, "typing.actions"),
+    env: createRowProbe(() => props.onPartLayout, "env.actions"),
+    picked: createRowProbe(() => props.onPartLayout, "picked.actions"),
+  };
 
   const value = () => String(props.value || "");
   const configured = () => props.status?.configured === true;
@@ -344,35 +425,50 @@ export function SecretInput(props: SecretInputProps) {
     return "typing";
   };
 
-  const storedBox = (content: JSX.Element) => (
-    <View class="min-h-9 flex-row items-center gap-2.5 rounded-(--radius) border border-input bg-field py-0.5 pl-3 pr-1">
+  // A filled field: as tall as a regular one (TextField), its buttons inside its end.
+  const storedBox = (state: string, content: JSX.Element) => (
+    <View
+      class={`${FIELD_HEIGHT} flex-row items-center gap-2.5 rounded-(--radius) border border-input bg-field py-0.5 pl-3 pr-1`}
+      {...parts.probe(() => `${state}.field`)}
+    >
       {content}
     </View>
   );
 
-  const undoButton = () => (
-    <ActionButton icon="PhArrowCounterClockwise" title={t("secret_picker_undo")} disabled={props.disabled} onPress={keepCurrent} />
+  const undoButton = (row: ReturnType<typeof createRowProbe>) => (
+    <ActionButton
+      icon="PhArrowCounterClockwise"
+      title={t("secret_picker_undo")}
+      disabled={props.disabled}
+      onLayout={row.button("undo")}
+      onPress={keepCurrent}
+    />
   );
 
   return (
     <View class="gap-1.5" testID={props.testID}>
       <If when={mode() === "picked-env"}>
-        <EnvManagedField name={pickedEnvName()} title={pickedTitle()}>
-          {undoButton()}
-        </EnvManagedField>
+        <View {...parts.probe(() => "env.field")}>
+          <EnvManagedField name={pickedEnvName()} title={pickedTitle()}>
+            <View class="shrink-0 flex-row items-center" {...rows.env.row()}>
+              {undoButton(rows.env)}
+            </View>
+          </EnvManagedField>
+        </View>
       </If>
       <If when={mode() === "picked"}>
         {storedBox(
+          "picked",
           <>
             <If
               when={picked()?.kind === "file"}
               else={
-                <Text class="flex-1 text-sm tracking-widest text-muted-foreground" accessibilityElementsHidden>
+                <Text class={`${MASK_CLASS} text-muted-foreground`} accessibilityElementsHidden>
                   {MASK}
                 </Text>
               }
             >
-              <Text class="flex-1 font-mono text-sm text-foreground" style={{ numberOfLines: 1 }}>
+              <Text class="min-w-0 flex-1 font-mono text-sm text-foreground" style={{ numberOfLines: 1 }}>
                 {picked()?.hint || "…"}
               </Text>
             </If>
@@ -380,17 +476,24 @@ export function SecretInput(props: SecretInputProps) {
               icon={picked()?.kind === "file" ? "PhKey" : KIND_ICONS[picked()?.kind ?? ""] || KIND_ICONS.stored}
               label={picked()?.kind === "file" ? pickedTitle() : kindTagText(picked()?.kind ?? "", info())}
               tooltip={pickedTitle()}
+              probe={parts.probe(() => "picked.tag")}
             />
-            {undoButton()}
+            <View class="shrink-0 flex-row items-center" {...rows.picked.row()}>
+              {undoButton(rows.picked)}
+            </View>
           </>,
         )}
       </If>
       <If when={mode() === "env"}>
-        <EnvManagedField name={props.envName || ""}>
-          <If when={canPickStored()}>
-            <ActionButton icon="PhKey" title={t("secret_picker_open")} onPress={openPicker} />
-          </If>
-        </EnvManagedField>
+        <View {...parts.probe(() => "env.field")}>
+          <EnvManagedField name={props.envName || ""}>
+            <If when={canPickStored()}>
+              <View class="shrink-0 flex-row items-center" {...rows.env.row()}>
+                <ActionButton icon="PhKey" title={t("secret_picker_open")} onLayout={rows.env.button("picker")} onPress={openPicker} />
+              </View>
+            </If>
+          </EnvManagedField>
+        </View>
       </If>
       <If when={mode() === "ask"}>
         <PasswordAsk
@@ -399,15 +502,17 @@ export function SecretInput(props: SecretInputProps) {
           onSubmit={(password) => void doReveal(password)}
           onCancel={cancelAsk}
           testID={props.testID ? `${props.testID}-password` : undefined}
+          onPartLayout={props.onPartLayout}
         />
       </If>
       <If when={mode() === "stored"}>
         {storedBox(
+          "stored",
           <>
             <If
               when={revealed() !== null}
               else={
-                <Text class="flex-1 text-sm tracking-widest text-muted-foreground" accessibilityLabel={t("secret_stored_" + kind())}>
+                <Text class={`${MASK_CLASS} text-muted-foreground`} accessibilityLabel={t("secret_stored_" + kind())}>
                   {MASK}
                 </Text>
               }
@@ -419,65 +524,84 @@ export function SecretInput(props: SecretInputProps) {
               </View>
             </If>
             <If when={revealed() === null}>
-              <KindTag icon={KIND_ICONS[kind()] || KIND_ICONS.stored} label={tagLabel()} tooltip={tooltip()} warn={kind() === "file"} />
+              <KindTag
+                icon={KIND_ICONS[kind()] || KIND_ICONS.stored}
+                label={tagLabel()}
+                tooltip={tooltip()}
+                warn={kind() === "file"}
+                probe={parts.probe(() => "stored.tag")}
+              />
             </If>
-            <View class="flex-row items-center">
+            <View class="shrink-0 flex-row items-center" {...rows.stored.row()}>
               <If when={canReveal()}>
                 <ActionButton
                   icon={revealed() !== null ? "PhEyeSlash" : "PhEye"}
                   title={revealed() !== null ? t("secret_hide") : t("secret_reveal")}
                   selected={revealed() !== null}
                   loading={revealing()}
+                  onLayout={rows.stored.button("reveal")}
                   onPress={toggleReveal}
                 />
               </If>
               <If when={canPickStored()}>
-                <ActionButton icon="PhKey" title={t("secret_picker_open")} onPress={openPicker} />
+                <ActionButton icon="PhKey" title={t("secret_picker_open")} onLayout={rows.stored.button("picker")} onPress={openPicker} />
               </If>
               <If when={replaceable()}>
-                <ActionButton icon="PhPencilSimple" title={t("secret_replace")} onPress={replace} />
+                <ActionButton icon="PhPencilSimple" title={t("secret_replace")} onLayout={rows.stored.button("replace")} onPress={replace} />
               </If>
             </View>
           </>,
         )}
       </If>
       <If when={mode() === "typing"}>
-        <TextField
-          value={value()}
-          clearable={Boolean(value())}
-          onChange={(next) => props.onChange?.(next)}
-          masked={!typedVisible()}
-          placeholder={props.placeholder}
-          disabled={props.disabled}
-          mono={typedVisible()}
-          testID={props.testID ? `${props.testID}-input` : undefined}
-          accessibilityLabel={props.placeholder || t("secret_value")}
-          inputRef={(node) => {
-            input = node;
-          }}
-          trailing={
-            <View class="-mr-1.5 flex-row items-center">
-              <ActionButton
-                icon={typedVisible() ? "PhEyeSlash" : "PhEye"}
-                title={typedVisible() ? t("secret_hide") : t("secret_reveal")}
-                selected={typedVisible()}
-                disabled={props.disabled}
-                onPress={() => typedVisible.update((on) => !on)}
-              />
-              <If when={canPickTyping()}>
-                <ActionButton icon="PhKey" title={t("secret_picker_open")} disabled={props.disabled} onPress={openPicker} />
-              </If>
-              <If when={configured() && replacing()}>
+        <View {...parts.probe(() => "typing.field")}>
+          <TextField
+            value={value()}
+            clearable={Boolean(value())}
+            onChange={(next) => props.onChange?.(next)}
+            masked={!typedVisible()}
+            placeholder={props.placeholder}
+            disabled={props.disabled}
+            mono={typedVisible()}
+            testID={props.testID ? `${props.testID}-input` : undefined}
+            accessibilityLabel={props.placeholder || t("secret_value")}
+            inputRef={(node) => {
+              input = node;
+            }}
+            trailing={
+              // Inside the field's end, as the stored field's buttons are (no negative margin past
+              // its border); the text before it shrinks instead.
+              <View class="shrink-0 flex-row items-center pr-1" {...rows.typing.row()}>
                 <ActionButton
-                  icon="PhArrowCounterClockwise"
-                  title={t("secret_keep_current")}
+                  icon={typedVisible() ? "PhEyeSlash" : "PhEye"}
+                  title={typedVisible() ? t("secret_hide") : t("secret_reveal")}
+                  selected={typedVisible()}
                   disabled={props.disabled}
-                  onPress={keepCurrent}
+                  onLayout={rows.typing.button("reveal")}
+                  onPress={() => typedVisible.update((on) => !on)}
                 />
-              </If>
-            </View>
-          }
-        />
+                <If when={canPickTyping()}>
+                  <ActionButton
+                    icon="PhKey"
+                    title={t("secret_picker_open")}
+                    disabled={props.disabled}
+                    onLayout={rows.typing.button("picker")}
+                    onPress={openPicker}
+                  />
+                </If>
+                <If when={configured() && replacing()}>
+                  <ActionButton
+                    icon="PhArrowCounterClockwise"
+                    title={t("secret_keep_current")}
+                    disabled={props.disabled}
+                    onLayout={rows.typing.button("undo")}
+                    onPress={keepCurrent}
+                  />
+                </If>
+              </View>
+            }
+          />
+        </View>
       </If>
       <If when={revealError()}>
         <Text class="text-xs text-danger" role="alert">

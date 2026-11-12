@@ -1,7 +1,8 @@
 // A test entry that mounts the settings components (components/settings, MarkdownEditor) on their
 // own, with each value read out beside them, for tests/settings-fields*.test.tsx. The boot location
-// picks the gallery: /fields, /secret, /panel, /routes, /auth, /llm, /markdown, /dialog.
-import type { JSX } from "nsh";
+// picks the gallery: /fields, /secret, /secret-layout, /panel, /routes, /auth, /llm, /markdown,
+// /dialog.
+import type { JSX, ViewRef } from "nsh";
 import { mount, signal, Text, View, Scroll } from "nsh";
 import { configureApiBase, endpointState, localeState } from "../../lib/core/context.js";
 import {
@@ -12,7 +13,8 @@ import {
 } from "../../lib/core/config-options.js";
 import { SETUP_PROVIDER_OPTIONS } from "../../lib/core/setup-contract.js";
 import { boot, initialLocation } from "../../lib/platform";
-import { NoticeHost } from "../../components/ui";
+import { NoticeHost, TextField } from "../../components/ui";
+import type { PartFrame } from "../../components/shared/partProbe";
 import {
   SettingBytes,
   SettingChoices,
@@ -123,6 +125,92 @@ function Secrets() {
         <Out name="secret-fresh" value={fresh()} />
         <SecretInput value={env()} onChange={(v) => env.set(v)} envName="OPENAI_API_KEY" status={{ configured: true, source: "environment_override" }} revealPath="llm.profiles.x.api_key" testID="secret-env" />
         <EnvManagedField name="MISTER_MORPH_LOG_LEVEL=debug" testID="env-field" />
+      </View>
+    </SecretPicker.Provider>
+  );
+}
+
+/**
+ * The secret fields at their widest: under a regular field (the height they match), each reports
+ * its parts' frames (SecretInput's `onPartLayout`), read out as JSON in `id:out-frames`.
+ */
+function SecretLayout() {
+  const frames = signal<Record<string, PartFrame>>({});
+  const report = (field: string) => (name: string, frame: PartFrame) =>
+    frames.update((all) => ({ ...all, [`${field}.${name}`]: frame }));
+  const stored = signal("");
+  const os = signal("");
+  const fresh = signal("");
+  const env = signal("");
+  /** A view that reports its own frame on the page as `name`. */
+  const Probe = (props: { name: string; children?: JSX.Element }) => {
+    let node: ViewRef | undefined;
+    return (
+      <View
+        ref={(value: ViewRef) => {
+          node = value;
+        }}
+        onLayout={() => {
+          node
+            ?.measure()
+            .then((m) => m && report("page")(props.name, { x: m.pagePosition.x, y: m.pagePosition.y, w: m.bounds.size.width, h: m.bounds.size.height }))
+            .catch(() => undefined);
+        }}
+      >
+        {props.children}
+      </View>
+    );
+  };
+  return (
+    <SecretPicker.Provider value={{ enabled: () => true }}>
+      <View class="gap-3 p-4">
+        <Probe name="column">
+          <View class="gap-3">
+            <Probe name="baseline">
+              <TextField value="gpt-5" onChange={() => undefined} placeholder="Model" accessibilityLabel="Model" testID="layout-baseline" />
+            </Probe>
+            <SecretInput
+              value={stored()}
+              onChange={(v) => stored.set(v)}
+              status={{ configured: true, source: "file", editable: true }}
+              revealPath="llm.api_key"
+              placeholder="Paste the new API key from your provider's dashboard"
+              testID="layout-stored"
+              onPartLayout={report("stored")}
+            />
+            <SecretInput
+              value={os()}
+              onChange={(v) => os.set(v)}
+              status={{ configured: true, source: "os", editable: true }}
+              revealPath="llm.profiles.ops.api_key"
+              testID="layout-os"
+              onPartLayout={report("os")}
+            />
+            <SecretInput
+              value={fresh()}
+              onChange={(v) => fresh.set(v)}
+              placeholder="Paste the bot token BotFather gave you when you made the bot"
+              revealPath="telegram.bot_token"
+              testID="layout-fresh"
+              onPartLayout={report("fresh")}
+            />
+            <SecretInput
+              value={env()}
+              onChange={(v) => env.set(v)}
+              envName="MISTER_MORPH_LLM_PROFILES_OPERATIONS_FALLBACK_API_KEY"
+              status={{ configured: true, source: "environment_override" }}
+              revealPath="llm.profiles.ops.fallback_api_key"
+              testID="layout-env"
+              onPartLayout={report("env")}
+            />
+            <Probe name="env-field">
+              <EnvManagedField name="MISTER_MORPH_LLM_PROFILES_OPERATIONS_FALLBACK_MODEL=gpt-5-mini" />
+            </Probe>
+          </View>
+        </Probe>
+        <Text class="text-[6px]" testID="out-frames">{`frames=${JSON.stringify(frames())}`}</Text>
+        <Out name="layout-stored" value={stored()} />
+        <Out name="layout-fresh" value={fresh()} />
       </View>
     </SecretPicker.Provider>
   );
@@ -366,6 +454,7 @@ function Dialog() {
 const PANELS: Record<string, () => JSX.Element> = {
   "/fields": Fields,
   "/secret": Secrets,
+  "/secret-layout": SecretLayout,
   "/panel": Panel,
   "/routes": Routes,
   "/auth": Auth,

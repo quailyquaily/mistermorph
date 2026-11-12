@@ -633,6 +633,8 @@ const FIELD_SIZES = {
   xs: { box: "min-h-8", text: "text-xs" },
 } as const;
 const CLEAR_SIZES = { md: 32, sm: 28, xs: 24 } as const;
+/** A regular (md) field's height, for boxes that stand in for one (a stored secret, a locked field). */
+export const FIELD_HEIGHT = FIELD_SIZES.md.box;
 const FIELD_FOCUS = { borderColor: "#426f9e9e", boxShadow: "0 0 0 1px rgba(66, 111, 158, 0.16)" };
 
 /** A text field with its label, hint and error, as the Vue console's AppInput and AppTextarea. */
@@ -674,7 +676,7 @@ export function TextField(props: TextFieldProps) {
           autoCorrect={false}
           accessibilityLabel={props.accessibilityLabel || props.label || props.placeholder}
           testID={props.testID}
-          class={`flex-1 self-stretch ${props.multiline ? "p-3 leading-[18.2px]" : `${props.leadingIcon ? "pl-0.5" : "pl-3"} pr-3 py-1.5`} ${
+          class={`min-w-0 flex-1 self-stretch ${props.multiline ? "p-3 leading-[18.2px]" : `${props.leadingIcon ? "pl-0.5" : "pl-3"} pr-3 py-1.5`} ${
             size().text
           } text-foreground placeholder:text-placeholder caret-blue selection:bg-[#426f9e38] ${props.mono ? "font-mono" : ""} ${
             props.inputClass ?? ""
