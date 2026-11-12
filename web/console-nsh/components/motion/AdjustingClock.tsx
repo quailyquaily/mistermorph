@@ -51,6 +51,8 @@ export function AdjustingClock(props: {
   adjustingTestID?: string;
   /** Hears how to read the hands (tests). */
   probe?: (read: ClockProbe) => void;
+  /** Its frame in its parent as it lays out (layout probes in tests). */
+  onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
 }) {
   const size = untracked(() => props.size ?? 14);
   const still = untracked(reduceMotion);
@@ -129,7 +131,7 @@ export function AdjustingClock(props: {
   // The icon's 256 grid in points.
   const unit = size / 256;
   return (
-    <View accessibilityElementsHidden testID={props.testID} style={{ width: size, height: size }}>
+    <View accessibilityElementsHidden testID={props.testID} onLayout={props.onLayout} style={{ width: size, height: size }}>
       <Image
         src={FACE}
         accessibilityElementsHidden

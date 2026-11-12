@@ -29,14 +29,15 @@ const right = (frame: Frame) => frame.x + frame.w;
 const centerX = (frame: Frame) => frame.x + frame.w / 2;
 
 // The head's last button: a whole 38pt hit area ending `inset` in from the sidebar's outer right
-// edge (the 314pt sidebar has 4pt of right padding of its own, a split one none), and its 14pt icon
-// in the middle of it. Returns the icon, the axis the marks are centred on.
+// edge (the 314pt sidebar has 4pt of right padding of its own, a split one none), and its 16pt icon
+// (BAR_ICON_SIZE, tests/topic-head-icons.test.tsx) in the middle of it. Returns the icon, the axis
+// the marks are centred on.
 function expectHead(all: Record<string, Frame>, inset: number): Frame {
   const action = all["head-action"];
   const icon = all["head-icon"];
   expect(Math.abs(action.w - 38)).toBeLessThan(0.5);
   expect(Math.abs(right(all.sidebar) - right(action) - inset)).toBeLessThan(0.5);
-  expect(Math.abs(icon.w - 14)).toBeLessThan(0.5);
+  expect(Math.abs(icon.w - 16)).toBeLessThan(0.5);
   expect(Math.abs(centerX(icon) - centerX(action))).toBeLessThan(0.5);
   return icon;
 }
@@ -63,7 +64,7 @@ for (const item of CASES) {
       expect(Math.abs(mark.w - 7)).toBeLessThan(0.5);
       // Centre on centre, not edge on edge: the mark ends half a button less half a mark
       // (15.5pt) further in than the button. Layout snaps frames to whole points, so an odd 7pt
-      // mark's centre lies half a point off an even 14pt icon's at best.
+      // mark's centre lies half a point off an even 16pt icon's at best.
       expect(Math.abs(centerX(mark) - centerX(icon))).toBeLessThanOrEqual(0.5);
       expect(mark.x).toBeGreaterThan(sidebar.x);
       expect(right(mark)).toBeLessThan(right(sidebar) - item.inset);
