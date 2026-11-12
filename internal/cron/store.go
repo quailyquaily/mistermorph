@@ -230,7 +230,8 @@ func (s *Store) AddRecurringWithChatID(title, content, expr, tz, id, chatID stri
 	return s.AddRecurring(Task{Title: title, Content: content, Cron: expr, TZ: tz, ID: id, ChatID: chatID})
 }
 
-// AddOnce adds a one-time task. Only the one-time fields of task are kept.
+// AddOnce adds a one-time task. Only the one-time fields of task are kept, its bash_env among
+// them.
 func (s *Store) AddOnce(task Task) (AddResult, error) {
 	return s.addTask("add_once", Task{
 		ID:           normalizeTaskID(task.ID),
@@ -240,10 +241,12 @@ func (s *Store) AddOnce(task Task) (AddResult, error) {
 		Content:      strings.TrimSpace(task.Content),
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
+		BashEnv:      normalizeBashEnvRefs(task.BashEnv),
 	})
 }
 
-// AddRecurring adds a recurring task. Only the recurring fields of task are kept.
+// AddRecurring adds a recurring task. Only the recurring fields of task are kept, its bash_env
+// among them.
 func (s *Store) AddRecurring(task Task) (AddResult, error) {
 	return s.addTask("add_recurring", Task{
 		ID:           normalizeTaskID(task.ID),
@@ -253,6 +256,7 @@ func (s *Store) AddRecurring(task Task) (AddResult, error) {
 		Content:      strings.TrimSpace(task.Content),
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
+		BashEnv:      normalizeBashEnvRefs(task.BashEnv),
 	})
 }
 
@@ -277,6 +281,48 @@ func (s *Store) addTask(action string, task Task) (AddResult, error) {
 			TaskCount: len(tasks),
 			Task:      &task,
 		}
+		return nil
+	})
+	return result, err
+}
+
+// ErrTaskNotFound is an update of an id the list does not have.
+var ErrTaskNotFound = errors.New("no TODO task with that id")
+
+// Update changes the task id in place, in one transaction: only the fields patch sets are
+// written, and every other field, the id, the task's position and its last run stay as they
+// were. Setting at alone makes the task one-time (its cron is cleared) and setting cron alone
+// makes it recurring (its at is cleared). The changed task is validated as a whole first; an
+// unknown id, an empty patch or a task that does not validate changes nothing.
+func (s *Store) Update(ctx context.Context, id string, patch TaskPatch) (UpdateResult, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return UpdateResult{}, fmt.Errorf("id is required")
+	}
+	if patch.IsEmpty() {
+		return UpdateResult{}, fmt.Errorf("update needs at least one field to change")
+	}
+	var result UpdateResult
+	err := s.mutate(ctx, func(ctx context.Context, tx *sql.Tx, tasks []Task) error {
+		idx := -1
+		for i, task := range tasks {
+			if strings.TrimSpace(task.ID) == id {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
+		}
+		updated, fields := patch.apply(tasks[idx])
+		if err := ValidateTask(updated); err != nil {
+			return err
+		}
+		tasks[idx] = updated
+		if err := writeTasks(ctx, tx, File{Version: Version, Tasks: tasks}); err != nil {
+			return err
+		}
+		result = UpdateResult{OK: true, Action: "update", TaskCount: len(tasks), Task: &updated, Fields: fields}
 		return nil
 	})
 	return result, err

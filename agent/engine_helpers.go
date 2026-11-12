@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -280,9 +281,123 @@ func toolDisplayArgsSummary(toolName string, params map[string]any, opts LogOpti
 	if maxStr <= 0 || maxStr > 240 {
 		maxStr = 240
 	}
-	sanitized, _ := sanitizeValue(params, maxStr, opts.RedactKeys, "").(map[string]any)
+	sanitized, _ := sanitizeValue(redactToolParamValues(toolName, params), maxStr, opts.RedactKeys, "").(map[string]any)
 	if len(sanitized) == 0 {
 		return nil
 	}
 	return sanitized
+}
+
+// RedactToolParamsForDisplay returns a tool call's parameters as a UI may show them: with the
+// values the tool keeps secret replaced, the same way tool events and logs show them. The call's
+// own parameters are never changed; the result is params itself when nothing is secret, or a
+// shallow copy. It is idempotent, so parameters already redacted (such as a tool event's Args)
+// can be passed again. Callers must keep executing with the original parameters.
+func RedactToolParamsForDisplay(toolName string, params map[string]any) map[string]any {
+	if len(params) == 0 {
+		return params
+	}
+	return redactToolParamValues(toolName, params)
+}
+
+// redactToolParamValues returns params with the values a tool keeps secret replaced, for logs
+// and tool events: todo_update's bash_env values, which may be credentials (the names stay), and
+// a codemode script's source, which may hold the values the script passes to such a tool.
+func redactToolParamValues(toolName string, params map[string]any) map[string]any {
+	switch strings.TrimSpace(toolName) {
+	case codeModeToolName:
+		return withheldCodeModeParams(params)
+	case "todo_update":
+	default:
+		return params
+	}
+	raw, ok := params["bash_env"]
+	if !ok || raw == nil {
+		return params
+	}
+	var entries []any
+	switch v := raw.(type) {
+	case []any:
+		entries = v
+	case []map[string]any:
+		for _, entry := range v {
+			entries = append(entries, entry)
+		}
+	default:
+		// Not the documented shape; nothing in it is shown.
+		out := make(map[string]any, len(params))
+		for k, v := range params {
+			out[k] = v
+		}
+		out["bash_env"] = "[redacted]"
+		return out
+	}
+	redacted := make([]any, 0, len(entries))
+	for _, entry := range entries {
+		item, ok := entry.(map[string]any)
+		if !ok {
+			redacted = append(redacted, "[redacted]")
+			continue
+		}
+		copied := make(map[string]any, len(item))
+		for k, v := range item {
+			if k == "name" {
+				copied[k] = v
+			} else {
+				copied[k] = "[redacted]"
+			}
+		}
+		redacted = append(redacted, copied)
+	}
+	out := make(map[string]any, len(params))
+	for k, v := range params {
+		out[k] = v
+	}
+	out["bash_env"] = redacted
+	return out
+}
+
+const codeModeWithheld = "[withheld]"
+
+// withheldCodeModeParams replaces a codemode call's parameters with the size of its script. Which
+// values a script passes to its calls is only known once it runs, and it may build them in any
+// expression, so no part of the source is shown; each call the script makes is shown on its own,
+// with its own redaction. Parameters codemode does not take are left out as well.
+func withheldCodeModeParams(params map[string]any) map[string]any {
+	raw, ok := params["code"]
+	if !ok {
+		return map[string]any{}
+	}
+	code, isString := raw.(string)
+	if !isString {
+		return map[string]any{"code": codeModeWithheld}
+	}
+	if code == codeModeWithheld {
+		// Already withheld (a tool event's Args shown again): keep the recorded size, and only
+		// as plain numbers.
+		out := map[string]any{"code": codeModeWithheld}
+		for _, key := range []string{"code_chars", "code_lines"} {
+			if isPlainNumber(params[key]) {
+				out[key] = params[key]
+			}
+		}
+		return out
+	}
+	return map[string]any{
+		"code":       codeModeWithheld,
+		"code_chars": utf8.RuneCountInString(code),
+		"code_lines": strings.Count(strings.TrimRight(code, "\n"), "\n") + 1,
+	}
+}
+
+func isPlainNumber(value any) bool {
+	switch v := value.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return true
+	case json.Number:
+		_, err := v.Float64()
+		return err == nil
+	default:
+		return false
+	}
 }

@@ -1,5 +1,5 @@
 [[ Cron Task Workflow ]]
-ONLY Use this workflow when you need to schedule something for future work, or remove an existing scheduled task.
+ONLY Use this workflow when you need to schedule something for future work, change an existing scheduled task, or remove an existing scheduled task.
 
 Scheduled tasks are kept by the agent itself (in `agent.db`); read and change them only with `todo_update`, never as a file.
 
@@ -9,6 +9,14 @@ ENDIF
 
 IF user asks to schedule a repeated task THEN
   call `todo_update` with action `add_recurring`
+ENDIF
+
+IF user asks to change an existing scheduled task (its content, title, time, schedule, timezone, workspace or bash_env) THEN
+  call `todo_update` with action `update`, the task's `id`, and ONLY the fields that change
+  omitted fields keep their current values, including `bash_env`, `workspace_dir`, `chat_id`, `tz` and the schedule
+  never delete and re-add a task to edit it: that loses settings the new task does not repeat
+  `content` is stored exactly as given; keep existing references like `[John](tg:@johnwick)` in it
+  to clear a field pass `""`, and pass `bash_env: []` to clear the bash environment; omitting `bash_env` keeps it
 ENDIF
 
 IF user asks to remove a scheduled task THEN

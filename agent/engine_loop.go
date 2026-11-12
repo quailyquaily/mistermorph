@@ -495,7 +495,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 				toolLog.Info("tool_call", fields...)
 				if e.logOpts.IncludeToolParams {
 					infoFields := []any{"step", step, "tool", tc.Name,
-						"params", paramsAsJSON(tc.Params, e.logOpts.MaxJSONBytes, e.logOpts.MaxStringValueChars, e.logOpts.RedactKeys),
+						"params", paramsAsJSON(redactToolParamValues(tc.Name, tc.Params), e.logOpts.MaxJSONBytes, e.logOpts.MaxStringValueChars, e.logOpts.RedactKeys),
 					}
 					if len(toolCalls) > 1 {
 						infoFields = append(infoFields, "tool_index", i, "tool_count", len(toolCalls))

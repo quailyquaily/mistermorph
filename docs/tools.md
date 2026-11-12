@@ -278,43 +278,47 @@ Parameters:
 
 ## `todo_update`
 
-Purpose: maintain scheduled TODO tasks in `file_state_dir/cron.yaml`.
+Purpose: maintain scheduled TODO tasks in `file_state_dir/cron.yaml`: add, edit in place, or delete them.
 
 Parameters:
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `action` | `string` | Yes | None | `add_once`, `add_recurring`, or `delete`. |
-| `title` | `string` | No | Default task title | Short task title for `add_once` and `add_recurring`. |
-| `content` | `string` | Yes for add actions; required for delete without `id` | None | Task content, or semantic delete query when `id` is omitted. |
-| `at` | `string` | Yes for `add_once` | None | One-time schedule in `YYYY-MM-DD HH:mm`. |
-| `cron` | `string` | Yes for `add_recurring` | None | Five-field numeric cron expression. |
-| `tz` | `string` | No | Runtime local timezone | IANA timezone or UTC offset, for example `Asia/Tokyo` or `UTC+8`. |
-| `id` | `string` | No for add; preferred for delete | Generated for add | Stable task ID. |
-| `people` | `array<string>` | No | None | Mentioned people to resolve into explicit reference IDs in added content. |
-| `chat_id` | `string` | No | Empty | Task-context chat ID, for example `tg:-1001234567890`. |
-| `workspace_dir` | `string` | No | Runtime default workspace | Workspace directory for the task's runs: an absolute path or `~/...`, or the literal `workspace_dir` for the workspace attached to the current conversation. The directory must exist when the task is added. |
+| `action` | `string` | Yes | None | `add_once`, `add_recurring`, `update`, or `delete`. |
+| `id` | `string` | Yes for `update`; preferred for `delete`; no for add | Generated for add | Stable task ID. |
+| `title` | `string` | No | Default task title | Short task title. For `update`, `""` resets it to the default title. |
+| `content` | `string` | Yes for add actions; required for delete without `id` | None | Task content, or semantic delete query when `id` is omitted. For `update`, the new content, stored exactly as given (surrounding whitespace trimmed; `people` references are not resolved). |
+| `at` | `string` | Yes for `add_once` | None | One-time schedule in `YYYY-MM-DD HH:mm`. For `update`, setting `at` alone makes the task one-time and clears its `cron`. |
+| `cron` | `string` | Yes for `add_recurring` | None | Five-field numeric cron expression. For `update`, setting `cron` alone makes the task recurring and clears its `at`. |
+| `tz` | `string` | No | Runtime local timezone | IANA timezone or UTC offset, for example `Asia/Tokyo` or `UTC+8`. For `update`, `""` clears it. |
+| `people` | `array<string>` | No | None | Mentioned people to resolve into explicit reference IDs in added content. Add actions only: `update` rejects a nonempty list. |
+| `chat_id` | `string` | No | Empty (`console:user` in the Console runtime on add) | Task-context chat ID, for example `tg:-1001234567890`. For `update`, `""` clears it; there is no default. |
+| `workspace_dir` | `string` | No | Runtime default workspace | Workspace directory for the task's runs: an absolute path or `~/...`, or the literal `workspace_dir` for the workspace attached to the current conversation. The directory must exist when the task is added or updated. For `update`, `""` clears it back to the runtime default. |
+| `bash_env` | `array<object>` | No | None | Environment variables injected into `bash` when the task runs, in the task's stored form: `[{"name": "REPORT_MODE", "value": "weekly"}]`. Names are letters, digits and underscores, not starting with a digit; values may reference environment variables as `${NAME}`, which is preferred over literal secrets. For `update`, the list replaces the whole `bash_env`, `[]` clears it, and omitting `bash_env` keeps it unchanged. |
+
+`update` edits a task in place by `id` and changes only the parameters passed: every omitted field (including `bash_env`, `workspace_dir`, schedule, `tz`, `chat_id` and `title`) and the task's run metadata keep their values, and the `id` stays the same. Edit tasks with `update`, not by deleting and re-adding them. Pass at least one field to change; `null` is rejected for every field rather than read as "keep" or "clear" (omit a field to keep it, pass `""` or `[]` to clear it). Parameters `update` does not use are ignored.
 
 Returns:
 
-- `add_once` and `add_recurring` return `AddResult` JSON:
-  - `ok`: whether operation succeeded (boolean).
-  - `action`: executed action.
-  - `task_count`: number of tasks after the update.
-  - `task`: added task.
-  - `warnings`: optional reference-resolution warnings.
-- `delete` returns `DeleteResult` JSON:
-  - `ok`: whether operation succeeded.
-  - `action`: `delete`.
-  - `task_count`: number of tasks after deletion.
-  - `deleted`: deleted task.
+All actions return JSON with:
+
+- `ok`: whether the operation succeeded (boolean).
+- `action`: executed action.
+- `task_count`: number of tasks after the operation.
+- `task`: the added or updated task (add actions and `update`).
+- `deleted`: the deleted task (`delete`).
+- `fields`: the fields `update` changed, for example `["content", "bash_env"]` (`update` only).
+- `warnings`: optional reference-resolution warnings (add actions).
+
+A task in a result never includes `bash_env` values: `bash_env` is left out and `bash_env_names` lists the variable names, for example `"bash_env_names": ["API_TOKEN"]`. Errors name a bad entry by its index, never its value. In tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript, `todo_update` arguments show each `bash_env` name with its value as `"[redacted]"`; a [`codemode`](#codemode) script that calls `todo_update` is shown by its size only.
 
 Constraints:
 
 - Controlled by `tools.todo_update.enabled`.
 - Add actions require an LLM client and model when `people` resolution is needed.
 - Add actions validate markdown reference IDs before writing.
-- Delete by `id` does not require an LLM.
+- `update` and delete by `id` do not require an LLM.
+- `update` runs in one transaction: an unknown `id`, an invalid field, or a resulting task that does not validate (for example a bad schedule or `bash_env` name) returns an error and leaves the stored task unchanged.
 - Delete without `id` uses LLM semantic matching on `content`; no match and ambiguous match both return errors.
 
 Errors (string matching):
@@ -323,16 +327,23 @@ Errors (string matching):
 |---|---|
 | `todo_update tool is disabled` | Tool is disabled. |
 | `action is required` | Missing `action`. |
-| `content is required` | Missing or empty `content`. |
-| `invalid action:` | `action` is not `add_once/add_recurring/delete`. |
+| `content is required` | Missing or empty `content` for an add action. |
+| `invalid action:` | `action` is not `add_once/add_recurring/update/delete`. |
 | `todo_update unavailable (missing llm client)` | LLM client not injected. |
 | `todo_update unavailable (missing llm model)` | LLM model not configured. |
 | `invalid reference id:` | Invalid `(...)` reference exists in text. |
 | `missing_reference_id` | Mentioned person cannot be uniquely resolved to a reference ID. |
 | `people must be an array of strings` | `people` is not a string array. |
+| `people is not used by update` | `update` received a nonempty `people`. |
 | `workspace_dir:` | `workspace_dir` does not exist, is not a directory, or names the current workspace when none is attached. |
+| `update needs the id of the task to change` | `update` without `id`. |
+| `update needs at least one field to change` | `update` with no field to change. |
+| `no TODO task with that id` | `update` named an unknown `id`. |
+| `must be a string` / `must be an array` | A field has the wrong type or is `null`. |
+| `bash_env must be an array of` | `bash_env` is not a list of `{name, value}` objects. |
+| `bash_env[` | A `bash_env` entry has a missing or invalid name or value. |
 | `invalid reference_resolve response` | Reference insertion LLM returned invalid JSON. |
-| `no matching cron task in cron.yaml` | Delete found no matching task. |
+| `no matching TODO task` | Delete found no matching task. |
 | `ambiguous cron task match` | Delete without `id` matched multiple candidates. |
 | `invalid semantic_match response` | Delete semantic match LLM returned invalid JSON/schema. |
 
@@ -614,6 +625,7 @@ Rules:
 - Limits: `timeout` (default 120s, also bounded by the task deadline), `max_tool_calls` (256, including searches), `max_parallel_calls` (4); source 64 KiB, one tool argument object 256 KiB, one result 1 MiB, all results 8 MiB, output 64 KiB or 256 items.
 - Memory is watched, not capped: while scripts run, the process heap is sampled every 100 ms, each result logs its approximate heap growth, and running scripts stop with `memory_limit` when the heap passes 90% of `GOMEMLIMIT` (2 GiB without one). A single large allocation can still exhaust the process. Set `tools.codemode.enabled: false` to turn it off.
 - In the Console activity panel a script is one entry with its calls listed under it; the CLI prints them indented under `▸ codemode`.
+- Tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript never show a script's source, only `code_chars` and `code_lines`: a script can pass secrets to its calls (such as `todo_update` `bash_env` values) through any expression, which is only known once it runs. Each call the script makes is shown on its own, with that tool's redaction. The conversation and run state keep the source.
 
 ## `plan_create`
 
