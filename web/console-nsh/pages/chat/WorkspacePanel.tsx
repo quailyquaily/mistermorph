@@ -421,7 +421,7 @@ export function WorkspacePanelTabs(props: {
  * the same 448pt, so output and reasoning get the whole screen; the close in its head and Back
  * take it away (there is no scrim beside it on a phone to press).
  */
-export function WorkspaceSheet(props: { open: boolean; onClose: () => void; wide?: boolean; children?: any }) {
+export function WorkspaceSheet(props: { open: boolean; onClose: () => void; children?: any }) {
   const padding = () => {
     const insets = rightSheetSystemInsets();
     return insets ? { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom } : undefined;
@@ -434,7 +434,7 @@ export function WorkspaceSheet(props: { open: boolean; onClose: () => void; wide
         if (!open) props.onClose();
       }}
       backdropClass="bg-scrim"
-      popupClass={`h-full ${props.wide ? "w-full" : "w-[88%]"} max-w-md border-l border-line bg-card`}
+      popupClass="h-full w-[88%] max-w-md border-l border-line bg-card"
       popupStyle={padding()}
     >
       {props.children}

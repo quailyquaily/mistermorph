@@ -1,7 +1,7 @@
-// What the temporary detail panel beside the conversation shows: one reply's plan, progress or
-// reasoning, or one of its workers' output. A reply only keeps compact entry points (the status
-// columns, the worker chips); pressing one selects it here, and the page shows it in the panel at
-// the right, in place of the topic and workspace panel (the two are one right panel, never both).
+// What the temporary detail panel shows: one reply's plan, progress or reasoning, or one of its
+// workers' output. A reply only keeps compact entry points (the status columns, the worker chips);
+// pressing one selects it here, and the page shows it in the frame's workbench (wide windows) or in
+// the phone's right sheet.
 //
 // A selection names its reply by id (and its task, should the reply be replaced by the task's own
 // row) and its worker by id, never a copy of the data: the panel looks them up in the live history,

@@ -1,12 +1,14 @@
-// The temporary detail panel at the right of the conversation: a reply's plan, progress, reasoning
-// and workers open there (never inside the conversation), one at a time; it and the topic and
-// workspace panel replace each other; close, Escape and Back dismiss it; another conversation
+// The temporary detail panel, in the frame's workbench (docked under the window) on wide windows: a
+// reply's plan, progress, reasoning and workers open there (never inside the conversation), one at a
+// time, beside the topic and workspace panel; the workbench opens at half its room and its edge
+// resizes it; on phones the right sheet. Close, Escape and Back dismiss it; another conversation
 // closes it; and what still streams keeps growing in it. Progress and a coder's output never repeat
 // the message the reply answers at their top; the conversation keeps it.
 import { batch, effect, signal, untracked } from "nsh";
 import { expect, open, test, type App } from "nsh/test";
 import { createFocusReturn } from "../components/chat/activityDetail";
 import { localEndpoint, openConsole, type ApiRequest } from "./harness";
+import { clampWorkbenchShare, workbenchHeight } from "../components/frame/Workbench";
 
 const NOW = new Date().toISOString();
 const TOPICS = {
@@ -270,28 +272,112 @@ test("closing the panel leaves the focus in the composer that had it", async () 
   await app.waitUntil(() => app.value("id:chat-composer-input") === "half!");
 });
 
-test("the detail panel and the workspace panel replace each other, both ways", async () => {
+test("on a wide window the details open in the frame's workbench, beside the workspace panel", async () => {
   const { app } = await openChat({ kv: PANEL_OPEN });
   await app.waitFor("id:chat-workspace-panel");
-  // The detail panel takes the workspace panel's place.
+  // The workbench is the frame's, docked under the window (not inside the chat page); the
+  // workspace panel stays at the right.
   await app.press("id:chat-status-plan");
-  await app.waitFor("id:chat-detail-panel");
-  expect(app.shows("id:chat-workspace-panel")).toBe(false);
-  expect(app.count("id:chat-right-panel")).toBe(1);
-  // The workspace toggle (over the conversation now) brings the workspace panel back in its place.
+  await app.waitFor("id:workbench >> id:chat-detail-panel");
+  expect(app.shows("id:chat-page >> id:workbench")).toBe(false);
+  expect(app.shows("id:chat-workspace-panel")).toBe(true);
+  expect(app.shows("id:chat-right-panel >> id:chat-detail-panel")).toBe(false);
+  // The workspace toggle closes the workspace panel only; the sheet stays.
+  await app.press("id:chat-workspace-toggle");
+  await app.waitFor("id:chat-workspace-panel", { state: "gone" });
+  expect(app.shows("id:workbench")).toBe(true);
+  // A worker takes the sheet over; the toggle brings the workspace panel back beside it.
+  await app.press("label:Curie · Coder · Done");
+  await app.waitFor("id:chat-detail-panel >> text:compiled 3 files");
   await app.press("id:chat-workspace-toggle");
   await app.waitFor("id:chat-workspace-panel");
-  expect(app.shows("id:chat-detail-panel")).toBe(false);
-  expect(app.count("id:chat-right-panel")).toBe(1);
-  // And a worker replaces it again.
-  await app.press("label:Curie · Coder · Done");
-  await app.waitFor("id:chat-detail-panel");
-  expect(app.shows("id:chat-workspace-panel")).toBe(false);
-  // Closing the details leaves no panel; the workspace panel stays remembered as open for next time.
+  expect(app.count("id:chat-detail-panel")).toBe(1);
+  // Closing the details leaves the workspace panel as it was.
   await app.press("id:chat-detail-close");
-  await app.waitFor("id:chat-detail-panel", { state: "gone" });
-  expect(app.shows("id:chat-workspace-panel")).toBe(false);
-  expect(app.shows("id:chat-right-panel")).toBe(false);
+  await app.waitFor("id:workbench", { state: "gone" });
+  expect(app.shows("id:chat-workspace-panel")).toBe(true);
+});
+
+test("the workbench's edge resizes it by drag, within its room, and the height is kept for next time", async () => {
+  const KEY = "mistermorph_console_workbench_height_v1";
+  // What has been kept: the last height written to the app's storage, as a share of the room.
+  const kept = (app: App) => {
+    const writes = app.host.calls().filter((call) => call.name === "morph.kv.set" && (call.data as any)?.key === KEY);
+    return writes.length ? Number((writes.at(-1)!.data as any).value) : null;
+  };
+  const { app } = await openChat();
+  await app.press("id:chat-status-plan");
+  await app.waitFor("id:workbench");
+  expect(kept(app)).toBe(null);
+  // Dragged up, it grows from half, and is kept once the drag ends.
+  await app.drag("id:workbench-edge", { x: 0, y: -80 });
+  await app.waitUntil(() => (kept(app) ?? 0) > 0.5);
+  const grown = kept(app)!;
+  // Dragged far down, it stops at its least; far up, short of the top.
+  await app.drag("id:workbench-edge", { x: 0, y: 2000 });
+  await app.waitUntil(() => (kept(app) ?? 1) < grown);
+  expect(kept(app)!).toBeGreaterThanOrEqual(0.2);
+  await app.drag("id:workbench-edge", { x: 0, y: -4000 });
+  await app.waitUntil(() => (kept(app) ?? 0) > grown);
+  expect(kept(app)!).toBeLessThanOrEqual(0.8);
+});
+
+test("the workbench's height: its share of the room, at least its head and a few lines, leaving the composer room", () => {
+  expect(workbenchHeight(800, 0.5)).toBe(400);
+  expect(workbenchHeight(800, 0.05)).toBe(140);
+  expect(workbenchHeight(800, 0.95)).toBe(600);
+  expect(workbenchHeight(500, 0.9)).toBe(300);
+  // A short room keeps the sheet's least over the room above.
+  expect(workbenchHeight(300, 0.5)).toBe(140);
+  // What is kept stays between a fifth and four fifths; anything unreadable is half.
+  expect(clampWorkbenchShare(0.05)).toBe(0.2);
+  expect(clampWorkbenchShare(0.95)).toBe(0.8);
+  expect(clampWorkbenchShare(Number("x"))).toBe(0.5);
+});
+
+test("reasoning is plain mono text as written, not rendered markdown", async () => {
+  const MARKED = task("t1", { status: "done", finished_at: NOW, result: { final: { output: "ok" }, reasoning: "**Check** the `du` output first." } });
+  const { app } = await openChat({ api: { "GET /proxy:/tasks": listOf(MARKED) } });
+  await app.press("id:chat-status-reasoning");
+  await app.waitFor("id:chat-detail-reasoning-text");
+  expect(app.texts()).toContain("**Check** the `du` output first.");
+  expect(app.shows("id:chat-detail-panel >> id:chat-code-block")).toBe(false);
+});
+
+test("a worker's panel is its conversation: what the agent asked, the calls it made, what it answered", async () => {
+  const TASK = "Find the two biggest cache folders under /var/cache and report their sizes.";
+  const SPAWNED = task("t1", {
+    status: "done",
+    finished_at: NOW,
+    result: {
+      final: { output: "ok" },
+      activity: {
+        history: [
+          {
+            id: "a2",
+            kind: "tool",
+            name: "spawn",
+            status: "done",
+            args: { task: TASK, tools: ["bash", "read_file"], model_profile: "fast" },
+            children: [{ id: "a2.1", kind: "tool", name: "bash", status: "done", args: { cmd: "du -sh /var/cache/*" } }],
+          },
+        ],
+        workers: [{ id: "w2", name: "Noether", name_index: 4, avatar_index: 1, kind: "subagent", status: "done", activity_id: "a2", result: "apt 1.2G, pip 800M" }],
+      },
+    },
+  });
+  const { app } = await openChat({ api: { "GET /proxy:/tasks": listOf(SPAWNED) } });
+  await app.press("label:Noether · Subagent · Done");
+  await app.waitFor("id:chat-worker-ask");
+  // What the agent asked, whole, and the call's settings.
+  expect(app.shows("id:chat-worker-ask >> text:/Morph → Noether/i")).toBe(true);
+  expect(app.texts()).toContain(TASK);
+  expect(app.shows("id:chat-worker-ask >> text:bash, read_file")).toBe(true);
+  expect(app.shows("id:chat-worker-ask >> text:fast")).toBe(true);
+  // The calls it made on its own.
+  expect(app.shows("id:chat-worker-calls >> text:bash")).toBe(true);
+  // What it answered.
+  expect(app.shows("id:chat-worker-answer >> text:apt 1.2G, pip 800M")).toBe(true);
 });
 
 test("another topic or a new chat closes the panel", async () => {
@@ -360,11 +446,13 @@ test("a running task's progress and a worker's output keep growing in the open p
   expect(userMessageShown(app)).toBe(true);
 });
 
-test("on a phone the details open in the right sheet, and Back closes it to the conversation", async () => {
+test("on a phone the details slide up in the workbench at the bottom, and Back closes it to the conversation", async () => {
   const { app } = await openConsole({ platform: "android", location: CHAT, api: API });
   await app.waitFor("id:chat-status-card");
   await app.press("id:chat-status-plan");
-  await app.waitFor("id:chat-detail-panel");
+  await app.waitFor("id:workbench >> id:chat-detail-panel");
+  // Its grab strip shows it can change height.
+  expect(app.shows("id:workbench >> id:workbench-handle")).toBe(true);
   expect(inPanel(app, "Look around")).toBe(true);
   expect(hasContext(app)).toBe(true);
   expect(app.shows("id:chat-workspace-panel")).toBe(false);
@@ -389,7 +477,7 @@ test("on a phone the details open in the right sheet, and Back closes it to the 
   await app.waitFor("id:chat-detail-panel", { state: "gone" });
   await app.press("id:chat-status-plan");
   await app.waitFor("id:chat-detail-panel");
-  // Back closes the sheet, not the topic.
+  // Back closes the workbench, not the topic.
   await app.back();
   await app.waitFor("id:chat-detail-panel", { state: "gone" });
   expect(app.shows("id:chat-back")).toBe(true);
@@ -398,17 +486,16 @@ test("on a phone the details open in the right sheet, and Back closes it to the 
   await app.waitFor("id:chat-detail-panel");
   await app.press("id:chat-detail-close");
   await app.waitFor("id:chat-detail-panel", { state: "gone" });
-  // The workspace sheet still opens from the bar, alone.
+  // The workspace panel is still the right sheet, from the bar.
   await app.press("id:chat-workspace-toggle");
   await app.waitFor("id:chat-workspace-panel");
   expect(app.shows("id:chat-detail-panel")).toBe(false);
 });
 
-// The sheet goes out with what it showed: closing the details does not put the workspace panel
-// (or its narrower width) in the sheet under its exit (chatController's mobileSheetDetail).
-// Headless runs do not draw the sheet's exit, so this checks only that the workspace panel never
-// shows on the way out; the exit's look is not checked here.
-test("on a phone the closing sheet keeps the details, never showing the workspace panel", async () => {
+// The workbench goes out with what it showed (chatController's workbenchDetail), and closing the
+// details never brings up the workspace panel. Headless runs do not draw the slide, so this checks
+// only that the workspace panel never shows on the way out; the exit's look is not checked here.
+test("on a phone the closing workbench keeps the details, never showing the workspace panel", async () => {
   const { app } = await openConsole({ platform: "android", location: CHAT, api: API });
   await app.waitFor("id:chat-status-card");
   await app.press("id:chat-status-plan");
@@ -459,7 +546,7 @@ test("the open plan follows the reply as it changes, and says when there is noth
   await app.press("id:show-coder");
   await app.waitFor("id:chat-detail-worker");
   expect(inPanel(app, "Curie")).toBe(true);
-  expect(inPanel(app, "No output yet.")).toBe(true);
+  expect(inPanel(app, "Running…")).toBe(true);
   expect(hasContext(app)).toBe(false);
   await app.press("id:show-subagent");
   await app.waitUntil(() => inPanel(app, "Noether"));

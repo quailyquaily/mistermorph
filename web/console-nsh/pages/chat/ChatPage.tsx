@@ -1,7 +1,7 @@
-// Chat: the agent's topics, the open conversation and its composer, and the panel at its right
-// (web/console/src/views/ChatView.js): the topic and workspace panel, or the temporary detail panel
-// of a reply's plan, progress, reasoning or worker, never both. On phones (≤ 980 points) the topic
-// list and the conversation are separate views, and the panel is a sheet. The behaviour is in
+// Chat: the agent's topics, the open conversation and its composer, the topic and workspace panel at
+// its right (web/console/src/views/ChatView.js); a reply's plan, progress, reasoning or worker opens
+// in the frame's workbench, docked under the window (components/frame/Workbench.tsx). On phones (≤ 980 points) the topic list and the
+// conversation are separate views, and the workspace panel is the right sheet. The behaviour is in
 // chatController.
 import { Text, untracked, View } from "nsh";
 import { BackButton, Fab, Icon, Kicker, MessageDialog, Page, PageBar, Tip, TipButton } from "../../components/ui";
@@ -19,10 +19,10 @@ import { createChatController, type ChatController } from "./chatController";
 import { FilePreviewDialog } from "./FilePreviewDialog";
 import { TopicRenameDialog } from "./TopicRenameDialog";
 import { TopicSidebar } from "./TopicSidebar";
-import { Entrance } from "../../components/motion";
 import { createPaneStack } from "../../components/motion/PaneStack";
 import { ActivityDetailPanel } from "./ActivityDetailPanel";
 import { WorkspacePanel, WorkspaceSheet } from "./WorkspacePanel";
+import { useWorkbench } from "../../components/frame/Workbench";
 
 function Composer(props: { c: ChatController; landing?: boolean }) {
   const c = props.c;
@@ -129,11 +129,11 @@ function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
   );
 }
 
-/** The detail panel of the reply entry the page has open, if any; on phones, the sheet's (kept while it goes out). */
+/** The detail panel of the reply entry the page has open, in the workbench (kept while it goes out). */
 function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string }) {
   const c = props.c;
-  const shown = () => (props.phone ? c.mobileSheetDetail() : c.activityDetail());
-  const item = () => (props.phone ? c.mobileSheetDetailItem() : c.activityDetailItem());
+  const shown = () => c.workbenchDetail();
+  const item = () => c.workbenchDetailItem();
   return (
     <If when={shown()}>
       {(detail) => (
@@ -145,7 +145,10 @@ function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string
           topicID={c.selectedTopicID()}
           previews={c.rowContext.previews}
           phone={props.phone}
-          escape={!c.pageDialogOpen()}
+          dark
+          agentName={c.activeAgentName()}
+          // Not while it slides out (nothing is open to close).
+          escape={!c.pageDialogOpen() && c.activityDetail() !== null}
           class={props.class}
           onClose={() => c.closeActivityDetail()}
         />
@@ -261,6 +264,12 @@ export function ChatPage() {
   // Asked as the route lets the topic go: the slide has started by then (or starts as the effects
   // of this change run), so look a microtask later.
   c.setConversationExit(() => Promise.resolve().then(() => (untracked(panes.exiting) === 1 ? panes.settled() : undefined)));
+  // A reply's details open in the frame's workbench, under every column, on every screen.
+  useWorkbench(
+    () => c.activityDetailVisible(),
+    () => c.detailSheetKey(),
+    () => <DetailPanel c={c} phone={c.mobileMode()} class="flex-1" />,
+  );
   const barShowsBack = panes.held(1, () => c.mobileShowBack());
   const barTitle = panes.held(1, () => (c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")));
   const barShowsWorkspace = panes.held(1, () => c.mobileTopicSplitEnabled() && c.showChatPane() && c.workspaceSidebarAvailable());
@@ -282,6 +291,11 @@ export function ChatPage() {
     "chat.focusComposer",
     () => c.focusComposer(),
     () => c.showChatPane() && !c.chatReadonly(),
+  );
+  // With the details open, Back closes them first (a newer registration goes first).
+  onSystemBack(
+    () => c.activityDetailVisible(),
+    () => c.closeActivityDetail(),
   );
 
   const mobileLeading = () => (
@@ -342,31 +356,17 @@ export function ChatPage() {
               <ChatMain c={c} />
             </View>
           </If>
-          {/* One column for either panel: switching between them (or between entries) keeps the
-              column and plays the new content's entrance, with no outgoing panel beside it. */}
           <If when={c.desktopRightPanelVisible()}>
-            <Entrance watch={c.rightPanelKey()} class="w-[314px] pl-1" testID="chat-right-panel">
-              <If
-                when={c.desktopActivityDetailVisible()}
-                else={<WorkspacePanel c={c} class="flex-1" trailing={<WorkspaceToggle c={c} />} />}
-              >
-                <DetailPanel c={c} class="flex-1" />
-              </If>
-            </Entrance>
+            <View class="w-[314px] pl-1" testID="chat-right-panel">
+              <WorkspacePanel c={c} class="flex-1" trailing={<WorkspaceToggle c={c} />} />
+            </View>
           </If>
         </View>
         <If when={c.showTopicSidebar() && c.mobileTopicSplitEnabled()}>
           <Fab label={t("chat_topic_new")} onPress={() => c.startNewTopic()} testID="chat-topic-new-fab" />
         </If>
-        <WorkspaceSheet
-          open={c.mobileWorkspaceSidebarVisible() || c.mobileActivityDetailVisible()}
-          wide={c.mobileSheetDetail() !== null}
-          onClose={() => (c.mobileActivityDetailVisible() ? c.closeActivityDetail() : c.closeMobileWorkspaceSidebar())}
-        >
-          {/* What the sheet showed stays while it goes out (chatController's mobileSheetDetail). */}
-          <If when={c.mobileSheetDetail() !== null} else={<WorkspacePanel c={c} class="flex-1" phone />}>
-            <DetailPanel c={c} class="flex-1" phone />
-          </If>
+        <WorkspaceSheet open={c.mobileWorkspaceSidebarVisible()} onClose={() => c.closeMobileWorkspaceSidebar()}>
+          <WorkspacePanel c={c} class="flex-1" phone />
         </WorkspaceSheet>
         <WorkspaceDirPickerDialog
           open={c.workspaceBrowserOpen()}

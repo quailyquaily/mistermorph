@@ -146,12 +146,8 @@ const TOPIC_SIDEBAR_VIEW_STORAGE_KEY = "mistermorph.chat.topicSidebarView";
 const TOPIC_GROUPS_COLLAPSED_STORAGE_KEY = "mistermorph.chat.topicGroupsCollapsed";
 export const WORKSPACE_TAB_ID = "workspace";
 
-/**
- * The one panel at the right of the conversation: none, the topic and workspace panel, or the
- * temporary detail panel with what it shows. One value, so the two can never show together:
- * opening either replaces the other.
- */
-export type RightPanel = { kind: "none" } | { kind: "workspace" } | { kind: "detail"; detail: ActivityDetailRef };
+/** The panel at the right of the conversation: none, or the topic and workspace panel. */
+export type RightPanel = { kind: "none" } | { kind: "workspace" };
 const RIGHT_PANEL_NONE: RightPanel = { kind: "none" };
 const RIGHT_PANEL_WORKSPACE: RightPanel = { kind: "workspace" };
 export const TOPIC_TAB_ID = "topic";
@@ -458,13 +454,12 @@ export function createChatController() {
   // remembered); the detail panel is never restored.
   const rightPanel = signal<RightPanel>(localStore.getItem(WORKSPACE_SIDEBAR_OPEN_STORAGE_KEY) === "true" ? RIGHT_PANEL_WORKSPACE : RIGHT_PANEL_NONE);
   const workspaceSidebarOpen = () => rightPanel().kind === "workspace";
-  const activityDetail = computed<ActivityDetailRef | null>(
-    () => {
-      const panel = rightPanel();
-      return panel.kind === "detail" ? panel.detail : null;
-    },
-    { equals: (a, b) => activityDetailKey(a) === activityDetailKey(b) && a?.taskID === b?.taskID },
-  );
+  // The temporary detail panel: in the frame's workbench, docked under the window and sliding up
+  // from its foot, on every screen; the workspace panel stays as it is beside it (the phone's right
+  // sheet).
+  const activityDetail = signal<ActivityDetailRef | null>(null, {
+    equals: (a, b) => activityDetailKey(a) === activityDetailKey(b) && a?.taskID === b?.taskID,
+  });
   // The entry point that takes the keyboard focus back as the detail panel closes (activityDetail.ts).
   const detailFocusReturn = createFocusReturn();
   const workspaceSidebarTabID = signal(TOPIC_TAB_ID);
@@ -716,16 +711,12 @@ export function createChatController() {
   const workspaceSidebarAvailable = () => Boolean(workspaceTopicID());
   const desktopWorkspaceSidebarVisible = () => workspaceSidebarAvailable() && !mobileMode() && showChatPane() && workspaceSidebarOpen();
   const mobileWorkspaceSidebarVisible = () => workspaceSidebarAvailable() && mobileMode() && showChatPane() && workspaceSidebarOpen();
-  const desktopActivityDetailVisible = () => activityDetail() !== null && !mobileMode() && showChatPane();
-  const mobileActivityDetailVisible = () => activityDetail() !== null && mobileMode() && showChatPane();
+  /** Whether the details show (in the frame's workbench, on every screen). */
+  const activityDetailVisible = () => activityDetail() !== null && showChatPane();
   /** Whether a column stands at the right of the conversation (wide windows). */
-  const desktopRightPanelVisible = () => desktopWorkspaceSidebarVisible() || desktopActivityDetailVisible();
-  /** What the right panel shows, as a key that changes when it shows something else. */
-  const rightPanelKey = () => {
-    const detail = activityDetail();
-    if (detail) return `detail\u0000${activityDetailKey(detail)}`;
-    return workspaceSidebarOpen() ? "workspace" : "";
-  };
+  const desktopRightPanelVisible = () => desktopWorkspaceSidebarVisible();
+  /** What the workbench shows of the details, as a key that changes when it shows something else. */
+  const detailSheetKey = () => activityDetailKey(activityDetail());
   /** Whether one of the page's dialogs is open (Escape is theirs then, not the detail panel's). */
   const pageDialogOpen = () =>
     rawDialogOpen() || filePreview().open || topicDeleteDialogOpen() || topicRename.open() || workspaceBrowserOpen();
@@ -742,17 +733,15 @@ export function createChatController() {
   };
   /** What the detail panel's reply answers. */
   const activityDetailContext = () => activityDetailContextOf(activityDetailItem());
-  // The phone's right sheet shows the details or the workspace panel. While it goes out (neither is
-  // open any more) it keeps the details it showed, and their width: closing them must not put the
-  // workspace panel in the sheet under its exit. Only opening it again changes what it shows.
-  const mobileSheetDetail = signal<ActivityDetailRef | null>(null);
+  // The workbench keeps the details it showed while it slides out: closing them leaves what it
+  // showed until it has gone. Only opening it again changes what it shows.
+  const workbenchDetail = signal<ActivityDetailRef | null>(null);
   effect(() => {
-    const detail = mobileActivityDetailVisible() ? activityDetail() : null;
-    const open = detail !== null || mobileWorkspaceSidebarVisible();
-    if (open) untracked(() => mobileSheetDetail.set(detail));
+    const detail = activityDetailVisible() ? activityDetail() : null;
+    if (detail) untracked(() => workbenchDetail.set(detail));
   });
-  /** The reply the phone's sheet shows, live (also while it goes out). */
-  const mobileSheetDetailItem = computed(() => findActivityDetailItem(chatHistoryItems(), mobileSheetDetail()));
+  /** The reply the workbench shows, live (also while it goes out). */
+  const workbenchDetailItem = computed(() => findActivityDetailItem(chatHistoryItems(), workbenchDetail()));
   // Consecutive topics of one local day share a date heading.
   const topicDayGroups = computed(() => {
     const groups: any[] = [];
@@ -1597,15 +1586,11 @@ export function createChatController() {
   /**
    * Shows `next` at the right. On wide windows a column that comes or goes does so in one motion
    * (the Vue console animates its grid column over the slow token): the conversation narrows or
-   * widens and the column fades in or out with it. A column that stays (the workspace panel giving
-   * way to the detail panel, or one entry to another) only changes what it shows (ChatPage plays
-   * the content's entrance), so an outgoing and an incoming panel never show at once.
+   * widens and the column fades in or out with it.
    */
   function setRightPanel(next: RightPanel) {
     const visible = (panel: RightPanel) =>
-      !untracked(mobileMode) &&
-      untracked(showChatPane) &&
-      (panel.kind === "detail" || (panel.kind === "workspace" && untracked(workspaceSidebarAvailable)));
+      !untracked(mobileMode) && untracked(showChatPane) && panel.kind === "workspace" && untracked(workspaceSidebarAvailable);
     if (visible(untracked(rightPanel)) !== visible(next)) {
       LayoutAnimation.configureNext({
         duration: motionMs(MOTION_SLOW),
@@ -1615,6 +1600,11 @@ export function createChatController() {
       });
     }
     rightPanel.set(next);
+  }
+
+  /** Shows `next` in the detail panel (on wide windows the workbench slides in and out itself). */
+  function setActivityDetail(next: ActivityDetailRef | null) {
+    activityDetail.set(next);
   }
 
   function rememberWorkspaceSidebarOpen(open: boolean) {
@@ -1635,8 +1625,8 @@ export function createChatController() {
   }
 
   /**
-   * Opens an entry of a reply (its plan, progress, reasoning or a worker) in the detail panel, in
-   * place of whatever the right panel showed; the entry already shown closes it again.
+   * Opens an entry of a reply (its plan, progress, reasoning or a worker) in the detail panel (the
+   * frame's workbench); the entry already shown closes it again. The workspace panel stays as it is.
    */
   function openActivityDetail(ref: ActivityDetailRef) {
     const next = normalizeActivityDetail(ref);
@@ -1645,7 +1635,7 @@ export function createChatController() {
       closeActivityDetail({ restoreFocus: false });
       return;
     }
-    setRightPanel({ kind: "detail", detail: next });
+    setActivityDetail(next);
   }
 
   /**
@@ -1656,7 +1646,7 @@ export function createChatController() {
   function closeActivityDetail(options: { restoreFocus?: boolean } = {}) {
     const current = untracked(activityDetail);
     if (!current) return;
-    setRightPanel(RIGHT_PANEL_NONE);
+    setActivityDetail(null);
     if (options.restoreFocus === false || composer?.focused()) return;
     detailFocusReturn.request(activityDetailKey(current));
   }
@@ -3391,13 +3381,14 @@ export function createChatController() {
     workspaceError,
     workspaceSidebarOpen,
     rightPanel,
-    rightPanelKey,
+    detailSheetKey,
     activityDetail,
     activityDetailItem,
     activityDetailContext,
     activityDetailContextOf,
-    mobileSheetDetail,
-    mobileSheetDetailItem,
+    workbenchDetail,
+    activeAgentName,
+    workbenchDetailItem,
     pageDialogOpen,
     workspaceSidebarTabID,
     workspaceTreeLoading,
@@ -3470,8 +3461,7 @@ export function createChatController() {
     workspaceTopicID,
     workspaceSidebarAvailable,
     desktopWorkspaceSidebarVisible,
-    desktopActivityDetailVisible,
-    mobileActivityDetailVisible,
+    activityDetailVisible,
     desktopRightPanelVisible,
     mobileWorkspaceSidebarVisible,
     workspaceSidebarToggleLabel,

@@ -95,6 +95,69 @@ export function workerSections(worker) {
   return sections;
 }
 
+// findActivityEntry is the activity entry with id, at any depth (history, current, children).
+export function findActivityEntry(activity, id) {
+  const want = text(id);
+  if (!want) {
+    return null;
+  }
+  const visit = (entries) => {
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      if (text(entry?.id) === want) {
+        return entry;
+      }
+      const found = visit(entry?.children);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  };
+  return visit([...(Array.isArray(activity?.history) ? activity.history : []), activity?.current].filter(Boolean));
+}
+
+function settingText(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => text(typeof item === "string" ? item : JSON.stringify(item))).filter(Boolean).join(", ");
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+  return text(value);
+}
+
+// workerAsk is how the agent started a worker: the call (spawn or coder) the worker belongs to,
+// read from the activity. Its task is what the agent asked; its other arguments are the settings
+// it gave (a coder's backend and directory, a subagent's tools and profile); its children are the
+// calls the worker made on its own (a subagent's tools). null when the call is not in the activity.
+export function workerAsk(activity, worker) {
+  const entry = findActivityEntry(activity, worker?.activityId);
+  if (!entry) {
+    return null;
+  }
+  const args = entry.args && typeof entry.args === "object" ? entry.args : {};
+  const task = typeof args.task === "string" ? args.task.trim() : "";
+  const settings = Object.keys(args)
+    .filter((key) => key !== "task")
+    .sort()
+    .map((key) => ({ key, value: settingText(args[key]) }))
+    .filter((setting) => setting.value);
+  return {
+    task,
+    settings,
+    at: text(entry.at),
+    calls: Array.isArray(entry.children) ? entry.children : [],
+    callsOmitted: Math.max(0, Number(entry.childrenOmitted) || 0),
+  };
+}
+
 export function workerProcessLabel(process) {
   return `${process?.program ? `${process.program} ` : ""}PID ${process?.pid}`;
 }

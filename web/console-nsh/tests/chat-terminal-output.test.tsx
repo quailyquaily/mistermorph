@@ -50,6 +50,9 @@ const TERMINAL = {
   note: "#e8eef5d1",
   muted: "#d5e0ecb2",
   error: "#e08a9e",
+  // TerminalText.tsx's NEON: a kind chip (TOOL, CODER) and a number.
+  chip: "#5ce1e6",
+  number: "#7ee787",
 };
 
 function style(app: App, selector: string) {
@@ -71,31 +74,33 @@ test("a coder's output, empty output and error are drawn on the progress termina
   await app.waitFor("id:chat-detail-activity >> id:chat-terminal");
   const printed = style(app, "id:chat-terminal >> text:progress printed this");
   const failed = style(app, "id:chat-terminal >> text:progress failed here");
-  const label = style(app, "id:chat-terminal >> text:TOOL >> nth=0");
+  const chip = style(app, "id:chat-terminal >> text:TOOL >> nth=0");
   expect(printed.color).toBe(TERMINAL.note);
   expect(failed.color.slice(0, 7)).toBe(TERMINAL.error);
-  expect(label.color).toBe(TERMINAL.muted);
+  expect(chip.color.slice(0, 7)).toBe(TERMINAL.chip);
 
   // A coder with output: on the terminal, its output styled as progress's printed output, its
-  // kind as progress's kind label; its PID still there.
+  // kind as progress's kind chip; its PID still there, the number in its own colour.
   await openWorker(app, "Curie · Coder · Running");
   expect(app.count("id:chat-detail-panel >> id:chat-terminal")).toBe(1);
   expect(style(app, "id:chat-terminal >> text:coder printed this")).toEqual(printed);
-  expect(style(app, "id:chat-terminal >> text:CODER")).toEqual(label);
+  expect(style(app, "id:chat-terminal >> text:CODER")).toEqual(chip);
   expect(style(app, "id:chat-terminal >> text:codex PID 4242").color).toBe(TERMINAL.muted);
-  // One section: no heading.
+  expect(style(app, "id:chat-terminal >> text:4242").color.slice(0, 7)).toBe(TERMINAL.number);
+  // What it printed is headed OUTPUT, apart from its answer (none yet: it runs).
+  expect(style(app, "id:chat-terminal >> text:OUTPUT").color).toBe(TERMINAL.muted);
+  expect(app.shows("id:chat-worker-answer >> text:Running…")).toBe(true);
+
+  // A coder with nothing printed yet: its answer is that it runs, in the muted text.
+  await openWorker(app, "Hopper · Coder · Running");
+  expect(style(app, "id:chat-worker-answer >> text:Running…").color).toBe(TERMINAL.muted);
   expect(app.shows("id:chat-terminal >> text:OUTPUT")).toBe(false);
 
-  // A coder with nothing printed yet: the empty line, on the terminal, in its muted text.
-  await openWorker(app, "Hopper · Coder · Running");
-  expect(style(app, "id:chat-terminal >> text:No output yet.").color).toBe(TERMINAL.muted);
-
-  // A failed coder: its error in progress's error style, then its output, each under a heading
-  // styled as progress's labels.
+  // A failed coder: what it printed under OUTPUT, then its error as its answer, in progress's
+  // error style; its state tag says FAIL.
   await openWorker(app, "Lovelace · Coder · Failed");
-  expect(style(app, "id:chat-terminal >> text:coder failed here")).toEqual(failed);
+  expect(style(app, "id:chat-worker-answer >> text:coder failed here")).toEqual(failed);
   expect(style(app, "id:chat-terminal >> text:half done")).toEqual(printed);
-  expect(style(app, "id:chat-terminal >> text:ERROR")).toEqual(label);
-  expect(style(app, "id:chat-terminal >> text:OUTPUT")).toEqual(label);
-  expect(app.shows("id:chat-worker-output >> text:FAILED")).toBe(true);
+  expect(style(app, "id:chat-terminal >> text:OUTPUT").color).toBe(TERMINAL.muted);
+  expect(app.texts()).toContain("[FAIL]");
 });

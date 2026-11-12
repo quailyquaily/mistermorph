@@ -11,8 +11,14 @@
 //
 // Only for runs that do not wrap: text that wraps (notes, output, errors) goes beside it, not in
 // it, since a sideways scroller gives its content all the width it asks for.
+//
+// Under `OverflowWraps` (the workbench, which keeps one scroll area: its own) a run wraps instead,
+// and no line is ever a scroller.
 import type { JSX } from "nsh";
-import { Scroll, signal, untracked, View } from "nsh";
+import { context, Scroll, signal, untracked, View } from "nsh";
+
+/** Runs wrap at the room's edge instead of scrolling sideways (a panel with one scroll area). */
+export const OverflowWraps = context<boolean>(false);
 
 export interface OverflowLineFrame {
   /** One per line, for as long as it is mounted. */
@@ -37,6 +43,13 @@ export function probeOverflowLines(listener: ((frame: OverflowLineFrame) => void
 }
 
 export function OverflowLine(props: { class?: string; contentClass?: string; testID?: string; children?: JSX.Element }) {
+  if (OverflowWraps()) {
+    return (
+      <View class={`max-w-full shrink ${props.class ?? ""}`} testID={props.testID}>
+        <View class={`shrink flex-wrap ${props.contentClass ?? ""}`}>{props.children}</View>
+      </View>
+    );
+  }
   const line = ++lines;
   const frame = { viewport: 0, content: 0, offset: 0 };
   const scrolls = signal(false);

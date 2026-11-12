@@ -124,6 +124,18 @@ test("output, notes and errors keep wrapping: none of them is in a sideways line
   }
 });
 
+test("in the workbench (one scroll area) the runs wrap at the panel's edge: none scrolls sideways", async () => {
+  for (const kind of ["activity", "worker"] as const) {
+    const app = await openPanel(360, kind);
+    await app.press("id:show-dark");
+    // The runs are there, whole, but none is a sideways line any more.
+    await app.waitFor(kind === "activity" ? "id:chat-activity-call" : "id:chat-worker-process");
+    await app.wait(100);
+    expect(report(app).lines.length).toBe(0);
+    if (kind === "activity") expect(app.shows("id:chat-activity-param >> text:/never\\/ends\\/file_name.go/")).toBe(true);
+  }
+});
+
 test("the empty states show no lines", async () => {
   const app = await openPanel(360, "activity");
   await app.press("id:show-missing-worker");

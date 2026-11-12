@@ -1,11 +1,11 @@
 // The temporary detail panel: a reply's plan, progress or reasoning, or one of its workers' output,
 // opened from the reply's compact entry points (ChatStatusCard's columns, ChatWorkerRoster's chips)
-// instead of unfolding inside the conversation. It takes the place of the topic and workspace
-// panel (the page has one right panel: opening either closes the other), in the same shell: a
-// 314pt column beside the conversation on wide windows, the right sheet on phones.
+// instead of unfolding inside the conversation. On wide windows it is in the frame's workbench,
+// docked under the window (components/frame/Workbench.tsx), and the topic and workspace panel stays;
+// on phones the right sheet, in the workspace panel's place.
 //
-// A plan, progress and a worker's output are drawn on one dark terminal (ChatTerminal); reasoning
-// is the reply's own rich text.
+// A plan, progress, reasoning and a worker's output are drawn on one dark terminal (ChatTerminal);
+// reasoning as plain mono text, as written (no markdown).
 //
 // It reads the reply from the live history by id (activityDetail.ts), so a plan, progress,
 // reasoning or output still streaming keeps growing here; its scroller follows the end of what
@@ -14,19 +14,21 @@
 // Its head is its title (the panel's name, or the worker's), what it belongs to (the message the
 // reply answers; not for progress or a coder's output, see `showContext`) and close; Escape closes
 // it beside the conversation, and on phones the sheet's own Escape, Back and scrim do.
-import { cleanup, effect, keymap, Text, View } from "nsh";
+import { cleanup, effect, Image, keymap, Text, View } from "nsh";
 import { Icon, popupOpen, StatusMark, Tip, TipButton } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
+import { ICONS } from "../../components/icons";
 import { activityDetailKey, type ActivityDetailRef } from "../../components/chat/activityDetail";
 import type { ArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
 import type { HistoryItem } from "../../components/chat/ChatHistoryItem";
-import { ChatRichContent } from "../../components/chat/ChatRichContent";
 import { activityEntries, ChatActivityEntries, ChatPlanSteps, planProgress } from "../../components/chat/ChatStatusCard";
-import { ChatTerminal } from "../../components/chat/ChatTerminal";
+import { ChatTerminal, TERMINAL_BG, TERMINAL_FG, TERMINAL_MUTED, TERMINAL_NOTE } from "../../components/chat/ChatTerminal";
 import { ChatWorkerOutput, replyWorkers, WorkerAvatar } from "../../components/chat/ChatWorkerRoster";
+import { OverflowWraps } from "../../components/chat/OverflowLine";
 import { t } from "../../components/chat/i18n";
 import { PinnedScroll } from "../../components/chat/PinnedScroll";
 import { taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
+import { workerAsk } from "../../lib/core/chat-workers.js";
 
 function taskStatus(item: HistoryItem | null) {
   const value = String(item?.status || "").trim().toLowerCase();
@@ -37,17 +39,29 @@ function terminal(status: string) {
   return status === "done" || status === "failed" || status === "canceled";
 }
 
-/** The panel's close: a 38pt square where the workspace panel's toggle sits (32pt on phones). */
-function CloseButton(props: { phone?: boolean; onPress: () => void }) {
+/**
+ * The panel's close: a 38pt square at the head's end (32pt on phones); in the workbench a 30pt
+ * square (32pt on phones) in its top right corner, as far from the top as from the right.
+ */
+const CORNER = 8;
+const cornerClose = (phone?: boolean) => (phone ? 32 : 30);
+function CloseButton(props: { phone?: boolean; dark?: boolean; onPress: () => void }) {
   return (
     <TipButton
       accessibilityLabel={t("action_close")}
       tooltip={<Tip text={t("action_close")} />}
       onPress={props.onPress}
       testID="chat-detail-close"
-      class={`${props.phone ? "size-8" : "size-[38px]"} items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft`}
+      class={`${props.phone ? "size-8" : props.dark ? "size-[30px]" : "size-[38px]"} items-center justify-center rounded-(--radius) transition-colors duration-[180ms] ${props.dark ? "hover:bg-white/10" : "hover:bg-hover-soft"}`}
     >
-      <Icon name="PhX" size={props.phone ? 16 : 14} color="subtle" />
+      {/* On the dark panel the terminal's light ink (no theme token is light on it). */}
+      <If when={props.dark} else={<Icon name="PhX" size={props.phone ? 16 : 14} color="subtle" />}>
+        <Image
+          src={ICONS.PhX}
+          accessibilityElementsHidden
+          style={{ width: props.phone ? 16 : 14, height: props.phone ? 16 : 14, tintColor: "#e8eef5d1" }}
+        />
+      </If>
     </TipButton>
   );
 }
@@ -62,6 +76,13 @@ export function ActivityDetailPanel(props: {
   topicID: string;
   previews: ArtifactPreviews;
   phone?: boolean;
+  /** The agent's name, for a worker's conversation ("Agent" when unknown). */
+  agentName?: string;
+  /**
+   * Drawn on the terminal's dark ink with no frame padding (the workbench): the plan, progress,
+   * reasoning and output run edge to edge on the panel itself.
+   */
+  dark?: boolean;
   /** Whether Escape closes it (false while a dialog is over the page). */
   escape?: boolean;
   class?: string;
@@ -119,9 +140,10 @@ export function ActivityDetailPanel(props: {
         return worker() !== null;
     }
   };
-  // Progress and output grow at their end, and reasoning while it is written: the scroller starts
-  // there and follows. A plan reads from its first step.
-  const startPinned = () => kind() === "activity" || kind() === "worker" || (kind() === "reasoning" && streaming());
+  // Progress and output grow at their end, and reasoning and a plan while their task runs: the
+  // scroller starts there and follows until the reader scrolls up (PinnedScroll). A finished plan
+  // reads from its first step.
+  const startPinned = () => kind() === "activity" || kind() === "worker" || ((kind() === "reasoning" || kind() === "plan") && streaming());
   // Progress and a coder's output are the run itself, read beside the conversation that already
   // shows the message they answer: their head is only the title, the mark and close. A plan, the
   // reasoning and a subagent still name what they answer.
@@ -133,28 +155,38 @@ export function ActivityDetailPanel(props: {
   };
 
   return (
-    <View class={`${props.class ?? ""}`} accessibilityLabel={title()} testID="chat-detail-panel">
+    <View class={`relative ${props.dark ? TERMINAL_BG : ""} ${props.class ?? ""}`} accessibilityLabel={title()} testID="chat-detail-panel">
       <View
-        class={props.phone ? "flex-row items-center gap-2 pl-4 pr-3" : "min-h-[46px] flex-row items-center gap-2 pl-4 pr-3 pt-2"}
-        style={props.phone ? { height: CHROME_BAR_HEIGHT } : undefined}
+        class={props.dark || props.phone ? "flex-row items-center gap-2 pl-4 pr-3" : "min-h-[46px] flex-row items-center gap-2 pl-4 pr-3 pt-2"}
+        style={
+          // In the workbench the head's middle is the close button's (it sits CORNER from the top
+          // and the right), and the head keeps the button's room at its end.
+          props.dark
+            ? { height: CORNER * 2 + cornerClose(props.phone), paddingRight: CORNER * 2 + cornerClose(props.phone) }
+            : props.phone
+              ? { height: CHROME_BAR_HEIGHT }
+              : undefined
+        }
       >
         <If when={item() && has()}>
           <If when={kind() === "worker" && worker()} else={<StatusMark state={markState()} testID={`chat-detail-mark-${markState()}`} />}>
             <WorkerAvatar avatarStyle={worker()?.avatarStyle ?? ""} />
           </If>
         </If>
-        <Text class="min-w-0 flex-1 text-[15px] font-semibold leading-[22px] text-foreground line-clamp-1" role="header" testID="chat-detail-title">
+        <Text class={`min-w-0 flex-1 text-[15px] font-semibold leading-[22px] line-clamp-1 ${props.dark ? TERMINAL_FG : "text-foreground"}`} role="header" testID="chat-detail-title">
           {title()}
         </Text>
         <If when={figure()}>
-          <Text class="font-mono text-xs text-muted-foreground" testID="chat-detail-figure">
+          <Text class={`font-mono text-xs ${props.dark ? TERMINAL_MUTED : "text-muted-foreground"}`} testID="chat-detail-figure">
             {figure()}
           </Text>
         </If>
-        <CloseButton phone={props.phone} onPress={() => props.onClose()} />
+        <If when={!props.dark}>
+          <CloseButton phone={props.phone} onPress={() => props.onClose()} />
+        </If>
       </View>
       <If when={showContext()}>
-        <Text class="px-4 pb-2 text-xs leading-[18px] text-muted-foreground line-clamp-2" testID="chat-detail-context">
+        <Text class={`px-4 pb-2 text-xs leading-[18px] line-clamp-2 ${props.dark ? TERMINAL_MUTED : "text-muted-foreground"}`} testID="chat-detail-context">
           {props.context}
         </Text>
       </If>
@@ -162,47 +194,60 @@ export function ActivityDetailPanel(props: {
         when={item() && has()}
         else={
           <View class="px-4 py-3" testID="chat-detail-empty">
-            <Text class="text-sm text-muted-foreground">{kind() === "worker" && item() ? t("chat_worker_no_output") : t("chat_detail_empty")}</Text>
+            <Text class={`text-sm ${props.dark ? TERMINAL_MUTED : "text-muted-foreground"}`}>
+              {kind() === "worker" && item() ? t("chat_worker_no_output") : t("chat_detail_empty")}
+            </Text>
           </View>
         }
       >
-        <PinnedScroll
-          resetKey={activityDetailKey(props.detail)}
-          startPinned={startPinned()}
-          class="flex-1"
-          contentClass="px-3 pb-4 pt-1"
-          testID={`chat-detail-${kind()}`}
-        >
-          <If when={kind() === "plan"}>
-            <ChatTerminal>
-              <ChatPlanSteps itemID={props.detail.itemID} plan={item()?.plan} />
-            </ChatTerminal>
-          </If>
-          <If when={kind() === "activity"}>
-            <ChatTerminal>
-              <ChatActivityEntries itemID={props.detail.itemID} activity={{ ...(item()?.activity ?? {}), history: entries(), current: null }} />
-            </ChatTerminal>
-          </If>
-          <If when={kind() === "reasoning"}>
-            <View class="px-1">
-              <ChatRichContent
-                source={reasoning()}
-                ownerKey={`${props.detail.itemID}:reasoning`}
-                endpointRef={props.endpointRef}
-                fallbackTopicID={props.topicID}
-                streaming={streaming()}
-                previews={props.previews}
-              />
-            </View>
-          </If>
-          <If when={kind() === "worker" && worker()}>
-            {(entry) => (
-              <ChatTerminal>
-                <ChatWorkerOutput worker={entry()} />
+        {/* In the workbench its scroller is the only one: long runs and code wrap (OverflowWraps). */}
+        <OverflowWraps.Provider value={Boolean(props.dark)}>
+          <PinnedScroll
+            resetKey={activityDetailKey(props.detail)}
+            startPinned={startPinned()}
+            class="flex-1"
+            contentClass={props.dark ? "" : "px-3 pb-4 pt-1"}
+            testID={`chat-detail-${kind()}`}
+          >
+            <If when={kind() === "plan"}>
+              <ChatTerminal flush={props.dark}>
+                <ChatPlanSteps itemID={props.detail.itemID} plan={item()?.plan} />
               </ChatTerminal>
-            )}
-          </If>
-        </PinnedScroll>
+            </If>
+            <If when={kind() === "activity"}>
+              <ChatTerminal flush={props.dark}>
+                <ChatActivityEntries itemID={props.detail.itemID} activity={{ ...(item()?.activity ?? {}), history: entries(), current: null }} />
+              </ChatTerminal>
+            </If>
+            <If when={kind() === "reasoning"}>
+              {/* As written, in the terminal's mono note style (no markdown), as progress is. */}
+              <ChatTerminal flush={props.dark}>
+                <View selectable>
+                  <Text class={`font-mono text-xs leading-[19px] ${TERMINAL_NOTE}`} testID="chat-detail-reasoning-text">
+                    {reasoning()}
+                  </Text>
+                </View>
+              </ChatTerminal>
+            </If>
+            <If when={kind() === "worker" && worker()}>
+              {(entry) => (
+                <ChatTerminal flush={props.dark}>
+                  <ChatWorkerOutput
+                    worker={entry()}
+                    ask={workerAsk(item()?.activity, entry())}
+                    agentName={props.agentName}
+                    itemID={props.detail.itemID}
+                  />
+                </ChatTerminal>
+              )}
+            </If>
+          </PinnedScroll>
+        </OverflowWraps.Provider>
+      </If>
+      <If when={props.dark}>
+        <View class="absolute" style={{ top: CORNER, right: CORNER }}>
+          <CloseButton phone={props.phone} dark onPress={() => props.onClose()} />
+        </View>
       </If>
     </View>
   );

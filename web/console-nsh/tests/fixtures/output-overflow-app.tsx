@@ -3,7 +3,8 @@
 // (a long command, a multiline script parameter, a long tool name, nested calls, a long process)
 // beside output, notes and errors that wrap. Every such run's line (OverflowLine) reports its
 // widths, whether it scrolls and its offset; they and the panel's width are read out below it as
-// JSON. The buttons switch what the panel shows, the empty states included.
+// JSON. The buttons switch what the panel shows, the empty states included, and draw it as the
+// workbench does (`dark`: one scroll area, where runs wrap).
 import { mount, signal, Text, View } from "nsh";
 import { Button } from "../../components/ui";
 import type { ActivityDetailRef } from "../../components/chat/activityDetail";
@@ -49,6 +50,7 @@ const activity = normalizeActivity({
 });
 const previews = createArtifactPreviews();
 const empty = signal(false);
+const dark = signal(false);
 const detail = signal<ActivityDetailRef>({ itemID: "r1", kind: "activity" });
 const item = () =>
   empty()
@@ -72,18 +74,25 @@ function Page() {
         <Show id="show-worker" label="worker" onPress={() => detail.set({ itemID: "r1", kind: "worker", workerID: "w1" })} />
         <Show id="show-missing-worker" label="missing" onPress={() => detail.set({ itemID: "r1", kind: "worker", workerID: "w9" })} />
         <Show id="show-empty" label="empty" onPress={() => empty.set(true)} />
+        <Show id="show-dark" label="dark" onPress={() => dark.set(true)} />
       </View>
       <View class="h-[600px]" onLayout={(e) => panel.set(e.bounds.size.width)}>
-        <ActivityDetailPanel
-          detail={detail()}
-          item={item() as any}
-          context="Clean the disk"
-          endpointRef=""
-          topicID=""
-          previews={previews}
-          class="flex-1"
-          onClose={() => {}}
-        />
+        {/* A panel of its own for each look: a line takes its way (scroll or wrap) as it is built. */}
+        <Each of={[dark()]} key={(on) => String(on)}>
+          {(on) => (
+            <ActivityDetailPanel
+              detail={detail()}
+              item={item() as any}
+              context="Clean the disk"
+              endpointRef=""
+              topicID=""
+              previews={previews}
+              dark={on()}
+              class="flex-1"
+              onClose={() => {}}
+            />
+          )}
+        </Each>
       </View>
       <Text class="text-[6px]">{JSON.stringify({ panel: panel(), lines: Object.values(lines()) })}</Text>
     </View>

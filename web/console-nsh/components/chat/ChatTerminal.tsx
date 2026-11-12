@@ -25,10 +25,14 @@ export function terminalNoteClass(error?: boolean) {
   return `text-xs ${error ? TERMINAL_ERROR : TERMINAL_NOTE}`;
 }
 
-/** The terminal's surface: rounded like the page's controls, 12pt inside, 8pt between entries. */
-export function ChatTerminal(props: { children?: JSX.Element; testID?: string }) {
+/**
+ * The terminal's surface: rounded like the page's controls, 12pt inside, 8pt between entries.
+ * `flush`: the panel around it is the terminal (the workbench), so no surface of its own, only the
+ * panel's 16pt inset at the sides.
+ */
+export function ChatTerminal(props: { children?: JSX.Element; flush?: boolean; testID?: string }) {
   return (
-    <View class={`gap-2 rounded-(--radius) p-3 ${TERMINAL_BG}`} testID={props.testID ?? "chat-terminal"}>
+    <View class={`gap-2 ${props.flush ? "px-4 pb-4 pt-1" : `rounded-(--radius) p-3 ${TERMINAL_BG}`}`} testID={props.testID ?? "chat-terminal"}>
       {props.children}
     </View>
   );

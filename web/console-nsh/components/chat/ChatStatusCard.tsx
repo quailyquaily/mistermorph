@@ -7,12 +7,13 @@
 import type { JSX, ViewRef } from "nsh";
 import { effect, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Icon, StatusMark } from "../ui";
+import { Icon } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { OverflowLine } from "./OverflowLine";
+import { KindChip, NEON, StatusTag, statusTag, TerminalText } from "./TerminalText";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
-import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
+import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
 
 export const PANEL_PLAN = "plan";
 export const PANEL_ACTIVITY = "activity";
@@ -86,16 +87,12 @@ function paramValueText(value: unknown) {
   }
 }
 
-function truncate(raw: string) {
-  const text = cleanText(raw);
-  return text.length <= 120 ? text : `${text.slice(0, 117)}...`;
-}
-
 function activityParams(entry: any) {
   const items: { key: string; value: string }[] = [];
   if (entry?.args && typeof entry.args === "object" && !Array.isArray(entry.args)) {
     for (const key of Object.keys(entry.args).sort()) {
-      const value = truncate(paramValueText(entry.args[key]));
+      // Whole: the terminal cuts what shows (PARAM_LIMIT), never inside a term worth copying.
+      const value = cleanText(paramValueText(entry.args[key]));
       if (value) items.push({ key, value });
     }
   }
@@ -107,7 +104,7 @@ function activityParams(entry: any) {
       ["output", entry?.outputKind],
     ];
     for (const [key, raw] of extras) {
-      const value = truncate(paramValueText(raw));
+      const value = cleanText(paramValueText(raw));
       if (value) items.push({ key, value });
     }
   }
@@ -128,52 +125,6 @@ function entryNote(entry: any) {
   const output = String(entry?.output || "");
   if (output.trim()) return output;
   return cleanText(entry?.summary);
-}
-
-/** A status square's colour on the terminal. */
-function dotColor(status: string) {
-  switch (status) {
-    case "done":
-    case "completed":
-      return "#5a8788";
-    case "failed":
-    case "canceled":
-      return "#c06a80";
-    case "running":
-    case "in_progress":
-      return "#eea03e";
-    default:
-      return "#ffffff4d";
-  }
-}
-
-/** A plan step's or activity entry's status mark in the terminal's colours; running, the turning
- *  ring in its running orange. */
-function StatusSquare(props: { status: string }) {
-  return (
-    <StatusMark
-      state={props.status === "running" || props.status === "in_progress" ? "running" : "on"}
-      color={dotColor(props.status)}
-      ringColor={dotColor("running")}
-      class="mt-1.5"
-    />
-  );
-}
-
-function dotClass(status: string) {
-  switch (status) {
-    case "done":
-    case "completed":
-      return "bg-[#5a8788] border-[#5a8788]";
-    case "failed":
-    case "canceled":
-      return "bg-[#c06a80] border-[#c06a80]";
-    case "running":
-    case "in_progress":
-      return "bg-[#eea03e] border-[#eea03e]";
-    default:
-      return "bg-[#ffffff4d] border-[#ffffff4d]";
-  }
 }
 
 export function planProgress(plan: any) {
@@ -207,22 +158,56 @@ function Column(props: { label: string; value?: string; selected: boolean; focus
   );
 }
 
-/** The plan's steps on the terminal, each with its status mark. */
+// The terminal's rows are a dashboard's readout (TerminalText.tsx): a bracketed state tag, the
+// entry's kind as a chip, its name bright; its parameters as a key column and typed values (a
+// command behind a `$` prompt); its output under a rule (red for an error), with the terms worth
+// copying pressable; its nested calls as a tree.
+
+/** The parameters that are a command line: their value shows behind a `$` prompt. */
+const COMMAND_KEYS = new Set(["cmd", "command", "script", "shell"]);
+/** How much of a parameter's value shows (cut by TerminalText, which keeps copyable terms whole). */
+const PARAM_LIMIT = 120;
+
+/** The plan's steps on the terminal: a two-digit number, the step's state and its text. */
 export function ChatPlanSteps(props: { itemID: string; plan: any }) {
   const steps = (): any[] => (Array.isArray(props.plan?.steps) ? props.plan.steps : []);
   return (
     <Each of={steps()} key={(_step, index) => `${props.itemID}:plan:${index}`}>
-      {(step) => (
+      {(step, index) => (
         <View class="flex-row items-start gap-2">
-          <StatusSquare status={normalizePlanStatus(step()?.status)} />
+          <Text class="font-mono text-[11px] leading-[18px]" style={{ color: NEON.idle }}>
+            {String(index() + 1).padStart(2, "0")}
+          </Text>
+          <StatusTag status={normalizePlanStatus(step()?.status)} />
           <View selectable class="flex-1">
-            <Text class={`text-sm ${normalizePlanStatus(step()?.status) === "completed" ? TERMINAL_MUTED : TERMINAL_FG}`}>
-              {String(step()?.step ?? "")}
-            </Text>
+            <TerminalText
+              text={String(step()?.step ?? "")}
+              class={`text-sm leading-[18px] ${normalizePlanStatus(step()?.status) === "completed" ? TERMINAL_MUTED : TERMINAL_FG}`}
+            />
           </View>
         </View>
       )}
     </Each>
+  );
+}
+
+/** A parameter: its key in a fixed column, its value typed (a command behind `$`). */
+function ParamRow(props: { name: string; value: string }) {
+  const command = () => COMMAND_KEYS.has(props.name.toLowerCase());
+  return (
+    <View class="flex-row items-start gap-2">
+      <Text class="w-[64px] shrink-0 font-mono text-[11px] leading-[18px] line-clamp-1" style={{ color: NEON.key }}>
+        {props.name}
+      </Text>
+      <OverflowLine contentClass="flex-row gap-1" testID="chat-activity-param">
+        <If when={command()}>
+          <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.ok }}>
+            $
+          </Text>
+        </If>
+        <TerminalText text={props.value} limit={PARAM_LIMIT} class={`font-mono text-xs leading-[18px] ${command() ? TERMINAL_FG : TERMINAL_VALUE}`} />
+      </OverflowLine>
+    </View>
   );
 }
 
@@ -233,76 +218,105 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
   return (
     <Each of={items()} key={(entry, index) => `${props.itemID}:activity:${entryKey(entry, index)}`}>
       {(entry) => (
-        <View class="flex-row items-start gap-2">
-          <StatusSquare status={normalizeTaskStatus(entry()?.status)} />
-          <View class="flex-1 gap-1">
-            <View class="flex-row flex-wrap items-baseline gap-1.5">
-              <If when={kindLabel(entry())}>
-                <Text class={TERMINAL_LABEL}>{kindLabel(entry())}</Text>
-              </If>
-              <OverflowLine testID="chat-activity-title">
-                <Text class={`text-sm font-medium ${TERMINAL_FG}`}>
-                  {entryTitle(entry())}
-                  {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
-                </Text>
-              </OverflowLine>
-              <If when={childCount(entry()) > 0}>
-                <Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_activity_calls", { count: childCount(entry()) })}</Text>
-              </If>
-              <View class="flex-1" />
-              <If when={entryTime(entry())}>
-                <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{entryTime(entry())}</Text>
-              </If>
-            </View>
-            <If when={activityParams(entry()).length > 0}>
-              <View class="flex-row flex-wrap gap-1.5">
-                <Each of={activityParams(entry())} key={(param) => param.key}>
-                  {(param) => (
-                    <OverflowLine contentClass="flex-row gap-1" testID="chat-activity-param">
-                      <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{param().key}</Text>
-                      <Text class={`font-mono text-xs ${TERMINAL_VALUE} line-clamp-2`}>{param().value}</Text>
-                    </OverflowLine>
-                  )}
-                </Each>
-              </View>
+        <View class="gap-1.5 pb-1" testID="chat-activity-entry">
+          <View class="flex-row flex-wrap items-center gap-2">
+            <StatusTag status={normalizeTaskStatus(entry()?.status)} testID="chat-activity-status" />
+            <If when={kindLabel(entry())}>
+              <KindChip label={kindLabel(entry())} tone={normalizeActivityKind(entry()?.kind) === "subtask" ? "violet" : "cyan"} />
             </If>
-            <If when={entryNote(entry()) && children(entry()).length === 0}>
-              <View selectable>
-                <Text class={terminalNoteClass(Boolean(cleanText(entry()?.error)))}>{entryNote(entry())}</Text>
-              </View>
+            <OverflowLine testID="chat-activity-title">
+              <Text class={`font-mono text-[13px] font-medium leading-[18px] ${TERMINAL_FG}`}>
+                {entryTitle(entry())}
+                {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
+              </Text>
+            </OverflowLine>
+            <If when={childCount(entry()) > 0}>
+              <Text class={`font-mono text-[11px] ${TERMINAL_MUTED}`}>{t("chat_activity_calls", { count: childCount(entry()) })}</Text>
             </If>
-            <If when={children(entry()).length > 0}>
-              <View class="gap-1 border-l border-[#ffffff26] pl-2">
-                <If when={Number(entry()?.childrenOmitted) > 0}>
-                  <Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_activity_calls_omitted", { count: entry()?.childrenOmitted })}</Text>
-                </If>
-                <Each of={children(entry())} key={(child, index) => `${props.itemID}:activity:child:${entryKey(child, index)}`}>
-                  {(child) => (
-                    <View class="gap-0.5">
-                      <View class="flex-row items-start gap-1.5">
-                        <View class={`mt-[5px] size-1.5 border ${dotClass(normalizeTaskStatus(child()?.status))}`} />
-                        <OverflowLine contentClass="flex-row items-center gap-1.5" testID="chat-activity-call">
-                          <Text class={`text-xs ${TERMINAL_FG}`}>
-                            {entryTitle(child())}
-                            {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
-                          </Text>
-                          <If when={activityParams(child())[0]?.value}>
-                            <Text class={`font-mono text-xs ${TERMINAL_MUTED} line-clamp-1`}>{activityParams(child())[0]?.value}</Text>
-                          </If>
-                        </OverflowLine>
-                      </View>
-                      <If when={child()?.error}>
-                        <Text class={`text-xs ${TERMINAL_ERROR}`}>{String(child()?.error ?? "")}</Text>
-                      </If>
-                    </View>
-                  )}
-                </Each>
-              </View>
+            <View class="flex-1" />
+            <If when={entryTime(entry())}>
+              <Text class="font-mono text-[11px]" style={{ color: NEON.idle }}>
+                {entryTime(entry())}
+              </Text>
             </If>
           </View>
+          <If when={activityParams(entry()).length > 0}>
+            <View class="gap-0.5">
+              <Each of={activityParams(entry())} key={(param) => param.key}>
+                {(param) => <ParamRow name={param().key} value={param().value} />}
+              </Each>
+            </View>
+          </If>
+          <If when={entryNote(entry()) && children(entry()).length === 0}>
+            <View
+              selectable
+              class="border-l-2 pl-2.5"
+              style={{ borderColor: cleanText(entry()?.error) ? `${NEON.fail}99` : "#ffffff1f" }}
+            >
+              <TerminalText
+                text={entryNote(entry())}
+                copyOnly
+                class={`font-mono leading-[18px] ${terminalNoteClass(Boolean(cleanText(entry()?.error)))}`}
+              />
+            </View>
+          </If>
+          <If when={children(entry()).length > 0}>
+            <ActivityCallTree itemID={props.itemID} calls={children(entry())} omitted={Number(entry()?.childrenOmitted) || 0} />
+          </If>
         </View>
       )}
     </Each>
+  );
+}
+
+/** Nested calls (a subtask's, a subagent's) as a tree: `├─`/`└─`, a state dot, the call and its
+ *  first value, an error under it. */
+export function ActivityCallTree(props: { itemID: string; calls: any[]; omitted?: number }) {
+  const omitted = () => Number(props.omitted) || 0;
+  return (
+    <View class="gap-0.5">
+      <If when={omitted() > 0}>
+        <Text class={`font-mono text-[11px] ${TERMINAL_MUTED}`}>
+          {"┆  "}
+          {t("chat_activity_calls_omitted", { count: omitted() })}
+        </Text>
+      </If>
+      <Each of={props.calls} key={(child, index) => `${props.itemID}:activity:child:${entryKey(child, index)}`}>
+        {(child, index) => (
+          <View class="gap-0.5">
+            <View class="flex-row items-start gap-1.5">
+              <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
+                {index() === props.calls.length - 1 ? "└─" : "├─"}
+              </Text>
+              <Text class="font-mono text-xs leading-[18px]" style={{ color: statusTag(normalizeTaskStatus(child()?.status)).color }}>
+                ●
+              </Text>
+              <OverflowLine contentClass="flex-row items-center gap-1.5" testID="chat-activity-call">
+                <Text class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`}>
+                  {entryTitle(child())}
+                  {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
+                </Text>
+                <If when={activityParams(child())[0]?.value}>
+                  <TerminalText
+                    text={activityParams(child())[0]?.value ?? ""}
+                    limit={PARAM_LIMIT}
+                    class={`font-mono text-xs leading-[18px] ${TERMINAL_MUTED} line-clamp-1`}
+                  />
+                </If>
+              </OverflowLine>
+            </View>
+            <If when={child()?.error}>
+              <View class="flex-row gap-1.5">
+                <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
+                  {index() === props.calls.length - 1 ? "  " : "│ "}
+                </Text>
+                <TerminalText text={String(child()?.error ?? "")} copyOnly class={`flex-1 font-mono text-xs leading-[18px] ${TERMINAL_ERROR}`} />
+              </View>
+            </If>
+          </View>
+        )}
+      </Each>
+    </View>
   );
 }
 

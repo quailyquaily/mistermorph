@@ -5,13 +5,24 @@
 // is the page's state (activityDetail.ts), since rows recycle. Ported from web/console/src/components/ChatWorkerRoster.js.
 import type { ViewRef } from "nsh";
 import { effect, Image, Text, View } from "nsh";
+
+/** How the agent started a worker (lib/core/chat-workers.js `workerAsk`). */
+export interface WorkerAsk {
+  task: string;
+  settings: { key: string; value: string }[];
+  at: string;
+  calls: any[];
+  callsOmitted: number;
+}
 import { Tip, TipButton } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { rosterWorkers, workerProcessLabel } from "../../lib/core/chat-workers.js";
+import { ActivityCallTree } from "./ChatStatusCard";
 import { workerAvatarURL } from "../../lib/core/worker-avatars.js";
 import { t } from "./i18n";
-import { TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
+import { TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
 import { OverflowLine } from "./OverflowLine";
+import { KindChip, NEON, StatusTag, TerminalText } from "./TerminalText";
 
 function stateTone(state: string) {
   switch (state) {
@@ -103,38 +114,137 @@ export function ChatWorkerRoster(props: {
 /** A worker as the detail panel shows it, on the panel's terminal (ChatTerminal) as its progress
  *  is: its kind, state and processes, then its output by section (the panel scrolls it and follows
  *  its end). */
-export function ChatWorkerOutput(props: { worker: any }) {
-  const worker = () => props.worker;
+/** A speaker line of the worker's conversation: `▸ MORPH → CURIE`, the time at its end. */
+function Speaker(props: { mark: string; from: string; to: string; fromColor: string; toColor: string; at?: string; testID?: string }) {
   return (
-    <View class="gap-2" testID="chat-worker-output">
-      <View class="flex-row flex-wrap items-baseline gap-1.5">
-        <Text class={TERMINAL_LABEL}>{workerKindLabel(worker())}</Text>
-        <Text class={`font-mono text-xs uppercase ${TERMINAL_VALUE}`}>{workerStateLabel(worker().state)}</Text>
+    <View class="flex-row items-center gap-2" testID={props.testID}>
+      <Text class="font-mono text-[11px] uppercase leading-[18px] tracking-[0.06em]">
+        <Text style={{ color: NEON.idle }}>{props.mark} </Text>
+        <Text style={{ color: props.fromColor }}>{props.from}</Text>
+        <Text style={{ color: NEON.idle }}> → </Text>
+        <Text style={{ color: props.toColor }}>{props.to}</Text>
+      </Text>
+      <View class="flex-1" />
+      <If when={props.at}>
+        <Text class="font-mono text-[11px]" style={{ color: NEON.idle }}>
+          {props.at}
+        </Text>
+      </If>
+    </View>
+  );
+}
+
+function clock(raw: string) {
+  const date = new Date(raw);
+  if (!raw || Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * A subagent's or coder's run as the conversation it is (a readout on the terminal, TerminalText):
+ * its state, kind and processes; then what the agent asked it (`ask`: the task, whole, and the
+ * settings of the call) and the calls it made on its own; then what it printed and what it answered
+ * (its result, or its error). While it runs, its answer is the running state.
+ */
+export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; agentName?: string; itemID?: string }) {
+  const worker = () => props.worker;
+  const agent = () => props.agentName || t("chat_worker_agent");
+  const name = () => String(worker().displayName || worker().name || "");
+  const tone = () => (worker().kind === "coder" ? NEON.cyan : NEON.violet);
+  const sections = (): any[] => (Array.isArray(worker().sections) ? worker().sections : []);
+  // What it printed while it ran, then what it answered (its result, an error or a summary).
+  const printed = () => sections().filter((section) => section.kind === "output");
+  const answer = () => sections().filter((section) => section.kind !== "output");
+  const running = () => worker().state === "running";
+  return (
+    <View class="gap-3" testID="chat-worker-output">
+      {/* A readout's head (TerminalText.tsx): its state tag, its kind as a chip, its processes. */}
+      <View class="flex-row flex-wrap items-center gap-2">
+        <StatusTag status={String(worker().state || "")} testID="chat-worker-status" />
+        <KindChip label={workerKindLabel(worker())} tone={worker().kind === "coder" ? "cyan" : "violet"} />
         <Each
           of={Array.isArray(worker().processes) ? worker().processes : []}
           key={(process: any) => `${process.pid}:${process.program}:${process.activityId}`}
         >
           {(process) => (
             <OverflowLine testID="chat-worker-process">
-              <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{workerProcessLabel(process())}</Text>
+              <TerminalText text={workerProcessLabel(process())} class={`font-mono text-[11px] leading-[18px] ${TERMINAL_MUTED}`} />
             </OverflowLine>
           )}
         </Each>
       </View>
-      <If when={worker().sections.length > 0} else={<Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_worker_no_output")}</Text>}>
-        <Each of={worker().sections as any[]} key={(section) => section.kind}>
-          {(section) => (
-            <View class="gap-1">
-              <If when={worker().sections.length > 1}>
-                <Text class={TERMINAL_LABEL}>{t(`chat_worker_section_${section().kind}`)}</Text>
-              </If>
-              <View selectable>
-                <Text class={terminalNoteClass(section().kind === "error")}>{section().text}</Text>
-              </View>
+
+      {/* What the agent asked: the task as it was sent, the call's settings under it. */}
+      <If when={props.ask?.task || props.ask?.settings.length}>
+        <View class="gap-1.5" testID="chat-worker-ask">
+          <Speaker mark="▸" from={agent()} to={name()} fromColor={NEON.ok} toColor={tone()} at={clock(props.ask?.at ?? "")} />
+          <If when={props.ask?.task}>
+            <View selectable class="border-l-2 pl-2.5" style={{ borderColor: `${NEON.ok}80` }}>
+              <TerminalText text={props.ask?.task ?? ""} copyOnly class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`} testID="chat-worker-task" />
             </View>
-          )}
-        </Each>
+          </If>
+          <Each of={props.ask?.settings ?? []} key={(setting) => setting.key}>
+            {(setting) => (
+              <View class="flex-row items-start gap-2 pl-3">
+                <Text class="w-[64px] shrink-0 font-mono text-[11px] leading-[18px] line-clamp-1" style={{ color: NEON.key }}>
+                  {setting().key}
+                </Text>
+                <TerminalText text={setting().value} class={`flex-1 font-mono text-xs leading-[18px] ${TERMINAL_VALUE}`} />
+              </View>
+            )}
+          </Each>
+        </View>
       </If>
+
+      {/* What it did on its own: a subagent's calls. */}
+      <If when={(props.ask?.calls.length ?? 0) > 0 || (props.ask?.callsOmitted ?? 0) > 0}>
+        <View class="gap-1 pl-3" testID="chat-worker-calls">
+          <ActivityCallTree itemID={`${props.itemID ?? ""}:${worker().id}`} calls={props.ask?.calls ?? []} omitted={props.ask?.callsOmitted} />
+        </View>
+      </If>
+
+      {/* What it printed while it ran (a coder's terminal). */}
+      <Each of={printed()} key={(section) => section.kind}>
+        {(section) => (
+          <View class="gap-1">
+            <Text class={TERMINAL_LABEL}>{t(`chat_worker_section_${section().kind}`)}</Text>
+            <View selectable class="border-l-2 pl-2.5" style={{ borderColor: "#ffffff1f" }}>
+              <TerminalText text={section().text} copyOnly class={`font-mono leading-[18px] ${terminalNoteClass(false)}`} />
+            </View>
+          </View>
+        )}
+      </Each>
+
+      {/* What it answered: its result, or its error; while it runs, that it is running. */}
+      <View class="gap-1.5" testID="chat-worker-answer">
+        <Speaker mark="◂" from={name()} to={agent()} fromColor={tone()} toColor={NEON.ok} />
+        <If
+          when={answer().length > 0}
+          else={
+            <Text class={`pl-3 font-mono text-xs ${TERMINAL_MUTED}`}>
+              {running() ? `${t("chat_worker_state_running")}…` : printed().length > 0 ? "—" : t("chat_worker_no_output")}
+            </Text>
+          }
+        >
+          <Each of={answer()} key={(section) => section.kind}>
+            {(section) => (
+              <View class="gap-1">
+                <If when={answer().length > 1}>
+                  <Text class={TERMINAL_LABEL}>{t(`chat_worker_section_${section().kind}`)}</Text>
+                </If>
+                <View
+                  selectable
+                  class="border-l-2 pl-2.5"
+                  style={{ borderColor: section().kind === "error" ? `${NEON.fail}99` : `${tone()}80` }}
+                >
+                  <TerminalText text={section().text} copyOnly class={`font-mono leading-[18px] ${terminalNoteClass(section().kind === "error")}`} />
+                </View>
+              </View>
+            )}
+          </Each>
+        </If>
+      </View>
     </View>
   );
 }
