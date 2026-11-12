@@ -310,7 +310,7 @@ All actions return JSON with:
 - `fields`: the fields `update` changed, for example `["content", "bash_env"]` (`update` only).
 - `warnings`: optional reference-resolution warnings (add actions).
 
-A task in a result never includes `bash_env` values: `bash_env` is left out and `bash_env_names` lists the variable names, for example `"bash_env_names": ["API_TOKEN"]`. Errors name a bad entry by its index, never its value. In tool events and `tool_call_params` logs, `todo_update` arguments show each `bash_env` name with its value as `"[redacted]"`; a [`codemode`](#codemode) script that calls `todo_update` is shown by its size only.
+A task in a result never includes `bash_env` values: `bash_env` is left out and `bash_env_names` lists the variable names, for example `"bash_env_names": ["API_TOKEN"]`. Errors name a bad entry by its index, never its value. In tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript, `todo_update` arguments show each `bash_env` name with its value as `"[redacted]"`; a [`codemode`](#codemode) script that calls `todo_update` is shown by its size only.
 
 Constraints:
 
@@ -625,7 +625,7 @@ Rules:
 - Limits: `timeout` (default 120s, also bounded by the task deadline), `max_tool_calls` (256, including searches), `max_parallel_calls` (4); source 64 KiB, one tool argument object 256 KiB, one result 1 MiB, all results 8 MiB, output 64 KiB or 256 items.
 - Memory is watched, not capped: while scripts run, the process heap is sampled every 100 ms, each result logs its approximate heap growth, and running scripts stop with `memory_limit` when the heap passes 90% of `GOMEMLIMIT` (2 GiB without one). A single large allocation can still exhaust the process. Set `tools.codemode.enabled: false` to turn it off.
 - In the Console activity panel a script is one entry with its calls listed under it; the CLI prints them indented under `▸ codemode`.
-- Tool events and `tool_call_params` logs never show a script's source, only `code_chars` and `code_lines`: a script can pass secrets to its calls (such as `todo_update` `bash_env` values) through any expression, which is only known once it runs. Each call the script makes is shown on its own, with that tool's redaction. The conversation and run state keep the source.
+- Tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript never show a script's source, only `code_chars` and `code_lines`: a script can pass secrets to its calls (such as `todo_update` `bash_env` values) through any expression, which is only known once it runs. Each call the script makes is shown on its own, with that tool's redaction. The conversation and run state keep the source.
 
 ## `plan_create`
 
