@@ -1,6 +1,6 @@
 ---
 branch: factory/FT97-todo-update-preserve-bash-environment
-round: 1
+round: 2
 ---
 # Fix todo_update losing configured Bash Environment when editing tasks
 
@@ -67,3 +67,21 @@ notes:
 - Validation: manager independently ran test -z "$(gofmt -l .)" && go vet ./... && go test ./... with throwaway HOME; all passed. Coder's initial test run failed without identifying a package due to truncated output; subsequent full and uncached runs passed. Initial failure cause remains unknown, not proven unrelated.
 - Installs: none. Source worktree remains clean; no UI changes, visual checks or nsh checks. Live-model compliance not checked. Run state/transcripts/approval persistence still retain values by design; unknown update parameters are ignored. Coder reported using a temporary scratch copy outside the assigned run directory for its probe and deleting it; that location did not comply with the run-directory rule.
 - Round 1 of 3: returned to new/ for the next build to fix the P1 before shipping. No linked GitHub issue or PR identified. Not merged or released.
+
+## factory · plan · 2026-11-12 16:31
+
+Fix round 2 addendum:
+- Fix the latest review P1 by withholding outer codemode script source from event arguments and parameter logs, including dynamically constructed values; preserve actual execution and nested todo_update redaction. Do not rely on JavaScript source regexes.
+- Cover real engine dispatch, persistence/reload, literal/computed synthetic credentials, failed inner calls and malformed scripts. Align docs/tools.md with update, bash_env clearing and redacted results (related P3).
+
+## factory · 2026-11-12 16:31
+
+Fix round 2 built and pushed at 0769aaa3 (commits 7e65c709 and 0769aaa3). Moved new/ → review/.
+- Fixed P1: codemode parameters in tool_start/tool_done arguments and include_tool_params logs now contain only a withheld marker and script size. Original execution arguments are untouched; nested todo_update calls keep their own redaction. Whole-source withholding avoids leaks from computed expressions and malformed scripts, at the cost of no script source in ordinary activity/log views.
+- Added unit and integration regressions: real codemode dispatch with literal/computed synthetic values, unknown ID and invalid environment failures followed by successful update, persistence/reload and unrelated-field preservation, malformed script, outer/nested events and parameter logs. Coder reports the regression fails when this fix is reverted.
+- Updated English docs/tools.md for update, omission/clear/null semantics, bash_env, schedule-kind changes, result redaction and script-source withholding (P3).
+- Validation: coder and manager independently passed test -z "$(gofmt -l .)" && go vet ./... && go test ./... using throwaway HOME under the build directory. Coder's initial formatting failure was fixed before the passing run. Worktree clean, only item-related history, no protected paths changed.
+- Installs: none; no dependency changes. No merge needed because origin/master remains an ancestor.
+- Not checked: live-model prompt compliance. No UI sources changed; no visual inspection or nsh checks. Conversation/run state still retain script source by design; arbitrary script output/returned text/thrown error text is not automatically scrubbed. No live tasks or user credentials touched.
+- Manager's first verification command was blocked by a local path guard; the replacement checked the full changed-path list and passed the same test gate.
+Next: review the security fix and its intentional observability tradeoff. Not merged or released.
