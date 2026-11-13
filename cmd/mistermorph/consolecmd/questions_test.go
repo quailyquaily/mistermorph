@@ -159,3 +159,33 @@ func TestConsoleRoutesAwaitingAnswerFollowsTheOpenQuestion(t *testing.T) {
 		t.Fatal("still waiting after the answer")
 	}
 }
+
+// A running task's open question and approval card, as its stream shows them, are its live result;
+// a task with none has nothing.
+func TestLiveTaskResultCarriesTheStreamsQuestionsAndElevations(t *testing.T) {
+	r := &consoleLocalRuntime{streamHub: newConsoleStreamHub()}
+	if live := r.liveTaskResult("t1"); len(live) != 0 {
+		t.Fatalf("no stream: %+v", live)
+	}
+	questions := &consoleTaskQuestions{taskID: "t1", hub: r.streamHub}
+	if _, err := questions.show(context.Background(), taskruntime.UserQuestion{
+		ID: "q1", Text: "Trust /tmp/try-cc?", ChoicesOnly: true,
+		Options: []taskruntime.UserQuestionOption{{Label: "Yes"}, {Label: "No"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A later frame (the reply's progress) still carries the question.
+	r.streamHub.PublishStatus("t1", "running")
+	r.streamHub.PublishElevations("t1", []consoleElevation{{ID: "e1", Command: "id", Status: "open"}})
+	live := r.liveTaskResult("t1")
+	asked, _ := live["questions"].([]consoleQuestion)
+	if len(asked) != 1 || asked[0].ID != "q1" || asked[0].Status != consoleQuestionOpen || len(asked[0].Options) != 2 {
+		t.Fatalf("questions = %+v", live["questions"])
+	}
+	if cards, _ := live["elevations"].([]consoleElevation); len(cards) != 1 || cards[0].ID != "e1" {
+		t.Fatalf("elevations = %+v", live["elevations"])
+	}
+	if live := r.liveTaskResult("other"); len(live) != 0 {
+		t.Fatalf("other task: %+v", live)
+	}
+}

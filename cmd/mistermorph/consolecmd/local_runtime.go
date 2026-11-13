@@ -1402,6 +1402,8 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			AwaitingAnswer: func(taskID string) bool {
 				return r.runControl.AwaitingAnswer("console", taskID)
 			},
+			// Its questions and approval cards, for a Console that polls rather than streams.
+			LiveResult: r.liveTaskResult,
 			TopicMetadata: func(ctx context.Context, topicID string) (daemonruntime.TopicMetadata, error) {
 				return r.topicMetadataForTopic(ctx, topicID, paths.TopicContextPath, defaultWorkspaceDir)
 			},

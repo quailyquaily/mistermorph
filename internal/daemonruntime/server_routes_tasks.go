@@ -27,6 +27,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	stop := opts.Stop
 	answerQuestion := opts.AnswerQuestion
 	awaitingAnswer := opts.AwaitingAnswer
+	liveResult := opts.LiveResult
 	answerElevation := opts.AnswerElevation
 
 	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
@@ -314,6 +315,9 @@ func (routes *routeRegistration) registerTaskRoutes() {
 		// A copy: the reader may hand out its own record.
 		task := []TaskInfo{*info}
 		markAwaitingAnswer(task, awaitingAnswer)
+		if liveResult != nil && task[0].Status == TaskRunning {
+			task[0].Result = withLiveResult(task[0].Result, liveResult(task[0].ID))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(task[0])
 	})
@@ -618,6 +622,32 @@ type TopicActivity struct {
 	CronRunning      int        `json:"cron_running,omitempty"`
 	LatestDoneTaskID string     `json:"latest_done_task_id,omitempty"`
 	LatestDoneAt     *time.Time `json:"latest_done_at,omitempty"`
+}
+
+// withLiveResult adds a running task's live entries to its result, keeping any the record has. A
+// result that is not an object is left as it is.
+func withLiveResult(result any, live map[string]any) any {
+	if len(live) == 0 {
+		return result
+	}
+	var merged map[string]any
+	switch current := result.(type) {
+	case nil:
+		merged = make(map[string]any, len(live))
+	case map[string]any:
+		merged = make(map[string]any, len(current)+len(live))
+		for key, value := range current {
+			merged[key] = value
+		}
+	default:
+		return result
+	}
+	for key, value := range live {
+		if _, ok := merged[key]; !ok {
+			merged[key] = value
+		}
+	}
+	return merged
 }
 
 // markAwaitingAnswer sets AwaitingAnswer on the running tasks of items whose run waits on an answer
