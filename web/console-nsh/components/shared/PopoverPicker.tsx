@@ -26,10 +26,13 @@
 //
 // The popup is never wider than the window less its margins, and the tail stays off the popup's
 // rounded corners (a trigger near the window's edge: the tail leans to the popup's side of it).
+// It opens growing out of its tail (fading in, sliding toward the trigger and scaling up from the
+// tail's tip) and closes the same way back. Its list runs from side to side, so the scroll view's
+// bar is at the popup's edge; the rows keep their inset inside it.
 import type { JSX, ViewRef } from "nsh";
 import { Canvas, cleanup, effect, keymap, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton, Input, Popover } from "nsh/base";
-import { MENU_POPUP_STYLE, MENU_STARTING, Tip } from "../ui";
+import { MENU_POPUP_STYLE, Tip } from "../ui";
 
 export interface PickerItem {
   value: string;
@@ -96,13 +99,23 @@ export function choosePickerPlacement(options: {
 /** The tail: its width along the popup's edge and how far it reaches out. */
 const TAIL_WIDTH = 24;
 const TAIL_HEIGHT = 9;
-/** The popup's padding (`p-2`) and border, between its edge and its content. */
-const POPUP_INSET = 8 + 1;
+/** The popup's padding and border between its edge and its content: above and below (`py-2`
+ *  and the border), and at the sides (the border only: the list reaches the popup's sides, and its
+ *  parts keep their inset inside it, LIST_INSET). */
+const POPUP_INSET_Y = 8 + 1;
+const POPUP_INSET_X = 1;
+/** How far a popup's rows, filter and label stand in from its sides, inside the list: the scroll
+ *  view runs edge to edge, so its bar is at the popup's edge and no margin frames it. */
+const LIST_INSET = 8;
 /** How far the tail's canvas reaches back over the popup: its border row and one inside it, so
  *  the fill covers the border under the tail wherever the edge falls on the pixels. */
 const TAIL_OVERLAP = 2;
 /** The popup's corner radius (`rounded-[16px]`), which the tail keeps off. */
 const POPUP_RADIUS = 16;
+/** How the popup opens and closes: from a little short of its place toward the trigger, a touch
+ *  smaller, transparent (MENU_STARTING's fade, with the scale its tail grows it from). */
+const PICKER_STARTING_BELOW = "opacity-0 -translate-y-1.5 scale-[0.96]";
+const PICKER_STARTING_ABOVE = "opacity-0 translate-y-1.5 scale-[0.96]";
 /** The margin the popover keeps from the window's edges. */
 const POPUP_MARGIN = 8;
 
@@ -188,7 +201,11 @@ export function PickerList(props: {
   part: (name: string) => string | undefined;
   /** Drawn first in the list, over it (the popover's tail). */
   overlay?: JSX.Element;
+  /** How far the rows, filter, label and footer stand in from the list's sides (the popover's
+   *  list reaches its sides); 0 by default. */
+  inset?: number;
 }) {
+  const inset = () => ({ paddingHorizontal: props.inset ?? 0 });
   // The rows: filtered, then the footer's; one highlighted (never a disabled one; -1: none).
   const query = signal("");
   const active = signal(0);
@@ -279,12 +296,13 @@ export function PickerList(props: {
           accessibilityLabel={props.filterPlaceholder}
           autoFocus={props.filterAutoFocus !== false}
           testID={props.part("filter")}
-          class="mx-1 mb-1 rounded-full border border-input px-3 py-1.5 text-sm text-foreground placeholder:text-placeholder"
+          style={{ marginHorizontal: (props.inset ?? 0) + 4 }}
+          class="mb-1 rounded-full border border-input px-3 py-1.5 text-sm text-foreground placeholder:text-placeholder"
         />
       </If>
       <If when={props.label}>
         {/* Spaced capitals, upper-cased here: text is measured as written. */}
-        <Text class="px-3 pb-1 pt-1.5 font-mono text-[11px] tracking-[0.16em] text-muted-foreground">
+        <Text class="px-3 pb-1 pt-1.5 font-mono text-[11px] tracking-[0.16em] text-muted-foreground" style={{ marginHorizontal: props.inset ?? 0 }}>
           {String(props.label ?? "").toLocaleUpperCase()}
         </Text>
       </If>
@@ -297,6 +315,7 @@ export function PickerList(props: {
       >
         <View
           class="gap-0.5"
+          style={inset()}
           role="listbox"
           accessibilityLabel={props.label ?? props.accessibilityLabel}
           onLayout={({ bounds }) => rowsHeight.set(bounds.size.height)}
@@ -310,10 +329,12 @@ export function PickerList(props: {
         </View>
       </Scroll>
       <If when={footer().length > 0}>
-        <View class="gap-0.5 border-t border-line-faint pt-1">
-          <Each of={footer()} key={(item) => item.value}>
-            {(item, index) => row(item, () => shown().length + index())}
-          </Each>
+        <View style={inset()}>
+          <View class="gap-0.5 border-t border-line-faint pt-1">
+            <Each of={footer()} key={(item) => item.value}>
+              {(item, index) => row(item, () => shown().length + index())}
+            </Each>
+          </View>
         </View>
       </If>
     </View>
@@ -418,11 +439,11 @@ export function PopoverPicker(props: {
   // Where the tail stands along the popup's edge (in its content box): over the trigger's middle,
   // kept off the rounded corners.
   const tailLeft = () => {
-    const left = anchorMiddle() - (popupLeft() ?? 0) - POPUP_INSET - TAIL_WIDTH / 2;
+    const left = anchorMiddle() - (popupLeft() ?? 0) - POPUP_INSET_X - TAIL_WIDTH / 2;
     const width = popupWidth();
     if (width <= 0) return left;
-    const least = POPUP_RADIUS - POPUP_INSET;
-    const most = width - POPUP_INSET - POPUP_RADIUS - TAIL_WIDTH;
+    const least = POPUP_RADIUS - POPUP_INSET_X;
+    const most = width - POPUP_INSET_X - POPUP_RADIUS - TAIL_WIDTH;
     return Math.max(least, Math.min(most, left));
   };
 
@@ -450,10 +471,16 @@ export function PopoverPicker(props: {
           popupLeft.set(bounds.origin.x);
           popupWidth.set(bounds.size.width);
         }}
-        popupClass={`${props.widthClass ?? "w-72"} rounded-[16px] border border-line-faint bg-dialog p-2 transition duration-120`}
-        popupStyle={{ ...MENU_POPUP_STYLE, maxHeight: placement().maxHeight, maxWidth: windowSize().width - 2 * POPUP_MARGIN }}
-        popupStartingClass={MENU_STARTING}
-        popupEndingClass="opacity-0"
+        popupClass={`${props.widthClass ?? "w-72"} rounded-[16px] border border-line-faint bg-dialog py-2 transition duration-180`}
+        popupStyle={{
+          ...MENU_POPUP_STYLE,
+          maxHeight: placement().maxHeight,
+          maxWidth: windowSize().width - 2 * POPUP_MARGIN,
+          // It grows out of its tail: from the tail's tip, on the side facing the trigger.
+          transformOrigin: `${popupLeft() === null ? "50%" : `${POPUP_INSET_X + tailLeft() + TAIL_WIDTH / 2}px`} ${placement().side === "top" ? "100%" : "0%"}`,
+        }}
+        popupStartingClass={placement().side === "top" ? PICKER_STARTING_ABOVE : PICKER_STARTING_BELOW}
+        popupEndingClass={placement().side === "top" ? PICKER_STARTING_ABOVE : PICKER_STARTING_BELOW}
         trigger={
           <View
             role="button"
@@ -483,13 +510,14 @@ export function PopoverPicker(props: {
           maxHeight={placement().maxHeight}
           testID={part("list")}
           part={part}
+          inset={LIST_INSET}
           overlay={
             <If when={popupLeft() !== null}>
               <PickerTail
                 up={shownSide() === "bottom"}
                 style={{
                   left: tailLeft(),
-                  ...(shownSide() === "top" ? { bottom: -(POPUP_INSET + TAIL_HEIGHT) } : { top: -(POPUP_INSET + TAIL_HEIGHT) }),
+                  ...(shownSide() === "top" ? { bottom: -(POPUP_INSET_Y + TAIL_HEIGHT) } : { top: -(POPUP_INSET_Y + TAIL_HEIGHT) }),
                 }}
                 testID={part("tail")}
               />

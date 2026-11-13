@@ -289,6 +289,11 @@ Headless tests prove behaviour, not the look.
   a list and items needs that call too. In `nsh test` the app's modules are another realm (a test's
   import of `lib/shell` is not the app's state): the frame's bottom padding is readable as the
   `app-frame.bottom-<pt>` testID.
+- On the web, an `Image` inside a `Scroll` adds its own pixels to the scroll's content size, not
+  its styled size: a 512px avatar drawn at 24pt made the agent picker's list (177pt of rows)
+  scroll to 656pt, and 532pt across (the runtime's `nsh-spacer` is sized from the core's content
+  size). Put such an image in a View of its size with `overflow-hidden` (`AgentAvatar`). Headless
+  tests and GPUI do not show it; read the scroll's `nsh-spacer` in a browser.
 
 ### Android (nsh 0.4.0)
 

@@ -54,12 +54,16 @@ export function AgentAvatar(props: { image: string | ImageAsset; size: number; d
       when={props.image}
       else={<View class="rounded-full bg-line-soft" style={{ width: props.size, height: props.size }} />}
     >
-      <Image
-        src={props.image}
-        class="rounded-full bg-card"
-        accessibilityElementsHidden
-        style={{ width: props.size, height: props.size, objectFit: "cover", opacity: props.dim ? 0.7 : 1 }}
-      />
+      {/* In a clipped frame of its size: nsh's web runtime counted the image's own pixels (a 512px
+          avatar) into a scroll view's content, so the agent list scrolled far past its rows. */}
+      <View class="overflow-hidden rounded-full" style={{ width: props.size, height: props.size }}>
+        <Image
+          src={props.image}
+          class="rounded-full bg-card"
+          accessibilityElementsHidden
+          style={{ width: props.size, height: props.size, objectFit: "cover", opacity: props.dim ? 0.7 : 1 }}
+        />
+      </View>
     </If>
   );
 }
@@ -262,7 +266,9 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
   const trigger = (): JSX.Element => (
     <View
       class={`h-14 flex-row items-center gap-2 ${props.compact && !open() ? "justify-center px-0" : "px-[13px]"} ${
-        open() ? "bg-card" : "hover:bg-hover-soft"
+        // Open: the hover's translucent tint, a step deeper; an opaque fill would lighten the
+        // sidebar and cover its right edge, which is drawn under the switcher.
+        open() ? "bg-hover" : "hover:bg-hover-soft"
       }`}
       style={{ transitionProperty: "colors", transitionDuration: 140, transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)" }}
     >
