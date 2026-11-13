@@ -37,3 +37,13 @@ Tests: gofmt and go vet passed. Required Go gate passed on retry, including a fr
 Visual verification: coder inspected actual Chrome rendering at 1280px and 390px for text-only, text plus file, file-only, multiple long filenames, system messages, hover/pressed/tooltip states and preview/copy interactions. Available light/dark palettes are identical. Native desktop and Android were not visually checked (no display server/device tooling). Screenshots remain ignored scratch artifacts.
 
 Installs: none; no dependency manifests changed. Initial push needed per-command credential.useHttpPath=true; retry succeeded without changing global settings. Owner should inspect the rounded outline and file interactions on native clients before shipping.
+
+## factory · review · 2026-11-13 12:10
+head: 864cd9909ef48f62ff976d918edfaa0ac9a53ee4
+verdict: pass
+notes:
+- Claude Code reviewed all four changed files on origin/master...HEAD against the request and plan. No qualifying findings. Worktree remained clean; no code changes or commits.
+- Required gate passed: gofmt clean, go vet ./... and go test ./... (162 packages ok, gate exit=0). Tests used absolute throwaway HOME directories.
+- Console validation passed: nsh check exit=0; nsh test --web-host tests/noHost.js: 862 passed, 0 failed (19m 53s), including all 11 attachment-bubble tests. Existing nsh 0.5.0 was used. Installs: none.
+- Review was headless: no independent pixel/visual verification of corners, hover or pressed fills, and no native desktop or physical Android verification. Prior build records browser visual checks; owner should inspect native clients before shipping.
+- No linked GitHub issue or PR was identified in this item. Moved review/ → ready/; not shipped.
