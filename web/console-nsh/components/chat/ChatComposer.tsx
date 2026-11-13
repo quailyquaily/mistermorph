@@ -7,9 +7,10 @@
 // Not ported: the coloured overlay that marked command and skill tokens inside the text (a native
 // text field draws its own text; nothing can be laid exactly over it).
 import type { InputRef, JSX } from "nsh";
-import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, platform, signal, Text, token, untracked, View } from "nsh";
+import { batch, cleanup, createAnimatedValue, effect, Image, Keyboard, keyboardFrame, keymap, platform, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { BorderBeam } from "../motion/BorderBeam";
+import { motionMs } from "../motion/tokens";
 import { PopoverPicker } from "../shared/PopoverPicker";
 import { ICONS } from "../icons";
 import {
@@ -166,6 +167,28 @@ export function voiceButtonLook(state: "idle" | "recording" | "transcribing" | u
   if (state === "recording") return { look: "recording", variant: "danger", tint: "destructive-foreground", busy: false };
   if (state === "transcribing") return { look: "busy", variant: "plain", tint: busyLook("primary").text, busy: true };
   return { look: "primary", variant: "primary", tint: "primary-foreground", busy: false };
+}
+
+/** The voice/Send drum (VoiceOrSend): its chambers' spacing, its axis below the button's centre,
+ * one chamber's turn, and the curve that overshoots a little and clicks back into place. */
+export const DRUM_STEP = 60;
+export const DRUM_RADIUS = 26;
+const DRUM_TURN_MS = 240;
+const DRUM_EASE: [number, number, number, number] = [0.34, 1.32, 0.64, 1];
+/** The drum's turn sampled along the arc (a chamber's place is not linear in the turn). */
+const DRUM_INPUT = [-0.5, -0.25, 0, 0.25, 0.5, 0.75, 1, 1.25, 1.5];
+
+/**
+ * Where a glyph on the drum sits, from the button's centre, along DRUM_INPUT: the chamber `offset`
+ * steps from the mic's (the mic's 0, Send's -1), at angle (turn + offset) × DRUM_STEP from the top,
+ * clockwise. Upright, so only its place moves.
+ */
+export function drumOffsets(offset: number, axis: "x" | "y") {
+  return DRUM_INPUT.map((turn) => {
+    const angle = ((turn + offset) * DRUM_STEP * Math.PI) / 180;
+    const value = axis === "x" ? DRUM_RADIUS * Math.sin(angle) : DRUM_RADIUS * (1 - Math.cos(angle));
+    return Math.round(value * 1000) / 1000;
+  });
 }
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -572,6 +595,8 @@ export function ChatComposer(props: ChatComposerProps) {
         !sendEmpty() && props.sendDisabled && !props.stopMode && !sendBusy() ? "opacity-45" : ""
       }`}
     >
+      {/* The glyphs; while the drum turns (VoiceOrSend) it carries them instead. */}
+      <View class="absolute inset-0 items-center justify-center" style={{ opacity: drumTurning() ? 0 : 1 }}>
         <Image
           src={ICONS.PhPaperPlaneTilt}
           accessibilityElementsHidden
@@ -597,6 +622,7 @@ export function ChatComposer(props: ChatComposerProps) {
             scale: props.stopMode ? 1 : 0.6,
           }}
         />
+      </View>
         <BusyBeam busy={sendBusy()} short radius={19} testID="chat-composer-send-beam" />
     </CircleButton>
   );
@@ -619,12 +645,14 @@ export function ChatComposer(props: ChatComposerProps) {
       variant={voiceLook().variant}
       class={voiceLook().busy ? `border ${busyLook("primary").box}` : "disabled:opacity-45"}
     >
-      <Icon
-        name="PhMicrophone"
-        size={14}
-        color={voiceLook().tint}
-        testID={`chat-composer-voice-icon.PhMicrophone.${voiceLook().look}.${voiceLook().tint}`}
-      />
+      <View style={{ opacity: drumTurning() ? 0 : 1 }}>
+        <Icon
+          name="PhMicrophone"
+          size={14}
+          color={voiceLook().tint}
+          testID={`chat-composer-voice-icon.PhMicrophone.${voiceLook().look}.${voiceLook().tint}`}
+        />
+      </View>
       <BusyBeam busy={voiceLook().busy} short radius={19} testID="chat-composer-voice-beam" />
     </CircleButton>
   );
@@ -720,15 +748,60 @@ export function ChatComposer(props: ChatComposerProps) {
 
   // Voice and Send share the row's end: the mic while there is nothing to send (no text, no
   // files) or while it records or transcribes, Send once there is something to send and while a
-  // task runs (it is Stop then). Both stay in place, one over the other, and cross-fade with a
-  // slight scale (opacity and transform, run natively); the hidden one takes no presses and is
-  // hidden from screen readers. Without voice input it is always Send.
+  // task runs (it is Stop then). Both stay in place, one over the other; the hidden one takes no
+  // presses and is hidden from screen readers. Without voice input it is always Send.
+  //
+  // Between the mic and Send the glyphs turn like a revolver's cylinder: chambers DRUM_STEP apart on
+  // a drum whose axis lies DRUM_RADIUS below the button's centre, one chamber's turn a step with a
+  // small overshoot, a click into place. Typing turns Send in from the left as the mic leaves to the
+  // right; clearing the field turns it back. The circles stay where they are (both the primary
+  // circle at rest; they cross-fade under the drum), the glyphs stay upright and are clipped to the
+  // circle. A turn reversed half-way goes back from where it is. While the drum turns it carries
+  // both glyphs and the buttons hide their own; at rest each button draws its own (its look:
+  // recording, busy, disabled). To and from Stop there is no turn (the plane is not what shows): the
+  // two cross-fade with a slight scale, as with reduced motion.
   const voiceShown = () =>
     !!props.voiceAvailable && !props.stopMode && (voiceActive() || (value().trim() === "" && !(props.fileItems ?? []).length));
-  const turn = (shown: boolean) => ({
+  // 0: the mic's chamber at the top; 1: Send's.
+  const drum = createAnimatedValue(untracked(voiceShown) ? 0 : 1);
+  const drumTurning = signal(false);
+  let drumRun = 0;
+  let wasStop = untracked(() => !!props.stopMode);
+  let wasVoice = untracked(voiceShown);
+  effect(() => {
+    const voice = voiceShown();
+    const stop = !!props.stopMode;
+    untracked(() => {
+      const changed = voice !== wasVoice;
+      const viaStop = stop || wasStop;
+      wasVoice = voice;
+      wasStop = stop;
+      if (!changed) return;
+      const run = ++drumRun;
+      const duration = motionMs(DRUM_TURN_MS);
+      if (viaStop || !props.voiceAvailable || duration === 0) {
+        drum.set(voice ? 0 : 1);
+        drumTurning.set(false);
+        return;
+      }
+      drumTurning.set(true);
+      void drum.timing(voice ? 0 : 1, { duration, easing: DRUM_EASE }).then(({ finished }) => {
+        if (finished && run === drumRun) drumTurning.set(false);
+      });
+    });
+  });
+  const crossFade = (shown: boolean) => ({
     opacity: shown ? 1 : 0,
-    scale: shown ? 1 : 0.6,
+    // The drum turns the glyphs; the circles only cross-fade under it.
+    scale: shown || drumTurning() ? 1 : 0.6,
     pointerEvents: shown ? ("auto" as const) : ("none" as const),
+  });
+  /** A glyph on the drum, in the chamber `offset` steps from the mic's (the mic's 0, Send's -1). */
+  const chamber = (offset: number) => ({
+    transform: [
+      { translateX: drum.interpolate({ inputRange: DRUM_INPUT, outputRange: drumOffsets(offset, "x"), extrapolate: "extend" }) },
+      { translateY: drum.interpolate({ inputRange: DRUM_INPUT, outputRange: drumOffsets(offset, "y"), extrapolate: "extend" }) },
+    ],
   });
   function VoiceOrSend() {
     return (
@@ -736,7 +809,7 @@ export function ChatComposer(props: ChatComposerProps) {
         <If when={props.voiceAvailable}>
           <View
             class="absolute inset-0 transition duration-[220ms]"
-            style={turn(voiceShown())}
+            style={crossFade(voiceShown())}
             accessibilityElementsHidden={!voiceShown() || undefined}
             importantForAccessibility={voiceShown() ? undefined : "no-hide-descendants"}
           >
@@ -745,12 +818,29 @@ export function ChatComposer(props: ChatComposerProps) {
         </If>
         <View
           class="absolute inset-0 transition duration-[220ms]"
-          style={turn(!voiceShown())}
+          style={crossFade(!voiceShown())}
           accessibilityElementsHidden={voiceShown() || undefined}
           importantForAccessibility={voiceShown() ? "no-hide-descendants" : undefined}
         >
           {sendControl()}
         </View>
+        {/* The drum: both glyphs, over the circles, clipped to them; not pressable. */}
+        <If when={drumTurning()}>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            class="absolute inset-0 overflow-hidden rounded-full"
+            style={{ pointerEvents: "none" }}
+            testID="chat-composer-drum"
+          >
+            <View class="absolute inset-0 items-center justify-center" style={chamber(0)}>
+              <Icon name="PhMicrophone" size={14} color={voiceLook().tint} />
+            </View>
+            <View class="absolute inset-0 items-center justify-center" style={chamber(-1)}>
+              <Image src={ICONS.PhPaperPlaneTilt} accessibilityElementsHidden style={{ width: 14, height: 14, tintColor: token("primary-foreground") as string }} />
+            </View>
+          </View>
+        </If>
       </View>
     );
   }

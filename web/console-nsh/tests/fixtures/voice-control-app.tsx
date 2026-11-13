@@ -1,5 +1,5 @@
 // The real ChatComposer's voice button in each voice state, set by the buttons above it: idle,
-// recording, transcribing, and the composer disabled. The report counts the button's presses and
+// recording, transcribing, the composer disabled, and a task running (Send is Stop then). The report counts the button's presses and
 // gives the colour its glyph is drawn in, in the theme shown. tests/chat-voice-icon.test.tsx reads it.
 import { mount, signal, Text, token, View } from "nsh";
 import { Button } from "nsh/base";
@@ -10,6 +10,7 @@ type VoiceState = "idle" | "recording" | "transcribing";
 const draft = signal("");
 const state = signal<VoiceState>("idle");
 const disabled = signal(false);
+const stop = signal(false);
 const presses = signal(0);
 
 const label = () => (state() === "recording" ? "Stop and transcribe" : "Voice input");
@@ -29,12 +30,14 @@ mount(() => (
       <Set name="set-recording" onPress={() => state.set("recording")} />
       <Set name="set-transcribing" onPress={() => state.set("transcribing")} />
       <Set name="toggle-disabled" onPress={() => disabled.update((value) => !value)} />
+      <Set name="toggle-stop" onPress={() => stop.update((value) => !value)} />
     </View>
     <ChatComposer
       value={draft()}
       onChange={(value) => draft.set(value)}
       disabled={disabled()}
       voiceAvailable
+      stopMode={stop()}
       voiceState={state()}
       voiceLabel={label()}
       onVoice={() => presses.update((count) => count + 1)}
