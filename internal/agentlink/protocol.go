@@ -28,6 +28,14 @@ const (
 	FramePing          = "ping"
 	FramePong          = "pong"
 	FrameError         = "error"
+	// FrameChunkAck acknowledges the bytes of a streamed file the receiver holds; a relay forwards
+	// it to the sender with the sender's lease ID.
+	FrameChunkAck = "chunk_ack"
+	// FrameTransferAbort tells a receiver that a relay dropped a streamed delivery: with
+	// StatusRejected its partial files go, with StatusUnreachable they wait for a resume.
+	FrameTransferAbort = "transfer_abort"
+	// FrameChunk is a binary frame carrying a Chunk. It never travels as JSON.
+	FrameChunk = "chunk"
 )
 
 // Delivery statuses.
@@ -77,7 +85,7 @@ type Message struct {
 	Hop       int                        `json:"hop"`
 	Envelope  busruntime.MessageEnvelope `json:"envelope"`
 	// Attachments are the files the message carries; see Attachment. Only a peer and a relay with
-	// CapabilityFiles get a message with them.
+	// CapabilityFiles get a message with them, and only with CapabilityFilesStream streamed ones.
 	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
@@ -114,6 +122,12 @@ type Frame struct {
 	Status       string   `json:"status,omitempty"`
 	Reason       string   `json:"reason,omitempty"`
 	Message      *Message `json:"message,omitempty"`
+	// TransferID and Offset are a chunk_ack's transfer and the bytes the receiver holds.
+	TransferID string `json:"transfer_id,omitempty"`
+	Offset     int64  `json:"offset,omitempty"`
+	// Chunk is the content of a binary frame (Type FrameChunk); nil for a binary frame that does
+	// not parse.
+	Chunk *Chunk `json:"-"`
 }
 
 // ContactID returns the contact ID of the agent with instanceID.

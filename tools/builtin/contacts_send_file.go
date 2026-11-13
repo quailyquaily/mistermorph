@@ -21,9 +21,14 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 )
 
-// contactsSendFileMaxBytes is the largest file contacts_send uploads. A channel with a smaller limit
-// lowers it at delivery.
+// contactsSendFileMaxBytes is the largest file contacts_send uploads to a chat channel. A channel
+// with a smaller limit lowers it at delivery. Agent Link has limits of its own (see
+// agentlink.Node.FileLimit): larger on a route that streams files, smaller on one that does not.
 const contactsSendFileMaxBytes = int64(20 << 20)
+
+// contactsSendFileReadMaxBytes is the largest file the tools look at: the larger of the chat
+// channels' limit and Agent Link's.
+const contactsSendFileReadMaxBytes = max(contactsSendFileMaxBytes, agentlink.MaxStreamAttachmentBytes)
 
 // parseContactsSendFile validates the file parameters and the file they name. It returns nil when
 // the call sends no file.
@@ -154,8 +159,8 @@ func resolveContactsSendFilePath(roots pathroots.PathRoots, rawPath string) (str
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("path is not a regular file: %s", resolved)
 	}
-	if info.Size() > contactsSendFileMaxBytes {
-		return "", fmt.Errorf("file too large to send (>%d bytes): %s", contactsSendFileMaxBytes, resolved)
+	if info.Size() > contactsSendFileReadMaxBytes {
+		return "", fmt.Errorf("file too large to send (>%d bytes): %s", contactsSendFileReadMaxBytes, resolved)
 	}
 	return resolved, nil
 }
@@ -184,12 +189,12 @@ func hashContactsSendFile(path string) (int64, string, error) {
 	}
 	defer f.Close()
 	h := sha256.New()
-	size, err := io.Copy(h, io.LimitReader(f, contactsSendFileMaxBytes+1))
+	size, err := io.Copy(h, io.LimitReader(f, contactsSendFileReadMaxBytes+1))
 	if err != nil {
 		return 0, "", err
 	}
-	if size > contactsSendFileMaxBytes {
-		return 0, "", fmt.Errorf("file too large to send (>%d bytes): %s", contactsSendFileMaxBytes, path)
+	if size > contactsSendFileReadMaxBytes {
+		return 0, "", fmt.Errorf("file too large to send (>%d bytes): %s", contactsSendFileReadMaxBytes, path)
 	}
 	return size, hex.EncodeToString(h.Sum(nil)), nil
 }
@@ -215,8 +220,8 @@ func auditContactsSendFile(ctx context.Context, toolName string, file *contacts.
 }
 
 // checkFileRecipient checks, before anything is sent, that a file can go to contact: over Agent
-// Link, within its size limit and to an agent that takes files. agent_send sends files over Agent
-// Link only.
+// Link, within the size limit of the route to it and to an agent that takes files; elsewhere,
+// within the chat channels' limit. agent_send sends files over Agent Link only.
 func checkFileRecipient(policy contactSendExecutionPolicy, contactID string, contact contacts.Contact, chatID string, file *contacts.ShareFile) error {
 	if file == nil {
 		return nil
@@ -226,13 +231,16 @@ func checkFileRecipient(policy contactSendExecutionPolicy, contactID string, con
 		if policy.agentLinkFilesOnly {
 			return fmt.Errorf("%s sends files only to Agent Link agents (mm: contacts) while Agent Link runs; %q is not one, use contacts_send for other channels", policy.toolName, strings.TrimSpace(contactID))
 		}
+		if file.Size > contactsSendFileMaxBytes {
+			return fmt.Errorf("file too large to send (>%d bytes): %s", contactsSendFileMaxBytes, file.Path)
+		}
 		return nil
-	}
-	if file.Size > agentlink.MaxAttachmentBytes {
-		return fmt.Errorf("file too large for Agent Link (%d bytes; at most %d): %s", file.Size, agentlink.MaxAttachmentBytes, file.Path)
 	}
 	if node.Reachable(instanceID) && !node.SupportsFiles(instanceID) {
 		return fmt.Errorf("%s: %q cannot take files: %w (its runtime or the Console that reaches it is too old); send text only", policy.toolName, strings.TrimSpace(contactID), agentlink.ErrFilesUnsupported)
+	}
+	if err := node.FileLimit(instanceID).Check(file.Size, 0); err != nil {
+		return fmt.Errorf("%w: %s", err, file.Path)
 	}
 	return nil
 }
@@ -257,21 +265,29 @@ func attachToAgentLinkReply(ctx context.Context, params map[string]any, contactI
 	if len(contactIDs) > 1 {
 		return "", true, fmt.Errorf("a file for your answer to %s goes on its own %s call, with only that contact_id", agentlink.ContactID(replyFiles.Peer()), policy.toolName)
 	}
-	if file.Size > agentlink.MaxAttachmentBytes {
-		return "", true, fmt.Errorf("file too large for Agent Link (%d bytes; at most %d): %s", file.Size, agentlink.MaxAttachmentBytes, file.Path)
+	// While no Console reaches the asker, the answer waits in the queue; it may carry what a
+	// streamed route takes, and its files are refused later if it finds only a route that does not
+	// stream.
+	limit := agentlink.FileLimit{PerFile: agentlink.MaxStreamAttachmentBytes, PerMessage: agentlink.MaxStreamMessageBytes, Streamed: true}
+	if node, ok := agentlink.Lookup(policy.stateDir); ok {
+		if node.Reachable(replyFiles.Peer()) && !node.SupportsFiles(replyFiles.Peer()) {
+			return "", true, fmt.Errorf("%s: %q cannot take files: %w (its runtime or the Console that reaches it is too old); answer in text only", policy.toolName, contactIDs[0], agentlink.ErrFilesUnsupported)
+		}
+		limit = node.FileLimit(replyFiles.Peer())
 	}
-	if node, ok := agentlink.Lookup(policy.stateDir); ok && node.Reachable(replyFiles.Peer()) && !node.SupportsFiles(replyFiles.Peer()) {
-		return "", true, fmt.Errorf("%s: %q cannot take files: %w (its runtime or the Console that reaches it is too old); answer in text only", policy.toolName, contactIDs[0], agentlink.ErrFilesUnsupported)
+	if err := limit.Check(file.Size, 0); err != nil {
+		return "", true, fmt.Errorf("%w: %s", err, file.Path)
 	}
 	name := file.DisplayName
 	if name == "" {
 		name = file.Filename
 	}
-	attachment, err := agentlink.ReadAttachmentFile(file.Path, name, file.Size, file.SHA256)
+	// The file is checked again and copied into the queue when the answer is sent.
+	attachment, err := agentlink.OpenAttachmentFile(file.Path, name, file.Size, file.SHA256)
 	if err != nil {
 		return "", true, err
 	}
-	if err := replyFiles.Add(attachment); err != nil {
+	if err := replyFiles.Add(attachment, limit.PerMessage); err != nil {
 		return "", true, err
 	}
 	result := map[string]any{

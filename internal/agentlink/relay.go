@@ -34,9 +34,19 @@ type Relay struct {
 	mu      sync.Mutex
 	members map[string]*relayMember
 	pending map[string]*pendingDelivery
-	// fileBytes is the attachment bytes of the pending deliveries, at most maxFileBytes.
+	// fileBytes is the inline attachment bytes of the pending deliveries, at most maxFileBytes.
 	fileBytes    int64
 	maxFileBytes int64
+	// transfers finds the streamed delivery of a chunk by its sender and transfer ID.
+	transfers map[string]*pendingDelivery
+	// streamBytes is the streamed bytes forwarded and not yet acknowledged by their receivers;
+	// peakStreamBytes the most it has been.
+	streamBytes     int64
+	peakStreamBytes int64
+	// noStream makes the relay act as one from before streamed files: it keeps
+	// CapabilityFilesStream out of the roster and refuses streamed messages. Tests use it to stand
+	// in for an older Console.
+	noStream bool
 }
 
 type relayMember struct {
@@ -45,6 +55,8 @@ type relayMember struct {
 	ctx    context.Context
 	cancel context.CancelCauseFunc
 	out    chan Frame
+	// chunks is how many chunks the member sent that its receivers have not acknowledged.
+	chunks int
 }
 
 func (m *relayMember) send(frame Frame) bool {
@@ -65,12 +77,15 @@ func (m *relayMember) send(frame Frame) bool {
 }
 
 type pendingDelivery struct {
-	source  *relayMember
-	target  *relayMember
-	leaseID string
-	timer   *time.Timer
-	// fileBytes is the attachment bytes the delivery carries.
+	messageID string
+	source    *relayMember
+	target    *relayMember
+	leaseID   string
+	timer     *time.Timer
+	// fileBytes is the inline attachment bytes the delivery carries.
 	fileBytes int64
+	// stream is the state of a delivery with streamed files.
+	stream *relayStream
 }
 
 // NewRelay returns an empty relay.
@@ -84,6 +99,7 @@ func NewRelay(logger *slog.Logger) *Relay {
 		pending: make(map[string]*pendingDelivery),
 
 		maxFileBytes: maxRelayAttachmentBytes,
+		transfers:    make(map[string]*pendingDelivery),
 	}
 }
 
@@ -133,7 +149,7 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 	member := &relayMember{
 		peer: Peer{
 			InstanceID: strings.TrimSpace(hello.InstanceID), AgentName: strings.TrimSpace(hello.AgentName),
-			Capabilities: knownCapabilities(hello.Capabilities),
+			Capabilities: r.capabilities(hello.Capabilities),
 		},
 		label:  label,
 		ctx:    ctx,
@@ -195,6 +211,10 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 			r.route(member, frame)
 		case FrameDeliverResult:
 			r.completeDelivery(member, frame)
+		case FrameChunk:
+			r.forwardChunk(member, frame)
+		case FrameChunkAck:
+			r.forwardAck(member, frame)
 		case FramePing:
 			member.send(Frame{Type: FramePong})
 		case FramePong:
@@ -202,7 +222,7 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 			// The agent was renamed, or its capabilities changed; reconnecting is not needed to
 			// update the roster.
 			name := strings.TrimSpace(frame.AgentName)
-			capabilities := knownCapabilities(frame.Capabilities)
+			capabilities := r.capabilities(frame.Capabilities)
 			r.mu.Lock()
 			if member.peer.AgentName != name || !slices.Equal(member.peer.Capabilities, capabilities) {
 				member.peer.AgentName = name
@@ -218,8 +238,8 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 
 func (r *Relay) removeMember(member *relayMember, reason string) {
 	member.cancel(nil)
-	var unreachable []*pendingDelivery
-	var unreachableIDs []string
+	var unreachable, gone []*pendingDelivery
+	var unreachableIDs, goneIDs []string
 	r.mu.Lock()
 	if r.members[member.peer.InstanceID] == member {
 		delete(r.members, member.peer.InstanceID)
@@ -232,12 +252,20 @@ func (r *Relay) removeMember(member *relayMember, reason string) {
 			unreachableIDs = append(unreachableIDs, id)
 			r.dropPendingLocked(id, p)
 		case p.source == member:
+			if p.stream != nil {
+				gone = append(gone, p)
+				goneIDs = append(goneIDs, id)
+			}
 			r.dropPendingLocked(id, p)
 		}
 	}
 	r.mu.Unlock()
 	for i, p := range unreachable {
 		p.source.send(Frame{Type: FrameSendResult, LeaseID: p.leaseID, MessageID: unreachableIDs[i], Status: StatusUnreachable})
+	}
+	for i, p := range gone {
+		// The receiver keeps what it got, for when the sender delivers the message again.
+		p.target.send(Frame{Type: FrameTransferAbort, MessageID: goneIDs[i], Status: StatusUnreachable})
 	}
 	r.logger.Info("agentlink_member_left", "instance_id", member.peer.InstanceID, "endpoint", member.label, "reason", reason)
 }
@@ -258,7 +286,13 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		result(StatusRejected, ReasonInvalid)
 		return
 	}
-	fileBytes := attachmentBytes(msg.Attachments)
+	withStream := streamed(msg.Attachments)
+	if withStream && r.noStream {
+		// What a Console from before streamed files answers.
+		result(StatusRejected, ReasonInvalid)
+		return
+	}
+	fileBytes := inlineBytes(msg.Attachments)
 	timeout := deliverTimeout
 	r.mu.Lock()
 	target := r.members[msg.To]
@@ -267,7 +301,23 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		result(StatusUnreachable, "")
 		return
 	}
-	if len(msg.Attachments) > 0 {
+	if withStream {
+		if !hasCapability(target.peer.Capabilities, CapabilityFilesStream) {
+			r.mu.Unlock()
+			r.logger.Info("agentlink_files_unsupported", "message_id", msg.MessageID, "from", msg.From, "to", msg.To, "streamed", true)
+			result(StatusRejected, ReasonFilesUnsupported)
+			return
+		}
+		for _, a := range msg.Attachments {
+			if p := r.transfers[transferKey(source, a.TransferID)]; p != nil && r.pending[msg.MessageID] != p {
+				// A transfer ID belongs to one message.
+				r.mu.Unlock()
+				result(StatusRejected, ReasonInvalid)
+				return
+			}
+		}
+		timeout = streamIdleTimeout
+	} else if len(msg.Attachments) > 0 {
 		if !hasCapability(target.peer.Capabilities, CapabilityFiles) {
 			r.mu.Unlock()
 			r.logger.Info("agentlink_files_unsupported", "message_id", msg.MessageID, "from", msg.From, "to", msg.To)
@@ -290,10 +340,16 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		// The sender's lease ran out and it sent again through this Console; answer the new lease.
 		r.dropPendingLocked(msg.MessageID, previous)
 	}
-	p := &pendingDelivery{source: source, target: target, leaseID: frame.LeaseID, fileBytes: fileBytes}
+	p := &pendingDelivery{messageID: msg.MessageID, source: source, target: target, leaseID: frame.LeaseID, fileBytes: fileBytes}
 	p.timer = time.AfterFunc(timeout, func() { r.expireDelivery(msg.MessageID, p) })
 	r.pending[msg.MessageID] = p
 	r.fileBytes += fileBytes
+	if withStream {
+		p.stream = newRelayStream(msg.Attachments)
+		for _, a := range msg.Attachments {
+			r.transfers[transferKey(source, a.TransferID)] = p
+		}
+	}
 	r.mu.Unlock()
 	if !target.send(Frame{Type: FrameDeliver, MessageID: msg.MessageID, Message: &msg}) {
 		r.expireDelivery(msg.MessageID, p)
@@ -308,6 +364,7 @@ func (r *Relay) dropPendingLocked(messageID string, p *pendingDelivery) {
 	p.timer.Stop()
 	r.fileBytes -= p.fileBytes
 	p.fileBytes = 0
+	r.releaseStreamLocked(p)
 }
 
 func (r *Relay) expireDelivery(messageID string, p *pendingDelivery) {
@@ -319,6 +376,10 @@ func (r *Relay) expireDelivery(messageID string, p *pendingDelivery) {
 	r.dropPendingLocked(messageID, p)
 	r.mu.Unlock()
 	p.source.send(Frame{Type: FrameSendResult, LeaseID: p.leaseID, MessageID: messageID, Status: StatusUnreachable})
+	if p.stream != nil {
+		// No progress for streamIdleTimeout; the receiver keeps what it got for a resume.
+		p.target.send(Frame{Type: FrameTransferAbort, MessageID: messageID, Status: StatusUnreachable})
+	}
 }
 
 func (r *Relay) completeDelivery(target *relayMember, frame Frame) {

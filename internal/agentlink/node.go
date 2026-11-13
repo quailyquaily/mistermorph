@@ -2,6 +2,7 @@ package agentlink
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -99,12 +100,26 @@ type Node struct {
 	fileMu sync.Mutex
 	// inboundFiles bounds the deliveries with attachments handled at once.
 	inboundFiles chan struct{}
-	// queuedFileBytes is the attachment bytes in the outbox.
-	queuedFileBytes int64
+	// queuedFileBytes is the attachment bytes in the outbox, at most maxQueuedFileBytes.
+	queuedFileBytes    int64
+	maxQueuedFileBytes int64
 	// retryBase is the first retry delay; it doubles with each attempt.
 	retryBase time.Duration
 	// attachmentLeaseExtra lengthens the lease of a message with files.
 	attachmentLeaseExtra time.Duration
+	// noStream makes the node act as one from before streamed files: it neither announces, sends
+	// nor takes them. Tests use it to stand in for an older runtime.
+	noStream bool
+	// streams are the messages whose files are being streamed, by message ID.
+	streams map[string]*outStream
+	// inStreams are the streamed deliveries being received, by sender and message ID; inTransfers
+	// finds them by transfer ID.
+	inStreams   map[string]*inStream
+	inTransfers map[string]*inStream
+	// inboundReserved is the inbox bytes the unfinished streamed deliveries reserved.
+	inboundReserved int64
+	// inlineDispatchBytes is the queued file bytes read back into memory for inline sends.
+	inlineDispatchBytes int64
 
 	notifyMu    sync.Mutex
 	listeners   map[int]func([]Peer)
@@ -124,6 +139,8 @@ type nodeConn struct {
 	cancel context.CancelFunc
 	out    chan Frame
 	roster map[string]Peer
+	// window holds a slot for each streamed chunk sent on the connection and not yet acknowledged.
+	window chan struct{}
 	// name and capabilities are what the hello last sent to this Console said.
 	helloMu      sync.Mutex
 	name         string
@@ -158,6 +175,8 @@ type outboxEntry struct {
 	leaseUntil time.Time
 	attempts   int
 	notBefore  time.Time
+	// inlineBytes is the file bytes read into memory for the current lease.
+	inlineBytes int64
 }
 
 // NewNode opens the node for opts.StateDir, loading its instance ID and any queued messages.
@@ -197,8 +216,12 @@ func NewNode(opts Options) (*Node, error) {
 		retryBase: time.Second,
 
 		attachmentLeaseExtra: attachmentLeaseExtra,
+		maxQueuedFileBytes:   maxQueuedAttachmentBytes,
 
 		inboundFiles: make(chan struct{}, maxInboundAttachmentDeliveries),
+		streams:      make(map[string]*outStream),
+		inStreams:    make(map[string]*inStream),
+		inTransfers:  make(map[string]*inStream),
 	}
 	if err := n.loadOutbox(); err != nil {
 		return nil, err
@@ -228,7 +251,11 @@ func (n *Node) Close() {
 	for c := range n.conns {
 		c.cancel()
 	}
+	for _, entry := range n.outbox {
+		n.clearLeaseLocked(entry)
+	}
 	n.mu.Unlock()
+	n.closeInStreams()
 }
 
 func (n *Node) agentName() string {
@@ -305,10 +332,14 @@ func (n *Node) supportsFilesLocked(instanceID string) bool {
 func (n *Node) capabilities() []string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.files != nil {
+	switch {
+	case n.files == nil:
+		return nil
+	case n.noStream:
 		return []string{CapabilityFiles}
+	default:
+		return []string{CapabilityFiles, CapabilityFilesStream}
 	}
-	return nil
 }
 
 // announce tells every connected Console about a change of capabilities.
@@ -348,9 +379,7 @@ func (n *Node) peersLocked() []Peer {
 			if existing.AgentName == "" {
 				existing.AgentName = peer.AgentName
 			}
-			if hasCapability(peer.Capabilities, CapabilityFiles) {
-				existing.Capabilities = []string{CapabilityFiles}
-			}
+			existing.Capabilities = knownCapabilities(append(append([]string(nil), existing.Capabilities...), peer.Capabilities...))
 			merged[id] = existing
 		}
 	}
@@ -397,10 +426,14 @@ func (n *Node) Send(ctx context.Context, to string, envelope busruntime.MessageE
 	return n.SendWithAttachments(ctx, to, envelope, nil, hop, wait)
 }
 
-// SendWithAttachments is Send for a message that carries files; its text may then be empty. It
-// returns ErrFilesUnsupported at once when the agent is reachable but nothing carries files to it,
-// and ErrFileQueueFull when the outbox holds too many file bytes already. A queued message that
-// finds only Consoles or a peer without CapabilityFiles is rejected with ReasonFilesUnsupported.
+// SendWithAttachments is Send for a message that carries files; its text may then be empty. Each
+// attachment has its bytes in Data or names a file in Source (see OpenAttachmentFile); the files
+// are copied into the queue and checked against their size and SHA-256 first. It returns
+// ErrFilesUnsupported at once when the agent is reachable but nothing carries files to it,
+// ErrFileTooLarge when the files are over the limit of the route to it (see FileLimit), and
+// ErrFileQueueFull when the outbox holds too many file bytes already. A queued message that finds
+// only Consoles or a peer without CapabilityFiles, or, with more than MaxAttachmentBytes, without
+// CapabilityFilesStream, is rejected with ReasonFilesUnsupported.
 func (n *Node) SendWithAttachments(ctx context.Context, to string, envelope busruntime.MessageEnvelope, attachments []Attachment, hop int, wait time.Duration) (SendResult, error) {
 	to = strings.TrimSpace(to)
 	if to == n.id {
@@ -417,13 +450,39 @@ func (n *Node) SendWithAttachments(ctx context.Context, to string, envelope busr
 		envelope.SentAt = n.opts.Now().UTC().Format(time.RFC3339)
 	}
 	msg := Message{MessageID: envelope.MessageID, From: n.id, To: to, Hop: hop, Envelope: envelope}
-	if len(attachments) > 0 {
-		msg.Attachments = append([]Attachment(nil), attachments...)
-		for i := range msg.Attachments {
-			msg.Attachments[i].Path, msg.Attachments[i].Ref = "", ""
+	sources := append([]Attachment(nil), attachments...)
+	if len(sources) > 0 {
+		msg.Attachments = make([]Attachment, len(sources))
+		for i, a := range sources {
+			if n.noStream && a.Data == nil && a.Source != "" {
+				// An older runtime holds the bytes in its queue entry.
+				read, err := ReadAttachmentFile(a.Source, a.Filename, a.Size, a.SHA256)
+				if err != nil {
+					return SendResult{}, err
+				}
+				a.Data = read.Data
+			}
+			a.Path, a.Ref, a.Source = "", "", ""
+			if n.noStream {
+				a.TransferID = ""
+			} else {
+				a.Data, a.TransferID = nil, newTransferID()
+			}
+			msg.Attachments[i] = a
 		}
 	}
 	if err := msg.Validate(); err != nil {
+		limit := streamFileLimit
+		if n.noStream {
+			limit = inlineFileLimit
+		}
+		var already int64
+		for _, a := range msg.Attachments {
+			if limitErr := limit.Check(a.Size, already); limitErr != nil {
+				return SendResult{}, limitErr
+			}
+			already += a.Size
+		}
 		return SendResult{}, err
 	}
 	fileBytes := attachmentBytes(msg.Attachments)
@@ -432,8 +491,13 @@ func (n *Node) SendWithAttachments(ctx context.Context, to string, envelope busr
 		if err != nil {
 			return SendResult{}, err
 		}
-		if len(encoded) > maxAttachmentMessageBytes {
-			return SendResult{}, fmt.Errorf("message with attachments too large for Agent Link (%d bytes encoded; at most %d)", len(encoded), maxAttachmentMessageBytes)
+		size := len(encoded)
+		if streamed(msg.Attachments) && fileBytes <= MaxAttachmentBytes {
+			// It may go inline, through a route that does not stream.
+			size += base64.StdEncoding.EncodedLen(int(fileBytes))
+		}
+		if size > maxAttachmentMessageBytes {
+			return SendResult{}, fmt.Errorf("message with attachments too large for Agent Link (%d bytes encoded; at most %d)", size, maxAttachmentMessageBytes)
 		}
 	}
 	now := n.opts.Now().UTC()
@@ -449,17 +513,49 @@ func (n *Node) SendWithAttachments(ctx context.Context, to string, envelope busr
 			n.mu.Unlock()
 			return SendResult{}, fmt.Errorf("%w: the agent's runtime or the Console that reaches it is too old to take files", ErrFilesUnsupported)
 		}
-		if n.queuedFileBytes+fileBytes > maxQueuedAttachmentBytes {
-			n.mu.Unlock()
-			return SendResult{}, fmt.Errorf("%w: %d bytes of files already wait for delivery (at most %d); try again later", ErrFileQueueFull, n.queuedFileBytes, maxQueuedAttachmentBytes)
+		limit := n.fileLimitLocked(to)
+		var already int64
+		for _, a := range msg.Attachments {
+			if err := limit.Check(a.Size, already); err != nil {
+				n.mu.Unlock()
+				return SendResult{}, err
+			}
+			already += a.Size
 		}
+		if n.queuedFileBytes+fileBytes > n.maxQueuedFileBytes {
+			n.mu.Unlock()
+			return SendResult{}, fmt.Errorf("%w: %d bytes of files already wait for delivery (at most %d); try again later", ErrFileQueueFull, n.queuedFileBytes, n.maxQueuedFileBytes)
+		}
+	}
+	// Reserve the queue's room while the files are copied.
+	n.queuedFileBytes += fileBytes
+	n.mu.Unlock()
+	release := func() {
+		n.mu.Lock()
+		n.queuedFileBytes -= fileBytes
+		n.mu.Unlock()
+	}
+	if streamed(msg.Attachments) {
+		if err := n.writeSnapshots(msg.MessageID, sources); err != nil {
+			release()
+			return SendResult{}, err
+		}
+	}
+	n.mu.Lock()
+	if _, exists := n.outbox[msg.MessageID]; exists {
+		n.mu.Unlock()
+		release()
+		return SendResult{MessageID: msg.MessageID, Status: StatusQueued}, nil
 	}
 	if err := n.writeEntry(entry); err != nil {
 		n.mu.Unlock()
+		release()
+		if streamed(msg.Attachments) {
+			_ = os.RemoveAll(n.filesDir(msg.MessageID))
+		}
 		return SendResult{}, err
 	}
 	n.outbox[msg.MessageID] = entry
-	n.queuedFileBytes += fileBytes
 	result := make(chan SendResult, 1)
 	n.waiters[msg.MessageID] = append(n.waiters[msg.MessageID], result)
 	n.mu.Unlock()
@@ -515,7 +611,7 @@ func (n *Node) wake() {
 func (n *Node) Serve(ctx context.Context, conn Conn) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	c := &nodeConn{conn: conn, ctx: ctx, cancel: cancel, out: make(chan Frame, 256), roster: map[string]Peer{}}
+	c := &nodeConn{conn: conn, ctx: ctx, cancel: cancel, out: make(chan Frame, 256), roster: map[string]Peer{}, window: make(chan struct{}, streamWindow)}
 	go func() {
 		<-ctx.Done()
 		_ = conn.Close()
@@ -557,6 +653,13 @@ func (n *Node) Serve(ctx context.Context, conn Conn) error {
 			n.handleSendResult(c, frame)
 		case FrameDeliver:
 			go n.handleDeliver(c, frame)
+		case FrameChunk:
+			// In order, on the reading goroutine: chunks must reach the file as they came.
+			n.handleChunk(c, frame)
+		case FrameChunkAck:
+			n.handleChunkAck(c, frame)
+		case FrameTransferAbort:
+			n.handleTransferAbort(c, frame)
 		case FramePing:
 			c.send(Frame{Type: FramePong})
 			// Tell the Console about a rename without reconnecting.
@@ -576,11 +679,11 @@ func (n *Node) removeConn(c *nodeConn) {
 	delete(n.conns, c)
 	for _, entry := range n.outbox {
 		if entry.lease == c {
-			entry.lease = nil
-			entry.leaseID = ""
+			n.clearLeaseLocked(entry)
 		}
 	}
 	n.mu.Unlock()
+	n.parkInStreams(c)
 	n.notifyPeers()
 	n.wake()
 }
@@ -619,12 +722,68 @@ func (n *Node) handleSendResult(c *nodeConn, frame Frame) {
 		n.finish(id, SendResult{MessageID: id, Status: frame.Status, Reason: strings.TrimSpace(frame.Reason)})
 		return
 	default:
-		entry.lease = nil
-		entry.leaseID = ""
+		n.clearLeaseLocked(entry)
 		n.backoffLocked(entry)
 		n.mu.Unlock()
 		n.wake()
 	}
+}
+
+// clearLeaseLocked ends the current delivery attempt of entry: its stream stops and the bytes it
+// read into memory are released.
+func (n *Node) clearLeaseLocked(entry *outboxEntry) {
+	entry.lease = nil
+	entry.leaseID = ""
+	n.inlineDispatchBytes -= entry.inlineBytes
+	entry.inlineBytes = 0
+	if s := n.streams[entry.Message.MessageID]; s != nil {
+		delete(n.streams, entry.Message.MessageID)
+		s.stop()
+	}
+}
+
+// handleChunkAck passes an acknowledgement of streamed bytes to the stream of the current lease, and
+// renews the lease: the transfer is making progress.
+func (n *Node) handleChunkAck(c *nodeConn, frame Frame) {
+	id := strings.TrimSpace(frame.MessageID)
+	n.mu.Lock()
+	entry := n.outbox[id]
+	s := n.streams[id]
+	if entry == nil || s == nil || entry.lease != c || entry.leaseID != frame.LeaseID || s.leaseID != frame.LeaseID {
+		n.mu.Unlock()
+		return
+	}
+	entry.leaseUntil = n.opts.Now().Add(n.opts.LeaseTimeout + streamLeaseIdle)
+	n.mu.Unlock()
+	s.ack(frame.TransferID, frame.Offset)
+}
+
+// Transfers reports the streamed files being sent and received.
+func (n *Node) Transfers() []TransferStatus {
+	n.mu.Lock()
+	outs := make([]*outStream, 0, len(n.streams))
+	for _, s := range n.streams {
+		outs = append(outs, s)
+	}
+	ins := make([]*inStream, 0, len(n.inStreams))
+	for _, s := range n.inStreams {
+		ins = append(ins, s)
+	}
+	n.mu.Unlock()
+	var out []TransferStatus
+	for _, s := range outs {
+		out = append(out, s.status()...)
+	}
+	for _, s := range ins {
+		out = append(out, s.status()...)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].MessageID != out[j].MessageID {
+			return out[i].MessageID < out[j].MessageID
+		}
+		return out[i].TransferID < out[j].TransferID
+	})
+	return out
 }
 
 func (n *Node) backoffLocked(entry *outboxEntry) {
@@ -644,6 +803,7 @@ func (n *Node) finish(id string, result SendResult) {
 	delete(n.waiters, id)
 	if entry != nil {
 		n.queuedFileBytes -= attachmentBytes(entry.Message.Attachments)
+		n.clearLeaseLocked(entry)
 	}
 	n.mu.Unlock()
 	if entry == nil {
@@ -651,6 +811,11 @@ func (n *Node) finish(id string, result SendResult) {
 	}
 	if err := os.Remove(n.entryPath(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		n.logger.Warn("agentlink_outbox_remove_error", "message_id", id, "error", err.Error())
+	}
+	if streamed(entry.Message.Attachments) {
+		if err := os.RemoveAll(n.filesDir(id)); err != nil {
+			n.logger.Warn("agentlink_outbox_remove_error", "message_id", id, "error", err.Error())
+		}
 	}
 	level := slog.LevelInfo
 	if result.Status != StatusDelivered {
@@ -674,6 +839,10 @@ func (n *Node) handleDeliver(c *nodeConn, frame Frame) {
 	frame.MessageID = msg.MessageID
 	if err := msg.Validate(); err != nil || msg.To != n.id {
 		reply(StatusRejected, ReasonInvalid)
+		return
+	}
+	if streamed(msg.Attachments) {
+		n.handleStreamDeliver(c, msg, reply)
 		return
 	}
 	withFiles := len(msg.Attachments) > 0
@@ -712,87 +881,106 @@ func (n *Node) handleDeliver(c *nodeConn, frame Frame) {
 	n.inflight[msg.MessageID] = true
 	n.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), handlerTimeout)
-	defer cancel()
-	reject := func(reason string, err error) {
-		removeAttachments(msg.Attachments)
+	if !withFiles {
+		n.handOver(slot, msg, reply)
+		return
+	}
+	select {
+	case n.inboundFiles <- struct{}{}:
+		defer func() { <-n.inboundFiles }()
+	default:
+		// Too many files arrive at once; the sender retries later.
 		n.mu.Lock()
 		delete(n.inflight, msg.MessageID)
 		n.mu.Unlock()
-		if err != nil {
-			n.logger.Warn("agentlink_deliver_rejected", "message_id", msg.MessageID, "from", msg.From, "reason", reason, "error", err.Error())
-		}
-		reply(StatusRejected, reason)
+		reply(StatusUnreachable, "")
+		return
 	}
 	authorized := false
-	authorize := func() bool {
-		if authorized || inbox.authorize == nil {
-			return true
-		}
-		if err := inbox.authorize(ctx, msg.From); err != nil {
-			reject(ReasonUnauthorized, err)
-			return false
+	if !answer {
+		if err := n.authorizeFiles(inbox, msg.From); err != nil {
+			n.rejectDelivery(msg, ReasonUnauthorized, err, reply)
+			return
 		}
 		authorized = true
-		return true
 	}
-	if withFiles {
-		select {
-		case n.inboundFiles <- struct{}{}:
-			defer func() { <-n.inboundFiles }()
-		default:
-			// Too many files arrive at once; the sender retries later.
-			n.mu.Lock()
-			delete(n.inflight, msg.MessageID)
-			n.mu.Unlock()
-			reply(StatusUnreachable, "")
-			return
-		}
-		if !answer && !authorize() {
-			return
-		}
-		saved, err := n.saveAttachments(inbox, msg)
-		if err != nil {
-			reject(ReasonAttachmentStore, err)
-			return
-		}
-		msg.Attachments = saved
-		n.mu.Lock()
-		if n.takeReplyLocked(msg) {
-			delete(n.inflight, msg.MessageID)
-			n.markSeenLocked(msg.MessageID)
-			n.mu.Unlock()
-			n.logger.Info("agentlink_attachments_received", "message_id", msg.MessageID, "from", msg.From, "count", len(saved))
-			reply(StatusAccepted, "")
-			return
-		}
-		// The answer's waiter stopped waiting; the handler takes it, as a late answer.
-		slot = n.handler
-		n.mu.Unlock()
-		if slot == nil || slot.handle == nil {
-			reject(ReasonNoHandler, nil)
-			return
-		}
-		if !authorize() {
-			return
-		}
-	}
-
-	err := slot.handle(ctx, msg)
+	saved, err := n.saveAttachments(inbox, msg)
 	if err != nil {
+		n.rejectDelivery(msg, ReasonAttachmentStore, err, reply)
+		return
+	}
+	msg.Attachments = saved
+	n.acceptFiles(msg, inbox, authorized, reply)
+}
+
+// authorizeFiles asks the inbox's authorizer whether from may send files.
+func (n *Node) authorizeFiles(inbox *fileInbox, from string) error {
+	if inbox.authorize == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), handlerTimeout)
+	defer cancel()
+	return inbox.authorize(ctx, from)
+}
+
+// rejectDelivery ends a delivery marked in flight: its saved files go, and the sender sees reason.
+func (n *Node) rejectDelivery(msg Message, reason string, err error, reply func(status, reason string)) {
+	removeAttachments(msg.Attachments)
+	n.mu.Lock()
+	delete(n.inflight, msg.MessageID)
+	n.mu.Unlock()
+	if err != nil {
+		n.logger.Warn("agentlink_deliver_rejected", "message_id", msg.MessageID, "from", msg.From, "reason", reason, "error", err.Error())
+	}
+	reply(StatusRejected, reason)
+}
+
+// acceptFiles ends a delivery marked in flight whose files are saved: the send waiting for it as an
+// answer takes it, or else the handler, once the sender is authorized.
+func (n *Node) acceptFiles(msg Message, inbox *fileInbox, authorized bool, reply func(status, reason string)) {
+	n.mu.Lock()
+	if n.takeReplyLocked(msg) {
+		delete(n.inflight, msg.MessageID)
+		n.markSeenLocked(msg.MessageID)
+		n.mu.Unlock()
+		n.logger.Info("agentlink_attachments_received", "message_id", msg.MessageID, "from", msg.From, "count", len(msg.Attachments))
+		reply(StatusAccepted, "")
+		return
+	}
+	// The answer's waiter stopped waiting, or this is no answer; the handler takes it.
+	slot := n.handler
+	n.mu.Unlock()
+	if slot == nil || slot.handle == nil {
+		n.rejectDelivery(msg, ReasonNoHandler, nil, reply)
+		return
+	}
+	if !authorized {
+		if err := n.authorizeFiles(inbox, msg.From); err != nil {
+			n.rejectDelivery(msg, ReasonUnauthorized, err, reply)
+			return
+		}
+	}
+	n.handOver(slot, msg, reply)
+}
+
+// handOver gives a delivery marked in flight to the handler.
+func (n *Node) handOver(slot *handlerSlot, msg Message, reply func(status, reason string)) {
+	ctx, cancel := context.WithTimeout(context.Background(), handlerTimeout)
+	defer cancel()
+	if err := slot.handle(ctx, msg); err != nil {
 		var rejectErr *RejectError
 		reason := ReasonHandlerErr
 		if errors.As(err, &rejectErr) && strings.TrimSpace(rejectErr.Reason) != "" {
 			reason = rejectErr.Reason
 		}
-		reject(reason, err)
+		n.rejectDelivery(msg, reason, err, reply)
 		return
 	}
 	n.mu.Lock()
 	delete(n.inflight, msg.MessageID)
 	n.markSeenLocked(msg.MessageID)
 	n.mu.Unlock()
-	if withFiles {
+	if len(msg.Attachments) > 0 {
 		n.logger.Info("agentlink_attachments_received", "message_id", msg.MessageID, "from", msg.From, "count", len(msg.Attachments))
 	}
 	reply(StatusAccepted, "")
@@ -820,7 +1008,8 @@ func (n *Node) dispatchLoop(ctx context.Context) {
 
 func (n *Node) dispatch() {
 	now := n.opts.Now()
-	var expired, unsupported []string
+	var expired, unsupported, broken []string
+	var started []*outStream
 	n.mu.Lock()
 	entries := make([]*outboxEntry, 0, len(n.outbox))
 	for _, entry := range n.outbox {
@@ -836,26 +1025,44 @@ func (n *Node) dispatch() {
 			if now.Before(entry.leaseUntil) {
 				continue
 			}
-			entry.lease = nil
-			entry.leaseID = ""
+			n.clearLeaseLocked(entry)
 			n.backoffLocked(entry)
 		}
 		if now.Before(entry.notBefore) {
 			continue
 		}
-		withFiles := len(entry.Message.Attachments) > 0
+		attachments := entry.Message.Attachments
+		withFiles := len(attachments) > 0
+		streamForm := streamed(attachments)
+		fileBytes := attachmentBytes(attachments)
+		// A queued streamed message small enough goes inline through a route that does not
+		// stream; one queued by an older version is inline already.
+		inlineOK := withFiles && (!streamForm || fileBytes <= MaxAttachmentBytes)
 		reachable := false
-		candidates := make([]*nodeConn, 0, len(n.conns))
+		var plain, streams, inline []*nodeConn
 		for c := range n.conns {
 			peer, ok := c.roster[entry.Message.To]
 			if !ok {
 				continue
 			}
 			reachable = true
-			// Files go only through a Console that carries them to a peer that takes them.
-			if !withFiles || hasCapability(peer.Capabilities, CapabilityFiles) {
-				candidates = append(candidates, c)
+			switch {
+			case !withFiles:
+				plain = append(plain, c)
+			// Files go only through a Console that carries them to a peer that takes them; they
+			// are streamed when both stream.
+			case streamForm && !n.noStream && hasCapability(peer.Capabilities, CapabilityFilesStream):
+				streams = append(streams, c)
+			case inlineOK && hasCapability(peer.Capabilities, CapabilityFiles):
+				inline = append(inline, c)
 			}
+		}
+		candidates := plain
+		switch {
+		case len(streams) > 0:
+			candidates = streams
+		case len(inline) > 0:
+			candidates = inline
 		}
 		if len(candidates) == 0 {
 			if reachable && withFiles {
@@ -868,6 +1075,24 @@ func (n *Node) dispatch() {
 		c := candidates[entry.attempts%len(candidates)]
 		msg := entry.Message
 		leaseID := uuid.NewString()
+		var stream *outStream
+		var loaded int64
+		switch {
+		case len(streams) > 0:
+			stream = n.newOutStream(c, msg, leaseID)
+		case streamForm && withFiles:
+			if n.inlineDispatchBytes+fileBytes > maxInlineDispatchBytes {
+				// Enough files are in memory already; this one waits for the next round.
+				continue
+			}
+			inlined, err := n.inlineMessage(entry)
+			if err != nil {
+				n.logger.Warn("agentlink_outbox_file_error", "message_id", msg.MessageID, "error", err.Error())
+				broken = append(broken, msg.MessageID)
+				continue
+			}
+			msg, loaded = inlined, fileBytes
+		}
 		if !c.send(Frame{Type: FrameSend, LeaseID: leaseID, MessageID: msg.MessageID, Message: &msg}) {
 			continue
 		}
@@ -877,14 +1102,27 @@ func (n *Node) dispatch() {
 		if withFiles {
 			entry.leaseUntil = entry.leaseUntil.Add(n.attachmentLeaseExtra)
 		}
+		entry.inlineBytes = loaded
+		n.inlineDispatchBytes += loaded
+		if stream != nil {
+			n.streams[msg.MessageID] = stream
+			started = append(started, stream)
+		}
 	}
 	n.mu.Unlock()
+	for _, s := range started {
+		go s.run()
+	}
 	for _, id := range expired {
 		n.finish(id, SendResult{MessageID: id, Status: StatusExpired})
 	}
 	for _, id := range unsupported {
 		n.finish(id, SendResult{MessageID: id, Status: StatusRejected, Reason: ReasonFilesUnsupported})
 	}
+	for _, id := range broken {
+		n.finish(id, SendResult{MessageID: id, Status: StatusRejected, Reason: ReasonAttachmentStore})
+	}
+	n.sweepInStreams()
 }
 
 func (n *Node) outboxDir() string { return filepath.Join(n.dir, "outbox") }
@@ -916,9 +1154,14 @@ func (n *Node) loadOutbox() error {
 			n.logger.Warn("agentlink_outbox_entry_skipped", "path", path)
 			continue
 		}
+		if streamed(entry.Message.Attachments) && !n.checkSnapshots(entry.Message) {
+			n.logger.Warn("agentlink_outbox_entry_skipped", "path", path, "reason", "queued files missing")
+			continue
+		}
 		n.outbox[entry.Message.MessageID] = &entry
 		n.queuedFileBytes += attachmentBytes(entry.Message.Attachments)
 	}
+	n.removeOrphanSnapshots()
 	return nil
 }
 

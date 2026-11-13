@@ -18,7 +18,7 @@ import (
 
 // filesNode is a test node that saves received files under a cache dir of its own, as an agent on
 // another machine would.
-func filesNode(t *testing.T, name string, authorize FileAuthorizer) (*Node, string) {
+func filesNode(t testing.TB, name string, authorize FileAuthorizer) (*Node, string) {
 	t.Helper()
 	node := newTestNode(t, name)
 	cacheDir := filepath.Join(t.TempDir(), "cache")
@@ -30,7 +30,7 @@ func filesNode(t *testing.T, name string, authorize FileAuthorizer) (*Node, stri
 	return node, cacheDir
 }
 
-func mustAttachment(t *testing.T, name string, data []byte) Attachment {
+func mustAttachment(t testing.TB, name string, data []byte) Attachment {
 	t.Helper()
 	a, err := NewAttachment(name, data)
 	if err != nil {
@@ -39,7 +39,7 @@ func mustAttachment(t *testing.T, name string, data []byte) Attachment {
 	return a
 }
 
-func binaryData(t *testing.T, size int) []byte {
+func binaryData(t testing.TB, size int) []byte {
 	t.Helper()
 	data := make([]byte, size)
 	if _, err := rand.Read(data); err != nil {
@@ -59,7 +59,7 @@ func (i *inbox) last() Message {
 }
 
 // inboxFiles lists every file under dir, partial ones included.
-func inboxFiles(t *testing.T, dir string) []string {
+func inboxFiles(t testing.TB, dir string) []string {
 	t.Helper()
 	var out []string
 	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
@@ -71,7 +71,7 @@ func inboxFiles(t *testing.T, dir string) []string {
 	return out
 }
 
-func linked(t *testing.T, ctx context.Context, nodes ...*Node) *Relay {
+func linked(t testing.TB, ctx context.Context, nodes ...*Node) *Relay {
 	t.Helper()
 	relay := NewRelay(nil)
 	for i, node := range nodes {
@@ -354,9 +354,11 @@ func TestAttachmentLimits(t *testing.T) {
 
 	t.Run("the outbox holds a bounded amount of file bytes", func(t *testing.T) {
 		a := newTestNode(t, "A")
+		// The real bound is 512 MiB on disk; a smaller one shows the same behavior.
+		a.maxQueuedFileBytes = 4 * MaxAttachmentBytes
 		offline := newTestNode(t, "B").InstanceID()
 		big := mustAttachment(t, "big.bin", make([]byte, MaxAttachmentBytes))
-		for i := int64(0); i < maxQueuedAttachmentBytes/MaxAttachmentBytes; i++ {
+		for i := int64(0); i < a.maxQueuedFileBytes/MaxAttachmentBytes; i++ {
 			if res, err := a.SendWithAttachments(ctx, offline, envelope(""), []Attachment{big}, 1, 0); err != nil || res.Status != StatusQueued {
 				t.Fatalf("send %d = %+v, %v", i, res, err)
 			}
@@ -379,11 +381,12 @@ func TestAttachmentLimits(t *testing.T) {
 		}
 	})
 
-	t.Run("the relay bounds the file bytes in flight", func(t *testing.T) {
+	t.Run("the relay bounds the inline file bytes in flight", func(t *testing.T) {
 		runCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		a := newTestNode(t, "A")
-		b, _ := filesNode(t, "B", nil)
+		// A peer that does not stream gets its files inline.
+		b := oldFilesNode(t, "B")
 		var got inbox
 		b.SetHandler(got.handler(nil))
 		relay := linked(t, runCtx, a, b)
@@ -760,16 +763,23 @@ func TestAttachmentInterrupted(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		disconnect()
 		res := <-results
+		a.mu.Lock()
+		_, queued := a.outbox[res.MessageID]
+		a.mu.Unlock()
 		close(release)
 		if res.Status == StatusDelivered {
 			t.Fatalf("result = %+v, want not delivered", res)
 		}
-		a.mu.Lock()
-		_, queued := a.outbox[res.MessageID]
-		a.mu.Unlock()
 		if !queued {
 			t.Fatal("the interrupted message left the queue")
 		}
+		// The receiver finishes the delivery it was handed (and writes its state) before the test
+		// removes its folders.
+		waitFor(t, "the receiver finished", func() bool {
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			return len(b.inflight) == 0 && len(b.inStreams) == 0
+		})
 	})
 
 	t.Run("cleanup removes stale partial files and bounds the inbox", func(t *testing.T) {

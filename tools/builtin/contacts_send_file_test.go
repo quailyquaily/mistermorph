@@ -53,7 +53,7 @@ func newContactsSendFileFixture(t *testing.T) contactsSendFileFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := big.Truncate(contactsSendFileMaxBytes + 1); err != nil {
+	if err := big.Truncate(contactsSendFileReadMaxBytes + 1); err != nil {
 		t.Fatal(err)
 	}
 	_ = big.Close()
@@ -278,4 +278,18 @@ func TestExecuteContactsSendFile(t *testing.T) {
 			t.Fatalf("retry = %+v, calls = %d", retry, len(sender.calls))
 		}
 	})
+}
+
+func TestCheckFileRecipientChatChannelLimit(t *testing.T) {
+	policy := contactSendExecutionPolicy{toolName: "contacts_send"}
+	contact := contacts.Contact{ContactID: "tg:@someone", Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, TGUsername: "someone"}
+	// Agent Link takes larger files on a streamed route; a chat channel keeps its own limit.
+	file := &contacts.ShareFile{Path: "/x/big.bin", Size: contactsSendFileMaxBytes + 1}
+	if err := checkFileRecipient(policy, contact.ContactID, contact, "", file); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("error = %v", err)
+	}
+	file.Size = contactsSendFileMaxBytes
+	if err := checkFileRecipient(policy, contact.ContactID, contact, "", file); err != nil {
+		t.Fatal(err)
+	}
 }

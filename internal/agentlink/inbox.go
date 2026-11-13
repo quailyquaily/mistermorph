@@ -18,13 +18,14 @@ import (
 
 // Received attachments live in file_cache_dir/agentlink/<sender instance id>/, under generated
 // names, kept for inboxMaxAge, up to inboxMaxFiles files and inboxMaxTotalBytes bytes; the oldest
-// go first. A partial file a crash left behind is removed after partialFileMaxAge; a partial file is
+// go first. inboxMaxTotalBytes admits two messages of the largest streamed size. A partial file a
+// crash or an abandoned transfer left behind is removed after partialFileMaxAge; a partial file is
 // never reported as an attachment.
 const (
 	InboxDirName           = "agentlink"
 	inboxMaxAge            = 7 * 24 * time.Hour
 	inboxMaxFiles          = 256
-	inboxMaxTotalBytes     = int64(64 << 20)
+	inboxMaxTotalBytes     = int64(512 << 20)
 	partialFileMaxAge      = time.Hour
 	partialFilePrefix      = ".part-"
 	defaultAttachmentMedia = "application/octet-stream"
@@ -160,8 +161,7 @@ var writeAttachmentData = func(f *os.File, data []byte) error {
 }
 
 func publishAttachment(root *os.Root, dir string, a Attachment) (string, error) {
-	tmp := path.Join(dir, partialFilePrefix+randomHex(8))
-	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	tmp, f, err := createPart(root, dir)
 	if err != nil {
 		return "", err
 	}
@@ -176,7 +176,23 @@ func publishAttachment(root *os.Root, dir string, a Attachment) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	name := filecache.SanitizeFilename(a.Filename)
+	return linkPart(root, dir, tmp, a.Filename)
+}
+
+// createPart creates a private partial file in dir under root.
+func createPart(root *os.Root, dir string) (string, *os.File, error) {
+	tmp := path.Join(dir, partialFilePrefix+randomHex(8))
+	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", nil, err
+	}
+	return tmp, f, nil
+}
+
+// linkPart publishes the complete partial file tmp under a new name for filename, and returns that
+// name. The partial file stays; the caller removes it.
+func linkPart(root *os.Root, dir, tmp, filename string) (string, error) {
+	name := filecache.SanitizeFilename(filename)
 	for attempt := 0; attempt < 3; attempt++ {
 		final := path.Join(dir, randomHex(6)+"-"+name)
 		// A hard link publishes the complete file without ever replacing one.
@@ -199,11 +215,19 @@ func publishAttachment(root *os.Root, dir string, a Attachment) (string, error) 
 	return "", fmt.Errorf("could not find a free name for %s", name)
 }
 
-// cleanInbox applies the inbox limits and removes stale partial files.
+// cleanInbox applies the inbox limits and removes stale partial files. The partial files of
+// unfinished streamed deliveries are kept, and the room they reserved is left free.
 func (n *Node) cleanInbox(dir string, protected map[string]bool) {
+	if protected == nil {
+		protected = make(map[string]bool)
+	}
+	pending := n.protectInStreams(protected)
 	now := n.opts.Now()
 	_ = filepath.WalkDir(dir, func(p string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasPrefix(entry.Name(), partialFilePrefix) {
+			return nil
+		}
+		if protected[p] {
 			return nil
 		}
 		if info, err := entry.Info(); err == nil && now.Sub(info.ModTime()) > partialFileMaxAge {
@@ -211,7 +235,8 @@ func (n *Node) cleanInbox(dir string, protected map[string]bool) {
 		}
 		return nil
 	})
-	if err := filecache.Cleanup(dir, filecache.Limits{MaxAge: inboxMaxAge, MaxFiles: inboxMaxFiles, MaxTotalBytes: inboxMaxTotalBytes}, protected); err != nil {
+	limits := filecache.Limits{MaxAge: inboxMaxAge, MaxFiles: inboxMaxFiles, MaxTotalBytes: max(inboxMaxTotalBytes-pending, 1)}
+	if err := filecache.Cleanup(dir, limits, protected); err != nil {
 		n.logger.Warn("agentlink_inbox_cleanup_error", "error", err.Error())
 	}
 }

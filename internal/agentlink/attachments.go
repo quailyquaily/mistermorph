@@ -16,23 +16,28 @@ import (
 	"unicode/utf8"
 )
 
-// File transfer limits. An attachment travels inline in its message frame, so the limits keep every
-// frame well inside maxFrameSize and bound what a runtime or a Console holds in memory and on disk.
+// File transfer limits. An inline attachment travels in its message frame, so its limits keep every
+// frame well inside maxFrameSize and bound what a runtime or a Console holds in memory. Streamed
+// attachments (see stream.go) have limits of their own; queued and received files are on disk.
 const (
 	// CapabilityFiles is advertised by a runtime that receives attachments, and by a Console relay
 	// that carries them. A peer or relay without it gets no attachments.
 	CapabilityFiles = "files"
 
-	// MaxAttachmentBytes is the most file bytes one message carries, all attachments together.
+	// MaxAttachmentBytes is the most file bytes one message carries inline, all attachments
+	// together: what a route that does not stream takes. A streamed route takes
+	// MaxStreamAttachmentBytes per file.
 	MaxAttachmentBytes = int64(2 << 20)
 	// MaxAttachments is the most attachments one message carries.
 	MaxAttachments = 4
 	// MaxAttachmentNameBytes bounds an attachment's display filename.
 	MaxAttachmentNameBytes = 255
 
-	// maxQueuedAttachmentBytes bounds the file bytes in a node's outbox, in memory and on disk.
-	maxQueuedAttachmentBytes = int64(16 << 20)
-	// maxRelayAttachmentBytes bounds the file bytes a Console relay has in flight.
+	// maxQueuedAttachmentBytes bounds the file bytes in a node's outbox. They are on disk; it admits
+	// two messages of the largest streamed size.
+	maxQueuedAttachmentBytes = int64(512 << 20)
+	// maxRelayAttachmentBytes bounds the inline file bytes a Console relay has in flight. Streamed
+	// files are bounded by streamWindow instead.
 	maxRelayAttachmentBytes = int64(32 << 20)
 	// maxInboundAttachmentDeliveries bounds the deliveries with files a node handles at once.
 	maxInboundAttachmentDeliveries = 4
@@ -58,16 +63,27 @@ var ErrFilesUnsupported = errors.New("agent link peer does not support file tran
 // ErrFileQueueFull is returned by Send when queued attachments already use maxQueuedAttachmentBytes.
 var ErrFileQueueFull = errors.New("agent link file queue is full")
 
-// Attachment is one file a message carries. Its bytes travel in Data, base64 in JSON; the receiving
-// runtime checks Size and SHA256 against them and saves them before it accepts the message.
+// ErrFileTooLarge is returned by Send for files over the limit of the route to the peer: 2 MiB in
+// all when the peer's runtime or the Console that reaches it does not stream files, otherwise
+// MaxStreamAttachmentBytes per file.
+var ErrFileTooLarge = errors.New("file too large for Agent Link")
+
+// Attachment is one file a message carries. Inline, its bytes travel in Data, base64 in JSON;
+// streamed, it has a TransferID and no Data, and its bytes follow as binary chunks. The receiving
+// runtime checks Size and SHA256 against the bytes and saves them before it accepts the message.
 type Attachment struct {
 	// Filename is the display filename. It is untrusted; the saved file gets a generated name.
 	Filename  string `json:"filename"`
 	MediaType string `json:"media_type"`
 	Size      int64  `json:"size"`
 	SHA256    string `json:"sha256"`
-	Data      []byte `json:"data"`
+	Data      []byte `json:"data,omitempty"`
+	// TransferID names a streamed file: 32 lowercase hex characters, the same in every delivery of
+	// the message.
+	TransferID string `json:"transfer_id,omitempty"`
 
+	// Source is a local file to send instead of Data; see OpenAttachmentFile. It does not travel.
+	Source string `json:"-"`
 	// Path is where the receiving runtime saved the file; Ref is the same file as
 	// file_cache_dir/..., for the agent's tools. Neither travels.
 	Path string `json:"-"`
@@ -155,8 +171,59 @@ func NewAttachment(filename string, data []byte) (Attachment, error) {
 	}, nil
 }
 
-// ReadAttachmentFile reads the regular file at path as an attachment named filename. When size or
-// digest are set, the file must still match them, as the caller checked it before.
+// OpenAttachmentFile checks the regular file at path as an attachment named filename, without
+// holding its bytes: the attachment's Source is path, and SendWithAttachments copies the file into
+// the queue, checking it again. When size or digest are set, the file must still match them, as the
+// caller checked it before. The file may be up to MaxStreamAttachmentBytes; the route decides the
+// limit that applies (see Node.FileLimit).
+func OpenAttachmentFile(path, filename string, size int64, digest string) (Attachment, error) {
+	name := CleanAttachmentName(filename)
+	if name == "" {
+		return Attachment{}, fmt.Errorf("attachment filename %q is not usable", filename)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("read file: %w", err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return Attachment{}, fmt.Errorf("read file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return Attachment{}, fmt.Errorf("path is not a regular file: %s", path)
+	}
+	if info.Size() > MaxStreamAttachmentBytes {
+		return Attachment{}, fmt.Errorf("%w (%d bytes; at most %d per file on a route that streams files): %s", ErrFileTooLarge, info.Size(), MaxStreamAttachmentBytes, path)
+	}
+	head := make([]byte, 512)
+	headLen, _ := io.ReadFull(f, head)
+	h := sha256.New()
+	h.Write(head[:headLen])
+	rest, err := io.Copy(h, io.LimitReader(f, MaxStreamAttachmentBytes+1-int64(headLen)))
+	if err != nil {
+		return Attachment{}, fmt.Errorf("read file: %w", err)
+	}
+	total := int64(headLen) + rest
+	if total > MaxStreamAttachmentBytes {
+		return Attachment{}, fmt.Errorf("%w (more than %d bytes): %s", ErrFileTooLarge, MaxStreamAttachmentBytes, path)
+	}
+	sum := hex.EncodeToString(h.Sum(nil))
+	if size >= 0 && digest != "" && (total != size || !strings.EqualFold(sum, digest)) {
+		return Attachment{}, fmt.Errorf("file changed after it was checked: %s", path)
+	}
+	return Attachment{
+		Filename:  name,
+		MediaType: DetectMediaType(name, head[:headLen]),
+		Size:      total,
+		SHA256:    sum,
+		Source:    path,
+	}, nil
+}
+
+// ReadAttachmentFile reads the regular file at path as an attachment named filename, with its
+// bytes in Data, at most MaxAttachmentBytes. When size or digest are set, the file must still match
+// them, as the caller checked it before.
 func ReadAttachmentFile(path, filename string, size int64, digest string) (Attachment, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -190,15 +257,22 @@ func ReadAttachmentFile(path, filename string, size int64, digest string) (Attac
 	return attachment, nil
 }
 
-// validateAttachments checks what a message's attachments claim against their bytes.
+// validateAttachments checks what a message's attachments claim against their bytes, or, for
+// streamed ones, against the limits; their bytes are checked as they arrive.
 func validateAttachments(attachments []Attachment) error {
 	if len(attachments) > MaxAttachments {
 		return fmt.Errorf("too many attachments (%d; at most %d)", len(attachments), MaxAttachments)
+	}
+	if streamed(attachments) {
+		return validateStreamedAttachments(attachments)
 	}
 	var total int64
 	for i, a := range attachments {
 		if a.Filename == "" || CleanAttachmentName(a.Filename) != a.Filename {
 			return fmt.Errorf("attachment %d: invalid filename", i)
+		}
+		if a.TransferID != "" {
+			return fmt.Errorf("attachment %d: a message's files are all inline or all streamed", i)
 		}
 		if a.Size < 0 || a.Size != int64(len(a.Data)) {
 			return fmt.Errorf("attachment %d: size %d does not match its %d bytes", i, a.Size, len(a.Data))
@@ -219,7 +293,49 @@ func validateAttachments(attachments []Attachment) error {
 	return nil
 }
 
+// validateStreamedAttachments checks the metadata of streamed attachments.
+func validateStreamedAttachments(attachments []Attachment) error {
+	var total int64
+	ids := make(map[string]bool, len(attachments))
+	for i, a := range attachments {
+		if !validTransferID(a.TransferID) || ids[a.TransferID] {
+			return fmt.Errorf("attachment %d: invalid transfer id", i)
+		}
+		ids[a.TransferID] = true
+		if a.Data != nil {
+			return fmt.Errorf("attachment %d: a streamed file carries no inline data", i)
+		}
+		if a.Filename == "" || CleanAttachmentName(a.Filename) != a.Filename {
+			return fmt.Errorf("attachment %d: invalid filename", i)
+		}
+		if a.Size < 0 || a.Size > MaxStreamAttachmentBytes {
+			return fmt.Errorf("attachment %d: size %d out of range (at most %d)", i, a.Size, MaxStreamAttachmentBytes)
+		}
+		total += a.Size
+		if total > MaxStreamMessageBytes {
+			return fmt.Errorf("attachments too large (at most %d bytes together)", MaxStreamMessageBytes)
+		}
+		if NormalizeMediaType(a.MediaType) != a.MediaType {
+			return fmt.Errorf("attachment %d: invalid media type", i)
+		}
+		if !validSHA256(a.SHA256) {
+			return fmt.Errorf("attachment %d: invalid sha256", i)
+		}
+	}
+	return nil
+}
+
+// attachmentBytes is the file bytes of attachments, as their sizes say.
 func attachmentBytes(attachments []Attachment) int64 {
+	var total int64
+	for _, a := range attachments {
+		total += a.Size
+	}
+	return total
+}
+
+// inlineBytes is the file bytes attachments hold in memory.
+func inlineBytes(attachments []Attachment) int64 {
 	var total int64
 	for _, a := range attachments {
 		total += int64(len(a.Data))
@@ -237,11 +353,15 @@ func hasCapability(capabilities []string, capability string) bool {
 }
 
 // knownCapabilities keeps the capabilities this version knows, so a peer cannot claim others.
+// CapabilityFilesStream counts only with CapabilityFiles.
 func knownCapabilities(capabilities []string) []string {
-	if hasCapability(capabilities, CapabilityFiles) {
-		return []string{CapabilityFiles}
+	if !hasCapability(capabilities, CapabilityFiles) {
+		return nil
 	}
-	return nil
+	if hasCapability(capabilities, CapabilityFilesStream) {
+		return []string{CapabilityFiles, CapabilityFilesStream}
+	}
+	return []string{CapabilityFiles}
 }
 
 // AttachmentNotes tells a task about the files a message brought, for its text. It is empty for a

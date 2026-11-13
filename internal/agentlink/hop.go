@@ -63,15 +63,17 @@ func ReplyFilesFromContext(ctx context.Context) (*ReplyFiles, bool) {
 // Peer is the instance ID of the agent the answer goes to.
 func (r *ReplyFiles) Peer() string { return r.peer }
 
-// Add attaches a file to the answer, within the limits of one message.
-func (r *ReplyFiles) Add(a Attachment) error {
+// Add attaches a file to the answer, within the limits of one message. maxBytes is the most file
+// bytes the answer carries in all on its route: MaxAttachmentBytes when the route does not stream
+// files, MaxStreamMessageBytes when it does (see Node.FileLimit).
+func (r *ReplyFiles) Add(a Attachment, maxBytes int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.files) >= MaxAttachments {
 		return fmt.Errorf("the answer already has %d files, the most one message carries", MaxAttachments)
 	}
-	if attachmentBytes(r.files)+int64(len(a.Data)) > MaxAttachmentBytes {
-		return fmt.Errorf("the answer's files would pass %d bytes, the most one message carries", MaxAttachmentBytes)
+	if attachmentBytes(r.files)+a.Size > maxBytes {
+		return fmt.Errorf("the answer's files would pass %d bytes, the most one message carries on this route", maxBytes)
 	}
 	r.files = append(r.files, a)
 	return nil
