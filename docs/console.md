@@ -497,7 +497,7 @@ for storage and execution boundaries.
 The agent's state is in SQLite, next to the journal and the memories (see `docs/feat/feat_20261108_agent_db.md`):
 
 - `<file_state_dir>/agent.db`: the config (unless `--config` names a file), the identity and soul, the heartbeat workflows, contacts (with an index of every channel identifier), the contacts bus inbox and outbox, the TODO list, Console login sessions, Agent Link peers, and each conversation's context use, latest request snapshot and workspace.
-- `<file_state_dir>/usage.db`: LLM usage, one row per call (`stats.llm_usage.retention_days` bounds it).
+- `<file_state_dir>/usage.db`: LLM usage, one row per call (`stats.llm_usage.retention_days` bounds it); also the coder tool's runs and the last subscription quota of each coding CLI (`coder_quota`).
 
 Each change is one transaction; there are no lock files for these stores (the TODO scheduler keeps `locks/cron.scheduler.lck`). The files an older version kept (`config.yaml` at the default path, `persona/identity.yaml`, `persona/soul.md`, `HEARTBEAT.md`, `contacts/ACTIVE.md`, `INACTIVE.md`, `bus_inbox.json`, `bus_outbox.json`, `cron.yaml`, `console/sessions.json`, `agentlink/peers.json`, `topics/*/context*.json` and `workspace.json`, `stats/llm_usage/*.jsonl`) are imported the first time the database opens after the config is loaded (so a custom `contacts.dir_name` is honoured) and renamed `*.imported`; a record that does not parse is skipped and listed in the database's `meta` table under `import_rejects:<store>`.
 

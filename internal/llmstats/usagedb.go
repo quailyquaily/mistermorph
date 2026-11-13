@@ -76,6 +76,7 @@ func usageMigrations(stateDir string, pricing func() (*uniaiapi.PricingCatalog, 
 		{Name: "import JSONL usage journal", Apply: func(ctx context.Context, tx *sql.Tx) error {
 			return importUsageJournal(ctx, tx, stateDir, pricing)
 		}},
+		{Name: "create coder quota", SQL: coderQuotaSchemaSQL},
 	}
 }
 

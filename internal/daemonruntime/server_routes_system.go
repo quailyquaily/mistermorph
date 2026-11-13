@@ -304,6 +304,10 @@ func (routes *routeRegistration) registerSystemRoutes() {
 		})
 	})
 
+	registerCoderQuotaRoutes(mux, authToken, func(ctx context.Context) (*llmstats.UsageStore, error) {
+		return openUsageStats(ctx, capturedPaths.UsageDBPath, settingsReader, pricingConfigPath)
+	}, settingsReader)
+
 	mux.HandleFunc("/stats/llm/usage", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

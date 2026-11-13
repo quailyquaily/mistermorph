@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 )
@@ -55,6 +56,9 @@ type CoderRequest struct {
 	Progress func(summary, text, step string)
 	// Process reports the OS PID of the CLI used for this task.
 	Process func(pid int)
+	// Report hears, once the CLI has ended, what the run used and the quota it reported (Claude
+	// Code reports one; nil otherwise). Runs in a terminal session report nothing.
+	Report func(run coderusage.Run, quota *coderusage.Quota)
 }
 
 type coderCLICommand struct {
@@ -85,12 +89,16 @@ func (t *coderTool) Description() string {
 		}
 		return "Delegate a repository coding task to local Codex or Claude Code (cc) when the user asks for them. " +
 			"Each keeps a terminal session for this conversation and working directory, and " + approvals + ". " +
-			"Returns a SubtaskResult envelope."
+			"Returns a SubtaskResult envelope. " + coderUsageNote
 	}
 	return "Delegate a repository coding task to the local Codex or Claude Code CLI. " +
 		"Use this when the user explicitly asks for Codex, Claude Code, or cc to handle code edits, review fixes, tests, or file generation. " +
-		"The child coder runs non-interactively with approvals bypassed and returns a SubtaskResult envelope."
+		"The child coder runs non-interactively with approvals bypassed and returns a SubtaskResult envelope. " + coderUsageNote
 }
+
+// coderUsageNote tells the model what the result's usage line is for.
+const coderUsageNote = "Its usage field, when present, says what the run used and how much of that coder's subscription quota is left; " +
+	"when a limit is reached or nearly used up, tell the user (and when it resets) rather than retrying."
 
 func (t *coderTool) ParameterSchema() string {
 	s := map[string]any{
@@ -151,6 +159,9 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 
 	result, err := runner.RunSubtask(ctx, SubtaskRequest{
 		RunFunc: func(runCtx context.Context) (*SubtaskResult, error) {
+			var run coderusage.Run
+			var quota *coderusage.Quota
+			req.Report = func(r coderusage.Run, q *coderusage.Quota) { run, quota = r, q }
 			req.Process = func(pid int) { RecordWorkerProcess(runCtx, req.Backend, pid) }
 			req.Progress = func(summary, text, step string) {
 				EmitEvent(runCtx, nil, Event{
@@ -171,10 +182,12 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 					Status:   "running",
 				})
 			})
+			usage := t.reportUsage(runCtx, req, run, quota)
 			if runErr != nil {
 				out := FailedSubtaskResult("", runErr)
 				out.OutputKind = SubtaskOutputKindText
 				out.Output = output
+				out.Usage = usage
 				return out, nil
 			}
 			return &SubtaskResult{
@@ -182,6 +195,7 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 				Summary:    summarizeSubtaskText(output),
 				OutputKind: SubtaskOutputKindText,
 				Output:     output,
+				Usage:      usage,
 			}, nil
 		},
 	})
@@ -198,6 +212,50 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 		return "", err
 	}
 	return string(b), nil
+}
+
+// reportUsage records what a run used and the coder's quota, and says both in a line for the
+// result and the activity: Claude Code reports its quota during the run; Codex's is read from its
+// app server after the run (no quota used). It returns "" when there is nothing to say.
+func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coderusage.Run, quota *coderusage.Quota) string {
+	var recorder *coderusage.Recorder
+	if t.deps.Usage != nil {
+		recorder = t.deps.Usage()
+	}
+	run.Backend = req.Backend
+	recorder.RecordRun(ctx, run)
+	if quota == nil && req.Backend == coderBackendCodex && t.deps.ReadCodexQuota != nil {
+		if read, err := t.deps.ReadCodexQuota(context.WithoutCancel(ctx), req.PathExtra); err == nil {
+			quota = &read
+		}
+	}
+	if quota != nil {
+		recorder.SaveQuota(ctx, *quota)
+	}
+	var parts []string
+	if summary := run.Summary(); summary != "" {
+		parts = append(parts, req.Backend+" run: "+summary)
+	}
+	if quota != nil {
+		if note := quota.Note(time.Now()); note != "" {
+			parts = append(parts, note)
+		}
+	}
+	text := strings.Join(parts, "; ")
+	if text != "" && req.Progress != nil {
+		line := "[" + req.Backend + "] usage: " + text + "\n"
+		req.Progress(line, line, "")
+	}
+	return text
+}
+
+// readCodexQuota reads Codex's quota from its app server, finding codex as the coder tool does.
+func readCodexQuota(ctx context.Context, pathExtra []string) (coderusage.Quota, error) {
+	command, env, err := prepareCoderCommand(coderBackendCodex, pathExtra)
+	if err != nil {
+		return coderusage.Quota{}, err
+	}
+	return coderusage.ReadCodexQuota(ctx, command, env)
 }
 
 func coderRequestFromParams(ctx context.Context, params map[string]any, roots pathroots.PathRoots) (CoderRequest, error) {
@@ -472,6 +530,12 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	waitErr := cmd.Wait()
 	stdoutLines.Flush()
 	stderrLines.Flush()
+	if req.Report != nil {
+		run := collector.run
+		run.Backend = req.Backend
+		run.DurationMs = time.Since(started).Milliseconds()
+		req.Report(run, collector.quota)
+	}
 	output = capCoderOutput(collector.Output(), diagnosticDir)
 	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
 		line := fmt.Sprintf("[%s] exited; stopped reading output still held by a background process\n", req.Backend)
@@ -718,6 +782,9 @@ type coderStreamCollector struct {
 	lastActivity  string
 	step          string
 	itemOutputLen map[string]int
+	// run is what the run used, as its events said; quota the subscription quota it reported.
+	run   coderusage.Run
+	quota *coderusage.Quota
 }
 
 func newCoderStreamCollector(backend string, emit func(string)) *coderStreamCollector {
@@ -850,7 +917,16 @@ func (c *coderStreamCollector) consumeClaude(payload map[string]any) {
 		if text := textFromValue(payload["message"]); stringField(payload, "type") == "assistant" && text != "" {
 			c.setAssistantText(text)
 		}
+	case "rate_limit_event":
+		if info, ok := mapField(payload, "rate_limit_info"); ok {
+			if quota, ok := coderusage.ParseClaudeRateLimit(info, time.Now()); ok {
+				c.quota = &quota
+			}
+		}
 	case "result":
+		if models, turns, ok := coderusage.ClaudeResultUsage(payload); ok {
+			c.run.Models, c.run.Turns = models, turns
+		}
 		if text := stringField(payload, "result"); text != "" {
 			c.final = text
 		}
@@ -893,6 +969,7 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 			c.step = coderStepThinking
 		case "turn.completed":
 			c.errText = ""
+			c.addCodexTurn(payload)
 		}
 		c.emitActivity("[codex] " + typ)
 	case "error":
@@ -944,6 +1021,24 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 	if errText := firstNonEmptyString(stringField(payload, "error"), stringField(payload, "message")); errText != "" && strings.Contains(strings.ToLower(typ), "error") {
 		c.errText = errText
 	}
+}
+
+// addCodexTurn adds a Codex turn's usage to the run's: one model, the turns summed.
+func (c *coderStreamCollector) addCodexTurn(payload map[string]any) {
+	usage, ok := coderusage.CodexTurnUsage(payload)
+	if !ok {
+		return
+	}
+	c.run.Turns++
+	if len(c.run.Models) == 0 {
+		c.run.Models = []coderusage.ModelUsage{{Model: usage.Model}}
+	}
+	total := &c.run.Models[0]
+	total.InputTokens += usage.InputTokens
+	total.CachedInputTokens += usage.CachedInputTokens
+	total.CacheCreationInputTokens += usage.CacheCreationInputTokens
+	total.OutputTokens += usage.OutputTokens
+	total.ReasoningTokens += usage.ReasoningTokens
 }
 
 func claudeStreamDelta(value any) string {
