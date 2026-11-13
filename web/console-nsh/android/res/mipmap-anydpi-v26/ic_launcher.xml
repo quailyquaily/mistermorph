@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher icon (scripts/build-android.sh links it next to nsh's): an adaptive icon, which the
+     launcher masks to its own shape, instead of nsh's one PNG, which launchers shrink onto a plate.
+     The app's minimum SDK is 26, so every device takes this one. Its layers come from
+     design/brand/generator/platforms.py; the foreground's lines are the themed icon's monochrome. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <background android:drawable="@color/ic_launcher_background" />
+  <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+  <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
