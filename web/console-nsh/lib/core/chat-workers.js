@@ -45,6 +45,8 @@ export function normalizeActivityWorkers(raw) {
       kind: text(item.kind) === "coder" ? "coder" : "subagent",
       status: text(item.status).toLowerCase(),
       activityId: text(item.activity_id || item.activityId),
+      // What the worker was asked, exactly as sent: never trimmed.
+      task: typeof item.task === "string" ? item.task : "",
       at: text(item.at),
       stream: text(item.stream),
       output: String(item.output || ""),
@@ -134,23 +136,26 @@ function settingText(value) {
 }
 
 // workerAsk is how the agent started a worker: the call (spawn or coder) the worker belongs to,
-// read from the activity. Its task is what the agent asked; its other arguments are the settings
-// it gave (a coder's backend and directory, a subagent's tools and profile); its children are the
-// calls the worker made on its own (a subagent's tools). null when the call is not in the activity.
+// read from the activity. Its task is what the agent asked, exactly as sent (whitespace, lines and
+// all); its other arguments are the settings it gave (a coder's backend and directory, a subagent's
+// tools and profile); its children are the calls the worker made on its own (a subagent's tools).
+// Once the call has scrolled out of the activity only the task is left, which the worker keeps
+// itself; null when neither has it.
 export function workerAsk(activity, worker) {
   const entry = findActivityEntry(activity, worker?.activityId);
+  const kept = typeof worker?.task === "string" ? worker.task : "";
   if (!entry) {
-    return null;
+    return kept.trim() ? { task: kept, settings: [], at: "", calls: [], callsOmitted: 0 } : null;
   }
   const args = entry.args && typeof entry.args === "object" ? entry.args : {};
-  const task = typeof args.task === "string" ? args.task.trim() : "";
+  const task = typeof args.task === "string" ? args.task : kept;
   const settings = Object.keys(args)
     .filter((key) => key !== "task")
     .sort()
     .map((key) => ({ key, value: settingText(args[key]) }))
     .filter((setting) => setting.value);
   return {
-    task,
+    task: task.trim() ? task : "",
     settings,
     at: text(entry.at),
     calls: Array.isArray(entry.children) ? entry.children : [],

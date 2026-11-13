@@ -5,6 +5,7 @@ import { activityWorkerLabel, normalizeActivity, taskListHistoryItems } from "./
 import {
   normalizeActivityWorkers,
   rosterWorkers,
+  workerAsk,
   workerProcessLabel,
   workerSections,
   workerState,
@@ -201,4 +202,59 @@ test("coder output keeps line boundaries through live normalization and restored
       }
     }
   }
+});
+
+test("workerAsk shows what the agent asked exactly, live and restored, and after the call scrolled out", () => {
+  const spawnTask = "\n  Собери отчёт 📊\n" + "каждая строка — 每一行 ✓\n".repeat(600) + "  END-SPAWN-✅ \n";
+  const coderTask = "\t修复解析器 🦀\n" + "x".repeat(9000) + "\nEND-CODER-🧪\n\n";
+  assert.ok(spawnTask.length > 8000 && coderTask.length > 8000);
+  const raw = {
+    history: [
+      { id: "spawn-1", kind: "tool", name: "spawn", args: { task: spawnTask, tools: ["bash"], model_profile: "fast" } },
+      { id: "coder-1", kind: "tool", name: "coder", args: { task: coderTask, coder: "codex" } },
+    ],
+    workers: [
+      { id: "w1", name: "Milo", kind: "subagent", activity_id: "spawn-1", task: spawnTask },
+      { id: "w2", name: "Nova", kind: "coder", activity_id: "coder-1", task: coderTask },
+    ],
+  };
+  const live = normalizeActivity(raw);
+  const tasks = JSON.parse(JSON.stringify([{ id: "task", status: "done", task: "go", result: { activity: raw, final: { output: "done" } } }]));
+  const restored = taskListHistoryItems(tasks, (key) => key).find((item) => item.activity).activity;
+  for (const activity of [live, normalizeActivity(live), restored]) {
+    const [milo, nova] = rosterWorkers(activity, "done", "en");
+    assert.equal(milo.task, spawnTask);
+    assert.equal(workerAsk(activity, milo).task, spawnTask);
+    assert.deepEqual(workerAsk(activity, milo).settings, [{ key: "model_profile", value: "fast" }, { key: "tools", value: "bash" }]);
+    assert.equal(workerAsk(activity, nova).task, coderTask);
+    // The calls scrolled out of the history: the worker's own copy is left.
+    const scrolled = { ...activity, history: [], current: null };
+    assert.deepEqual(workerAsk(scrolled, milo), { task: spawnTask, settings: [], at: "", calls: [], callsOmitted: 0 });
+    assert.equal(workerAsk(scrolled, nova).task, coderTask);
+  }
+});
+
+test("workerAsk renders nothing for an empty, blank or missing task", () => {
+  const activity = normalizeActivity({
+    history: [
+      { id: "blank", kind: "tool", name: "coder", args: { task: " \n\t ", coder: "codex" } },
+      { id: "none", kind: "tool", name: "spawn", args: { tools: ["bash"] } },
+      { id: "odd", kind: "tool", name: "spawn", args: { task: 42 } },
+    ],
+    workers: [
+      { id: "w1", name: "A", activity_id: "blank", task: " \n\t " },
+      { id: "w2", name: "B", activity_id: "none" },
+      { id: "w3", name: "C", activity_id: "odd", task: 42 },
+      { id: "w4", name: "D", activity_id: "gone" },
+      { id: "w5", name: "E", activity_id: "gone", task: "\n " },
+    ],
+  });
+  const [blank, none, odd, gone, goneBlank] = activity.workers;
+  assert.equal(workerAsk(activity, blank).task, "");
+  assert.deepEqual(workerAsk(activity, blank).settings, [{ key: "coder", value: "codex" }]);
+  assert.equal(workerAsk(activity, none).task, "");
+  assert.equal(workerAsk(activity, odd).task, "");
+  assert.equal(odd.task, "");
+  assert.equal(workerAsk(activity, gone), null);
+  assert.equal(workerAsk(activity, goneBlank), null);
 });
