@@ -375,8 +375,8 @@ test("a worker's panel is its conversation: what the agent asked, the calls it m
   expect(app.texts()).toContain(TASK);
   expect(app.shows("id:chat-worker-ask >> text:bash, read_file")).toBe(true);
   expect(app.shows("id:chat-worker-ask >> text:fast")).toBe(true);
-  // The calls it made on its own.
-  expect(app.shows("id:chat-worker-calls >> text:bash")).toBe(true);
+  // The calls it made on its own: each one text, the call and its first value.
+  expect(app.shows("id:chat-worker-calls >> text:bash du -sh /var/cache/*")).toBe(true);
   // What it answered.
   expect(app.shows("id:chat-worker-answer >> text:apt 1.2G, pip 800M")).toBe(true);
 });

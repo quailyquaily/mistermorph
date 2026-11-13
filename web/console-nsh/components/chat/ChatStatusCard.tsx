@@ -11,6 +11,7 @@ import { Icon } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { OverflowLine } from "./OverflowLine";
+import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { KindChip, NEON, StatusTag, statusTag, TerminalText } from "./TerminalText";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
 import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
@@ -191,22 +192,49 @@ export function ChatPlanSteps(props: { itemID: string; plan: any }) {
   );
 }
 
-/** A parameter: its key in a fixed column, its value typed (a command behind `$`). */
-function ParamRow(props: { name: string; value: string }) {
+let paramProbe: PartLayoutListener | undefined;
+/** Test fixtures hear where each parameter's parts and each nested call lie on the page (null to
+ *  stop): `param:<key>=<value>` (the row), `prompt:…` (its `$`), `value:…`, `call:<title>=<value>`. */
+export function probeActivityParams(listener: PartLayoutListener | null) {
+  paramProbe = listener ?? undefined;
+}
+const params = createPartProbe(() => paramProbe);
+
+/**
+ * A parameter: its key in a fixed column, its value typed in the room left, where it wraps (at
+ * spaces, and inside a word longer than the room, so no value widens the panel). Its line breaks
+ * stay. A command's value has its `$` prompt in a column of its own beside it: always beside the
+ * command's first line (as text before the value it could end a line of its own), and never part
+ * of the value a press copies. `limit` is how much of the value shows (0: all of it).
+ */
+export function ParamRow(props: { name: string; value: string; class?: string; limit?: number; testID?: string }) {
   const command = () => COMMAND_KEYS.has(props.name.toLowerCase());
   return (
-    <View class="flex-row items-start gap-2">
+    <View
+      class={`flex-row items-start gap-2 ${props.class ?? ""}`}
+      testID={props.testID ?? "chat-activity-param"}
+      {...params.probe(() => `param:${props.name}=${props.value}`)}
+    >
       <Text class="w-[64px] shrink-0 font-mono text-[11px] leading-[18px] line-clamp-1" style={{ color: NEON.key }}>
         {props.name}
       </Text>
-      <OverflowLine contentClass="flex-row gap-1" testID="chat-activity-param">
+      <View class="min-w-0 flex-1 flex-row items-start gap-1">
         <If when={command()}>
-          <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.ok }}>
-            $
-          </Text>
+          <View class="shrink-0" testID="chat-activity-prompt" {...params.probe(() => `prompt:${props.name}=${props.value}`)}>
+            <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.ok }}>
+              $
+            </Text>
+          </View>
         </If>
-        <TerminalText text={props.value} limit={PARAM_LIMIT} class={`font-mono text-xs leading-[18px] ${command() ? TERMINAL_FG : TERMINAL_VALUE}`} />
-      </OverflowLine>
+        <View class="min-w-0 flex-1" {...params.probe(() => `value:${props.name}=${props.value}`)}>
+          <TerminalText
+            text={props.value}
+            limit={props.limit ?? PARAM_LIMIT}
+            class={`font-mono text-xs leading-[18px] ${command() ? TERMINAL_FG : TERMINAL_VALUE}`}
+            testID="chat-activity-param-value"
+          />
+        </View>
+      </View>
     </View>
   );
 }
@@ -291,26 +319,34 @@ export function ActivityCallTree(props: { itemID: string; calls: any[]; omitted?
               <Text class="font-mono text-xs leading-[18px]" style={{ color: statusTag(normalizeTaskStatus(child()?.status)).color }}>
                 ●
               </Text>
-              <OverflowLine contentClass="flex-row items-center gap-1.5" testID="chat-activity-call">
+              {/* The call and its first value as one text that wraps in the room left, as a
+                  parameter's value does (ParamRow). */}
+              <View
+                class="min-w-0 flex-1"
+                testID="chat-activity-call"
+                {...params.probe(() => `call:${entryTitle(child())}=${activityParams(child())[0]?.value ?? ""}`)}
+              >
                 <Text class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`}>
                   {entryTitle(child())}
                   {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
+                  <If when={activityParams(child())[0]?.value}>
+                    {" "}
+                    <TerminalText
+                      text={activityParams(child())[0]?.value ?? ""}
+                      limit={PARAM_LIMIT}
+                      class={TERMINAL_MUTED}
+                      testID="chat-activity-call-value"
+                    />
+                  </If>
                 </Text>
-                <If when={activityParams(child())[0]?.value}>
-                  <TerminalText
-                    text={activityParams(child())[0]?.value ?? ""}
-                    limit={PARAM_LIMIT}
-                    class={`font-mono text-xs leading-[18px] ${TERMINAL_MUTED} line-clamp-1`}
-                  />
-                </If>
-              </OverflowLine>
+              </View>
             </View>
             <If when={child()?.error}>
               <View class="flex-row gap-1.5">
                 <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
                   {index() === props.calls.length - 1 ? "  " : "│ "}
                 </Text>
-                <TerminalText text={String(child()?.error ?? "")} copyOnly class={`flex-1 font-mono text-xs leading-[18px] ${TERMINAL_ERROR}`} />
+                <TerminalText text={String(child()?.error ?? "")} copyOnly class={`min-w-0 flex-1 font-mono text-xs leading-[18px] ${TERMINAL_ERROR}`} />
               </View>
             </If>
           </View>
