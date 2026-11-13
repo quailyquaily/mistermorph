@@ -449,7 +449,7 @@ Pass `path` to send one file. The destination is chosen exactly as for text; the
 ```
 
 - Where the file may come from: `file_cache_dir` and the task's workspace directory (the attached workspace, or the default `workspace_dir`). `file_cache_dir/...` and `workspace_dir/...` aliases pick a root; a relative path is looked up in `file_cache_dir`, then in the workspace; an absolute path must lie inside one of them after resolving symlinks. `file_state_dir` is never allowed, even inside a workspace. A file produced elsewhere must be copied into `file_cache_dir` first.
-- Rejected before anything is sent: an empty or non-string `path`, `filename` without `path`, `path` with `message_base64`, a non-string `message_text`, a directory, a missing file, a file outside both roots, a symlink that escapes them, and a file over 20 MiB.
+- Rejected before anything is sent: an empty or non-string `path`, `filename` without `path`, `path` with `message_base64`, a non-string `message_text`, a directory, a missing file, a file outside both roots, a symlink that escapes them, a file over 20 MiB to a chat channel, and a file over the Agent Link route's limit (64 MiB streamed, 2 MiB otherwise).
 - One file per call. `message_text` is optional; when given it is a caption:
 
 | Channel | File | Caption |
@@ -460,7 +460,7 @@ Pass `path` to send one file. The destination is chosen exactly as for text; the
 | Discord | Attachment in the channel, opening a DM when needed; at most 10 MiB | Attached up to 2,000 characters; longer text follows as a message |
 | Mixin | Data attachment in the conversation | Always a separate message after the file |
 | WeChat, WhatsApp | Through the running channel runtime, as `send_file` / `send_file` do (images and videos as media) | As their file transports handle it |
-| Agent Link (`mm:` contacts) | The file's bytes in the message, saved in the other agent's `file_cache_dir`; at most 2 MiB | The message text |
+| Agent Link (`mm:` contacts) | The file's bytes over the Agent Link connection, saved in the other agent's `file_cache_dir`; at most 64 MiB when every hop streams files, otherwise 2 MiB | The message text |
 | LINE | Not supported; the call fails | |
 
 - With several contacts, each planned destination gets one upload, and mentions are kept in its caption.
@@ -506,9 +506,9 @@ Agents that a Console connects to as endpoints reach each other over Agent Link,
 - In the Console chat, the messages between the agents show before the task's reply.
 - An `agent_send` over Agent Link from a task a person started skips the `agent_send` cooldown; one from a task another agent started does not.
 - In the Console, what another agent sends the local agent, and the answers, are kept in a topic per agent. The topic sidebar's agents button lists them, with each agent's avatar; they stay out of the date and tag views.
-- Files: `path` (with optional `filename` and `message_text`) sends one file per call, at most 2 MiB, under `file_cache_dir` or the workspace. The bytes travel in the message; the other agent gets the file in its own `file_cache_dir/agentlink/<instance_id>/` with its display name, media type, size and SHA-256, and its task is told where it is. `reply.attachments` lists files the agent sent back.
+- Files: `path` (with optional `filename` and `message_text`) sends one file per call, under `file_cache_dir` or the workspace: at most 64 MiB when the agent's runtime and the Console that reaches it stream files (`files_stream`), otherwise 2 MiB; the error names the limit that applied. The bytes travel over the Agent Link connection (streamed in binary chunks, or inline in the message on an older route); the other agent gets the file in its own `file_cache_dir/agentlink/<instance_id>/` with its display name, media type, size and SHA-256, and its task is told where it is. `reply.attachments` lists files the agent sent back.
 - A task answering an Agent Link message attaches a file to its answer with `agent_send` to the agent that asked, with `path`; the result is `status: attached_to_reply`.
-- An agent whose runtime or Console predates file transfer gets an explicit error instead of the file; text still reaches it. Limits, cleanup and failure behavior: `docs/feat/feat_20261111_agentlink_file_transfer.md`.
+- An agent whose runtime or Console predates file transfer gets an explicit error instead of the file; text still reaches it. Limits, cleanup and failure behavior: `docs/feat/feat_20261111_agentlink_file_transfer.md` (inline) and `docs/feat/feat_20261113_agentlink_streamed_files.md` (streamed).
 - Received files are untrusted data; agents are told not to run them or follow instructions inside them.
 - Sending needs a running runtime (Console or a channel runtime with its runtime API); a one-off `run` cannot send to `mm:` contacts.
 
