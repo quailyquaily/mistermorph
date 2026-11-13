@@ -230,3 +230,73 @@ func TestActivityRosterKeepsCoderOutputAfterItsEntryIsTrimmed(t *testing.T) {
 		}
 	}
 }
+
+// A worker keeps the task its call sent, exactly, after the call scrolls out of the history and
+// through the JSON the task's result is stored and streamed as.
+func TestActivityRosterKeepsWorkerTaskExactly(t *testing.T) {
+	tasks := map[string]string{
+		"spawn": "\n  Собери отчёт 📊\n" + strings.Repeat("каждая строка — 每一行 ✓\n", 500) + "  END-SPAWN-✅ \n",
+		"coder": "\t修复解析器 🦀\n" + strings.Repeat("x", 9000) + "\nEND-CODER-🧪\n\n",
+		"child": strings.Repeat("Grün ", 100) + "END-CHILD",
+	}
+	var progress *consoleActivityProgress
+	apply := func(event agent.Event) { progress, _ = updateConsoleActivityProgress(progress, event) }
+	start := func(id, parent, tool, worker, task string) {
+		meta := &agent.WorkerMetadata{ID: worker, Name: worker}
+		args := map[string]any{"task": task, "tools": []any{"bash"}}
+		apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: id, ParentActivityID: parent, ToolName: tool, Status: "running", Worker: meta, Args: args})
+		apply(agent.Event{Kind: agent.EventKindToolDone, ActivityID: id, ParentActivityID: parent, ToolName: tool, Status: "done", Worker: meta, Args: args,
+			Text: subtaskEnvelope(t, agent.SubtaskResult{Status: "done", OutputKind: "text", Output: "ok"})})
+	}
+	start("spawn-1", "", "spawn", "w-spawn", tasks["spawn"])
+	start("coder-1", "", "coder", "w-coder", tasks["coder"])
+	apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: "code", ToolName: "codemode", Status: "running"})
+	start("child-1", "code", "coder", "w-child", tasks["child"])
+	want := map[string]string{"w-spawn": tasks["spawn"], "w-coder": tasks["coder"], "w-child": tasks["child"]}
+	check := func(stage string, progress *consoleActivityProgress) {
+		t.Helper()
+		if len(progress.Workers) != len(want) {
+			t.Fatalf("%s: workers = %+v", stage, progress.Workers)
+		}
+		for _, worker := range progress.Workers {
+			if worker.Task != want[worker.ID] {
+				t.Fatalf("%s: worker %s task = %d bytes ending %q, want %d bytes", stage, worker.ID, len(worker.Task), lastRunes(worker.Task), len(want[worker.ID]))
+			}
+		}
+	}
+	check("live", progress)
+	for _, entry := range progress.History {
+		if task, ok := tasks[entry.Name]; ok && entry.Args["task"] != task {
+			t.Fatalf("history %s task changed", entry.ID)
+		}
+	}
+	// Unrelated calls push every worker's call out of the history.
+	for i := 0; i < consoleActivityHistoryLimit+1; i++ {
+		apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: fmt.Sprintf("read-%d", i), ToolName: "read_file", Status: "done"})
+	}
+	for _, entry := range progress.History {
+		if entry.ID == "spawn-1" || entry.ID == "coder-1" || entry.ID == "code" {
+			t.Fatalf("%s is still in the history", entry.ID)
+		}
+	}
+	check("scrolled out", progress)
+	// As the task's result stores it and the stream sends it.
+	raw, err := json.Marshal(map[string]any{"activity": progress})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored struct {
+		Activity *consoleActivityProgress `json:"activity"`
+	}
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		t.Fatal(err)
+	}
+	check("stored", stored.Activity)
+}
+
+func lastRunes(s string) string {
+	if r := []rune(s); len(r) > 12 {
+		return string(r[len(r)-12:])
+	}
+	return s
+}
