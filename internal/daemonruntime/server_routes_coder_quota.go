@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
@@ -14,14 +15,17 @@ import (
 // coderQuotaPathExtraKey is where the coder tool looks for the CLIs beyond PATH.
 const coderQuotaPathExtraKey = "tools.coder.path_extra"
 
-// findCoderCommand and readCodexQuota are the CLI lookups the quota routes use (tests replace
-// them).
+// findCoderCommand and readCoderQuota are the CLI lookups the quota routes use (tests replace
+// them): Codex's app server, Claude Code's /usage; neither uses quota.
 var (
 	findCoderCommand = coderusage.FindCommand
-	readCodexQuota   = func(ctx context.Context, pathExtra []string) (coderusage.Quota, error) {
-		command, env, err := coderusage.FindCommand(coderusage.BackendCodex, pathExtra)
+	readCoderQuota   = func(ctx context.Context, backend string, pathExtra []string) (coderusage.Quota, error) {
+		command, env, err := coderusage.FindCommand(backend, pathExtra)
 		if err != nil {
 			return coderusage.Quota{}, err
+		}
+		if backend == coderusage.BackendClaude {
+			return coderusage.ReadClaudeQuota(ctx, command, env)
 		}
 		return coderusage.ReadCodexQuota(ctx, command, env)
 	}
@@ -37,8 +41,8 @@ type coderQuotaPayload struct {
 }
 
 // registerCoderQuotaRoutes serves the local coding CLIs' subscription quotas: GET
-// /stats/coder/quota gives the last ones the coder tool saw; POST /stats/coder/quota/refresh reads
-// Codex's from its app server first (Claude Code reports its quota only during a run).
+// /stats/coder/quota gives the last ones saved; POST /stats/coder/quota/refresh reads each
+// installed coder's first, at once (Codex's app server, Claude Code's /usage).
 func registerCoderQuotaRoutes(mux *http.ServeMux, authToken string, openStore func(context.Context) (*llmstats.UsageStore, error), settings agentsettings.Reader) {
 	serve := func(w http.ResponseWriter, r *http.Request, refresh bool) {
 		if !checkAuth(r, authToken) {
@@ -57,14 +61,31 @@ func registerCoderQuotaRoutes(mux *http.ServeMux, authToken string, openStore fu
 			return
 		}
 		defer func() { _ = store.Close() }()
-		if refresh && payload.Available[coderusage.BackendCodex] {
-			quota, err := readCodexQuota(r.Context(), pathExtra)
-			if err == nil {
-				err = coderusage.StoreQuota(r.Context(), store, quota)
+		if refresh {
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+			for _, backend := range []string{coderusage.BackendCodex, coderusage.BackendClaude} {
+				if !payload.Available[backend] {
+					continue
+				}
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					quota, err := readCoderQuota(r.Context(), backend, pathExtra)
+					mu.Lock()
+					defer mu.Unlock()
+					if err == nil {
+						err = coderusage.StoreQuota(r.Context(), store, quota)
+					}
+					if err != nil {
+						if payload.Errors == nil {
+							payload.Errors = map[string]string{}
+						}
+						payload.Errors[backend] = err.Error()
+					}
+				}()
 			}
-			if err != nil {
-				payload.Errors = map[string]string{coderusage.BackendCodex: err.Error()}
-			}
+			wg.Wait()
 		}
 		payload.Quotas, err = coderusage.LoadQuotas(r.Context(), store)
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
@@ -17,6 +18,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/coderterm"
+	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
@@ -794,6 +796,16 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 				Backend: request.Backend, Command: request.Command, Env: request.Env, CWD: request.CWD,
 				Task: request.Task, LogRoot: request.LogRoot, BypassApprovals: request.BypassApprovals,
 				Process: request.Process,
+				// Claude Code's status line carries its subscription's quota: reported as a stream
+				// run's would be, so it is saved and said with the result.
+				Status: func(data []byte) {
+					if request.Report == nil {
+						return
+					}
+					if quota, ok := coderusage.ParseClaudeStatusLine(data, time.Now()); ok {
+						request.Report(coderusage.Run{}, &quota)
+					}
+				},
 				Progress: func(status string) {
 					if request.Progress != nil {
 						request.Progress(status, status+"\n", status)

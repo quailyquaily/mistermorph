@@ -224,3 +224,107 @@ func TestFindCommand(t *testing.T) {
 		t.Fatal("found in a relative directory")
 	}
 }
+
+// Claude Code's status line JSON, as a terminal session keeps it: the 5-hour and weekly windows
+// become the quota; a gateway's spend limit, other fields and a status without windows do not.
+func TestParseClaudeStatusLine(t *testing.T) {
+	now := time.Date(2026, 11, 13, 13, 0, 0, 0, time.UTC)
+	data := []byte(`{"session_id":"s","model":{"id":"claude-opus-5-5"},"cost":{"total_cost_usd":0.4},
+		"rate_limits":{"seven_day":{"used_percentage":21.5,"resets_at":1795046400},
+		"five_hour":{"used_percentage":100,"resets_at":1794580200},
+		"spend_limit":{"used_percentage":3,"resets_at":1795046400}}}`)
+	q, ok := ParseClaudeStatusLine(data, now)
+	if !ok {
+		t.Fatal("no quota")
+	}
+	if q.Backend != BackendClaude || q.Source != SourceRun || q.ObservedAt != "2026-11-13T13:00:00Z" || q.Status != StatusRejected {
+		t.Fatalf("quota = %+v", q)
+	}
+	if len(q.Windows) != 2 || q.Windows[0].Kind != "five_hour" || q.Windows[1].Kind != "seven_day" {
+		t.Fatalf("windows = %+v", q.Windows)
+	}
+	five, week := q.Windows[0], q.Windows[1]
+	if five.WindowMinutes != 300 || *five.UsedPercent != 100 || five.Status != StatusRejected || five.ResetsAt != "2026-11-13T14:30:00Z" {
+		t.Fatalf("5h = %+v", five)
+	}
+	if week.WindowMinutes != 10080 || *week.UsedPercent != 21.5 || week.Status != StatusAllowed {
+		t.Fatalf("7d = %+v", week)
+	}
+	for _, data := range []string{`{"model":{"id":"x"}}`, `{"rate_limits":{}}`, `{"rate_limits":{"spend_limit":{"used_percentage":3}}}`, `not json`} {
+		if _, ok := ParseClaudeStatusLine([]byte(data), now); ok {
+			t.Fatalf("%s gave a quota", data)
+		}
+	}
+}
+
+// Claude Code's /usage text: the session is the 5-hour window, the weeks are 7-day ones (a
+// model's own named by it), resets read in their time zone; the rest of the text is left.
+func TestParseClaudeUsage(t *testing.T) {
+	now := time.Date(2026, 11, 13, 14, 0, 0, 0, time.UTC) // 23:00 in Tokyo
+	text := "You are currently using your subscription to power your Claude Code usage\n\n" +
+		"Current session: 70% used · resets Nov 14, 12:10am (Asia/Tokyo)\n" +
+		"Current week (all models): 12% used · resets Nov 20, 5am (Asia/Tokyo)\n" +
+		"Current week (Fable): 100% used · resets Nov 20, 5am (Asia/Tokyo)\n\n" +
+		"What's contributing to your usage?\nLast 24h · 1156 requests · 13 sessions\n  77%  Start fresh when you switch tasks · run /clear\n"
+	q, err := ParseClaudeUsage(text, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Backend != BackendClaude || q.Source != SourceRead || q.Status != StatusRejected || len(q.Windows) != 3 {
+		t.Fatalf("quota = %+v", q)
+	}
+	want := []struct {
+		kind, label, resets string
+		used                float64
+	}{
+		{"five_hour", "5h", "2026-11-13T15:10:00Z", 70},
+		{"seven_day", "7d", "2026-11-19T20:00:00Z", 12},
+		{"seven_day_fable", "7d fable", "2026-11-19T20:00:00Z", 100},
+	}
+	for i, w := range q.Windows {
+		if w.Kind != want[i].kind || WindowLabel(w) != want[i].label || w.ResetsAt != want[i].resets || *w.UsedPercent != want[i].used {
+			t.Fatalf("window %d = %+v (%s), want %+v", i, w, WindowLabel(w), want[i])
+		}
+	}
+	if q.Windows[2].Status != StatusRejected || q.Windows[0].Status != StatusAllowed {
+		t.Fatalf("statuses = %+v", q.Windows)
+	}
+
+	// A reset with no date is today's, or tomorrow's once passed; one in early January seen in
+	// late December is next year's.
+	if at, ok := parseClaudeReset("5pm (Asia/Tokyo)", now); !ok || at.UTC().Format(time.RFC3339) != "2026-11-14T08:00:00Z" {
+		t.Fatalf("time alone = %v %v", at, ok)
+	}
+	december := time.Date(2026, 12, 30, 0, 0, 0, 0, time.UTC)
+	if at, ok := parseClaudeReset("Jan 2, 9:30am (UTC)", december); !ok || at.Format(time.RFC3339) != "2027-01-02T09:30:00Z" {
+		t.Fatalf("next year = %v %v", at, ok)
+	}
+	for _, bad := range []string{"soon", "Nov 14, 25pm (Asia/Tokyo)", "Nov 14, 5pm (Nowhere/City)"} {
+		if _, ok := parseClaudeReset(bad, now); ok {
+			t.Fatalf("%q read as a time", bad)
+		}
+	}
+	// No limits: an API key, or another text.
+	if _, err := ParseClaudeUsage("You are using an API key\n\nNo subscription limits apply.", now); err == nil || !strings.Contains(err.Error(), "You are using an API key") {
+		t.Fatalf("api key err = %v", err)
+	}
+}
+
+// Opt in to read the installed Claude Code's subscription usage (/usage: no model call).
+func TestInstalledClaudeUsage(t *testing.T) {
+	if os.Getenv("MISTERMORPH_TEST_CLAUDE") != "1" {
+		t.Skip("set MISTERMORPH_TEST_CLAUDE=1 to read the installed CLI's usage")
+	}
+	command, env, err := FindCommand(BackendClaude, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := ReadClaudeQuota(context.Background(), command, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Windows) == 0 || q.Windows[0].Kind != "five_hour" {
+		t.Fatalf("quota = %+v", q)
+	}
+	t.Log(q.Note(time.Now()))
+}

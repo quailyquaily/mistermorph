@@ -96,7 +96,7 @@ func start(b backend, req Request, resumeID string) (*session, error) {
 		s.id, s.resumed = resumeID, true
 	}
 	s.transcriptDir = b.transcriptRoot(func(key string) string { return values[key] }, home, req.CWD)
-	s.cmd = exec.CommandContext(ctx, req.Command, b.args(s.id, s.resumed, s.bypass)...)
+	s.cmd = exec.CommandContext(ctx, req.Command, b.args(s.id, s.resumed, s.bypass, dir)...)
 	s.cmd.Dir = req.CWD
 	s.cmd.Env = append(childEnv, "TERM=xterm-256color")
 	s.cmd.Cancel = func() error {
@@ -483,4 +483,16 @@ func (s *session) submit(ctx context.Context, text string, paste bool) error {
 // spaces, trailing whitespace is trimmed), so the transcript records exactly what was sent.
 func normalizeTask(task string) string {
 	return strings.TrimRight(strings.ReplaceAll(task, "\t", "    "), " \t\r\n")
+}
+
+// statusLine is the status JSON the CLI last gave its status line command, nil when none.
+func (s *session) statusLine() []byte {
+	if s.dir == "" {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(s.dir, StatusLineFile))
+	if err != nil {
+		return nil
+	}
+	return data
 }

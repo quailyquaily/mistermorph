@@ -54,10 +54,22 @@ func (q Quota) Observed() time.Time {
 
 // claudeWindowMinutes are the lengths of Claude Code's named windows.
 var claudeWindowMinutes = map[string]int64{
-	"five_hour":        300,
-	"seven_day":        10080,
-	"seven_day_opus":   10080,
-	"seven_day_sonnet": 10080,
+	"five_hour": 300,
+	"seven_day": 10080,
+}
+
+// claudeKindMinutes is the length of a Claude Code window by its kind: a model's own week
+// ("seven_day_opus", "seven_day_fable") is a week too. 0 when unknown.
+func claudeKindMinutes(kind string) int64 {
+	if minutes, ok := claudeWindowMinutes[kind]; ok {
+		return minutes
+	}
+	for base, minutes := range claudeWindowMinutes {
+		if strings.HasPrefix(kind, base+"_") {
+			return minutes
+		}
+	}
+	return 0
 }
 
 // ParseClaudeRateLimit reads a Claude Code `rate_limit_event`'s `rate_limit_info`: every window in
@@ -80,7 +92,7 @@ func ParseClaudeRateLimit(info map[string]any, now time.Time) (Quota, bool) {
 			}
 			w := Window{
 				Kind:          strings.TrimSpace(kind),
-				WindowMinutes: claudeWindowMinutes[strings.TrimSpace(kind)],
+				WindowMinutes: claudeKindMinutes(strings.TrimSpace(kind)),
 				ResetsAt:      unixTime(window["resetsAt"]),
 				Status:        normalizeStatus(stringValue(window["status"])),
 			}
@@ -95,7 +107,7 @@ func ParseClaudeRateLimit(info map[string]any, now time.Time) (Quota, bool) {
 		if kind == "" {
 			return Quota{}, false
 		}
-		w := Window{Kind: kind, WindowMinutes: claudeWindowMinutes[kind], ResetsAt: unixTime(info["resetsAt"]), Status: q.Status}
+		w := Window{Kind: kind, WindowMinutes: claudeKindMinutes(kind), ResetsAt: unixTime(info["resetsAt"]), Status: q.Status}
 		if used, ok := info["utilization"].(float64); ok && !math.IsNaN(used) {
 			w.UsedPercent = percent(used * 100)
 		}
@@ -104,6 +116,47 @@ func ParseClaudeRateLimit(info map[string]any, now time.Time) (Quota, bool) {
 	sortWindows(q.Windows)
 	// The event's own status names the window it is about; a window nearer its limit wins.
 	q.Status = worse(q.Status, worstStatus(q.Windows))
+	return q, true
+}
+
+// claudeStatusLine is the part of the status JSON Claude Code gives a status line command that is
+// read here: the subscription's windows, each its share used (0–100) and when it resets (Unix
+// seconds). Claude Code includes a window only while its reset has not passed.
+type claudeStatusLine struct {
+	RateLimits map[string]*struct {
+		UsedPercentage *float64 `json:"used_percentage"`
+		ResetsAt       float64  `json:"resets_at"`
+	} `json:"rate_limits"`
+}
+
+// ParseClaudeStatusLine reads the quota from Claude Code's status line JSON (a terminal session's
+// StatusLineFile): its `rate_limits` five_hour and seven_day windows. A gateway's spend_limit is
+// not a subscription window and is left out. It reports false when there is no window.
+func ParseClaudeStatusLine(data []byte, now time.Time) (Quota, bool) {
+	var parsed claudeStatusLine
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return Quota{}, false
+	}
+	q := Quota{Backend: BackendClaude, ObservedAt: now.UTC().Format(time.RFC3339), Source: SourceRun}
+	for kind, window := range parsed.RateLimits {
+		minutes, known := claudeWindowMinutes[kind]
+		if window == nil || !known {
+			continue
+		}
+		w := Window{Kind: kind, WindowMinutes: minutes, ResetsAt: unixTime(window.ResetsAt), Status: StatusAllowed}
+		if window.UsedPercentage != nil {
+			w.UsedPercent = percent(*window.UsedPercentage)
+			if *window.UsedPercentage >= 100 {
+				w.Status = StatusRejected
+			}
+		}
+		q.Windows = append(q.Windows, w)
+	}
+	if len(q.Windows) == 0 {
+		return Quota{}, false
+	}
+	sortWindows(q.Windows)
+	q.Status = worstStatus(q.Windows)
 	return q, true
 }
 
@@ -191,7 +244,8 @@ func (q Quota) Note(now time.Time) string {
 	return note
 }
 
-// WindowLabel names a window by its length: "5h", "7d", "weekly opus".
+// WindowLabel names a window by its length, and a model's own window by its model too: "5h",
+// "7d", "7d opus", "7d fable".
 func WindowLabel(w Window) string {
 	label := w.Kind
 	switch {
@@ -202,12 +256,21 @@ func WindowLabel(w Window) string {
 	case w.WindowMinutes > 0:
 		label = fmt.Sprintf("%dm", w.WindowMinutes)
 	}
-	for _, model := range []string{"opus", "sonnet"} {
-		if strings.HasSuffix(w.Kind, "_"+model) {
-			label += " " + model
-		}
+	if model := windowModel(w.Kind); model != "" && w.WindowMinutes > 0 {
+		label += " " + model
 	}
 	return label
+}
+
+// windowModel is the model a window is for, from its kind ("seven_day_opus": "opus"), "" for a
+// window of every model.
+func windowModel(kind string) string {
+	for base := range claudeWindowMinutes {
+		if rest, ok := strings.CutPrefix(kind, base+"_"); ok {
+			return strings.ReplaceAll(rest, "_", " ")
+		}
+	}
+	return ""
 }
 
 func shortDuration(d time.Duration) string {

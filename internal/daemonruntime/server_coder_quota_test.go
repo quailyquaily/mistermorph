@@ -23,17 +23,24 @@ func TestCoderQuotaRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Codex is installed, Claude Code is not; the Codex read answers once, then fails.
-	origFind, origRead := findCoderCommand, readCodexQuota
-	t.Cleanup(func() { findCoderCommand, readCodexQuota = origFind, origRead })
+	// Codex is installed, Claude Code is not (at first); the Codex read answers once, then fails.
+	origFind, origRead := findCoderCommand, readCoderQuota
+	t.Cleanup(func() { findCoderCommand, readCoderQuota = origFind, origRead })
+	claudeInstalled := false
 	findCoderCommand = func(name string, _ []string) (string, []string, error) {
-		if name == "codex" {
-			return "/bin/codex", nil, nil
+		if name == "codex" || (name == "claude" && claudeInstalled) {
+			return "/bin/" + name, nil, nil
 		}
 		return "", nil, errors.New("not found")
 	}
-	reads := 0
-	readCodexQuota = func(context.Context, []string) (coderusage.Quota, error) {
+	reads, claudeReads := 0, 0
+	readCoderQuota = func(_ context.Context, backend string, _ []string) (coderusage.Quota, error) {
+		if backend == "claude" {
+			claudeReads++
+			session := 70.0
+			return coderusage.Quota{Backend: "claude", Status: coderusage.StatusAllowed, ObservedAt: "2026-11-13T11:00:00Z", Source: coderusage.SourceRead,
+				Windows: []coderusage.Window{{Kind: "five_hour", WindowMinutes: 300, UsedPercent: &session}}}, nil
+		}
 		reads++
 		if reads > 1 {
 			return coderusage.Quota{}, errors.New("not logged in")
@@ -73,6 +80,18 @@ func TestCoderQuotaRoutes(t *testing.T) {
 	code, payload = call(http.MethodPost, "/stats/coder/quota/refresh")
 	if code != http.StatusOK || payload.Errors["codex"] != "not logged in" || len(payload.Quotas) != 2 {
 		t.Fatalf("failed refresh = %d %+v", code, payload)
+	}
+	if claudeReads != 0 {
+		t.Fatalf("read Claude Code's quota without the CLI: %d", claudeReads)
+	}
+	// With Claude Code installed, a refresh reads its quota too (/usage), whatever Codex's does.
+	claudeInstalled = true
+	code, payload = call(http.MethodPost, "/stats/coder/quota/refresh")
+	if code != http.StatusOK || claudeReads != 1 || payload.Errors["codex"] != "not logged in" || payload.Errors["claude"] != "" {
+		t.Fatalf("refresh with claude = %d %+v", code, payload)
+	}
+	if q := payload.Quotas[0]; q.Backend != "claude" || q.Source != coderusage.SourceRead || *q.Windows[0].UsedPercent != 70 {
+		t.Fatalf("claude quota = %+v", q)
 	}
 
 	for _, c := range []struct{ method, path string }{{http.MethodPost, "/stats/coder/quota"}, {http.MethodGet, "/stats/coder/quota/refresh"}} {

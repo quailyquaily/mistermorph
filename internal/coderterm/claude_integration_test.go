@@ -156,9 +156,11 @@ func TestInstalledClaude(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	questions := 0
+	var status []byte
 	req := Request{Backend: "claude", Command: command, CWD: work, LogRoot: root,
 		Env:      []string{"PATH=" + os.Getenv("PATH"), "CLAUDE_CONFIG_DIR=" + config, "ANTHROPIC_API_KEY=morph-probe", "ANTHROPIC_BASE_URL=" + server.URL, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1"},
 		Progress: func(s string) { t.Log(s) },
+		Status:   func(data []byte) { status = data },
 		Ask: func(_ context.Context, q Question) (Answer, error) {
 			t.Logf("question: %s; options: %v", q.Text, q.Options)
 			if strings.Contains(q.Text, "Accessing workspace") {
@@ -207,9 +209,17 @@ func TestInstalledClaude(t *testing.T) {
 		} else if s != first {
 			t.Fatal("follow-up replaced the Claude process")
 		}
-		if !strings.Contains(strings.Join(s.cmd.Args, " "), "--session-id "+s.id) || strings.Contains(strings.Join(s.cmd.Args, " "), "--settings") {
+		if args := strings.Join(s.cmd.Args, " "); !strings.Contains(args, "--session-id "+s.id) || strings.Contains(args, "--dangerously-skip-permissions") || strings.Contains(args, "skipDangerousModePermissionPrompt") {
 			t.Fatalf("unexpected Claude arguments: %v", s.cmd.Args)
 		}
+	}
+	// The status line command kept Claude Code's status JSON (no rate limits against a stub: they
+	// are a subscriber's).
+	var parsed struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(status, &parsed); err != nil || parsed.SessionID != first.id {
+		t.Fatalf("status line JSON = %q (%v), want session %s", status, err, first.id)
 	}
 	if questions < 3 {
 		t.Fatalf("questions=%d, want choice, Other, and text", questions)

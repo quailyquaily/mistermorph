@@ -38,6 +38,9 @@ type Request struct {
 	Progress        func(string)
 	// Process reports the terminal PID, including when reusing a session.
 	Process func(int)
+	// Status hears, after each task, the status JSON the CLI last gave its status line (Claude
+	// Code: StatusLineFile); not called when there is none.
+	Status func([]byte)
 }
 
 // Sessions belongs to one runtime. Its zero value is ready to use.
@@ -113,6 +116,11 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (string, 
 		req.Process(s.pid)
 	}
 	output, err := s.run(ctx, req)
+	if req.Status != nil {
+		if data := s.statusLine(); len(data) > 0 {
+			req.Status(data)
+		}
+	}
 	m.mu.Lock()
 	s.busy = false
 	if err != nil {
