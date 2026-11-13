@@ -30,6 +30,6 @@ func (systemKeyringClient) Delete(service, account string) error {
 	return err
 }
 
-func NewOSStore() OSStore {
+func newPlatformOSStore() OSStore {
 	return newKeyringOSStore(systemKeyringClient{})
 }

@@ -41,7 +41,7 @@ type darwinKeychainStore struct {
 	releaseCoreFoundation func(uintptr)
 }
 
-func NewOSStore() OSStore {
+func newPlatformOSStore() OSStore {
 	return &darwinKeychainStore{}
 }
 

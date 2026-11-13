@@ -13,12 +13,12 @@ import (
 )
 
 func runRootPreflight(cmd *cobra.Command, _ []string) error {
-	if shouldCheckOSSecretStore(cmd) {
+	if store := secref.NewOSStore(); store != nil && shouldCheckOSSecretStore(cmd) {
 		ctx := cmd.Context()
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if err := secref.CheckOSStore(ctx, secref.NewOSStore()); err != nil {
+		if err := secref.CheckOSStore(ctx, store); err != nil {
 			slog.Warn("os_secret_store_unavailable", "error", err)
 		}
 	}
