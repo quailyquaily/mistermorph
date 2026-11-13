@@ -1,6 +1,6 @@
 // The web implementation of the `morph.*` host contract (see lib/platform.ts). It runs in the
 // page itself, around the frame the app draws in, so the browser-only parts live here: the
-// address bar, localStorage, file inputs, downloads and system notifications.
+// address bar, localStorage, file inputs, downloads, system notifications and the tab's icon.
 const KV_PREFIXES = ["mistermorph", "quail-language"];
 
 function keep(key) {
@@ -327,9 +327,171 @@ function createVoiceRecorder(player) {
   };
 }
 
+// The tab's icon (morph.favicon): the selected agent's avatar, drawn round on a small square, or
+// the app icon the build wrote into index.html. The app runs in a same-origin frame, so the page
+// loads the `blob:` URLs it makes (and the server's `data:` URLs) as they are; the drawn icon is a
+// `data:` URL, so the page makes no object URLs of its own to release.
+const FAVICON_SIZE = 32;
+
+/** The link elements that give the page's icon (`rel="icon"`, not `apple-touch-icon`). */
+function iconLinks(head) {
+  return [...head.querySelectorAll("link")].filter((link) =>
+    String(link.getAttribute("rel") || "").toLowerCase().split(/\s+/).includes("icon"),
+  );
+}
+
+/** "anonymous" for an image on another origin (a canvas can only read it with CORS), else null. */
+function crossOriginFor(url, pageOrigin) {
+  try {
+    const parsed = new URL(url, pageOrigin);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.origin === pageOrigin ? null : "anonymous";
+  } catch {
+    return null;
+  }
+}
+
+function loadFaviconImage(url, crossOrigin) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    if (crossOrigin) image.crossOrigin = crossOrigin;
+    image.decoding = "async";
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`could not load ${url.slice(0, 64)}`));
+    image.src = url;
+  });
+}
+
+/** The image cropped to its centre square, scaled to `size` and cut round: a PNG `data:` URL. */
+export function drawFavicon(image, size = FAVICON_SIZE, makeCanvas = () => document.createElement("canvas")) {
+  const canvas = makeCanvas();
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("no 2d canvas");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.beginPath();
+  context.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+  context.closePath();
+  context.clip();
+  const width = Number(image.naturalWidth || image.width) || 0;
+  const height = Number(image.naturalHeight || image.height) || 0;
+  if (width > 0 && height > 0) {
+    const side = Math.min(width, height);
+    context.drawImage(image, (width - side) / 2, (height - side) / 2, side, side, 0, 0, size, size);
+  } else {
+    // An SVG without a size of its own: it scales to fit.
+    context.drawImage(image, 0, 0, size, size);
+  }
+  // Throws on a canvas the image tainted (another origin without CORS).
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Keeps the page's icon. `show(url)` loads the avatar at `url` and puts it in place of the app
+ * icon; "" puts the app icon back, as do a load in progress and an image that fails. Only the
+ * latest call counts: an older load that ends later changes nothing. The app icon's own link
+ * elements are kept and put back as they were.
+ */
+export function createFavicon({
+  document: doc = globalThis.document,
+  pageOrigin = globalThis.location?.origin || "",
+  loadImage = loadFaviconImage,
+  draw = (image) => drawFavicon(image),
+} = {}) {
+  let originals = null;
+  let placeholder = null;
+  let avatarLink = null;
+  let seq = 0;
+
+  function capture() {
+    if (originals) return;
+    originals = iconLinks(doc.head);
+    // Marks where the app icon's links were, to put them back in the same place.
+    placeholder = doc.createComment("morph.favicon");
+    if (originals[0]) originals[0].before(placeholder);
+    else doc.head.append(placeholder);
+  }
+
+  function restore() {
+    if (!avatarLink) return;
+    for (const link of originals) placeholder.before(link);
+    avatarLink.remove();
+    avatarLink = null;
+  }
+
+  function put(href) {
+    if (!avatarLink) {
+      avatarLink = doc.createElement("link");
+      avatarLink.setAttribute("rel", "icon");
+      avatarLink.setAttribute("data-morph-favicon", "");
+      placeholder.before(avatarLink);
+      for (const link of originals) link.remove();
+    }
+    // A link of its own every time: browsers notice a new element more reliably than a new href.
+    const next = avatarLink.cloneNode(false);
+    const drawn = href.startsWith("data:image/png");
+    if (drawn) {
+      next.setAttribute("type", "image/png");
+      next.setAttribute("sizes", `${FAVICON_SIZE}x${FAVICON_SIZE}`);
+    } else {
+      next.removeAttribute("type");
+      next.removeAttribute("sizes");
+    }
+    next.setAttribute("href", href);
+    avatarLink.replaceWith(next);
+    avatarLink = next;
+  }
+
+  async function iconFor(url) {
+    const crossOrigin = crossOriginFor(url, pageOrigin);
+    let image;
+    try {
+      image = await loadImage(url, crossOrigin);
+    } catch (error) {
+      if (!crossOrigin) throw error;
+      // Another origin without CORS: the browser can still show it, unround.
+      await loadImage(url, null);
+      return url;
+    }
+    try {
+      return draw(image);
+    } catch {
+      // The image loads but cannot be drawn here: the browser shows it as it is.
+      return url;
+    }
+  }
+
+  return {
+    /** What the tab shows now: "app" or the avatar link's href. */
+    current: () => (avatarLink ? String(avatarLink.getAttribute("href") || "") : "app"),
+    async show(url) {
+      capture();
+      const id = (seq += 1);
+      const source = String(url || "").trim();
+      // The app icon while the avatar loads, never the previous agent's.
+      restore();
+      if (!source) return "app";
+      try {
+        const href = await iconFor(source);
+        if (id !== seq) return "stale";
+        put(href);
+        return "avatar";
+      } catch (error) {
+        if (id !== seq) return "stale";
+        restore();
+        console.warn("favicon:", error?.message || error);
+        return "app";
+      }
+    },
+  };
+}
+
 export function createHost(player) {
   const notifications = new Map();
   const voice = createVoiceRecorder(player);
+  const favicon = createFavicon();
   const sendVisibility = () =>
     player.hostEvent("morph.visibility", { visible: document.visibilityState === "visible", focused: document.hasFocus() });
 
@@ -380,6 +542,7 @@ export function createHost(player) {
       },
     ],
     ["morph.title", ({ title }) => void (document.title = title)],
+    ["morph.favicon", ({ url }) => favicon.show(url)],
     ["morph.language", ({ language }) => void (document.documentElement.lang = language)],
     ["morph.notify.state", () => notificationState()],
     [
