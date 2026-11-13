@@ -10,8 +10,12 @@ import (
 // coderQuotaSchemaSQL keeps the last subscription quota each local coding CLI reported (Codex,
 // Claude Code): one row per coder, replaced by every newer report. The quota itself is the
 // coder's own JSON (internal/coderusage), stored as given.
+//
+// It is not a migration step: a step raises the schema version, and a build that knows fewer steps
+// refuses the file, so going back to an older build would lose the usage page over a table that
+// build never reads. The table is created when missing each time usage.db opens instead.
 const coderQuotaSchemaSQL = `
-CREATE TABLE coder_quota (
+CREATE TABLE IF NOT EXISTS coder_quota (
 	backend     TEXT PRIMARY KEY,
 	observed_at INTEGER NOT NULL,
 	data        TEXT NOT NULL

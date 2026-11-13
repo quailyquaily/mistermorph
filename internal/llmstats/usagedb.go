@@ -76,7 +76,6 @@ func usageMigrations(stateDir string, pricing func() (*uniaiapi.PricingCatalog, 
 		{Name: "import JSONL usage journal", Apply: func(ctx context.Context, tx *sql.Tx) error {
 			return importUsageJournal(ctx, tx, stateDir, pricing)
 		}},
-		{Name: "create coder quota", SQL: coderQuotaSchemaSQL},
 	}
 }
 
@@ -139,6 +138,10 @@ func OpenUsageStore(ctx context.Context, path string, opts UsageStoreOptions) (*
 		db, err := sqlitedb.Open(ctx, path, usageMigrations(stateDir, pricingSource))
 		if err != nil {
 			return nil, fmt.Errorf("open usage database: %w", err)
+		}
+		if _, err := db.ExecContext(ctx, coderQuotaSchemaSQL); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("open usage database: create coder quota: %w", err)
 		}
 		if err := stateimport.FinishRenames(ctx, db, stateDir, logger); err != nil {
 			logger.Warn("llm_usage_import_rename_failed", "error", err)
