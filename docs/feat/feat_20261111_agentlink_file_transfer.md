@@ -6,6 +6,11 @@ status: implemented-v1
 
 # File transfer over Agent Link
 
+> Since 2026-11-13, runtimes and Consoles that announce `files_stream` stream files as binary chunks
+> instead, with larger limits and resume: see `feat_20261113_agentlink_streamed_files.md`. This
+> document describes the inline path, which routes that do not stream keep using unchanged, and the
+> parts both paths share. Where the two differ, the limits below say so.
+
 ## Goal
 
 Let agents connected through Agent Link (see `feat_20261011_agentlink_channel.md`) send files to one another: a file with a message, a file alone, and files returned in an answer. The bytes travel over the existing authenticated Agent Link connection, so it works when the agents share no filesystem. The receiving agent gets the file's metadata and a local copy inside its own `file_cache_dir`.
@@ -24,7 +29,7 @@ Out of scope: shared folders, directory sync, and files on other channels (those
 | `filename` | Optional display filename; defaults to the file's own name. |
 | `message_text` | Optional with `path`; the text that goes with the file. |
 
-- One file per call, at most 2 MiB (`agentlink.MaxAttachmentBytes`). `path` cannot be combined with `message_base64`.
+- One file per call, at most 2 MiB (`agentlink.MaxAttachmentBytes`) on a route that does not stream files, 64 MiB on one that does (see the streamed transfer doc). `path` cannot be combined with `message_base64`.
 - `agent_send` sends files over Agent Link only. A file to an Agent contact on another channel is rejected; `contacts_send` sends files there.
 - `contacts_send` with `path` to an `mm:` contact sends the file over Agent Link too (it does not wait for an answer).
 - The result is the usual `agent_send` result. The outcome is `accepted` once the other runtime saved the file, and `queued: true` while it waits for a Console that reaches the agent.
@@ -32,7 +37,7 @@ Out of scope: shared folders, directory sync, and files on other channels (those
 ### Files in the answer
 
 - `reply.attachments` lists the files the other agent sent back with its answer: `filename`, `media_type`, `size`, `sha256` and `path` (`file_cache_dir/agentlink/<instance_id>/<generated name>`). A late answer that becomes a new message in the conversation that asked lists the same files in its text.
-- A task that answers an Agent Link message attaches a file to its answer with `agent_send` to the agent that asked, with `path`: the call returns `status: attached_to_reply` and sends nothing on its own; the file goes with the task's final answer, which is the reply text. `message_text` in such a call is not sent. Up to 4 files may be attached, at most 2 MiB together. A file to anyone else, or a text-only `agent_send`, works as before.
+- A task that answers an Agent Link message attaches a file to its answer with `agent_send` to the agent that asked, with `path`: the call returns `status: attached_to_reply` and sends nothing on its own; the file goes with the task's final answer, which is the reply text. `message_text` in such a call is not sent. Up to 4 files may be attached, at most 2 MiB together (256 MiB on a route that streams files). A file to anyone else, or a text-only `agent_send`, works as before.
 - When the answer's files cannot go (the asker cannot take files, or the queue is full), the answer goes without them and ends with a line saying which files could not be attached and why.
 
 ### Receiving
@@ -57,8 +62,8 @@ The agent reads the file with its usual tools (`read_file`, `bash`, …). The fi
 
 | Where | Checks |
 |---|---|
-| Sending tool | Recipient is an active Agent contact (`agent_send`) reached over Agent Link; file under an allowed root after resolving symlinks; regular file; at most 2 MiB; the peer takes files when reachable. All before anything is sent. |
-| Sending runtime | The file is checked again and read once; its size and SHA-256 must still match what the tool saw. The bytes are copied into the queue, so later changes to the file do not matter. |
+| Sending tool | Recipient is an active Agent contact (`agent_send`) reached over Agent Link; file under an allowed root after resolving symlinks; regular file; within the route's limit (2 MiB inline); the peer takes files when reachable. All before anything is sent. |
+| Sending runtime | The file is checked again and copied into the queue's own storage on disk; its size and SHA-256 must still match what the tool saw. Later changes to the file do not matter. For an inline route the copy is read back when the message goes. |
 | Console relay | The sender is the connected runtime (`from` is overwritten as before). Every attachment is validated (count, total size, size against bytes, SHA-256 against bytes, clean filename, media type). The target must have announced `files`. |
 | Receiving runtime | The same validation; the message must be addressed to it; repeats are accepted without saving again. Files from an agent whose contact a person deactivated are refused (`unauthorized`); an agent the contact sync made inactive, or one with no contact yet, may send. An answer to a message this runtime sent is always taken. |
 
@@ -79,10 +84,10 @@ No download link, URL, token or path on the sender's machine is exposed: the byt
 | File bytes per message (all attachments) | 2 MiB |
 | Attachments per message | 4 (`agent_send` sends one per call) |
 | Frame size | 4 MiB (base64 makes a 2 MiB file about 2.7 MiB) |
-| File bytes waiting in a runtime's queue (memory and disk) | 16 MiB; a send over it fails with "agent link file queue is full" |
+| File bytes waiting in a runtime's queue (on disk since streamed transfer; 16 MiB before) | 512 MiB; a send over it fails with "agent link file queue is full" |
 | File bytes a Console relay has in flight | 32 MiB; over it, deliveries wait and are retried |
 | Deliveries with files a runtime saves at once | 4; more are retried later |
-| Received files kept | 7 days, at most 256 files and 64 MiB under `file_cache_dir/agentlink/`; the oldest go first |
+| Received files kept | 7 days, at most 256 files and 512 MiB (64 MiB before streamed transfer) under `file_cache_dir/agentlink/`; the oldest go first |
 | Partial files left by a crash | removed after 1 hour |
 
 A frame with a file gets extra time on a slow link: the write deadline grows by one second per 64 KiB, the relay's delivery timeout by 60 s and the sender's lease by 90 s.
