@@ -132,24 +132,54 @@ func TestToolDisplayArgsSummary_FallbackSanitizesUnknownTool(t *testing.T) {
 
 func TestToolDisplayArgsSummary_WorkerTaskKeptWhole(t *testing.T) {
 	opts := DefaultLogOptions()
-	task := strings.Repeat("Refactor the parser and keep the tests green. ", 20)
-	for _, name := range []string{"spawn", "coder"} {
-		got := toolDisplayArgsSummary(name, map[string]any{
-			"task":  task,
-			"coder": "codex",
-			"note":  strings.Repeat("x", 400),
-		}, opts)
-		if got["task"] != strings.TrimSpace(task) {
-			t.Fatalf("%s: task cut to %d chars, want the whole %d", name, len(got["task"].(string)), len(strings.TrimSpace(task)))
-		}
-		// Other values keep the display cap.
-		if note, _ := got["note"].(string); len(note) >= 400 {
-			t.Fatalf("%s: note = %d chars, want it cut", name, len(note))
+	multiline := "\n  Перепиши парсер 🦀 и сохрани тесты зелёными.\n\t改写解析器，保持测试通过。\n" +
+		strings.Repeat("Шаг — étape — ステップ ✓\n", 600) + "  末尾-FT105-SUFFIX-✅ \n\n"
+	cases := []struct {
+		name string
+		task string
+	}{
+		{"past the 240 display cap", strings.Repeat("Refactor the parser and keep the tests green. ", 20) + "END-241"},
+		{"past the old 8000 cap", strings.Repeat("x", 8000) + "END-8001"},
+		{"far past every cap", strings.Repeat("Keep going. ", 20000) + "END-240K"},
+		{"multiline unicode with boundary whitespace", multiline},
+		{"whitespace only", " \n\t "},
+		{"empty", ""},
+	}
+	for _, tc := range cases {
+		for _, name := range []string{"spawn", "coder"} {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				params := map[string]any{
+					"task":  tc.task,
+					"coder": "codex",
+					"note":  strings.Repeat("x", 400),
+				}
+				got := toolDisplayArgsSummary(name, params, opts)
+				if got["task"] != tc.task {
+					shown, _ := got["task"].(string)
+					t.Fatalf("task shown as %d bytes, want the exact %d bytes sent", len(shown), len(tc.task))
+				}
+				// The call's own parameters are left as they were.
+				if params["task"] != tc.task {
+					t.Fatalf("params task changed")
+				}
+				// Other values keep the display cap.
+				if note, _ := got["note"].(string); len(note) >= 400 {
+					t.Fatalf("note = %d chars, want it cut", len(note))
+				}
+			})
 		}
 	}
 	// Another tool's long value is still cut.
+	task := strings.Repeat("Refactor the parser and keep the tests green. ", 20)
 	got := toolDisplayArgsSummary("custom_tool", map[string]any{"task": task}, opts)
-	if s, _ := got["task"].(string); len(s) >= len(strings.TrimSpace(task)) {
+	if s, _ := got["task"].(string); len(s) >= len(task) {
 		t.Fatalf("custom_tool task = %d chars, want it cut", len(s))
+	}
+	// A task key the configuration redacts stays redacted.
+	redacting := opts
+	redacting.RedactKeys = append(append([]string(nil), opts.RedactKeys...), "task")
+	got = toolDisplayArgsSummary("coder", map[string]any{"task": task, "coder": "codex"}, redacting)
+	if got["task"] != "[redacted]" {
+		t.Fatalf("redacted task = %#v", got["task"])
 	}
 }

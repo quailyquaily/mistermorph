@@ -285,11 +285,12 @@ func toolDisplayArgsSummary(toolName string, params map[string]any, opts LogOpti
 	if len(sanitized) == 0 {
 		return nil
 	}
-	// What the agent asks a subagent or a coder is shown whole (up to workerTaskDisplayChars): the
-	// Console shows it as the start of that worker's conversation.
+	// What the agent asks a subagent or a coder is shown exactly as sent, whole and untrimmed: the
+	// Console shows it as the start of that worker's conversation. The tool itself still runs with
+	// its own reading of the task (trimmed); only this display copy keeps every character.
 	if toolName == spawnToolName || toolName == coderToolName {
-		if task, ok := params["task"].(string); ok && strings.TrimSpace(task) != "" {
-			sanitized["task"] = sanitizeValue(strings.TrimSpace(task), workerTaskDisplayChars, opts.RedactKeys, "task")
+		if task, ok := params["task"].(string); ok {
+			sanitized["task"] = sanitizeValue(task, 0, opts.RedactKeys, "task")
 		}
 	}
 	return sanitized
@@ -408,6 +409,3 @@ func isPlainNumber(value any) bool {
 		return false
 	}
 }
-
-// workerTaskDisplayChars is how much of a spawn or coder task the activity keeps for display.
-const workerTaskDisplayChars = 8000
