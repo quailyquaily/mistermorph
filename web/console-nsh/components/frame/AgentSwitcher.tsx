@@ -3,7 +3,7 @@
 // opening below with its tail up to the switcher: online agents first, offline ones dimmed and not
 // selectable, the current one marked, and a last row to the overview of every agent. With more than
 // eight agents a filter heads the list. Folded, the sidebar shows the avatar only. The phone's
-// bottom bar opens the same list above its agent slot (MobileBottomNav, `AgentPicker`).
+// bottom bar shows the same rows on a sheet that rises over the page (MobileBottomNav, `AgentList`).
 //
 // Why not nsh's Menu: on the desktop app (GPUI) the menu's agent rows took no clicks while its
 // Overview row did. The rows were in a `Scroll` inside the menu's popup, and under the console's
@@ -15,7 +15,7 @@ import { computed, Image, signal, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import type { EndpointItem } from "../../lib/shell";
 import { FadeText } from "../motion/FadeText";
-import { PopoverPicker, type PickerItem, type PickerSide } from "../shared/PopoverPicker";
+import { PickerList, PopoverPicker, type PickerItem, type PickerSide } from "../shared/PopoverPicker";
 import { Icon, Tip, trackPopup } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
@@ -116,9 +116,19 @@ export function overviewPickerItem(testID: string): PickerItem {
   };
 }
 
+/** A row picked in either list: the overview row hears `onOverview`, an online agent `onSelect`. */
+function chooseAgent(items: AgentOption[], value: string, onSelect: (item: AgentOption) => void, onOverview: () => void) {
+  if (value === OVERVIEW_VALUE) {
+    onOverview();
+    return;
+  }
+  const item = items.find((entry) => entry.value === value);
+  if (item?.connected) onSelect(item);
+}
+
 /**
- * The agents in the popover bubble, for the sidebar's switcher and the phone's agent slot: picking
- * an online agent hears `onSelect`, the overview row `onOverview`; both close it.
+ * The agents in the popover bubble, for the sidebar's switcher: picking an online agent hears
+ * `onSelect`, the overview row `onOverview`; both close it.
  */
 export function AgentPicker(props: {
   items: EndpointItem[];
@@ -151,14 +161,7 @@ export function AgentPicker(props: {
       items={agentPickerItems(items(), props.optionPrefix)}
       footer={[overviewPickerItem(props.overviewTestID)]}
       value={props.selectedValue}
-      onChange={(value) => {
-        if (value === OVERVIEW_VALUE) {
-          props.onOverview();
-          return;
-        }
-        const item = items().find((entry) => entry.value === value);
-        if (item?.connected) props.onSelect(item);
-      }}
+      onChange={(value) => chooseAgent(items(), value, props.onSelect, props.onOverview)}
       trigger={props.trigger}
       accessibilityLabel={props.accessibilityLabel}
       tooltip={props.tooltip}
@@ -176,6 +179,47 @@ export function AgentPicker(props: {
       onOpenChange={props.onOpenChange}
       testID={props.testID}
       partID={props.partID}
+    />
+  );
+}
+
+/**
+ * The agents on the phone's sheet (MobileBottomNav): the bubble's rows, filter and overview row,
+ * without the bubble; the sheet carries the title. Rows a finger can take (44pt); the filter (long
+ * lists) raises the keyboard only once it is pressed.
+ */
+export function AgentList(props: {
+  items: EndpointItem[];
+  selectedValue: string;
+  onSelect: (item: AgentOption) => void;
+  onOverview: () => void;
+  /** While the sheet is up (it takes the keys). */
+  open: boolean;
+  /** The tallest the list may be. */
+  maxHeight: number;
+  /** What the list's and filter's test ids start with. */
+  partID: string;
+  /** What each agent row's test id starts with (`<optionPrefix>-<ref>`). */
+  optionPrefix: string;
+  overviewTestID: string;
+}) {
+  const items = computed(() => normalizeAgentItems(props.items));
+  return (
+    <PickerList
+      items={agentPickerItems(items(), props.optionPrefix)}
+      footer={[overviewPickerItem(props.overviewTestID)]}
+      value={props.selectedValue}
+      onChoose={(value) => chooseAgent(items(), value, props.onSelect, props.onOverview)}
+      open={props.open}
+      accessibilityLabel={t("endpoint_switcher_title")}
+      filterPlaceholder={items().length > 8 ? t("endpoint_switcher_filter_placeholder") : undefined}
+      filterAutoFocus={false}
+      emptyText={t("endpoint_switcher_empty")}
+      rowClass="min-h-11 justify-center"
+      maxHeight={props.maxHeight}
+      class="gap-1"
+      testID={`${props.partID}-list`}
+      part={(name) => `${props.partID}-${name}`}
     />
   );
 }

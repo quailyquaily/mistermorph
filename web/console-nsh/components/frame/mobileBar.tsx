@@ -29,6 +29,22 @@ export function mobileNavSlots(width: number, count: number) {
   return { slot, rowWidth: slot * Math.max(0, count), left: (index: number) => slot * index };
 }
 
+/** The share of the page's height a sheet over the bar may take, and the room it leaves above itself. */
+const SHEET_MAX_SHARE = 0.62;
+const SHEET_TOP_ROOM = 48;
+
+/**
+ * Where a sheet over the bar goes (MobileBottomNav's More and agent sheets) in a page `pageHeight`
+ * tall whose bar takes `barRoom` (mobileBarRoom()): its inset from the window's sides (the bar's),
+ * its foot's distance from the page's foot (where a page's list ends: clear of the bar; the side
+ * inset without a bar), and its tallest (62% of the page, leaving room above it).
+ */
+export function mobileSheetFrame(pageHeight: number, barRoom: number) {
+  const bottom = barRoom > 0 ? barRoom : BAR_SIDE;
+  const maxHeight = Math.max(120, Math.min(pageHeight * SHEET_MAX_SHARE, pageHeight - bottom - SHEET_TOP_ROOM));
+  return { side: BAR_SIDE, bottom, maxHeight };
+}
+
 /** The room the floating bar takes at the foot of the window, clearance included (0 while it is not shown). */
 export function mobileBarRoom() {
   if (!mobileBottomNavVisible()) return 0;

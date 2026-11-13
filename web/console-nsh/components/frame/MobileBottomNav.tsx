@@ -2,12 +2,12 @@
 // AppMobileAgentSwitcher): icons at the foot of the window, the primary pages, More, and the agent,
 // in a capsule that floats on the page (the layout of Telegram's tab bar, without its labels;
 // design/ui-refresh.html §4). A lighter pill behind the active slot slides to it, and its icon fills.
-// More opens a sheet that rises above the bar, over a scrim; the agent opens the sidebar switcher's
-// popover bubble above its slot, its tail down to it (AgentSwitcher's `AgentPicker`). Escape,
-// Android's Back or a press outside closes either.
+// More and the agent open the same sheet, over a scrim: a card as wide as the window less the bar's
+// side margins, floating above the bar, that slides up from the window's foot; More's lists the
+// other pages, the agent's the agents (AgentSwitcher's `AgentList`, the sidebar switcher's rows).
+// Escape, Android's Back or a press outside closes either.
 import type { JSX } from "nsh";
 import { computed, createAnimatedValue, effect, keymap, platform, signal, Text, untracked, View, windowSize } from "nsh";
-import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import {
   closeMobileMore,
@@ -27,12 +27,12 @@ import {
 import { onSystemBack } from "../../lib/systemBack";
 import { MOTION_EASE, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
-import { Icon, Tip, TipButton, type IconName } from "../ui";
-import { AGENT_PICKER_GAP, AgentAvatar, AgentPicker } from "./AgentSwitcher";
+import { Icon, MENU_POPUP_STYLE, Tip, TipButton, type IconName } from "../ui";
+import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
 import { uiSlots } from "./slots";
-import { BAR_BELOW, BAR_INSET, BAR_SIDE, mobileBarRoom, mobileNavSlots, MOBILE_NAV_HEIGHT } from "./mobileBar";
+import { BAR_BELOW, BAR_INSET, BAR_SIDE, mobileBarRoom, mobileNavSlots, mobileSheetFrame, MOBILE_NAV_HEIGHT } from "./mobileBar";
 
 export { MOBILE_NAV_HEIGHT };
 
@@ -41,12 +41,16 @@ const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 const PRIMARY_PAGE_PATHS = ["/chat", "/contacts", "/todo"];
 const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
 
-// The agent popover; More's state is lib/shell's (navigation closes it).
+// The agents' sheet; More's state is lib/shell's (navigation closes it).
 const agentMenuOpen = signal(false);
 
 function setAgentMenuOpen(open: boolean) {
   if (open) closeMobileMore();
   agentMenuOpen.set(open);
+}
+
+function toggleAgents() {
+  setAgentMenuOpen(!agentMenuOpen());
 }
 
 function toggleMore() {
@@ -76,19 +80,32 @@ function navigateTo(item: NavItem) {
   goTo(item, false);
 }
 
-// The sheets rise from behind the strip and sink back into it (the Vue console's 280ms in, 200ms
-// out). Reopening one while it sinks turns it round from where it is, as the motion runs from the
-// animated value's current position. A closing sheet takes no presses; with reduced motion it
-// appears and goes at once.
+// The sheets slide up from the window's foot, behind the bar, to float above it, and slide back
+// down (the Vue console's 280ms in, 200ms out). Reopening one while it slides out turns it round
+// from where it is, as the motion runs from the animated value's current position. A closing sheet
+// takes no presses; with reduced motion it appears and goes at once.
 const SHEET_IN_MS = 280;
 const SHEET_OUT_MS = 200;
 const SHEET_OUT_EASE: [number, number, number, number] = [0.4, 0, 1, 1];
+/** The sheet's corner radius: the popover bubbles' (components/shared/PopoverPicker.tsx). */
+const SHEET_RADIUS = 16;
+/** The sheet's title row (min-h-9.5) and its hairline. */
+const SHEET_HEADER = 39;
 
-/** A sheet docked on the strip, rising from behind it, over a scrim; kept until it has sunk back. */
-function BottomSheet(props: { open: boolean; label: string; onClose: () => void; testID?: string; children?: JSX.Element }) {
+/** A sheet floating above the bar, over a scrim; kept until it has slid out. `children` gets the
+ * tallest its content may be. */
+function BottomSheet(props: {
+  open: boolean;
+  label: string;
+  onClose: () => void;
+  testID?: string;
+  children: (contentMax: number) => JSX.Element;
+  /** Hears the sheet's frame in the page (layout checks). */
+  onFrame?: (frame: MobileNavFrame) => void;
+}) {
   const shown = signal(untracked(() => props.open));
   const closing = signal(false);
-  // 0 hidden behind the strip, 1 fully risen; the scrim fades with it.
+  // 0 hidden below the window's foot, 1 fully risen; the scrim fades with it.
   const progress = createAnimatedValue(0);
   const height = signal(0);
   let generation = 0;
@@ -124,18 +141,29 @@ function SheetLayer(props: {
   label: string;
   onClose: () => void;
   testID?: string;
-  children?: JSX.Element;
+  children: (contentMax: number) => JSX.Element;
+  onFrame?: (frame: MobileNavFrame) => void;
   closing: boolean;
   progress: ReturnType<typeof createAnimatedValue>;
-  /** The sheet's height, which it rises by. */
+  /** The sheet's height, which it slides by. */
   height: number;
   onHeight: (height: number) => void;
 }) {
   keymap.bind("escape", () => props.onClose());
   // Android's Back closes the sheet before it leaves the page.
   onSystemBack(() => !props.closing, () => props.onClose());
+  // The page's height (the layer covers it), the window's until the layer's first layout.
+  const room = signal(0);
+  const frame = () => mobileSheetFrame(room() || windowSize().height, mobileBarRoom());
+  const bottom = () => frame().bottom;
+  const sheetMax = () => frame().maxHeight;
   return (
-    <View class="absolute inset-0 z-40" testID={props.closing ? undefined : props.testID} style={props.closing ? { pointerEvents: "none" } : undefined}>
+    <View
+      class="absolute inset-0 z-40"
+      testID={props.closing ? undefined : props.testID}
+      onLayout={({ bounds }) => room.set(bounds.size.height)}
+      style={props.closing ? { pointerEvents: "none" } : undefined}
+    >
       <View
         class="absolute inset-0 bg-scrim"
         accessibilityElementsHidden
@@ -146,39 +174,85 @@ function SheetLayer(props: {
       <View
         role="menu"
         accessibilityLabel={props.label}
-        class="absolute bottom-0 left-0 right-0 max-h-[62%] border-t border-line bg-card"
-        // The floating bar stays over the sheet's foot: its last row ends above the bar.
+        class="absolute overflow-hidden border border-line-faint bg-dialog"
         // Until its first layout the sheet's height is unknown: it starts far below, not at 0.
-        onLayout={({ bounds }) => props.onHeight(bounds.size.height)}
+        onLayout={({ bounds }) => {
+          props.onHeight(bounds.size.height);
+          props.onFrame?.({ x: bounds.origin.x, y: bounds.origin.y, w: bounds.size.width, h: bounds.size.height });
+        }}
+        testID={props.testID && !props.closing ? `${props.testID}-sheet` : undefined}
         style={{
-          paddingBottom: mobileBarRoom(),
-          transform: [{ translateY: props.progress.interpolate({ inputRange: [0, 1], outputRange: [props.height > 0 ? props.height + 1 : 4000, 0] }) }],
+          left: frame().side,
+          right: frame().side,
+          bottom: bottom(),
+          maxHeight: sheetMax(),
+          borderRadius: SHEET_RADIUS,
+          // As the bar: no outer shadow on Android, where it would not follow the corners.
+          boxShadow: platform.os === "android" ? undefined : MENU_POPUP_STYLE.boxShadow,
+          transform: [
+            {
+              translateY: props.progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [props.height > 0 ? props.height + bottom() + 1 : 4000, 0],
+              }),
+            },
+          ],
         }}
       >
         <View class="min-h-9.5 flex-row items-center gap-2 border-b border-line-soft px-4">
           <View class="size-1.5 bg-muted-foreground" />
           <Text class="font-mono text-xs uppercase tracking-widest text-muted-foreground">{props.label}</Text>
         </View>
-        {props.children}
+        {props.children(sheetMax() - SHEET_HEADER - 2)}
       </View>
     </View>
   );
 }
 
-/** The More sheet over the page; put it last in the content area so it covers the page, not the strip. */
-export function MobileBottomMenus() {
+/** The More and agent sheets over the page; put them last in the content area so they cover the
+ * page, not the strip. `onSheetLayout` hears each sheet's frame in the page ("mobile-more",
+ * "mobile-agents"; tests/mobile-bottom-nav.test.tsx). */
+export function MobileBottomMenus(props: { onSheetLayout?: (name: string, frame: MobileNavFrame) => void } = {}) {
   const BottomLeft = uiSlots["sidebar.bottom_left"];
   return (
     <>
-      <BottomSheet open={mobileMoreOpen()} label={t("nav_more")} onClose={closeMobileMore} testID="mobile-more">
-        <View class="shrink">
-          <NavList items={moreItems()} mobile onNavigate={navigateTo} testPrefix="mobile-more" />
-          <If when={BottomLeft}>
-            <View class="border-t border-line-soft px-3 pb-3 pt-2">
-              {BottomLeft?.({ selectedEndpointItem: selectedEndpointItem(), currentPath: currentPath(), t })}
-            </View>
-          </If>
-        </View>
+      <BottomSheet open={mobileMoreOpen()} label={t("nav_more")} onClose={closeMobileMore} testID="mobile-more" onFrame={(frame) => props.onSheetLayout?.("mobile-more", frame)}>
+        {() => (
+          <View class="shrink">
+            <NavList items={moreItems()} mobile onNavigate={navigateTo} testPrefix="mobile-more" />
+            <If when={BottomLeft}>
+              <View class="border-t border-line-soft px-3 pb-3 pt-2">
+                {BottomLeft?.({ selectedEndpointItem: selectedEndpointItem(), currentPath: currentPath(), t })}
+              </View>
+            </If>
+          </View>
+        )}
+      </BottomSheet>
+      <BottomSheet open={agentMenuOpen()} label={t("endpoint_switcher_title")} onClose={() => setAgentMenuOpen(false)} testID="mobile-agents"
+        onFrame={(frame) => props.onSheetLayout?.("mobile-agents", frame)}
+      >
+        {(contentMax) => (
+          <View class="p-2">
+            <AgentList
+              items={endpointItems()}
+              selectedValue={String(selectedEndpointItem()?.value || "").trim()}
+              onSelect={(item) => {
+                setAgentMenuOpen(false);
+                switchEndpoint(item.value);
+              }}
+              onOverview={() => {
+                setAgentMenuOpen(false);
+                goOverview();
+              }}
+              open={agentMenuOpen()}
+              // The sheet's padding (p-2) round it.
+              maxHeight={contentMax - 16}
+              partID="mobile-agents"
+              optionPrefix="mobile-agent-option"
+              overviewTestID="mobile-agents-overview"
+            />
+          </View>
+        )}
       </BottomSheet>
     </>
   );
@@ -202,10 +276,6 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
   const moreIcon = (): IconName => (moreCurrentItem()?.icon as IconName) || "PhSquaresFour";
   const moreLabel = () =>
     moreActive() ? `${moreCurrentItem()?.title} · ${t("nav_more")}` : t("nav_more");
-
-  // Android's Back closes the agents' bubble before it leaves the page (nsh's popover takes Back
-  // itself where it can; this is for where it does not).
-  onSystemBack(() => agentMenuOpen(), () => setAgentMenuOpen(false));
 
   const selectedName = () => selectedEndpointItem()?.title || t("nav_agent");
   const selectedAvatar = () => personaAvatarURL() || selectedEndpointItem()?.image || defaultEndpointAvatar;
@@ -303,49 +373,21 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
           >
             <Icon name={moreIcon()} size={24} filled={activeSlot() === primaryItems().length} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
           </TipButton>
-          {/* The agent's slot opens the agents' bubble above it. The popover opens on a press of
-              the view around its trigger, so the slot is a plain view, not a button; the frame the
-              strip reports is its stretch of the row. */}
-          <View style={slotStyle()} onLayout={report("mobile-nav-agent")}>
-            <AgentPicker
-              items={endpointItems()}
-              selectedValue={String(selectedEndpointItem()?.value || "").trim()}
-              onSelect={(item) => {
-                setAgentMenuOpen(false);
-                switchEndpoint(item.value);
-              }}
-              onOverview={() => {
-                setAgentMenuOpen(false);
-                goOverview();
-              }}
-              trigger={() => (
-                // The portrait alone, as Telegram's profile slot: selecting or pressing it adds
-                // nothing to it (no ring, no status mark, no press fill); the pill behind it marks it
-                // selected, and the list shows whether the agent is connected.
-                <View class={slotClass(false)} style={{ ...slotStyle(), height: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }}>
-                  <AgentAvatar image={selectedAvatar()} size={28} />
-                </View>
-              )}
-              accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
-              tooltip={tip(selectedName())}
-              // Above the bar (the sidebar's switcher opens below), clear of the capsule around
-              // the slot, at the window's right edge as the slot is.
-              placement="top"
-              align="end"
-              clearance={{ top: BAR_INSET }}
-              gap={AGENT_PICKER_GAP}
-              // Rows a finger can take (44pt); the filter (long lists) raises the keyboard only
-              // once it is pressed.
-              rowClass="min-h-11 justify-center"
-              filterAutoFocus={platform.desktop}
-              open={agentMenuOpen()}
-              onOpenChange={(open) => setAgentMenuOpen(open)}
-              testID="mobile-nav-agent"
-              partID="mobile-agents"
-              optionPrefix="mobile-agent-option"
-              overviewTestID="mobile-agents-overview"
-            />
-          </View>
+          {/* The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing to
+              it (no ring, no status mark, no press fill); the pill behind it marks it selected, and
+              the list shows whether the agent is connected. */}
+          <TipButton
+            selected={agentMenuOpen()}
+            onPress={toggleAgents}
+            accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
+            testID="mobile-nav-agent"
+            tooltip={tip(selectedName())}
+            class={slotClass(false)}
+            style={slotStyle()}
+            onLayout={report("mobile-nav-agent")}
+          >
+            <AgentAvatar image={selectedAvatar()} size={28} />
+          </TipButton>
         </View>
       </View>
     </View>
