@@ -7,11 +7,15 @@
 // sidebar) when a page puts something in it (frame/Workbench.tsx); and the notice stack over
 // everything.
 // Shellless pages (login, troubleshooting) and standalone ones (overview, setup) get the banner and
-// the notices only. The keyboard shortcuts are bound here (components/frame/shortcutDispatch.ts).
+// the notices only. On the web the browser tab's icon is the selected agent's avatar
+// (frame/AgentFavicon.tsx), except on shellless pages. The keyboard shortcuts are bound here
+// (components/frame/shortcutDispatch.ts).
 import type { JSX } from "nsh";
 import { signal, View } from "nsh";
+import { hasFavicon } from "../lib/platform";
 import { isMobile, mobileBottomNavVisible } from "../lib/shell";
 import { notePress } from "./motion/pressOrigin";
+import { AgentFavicon } from "./frame/AgentFavicon";
 import { InsecureBanner } from "./frame/InsecureBanner";
 import { MobileBottomMenus, MobileBottomNav } from "./frame/MobileBottomNav";
 import { Sidebar } from "./frame/Sidebar";
@@ -32,6 +36,10 @@ export function Shell(props: { shellless: boolean; standalone: boolean; children
       class="flex-1 bg-background"
       onTouchStartCapture={(event) => notePress(event.pageX, event.pageY)}
     >
+      {/* The browser tab's icon: the selected agent's avatar (web only). */}
+      <If when={!props.shellless && hasFavicon()}>
+        <AgentFavicon />
+      </If>
       <InsecureBanner />
       <View class="relative flex-1 flex-row">
         <If when={withSidebar()}>

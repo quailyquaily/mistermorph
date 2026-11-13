@@ -210,6 +210,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         "morph.kv.set": null,
         "morph.history": null,
         "morph.title": null,
+        "morph.favicon": null,
         "morph.language": null,
         "morph.notify.state": "default",
         "morph.desktop.ready": null,

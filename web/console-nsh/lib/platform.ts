@@ -170,6 +170,15 @@ export const previousLocation = () => (MOBILE ? mobileHost.previousEntry() : "")
 export function setDocumentTitle(title: string) {
   if (hosted) void hostChannel.call("morph.title", { title }).catch(() => {});
 }
+/**
+ * The browser tab's icon: the image at `url` (an avatar), drawn small and round by the page, or
+ * the app icon for "". Only the web has one; the desktop and phone apps keep their own icons.
+ */
+export function setFavicon(url: string) {
+  if (hasFavicon()) void hostChannel.call("morph.favicon", { url }).catch(() => {});
+}
+/** Whether `setFavicon` changes anything here: the web only. */
+export const hasFavicon = () => hosted && config.runtime === "web";
 export function setDocumentLanguage(language: string) {
   if (hosted) void hostChannel.call("morph.language", { language }).catch(() => {});
 }
