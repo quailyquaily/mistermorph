@@ -6,6 +6,12 @@
 // and lowers the keyboard once; a save under way, a failed save and a blank one keep the dialog and
 // its focus; each opening focuses the field a turn later, and an opening already gone, or a late
 // answer of an older one, never moves the focus of a newer one.
+//
+// The rename dialog also selects the current name as each opening focuses the field
+// (`selectOnOpen`), so typing replaces it: on a first opening, on a dialog mounted already open,
+// on a reopening (the same field or one mounted anew) and on another topic's. Editing, a generated
+// name and a failed save never select again; a turn of an opening already gone selects nothing.
+// Headless inputs ignore `setSelection`, so the stand-in field records it.
 import { expect, test } from "nsh/test";
 import { effect, signal, untracked, type InputRef } from "nsh";
 import { createDialogFieldFocus } from "../components/shared/dialogFieldFocus";
@@ -25,11 +31,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function setup() {
+function setup(options: { select?: boolean; mounted?: boolean; fieldOnMount?: boolean } = {}) {
   const log: string[] = [];
   const turns: (() => void)[] = [];
   const saves: ReturnType<typeof deferred<any>>[] = [];
-  const mounted = signal(true);
+  const mounted = signal(options.mounted ?? true);
   let rename!: TopicRename;
   // The field the dialog mounts, as nsh hands it to `inputRef`.
   const field = (name: string) =>
@@ -37,12 +43,17 @@ function setup() {
       focus: () => log.push(`focus ${name}`),
       blur: () => log.push(`blur ${name}`),
       measure: async () => null,
-      setSelection: () => {},
+      setSelection: (start: number, end: number) => log.push(`select ${name} ${start}-${end}`),
     }) as unknown as InputRef;
+  const suggestions: ReturnType<typeof deferred<any>>[] = [];
   effect(() => {
     untracked(() => {
       rename = createTopicRename({
-        suggest: async () => ({ title: "Suggested" }),
+        suggest: () => {
+          const answer = deferred<any>();
+          suggestions.push(answer);
+          return answer.promise;
+        },
         save: () => {
           const answer = deferred<any>();
           saves.push(answer);
@@ -61,13 +72,25 @@ function setup() {
         session: () => rename.session(),
         dismissKeyboard: () => log.push("keyboard down"),
         defer: (fn) => turns.push(fn),
+        selectOnOpen: options.select ? () => rename.draft() : undefined,
       });
-      focus.ref(field("first"));
+      if (options.fieldOnMount !== false) focus.ref(field("first"));
     });
   });
   const nextTurn = () => turns.splice(0).forEach((fn) => fn());
-  const open = (topicID = "topic-1") => rename.start({ endpointRef: "ep", topicID, title: "Trip plans" });
-  return { log, turns, saves, mounted, rename: () => rename, field, mount: (name: string) => focus?.ref(field(name)), nextTurn, open };
+  const open = (topicID = "topic-1", title = "Trip plans") => rename.start({ endpointRef: "ep", topicID, title });
+  return {
+    log,
+    turns,
+    saves,
+    suggestions,
+    mounted,
+    rename: () => rename,
+    field,
+    mount: (name: string) => focus?.ref(field(name)),
+    nextTurn,
+    open,
+  };
 }
 
 test("Cancel (and every other ask to close) blurs the field and lowers the keyboard once", async () => {
@@ -182,4 +205,168 @@ test("a dialog that goes with its page while open lets go; one already closed do
   closed.rename().close();
   closed.mounted.set(false);
   expect(closed.log).toEqual(["blur first", "keyboard down"]);
+});
+
+test("selecting: an opening focuses the field and selects the whole current name, once", async () => {
+  const s = setup({ select: true });
+  s.open();
+  // Nothing before the turn: the field and the opening settle first.
+  expect(s.log).toEqual([]);
+  s.nextTurn();
+  // "Trip plans" is 10 UTF-16 units; the focus comes first, so the selection is the field's own.
+  expect(s.log).toEqual(["focus first", "select first 0-10"]);
+  s.nextTurn();
+  expect(s.log).toEqual(["focus first", "select first 0-10"]);
+});
+
+test("selecting: a dialog mounted with its opening already on screen selects the name too", async () => {
+  const s = setup({ select: true, mounted: false });
+  s.open();
+  s.nextTurn();
+  expect(s.log).toEqual([]);
+  // Mounting creates the helper with the opening there, then hands it the field.
+  s.mounted.set(true);
+  expect(s.log).toEqual([]);
+  s.nextTurn();
+  expect(s.log).toEqual(["focus first", "select first 0-10"]);
+  // It is still one opening: nothing more on later turns.
+  s.nextTurn();
+  expect(s.log).toEqual(["focus first", "select first 0-10"]);
+});
+
+test("selecting: reopening, with the field kept or mounted anew, and another topic select again", async () => {
+  const s = setup({ select: true });
+  s.open();
+  s.nextTurn();
+  s.rename().setDraft("Trip plans 2026");
+  s.rename().close();
+  // Reopened while it still went out: the same field, the stored name selected again (not the
+  // abandoned draft).
+  s.open();
+  s.nextTurn();
+  expect(s.log).toEqual(["focus first", "select first 0-10", "blur first", "keyboard down", "focus first", "select first 0-10"]);
+  s.log.length = 0;
+  s.rename().close();
+  // Another topic, its dialog drawn anew: the new field takes the new name.
+  s.open("topic-2", "Recipes");
+  s.mount("second");
+  s.nextTurn();
+  expect(s.log).toEqual(["blur first", "keyboard down", "focus second", "select second 0-7"]);
+  s.log.length = 0;
+  s.rename().close();
+  // Units are UTF-16, as the platforms count them: an emoji is two.
+  s.open("topic-3", "Café 🍲");
+  s.nextTurn();
+  expect(s.log).toEqual(["blur second", "keyboard down", "focus second", "select second 0-7"]);
+  s.log.length = 0;
+  s.rename().close();
+  // A topic without a name: focused, an empty selection (a caret), nothing to replace.
+  s.open("topic-4", "");
+  s.nextTurn();
+  expect(s.log).toEqual(["blur second", "keyboard down", "focus second", "select second 0-0"]);
+});
+
+test("selecting: a field mounted after its opening's turn is focused and selected on its own turn", async () => {
+  const s = setup({ select: true, fieldOnMount: false });
+  // Opened with no field yet (the dialog's content still to be drawn): its turn finds none.
+  s.open("topic-2", "Recipes");
+  s.nextTurn();
+  expect(s.log).toEqual([]);
+  // The field comes: its own turn focuses and selects it, once.
+  s.mount("second");
+  expect(s.log).toEqual([]);
+  s.nextTurn();
+  s.nextTurn();
+  expect(s.log).toEqual(["focus second", "select second 0-7"]);
+});
+
+test("selecting: editing, a generated name and failed or blank saves never select again", async () => {
+  const s = setup({ select: true });
+  s.open();
+  s.nextTurn();
+  const opened = ["focus first", "select first 0-10"];
+  s.rename().setDraft("Lisbon");
+  s.nextTurn();
+  void s.rename().regenerate();
+  s.suggestions[0].resolve({ title: "Lisbon trip" });
+  await settle();
+  s.nextTurn();
+  expect(s.rename().draft()).toBe("Lisbon trip");
+  s.rename().setDraft("   ");
+  await s.rename().save();
+  expect(s.rename().error()).toBe("Enter a topic name.");
+  s.rename().setDraft("Lisbon in May");
+  void s.rename().save();
+  s.saves[0].reject(new Error("store is down"));
+  await settle();
+  s.nextTurn();
+  expect(s.rename().open()).toBe(true);
+  expect(s.rename().draft()).toBe("Lisbon in May");
+  expect(s.log).toEqual(opened);
+  // A field handed over mid-edit (the dialog drawn anew) is not selected: the opening was.
+  s.mount("first");
+  s.nextTurn();
+  expect(s.log).toEqual(opened);
+  // Save still saves what was typed, and closes and lets go.
+  void s.rename().save();
+  s.saves[1].resolve({ id: "topic-1", title: "Lisbon in May" });
+  await settle();
+  expect(s.rename().open()).toBe(false);
+  expect(s.log).toEqual([...opened, "blur first", "keyboard down"]);
+});
+
+test("selecting: a turn of an opening already gone neither focuses nor selects a newer one", async () => {
+  const s = setup({ select: true });
+  s.open("topic-1", "Trip plans");
+  s.rename().close();
+  // Reopened on another topic before the first opening's turn came: both turns run now.
+  s.open("topic-2", "Recipes");
+  expect(s.turns.length).toBe(2);
+  s.nextTurn();
+  expect(s.log).toEqual(["blur first", "keyboard down", "focus first", "select first 0-7"]);
+  s.rename().close();
+  s.log.length = 0;
+  // Closed before its turn: nothing at all, and Cancel still lets go only once.
+  s.open("topic-1", "Trip plans");
+  s.rename().close();
+  s.nextTurn();
+  expect(s.log).toEqual(["blur first", "keyboard down"]);
+  // The page going before a turn: nothing either.
+  s.log.length = 0;
+  s.open("topic-1", "Trip plans");
+  s.mounted.set(false);
+  s.nextTurn();
+  expect(s.log).toEqual(["blur first", "keyboard down"]);
+});
+
+test("selecting: Cancel and Enter's save keep working as before", async () => {
+  const s = setup({ select: true });
+  s.open();
+  s.nextTurn();
+  s.rename().close();
+  expect(s.rename().open()).toBe(false);
+  expect(s.saves.length).toBe(0);
+  expect(s.log).toEqual(["focus first", "select first 0-10", "blur first", "keyboard down"]);
+  s.log.length = 0;
+  s.open();
+  s.nextTurn();
+  // Typing over the selection replaced the name; Enter saves it.
+  s.rename().setDraft("Lisbon");
+  void s.rename().save();
+  s.saves[0].resolve({ id: "topic-1", title: "Lisbon" });
+  await settle();
+  expect(s.rename().open()).toBe(false);
+  expect(s.log).toEqual(["focus first", "select first 0-10", "blur first", "keyboard down"]);
+});
+
+test("without selectOnOpen a dialog never selects, and one mounted already open leaves the focus to autoFocus", async () => {
+  const s = setup({ mounted: false });
+  s.open();
+  s.mounted.set(true);
+  s.nextTurn();
+  expect(s.log).toEqual([]);
+  s.rename().close();
+  s.open();
+  s.nextTurn();
+  expect(s.log).toEqual(["blur first", "keyboard down", "focus first"]);
 });

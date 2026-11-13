@@ -3,7 +3,8 @@
 // topic (pages/chat/topicRename.ts). Enter in the field saves, keeping the focus should it fail;
 // Escape, the close button, the scrim and Cancel leave the name as it was. A save under way holds
 // the dialog until it answers. Cancel and Save share the footer's width equally. However it
-// closes, the field lets go of the focus and the software keyboard goes down with it
+// closes, the field lets go of the focus and the software keyboard goes down with it; each opening
+// focuses it with the current name selected, so typing replaces it
 // (components/shared/dialogFieldFocus.ts).
 import { Text, View, type Bounds } from "nsh";
 import { Button, Modal, TextField } from "../../components/ui";
@@ -21,7 +22,7 @@ export function TopicRenameDialog(props: {
   onPartLayout?: (part: TopicRenamePart, bounds: Bounds) => void;
 }) {
   const r = props.rename;
-  const focus = createDialogFieldFocus({ session: () => r.session() });
+  const focus = createDialogFieldFocus({ session: () => r.session(), selectOnOpen: () => r.draft() });
   const layout = (part: TopicRenamePart) => (event: { bounds: Bounds }) => props.onPartLayout?.(part, event.bounds);
   return (
     <Modal
