@@ -1,3 +1,7 @@
+---
+branch: factory/FT109-agentlink-chunked-binary-file-transfer
+round: 1
+---
 # Agent Link: stream files as chunked binary frames
 
 ## factory · 2026-11-13 18:53
@@ -33,3 +37,34 @@ Tests (`internal/agentlink/`, extending `attachments_test.go` or alongside it):
 - A benchmark comparing the old and new paths for a 2 MiB file through a relay (wall time and peak memory), with the numbers recorded in the doc.
 
 Update `docs/feat/feat_20261111_agentlink_file_transfer.md` (protocol, limits, compatibility) or add a follow-up doc that it links to.
+
+## factory · plan · 2026-11-13 19:36
+
+Behaviour
+- Advertise files_stream only with complete streaming support. Negotiate sender, relay route and receiver; retain the existing inline files protocol and its 2 MiB limit unchanged on mixed routes.
+- Queue a private disk snapshot with checked size/digest and regular-file/root authorization; stream immutable queued data in 64 KiB chunks with transfer ID and offset, separate JSON metadata, bounded receiver-acknowledged window, fixed per-chunk deadlines and ordinary frame interleaving.
+- Authenticate/validate complete message metadata before accepting bytes, including empty files, aggregate and per-file limits, cleaned names/media and existing reply authorization. Relay forwards bounded chunks without assembling files, rejects invalid offsets/lengths and notifies both endpoints.
+- Receiver writes rooted 0600 parts, hashes incrementally, syncs/publishes only after verified sizes/digests, removes corrupt parts, and delivers once all attachments finish. Resume valid unfinished IDs at the receiver's offset on reconnect; never publish a duplicate; retain one-hour abandoned part cleanup and queue TTL.
+- Log transfer byte progress, retain reply-file/task-note/untrusted-file behavior, report the applicable route limit in tools.
+Scope
+- Agent Link connection/protocol/node/relay/inbox/queue and necessary tool file preparation, regression tests, and linked English protocol documentation. No Console UI or config knobs; no forbidden paths.
+Decisions
+- Default 64 KiB chunks and four outstanding chunks per connection, with explicit bounded transfer concurrency and byte accounting; explain any necessary adjustment. Stream limit 64 MiB per file, four per message (256 MiB total); disk queue and inbox bounds must admit a full message with bounded concurrency (choose/document deliberate constants, reserve before receiving, keep 256 files/seven days). Legacy limits remain unchanged.
+- Transfer identity and resume bind sender, recipient, message and immutable metadata/digest; no trusting an arbitrary reconnect offset. Reconnect resume is mandatory; choose durable metadata where existing persistence requires restart survival and document lifetime. Reject malformed or unsupported binary frames without exposing files to old peers.
+Checking
+- Go formatting, go vet ./..., go test ./... with throwaway absolute HOME; focused tests for direct and relay byte boundaries including maximum, interleaving, bounded buffers/window, disconnect/resume/no duplicate, corrupt/out-of-order/oversized/short chunks and cleanup, queue source mutation, authorization/limits, and mixed-version fallback. Run real WebSocket binary-frame tests, not only Pipe.
+- Add/run old versus new 2 MiB relay benchmark, record measured timings and memory (distinguish allocations from peak memory honestly). Update existing feature doc or link follow-up with negotiation, binary layout, limits, error/resume semantics and benchmark environment. No UI changes planned; report checks impossible in this environment.
+
+## factory · 2026-11-13 19:36
+
+Built in 292e727b, 2da85e67 and b5e4c417 (head b5e4c417): capability-negotiated binary streaming, 64 KiB chunks, four outstanding chunks per connection, end-to-end acknowledgements, streaming relay, rooted private receiver parts, incremental hash verification, disk queue snapshots, reconnect resume, progress logs and route-aware tool limits. Mixed-version routes retain the legacy base64 protocol and 2 MiB aggregate limit.
+
+Decisions: streamed per-file limit 64 MiB, four files/256 MiB per message, disk queue and inbox 512 MiB; at most four unfinished receiver deliveries and 256 MiB reserved bytes. Receiver resume state is in memory: reconnects and sender/Console restarts resume; receiver restarts start at zero and abandoned parts age out after one hour. Four-chunk end-to-end window trades high-latency throughput for bounded memory. Older runtimes skip streamed queue entries on downgrade.
+
+Installs: none outside repository-pinned dependencies; no manifest/lock changes.
+
+Checks: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with an absolute throwaway HOME. Coder also reports eight repeated agentlink suite runs, race tests for agentlink/tools/runtime and 40 repetitions of the interrupted-delivery cleanup test. Tests cover real WebSocket binary frames, direct/relay boundaries through 64 MiB, interleaving, window enforcement, resume, corrupt chunks/cleanup, queue snapshots, capacity/auth checks and mixed versions.
+
+Benchmark (coder measured, 2 MiB localhost WebSocket relay, Ryzen 9 5950X/Go 1.26.1, six runs of 50 files): legacy 65–67 ms/file and 32–36 MiB sampled peak heap; streaming 11.5–11.7 ms/file and 3.5–4.0 MiB sampled peak heap. Sampling is every 200 microseconds and can miss short peaks; allocation totals are documented separately. See docs/feat/feat_20261113_agentlink_streamed_files.md for full protocol, compatibility and measurement details.
+
+Not checked: real-network/multi-machine, Android, or separate-process mixed-version runs; old peers are simulated. No UI sources changed, so no visual/nsh checks required. No deployment, base push or tags. Initial code push failed because the credential helper required a repository path; a command-local credential.useHttpPath=true retry succeeded.
