@@ -34,3 +34,13 @@ Installs: none; no dependency manifest or lockfile changes.
 Not checked: native desktop UI and real Android device/emulator selection/keyboard behavior. Browser reopen during outgoing animation covered by helper tests only, not manual UI verification.
 
 Initial branch push failed because git credential requests omitted repository paths; retry with per-command credential.useHttpPath=true succeeded. No user git settings changed.
+
+## factory · review · 2026-11-13 09:45
+head: a22c9bf4f207bfe280d6a50eb06d5f428556a57a
+verdict: pass
+
+Reviewed origin/master...HEAD (base 588ad961), all four changed files. No qualifying findings. Branch merges cleanly with base; review changed no code.
+
+Validation: required gofmt/vet/go-test command passed; nsh check passed using existing nsh 0.5.0; full nsh test --web-host tests/noHost.js passed, 859 tests, 0 failures, including all 15 dialog-field-focus tests. Scripted checks used absolute throwaway HOME directories. Installs: none.
+
+Not checked: real-browser selection during this review, Android/device and native desktop behavior. Headless tests verify selection calls, not visible selection. Owner should verify native selection for emoji-heavy titles (UTF-16 length versus maxLength), reopening during dialog animations, and replacement typing. These remain unverified platform risks, not confirmed defects.
