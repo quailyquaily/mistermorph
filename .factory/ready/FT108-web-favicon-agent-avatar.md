@@ -54,3 +54,12 @@ Checks: configured gofmt/vet/go test gate passes, independently rerun by manager
 Not checked: visible browser tab strip (headless Chrome checks DOM and PNG pixels instead), Firefox, Safari, native desktop and Android devices. Second endpoint API was simulated in browser checks. Headless nsh cannot enable the image crop Save action, so replacement was exercised in Chrome instead.
 
 Push: first credential-helper attempt lacked repository-path information; retry with per-command credential.useHttpPath=true succeeded. Branch pushed; no base or tags pushed.
+
+## factory · review · 2026-11-13 16:47
+head: 8890428f7043a815763b7773f9c6789267949b5f
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (merge-base 588ad961), all nine changed files, against the request and plan. No qualifying findings. Branch merges cleanly with current base; worktree unchanged.
+- Validation: configured gofmt/vet/go test gate passes (exit 0); nsh 0.5.0 check passes (exit 0); nsh test --web-host tests/noHost.js passes, 864/864 tests, including all 13 new favicon tests. All scripted tests used throwaway absolute HOME directories.
+- Installs: no unpinned tools or dependency changes; nsh populated its isolated cache with its TypeScript tooling.
+- Limits: this review did not independently inspect a real browser tab, actual CORS/canvas rendering, Firefox/Safari or native devices. Cross-origin non-CORS images intentionally retain their original shape. Build-stage Chrome evidence is recorded above, not rerun in this review.
