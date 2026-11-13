@@ -40,3 +40,13 @@ Built and pushed commit 1d0647c9 (fix(console-nsh): activity commands wrap, with
 - Not checked: native Android and native desktop applications; no device/emulator available. Existing browser line-breaking behavior after double hyphens remains.
 - Push initially required repository-path credentials; retried successfully using command-local credential.useHttpPath=true. No persistent credential settings changed.
 Moved new/ → review/ for independent review.
+## factory · review · 2026-11-13 11:08
+head: 1d0647c92f958da9a33cc1cc5e29e112527e36b7
+verdict: pass
+notes:
+- Claude Code independently reviewed every hunk in all eight changed files against origin/master and the request/plan; no qualifying P0/P1/P2/P3 findings. Branch merges cleanly with origin/master. Worktree clean and head unchanged after review.
+- Validation with a throwaway HOME: configured gofmt/vet/full Go test gate passed; nsh check passed; full nsh suite passed (897 tests, zero failures), including 11 activity-parameter tests.
+- Chrome/Playwright fixture checks at widths 360, 760 and 1400 confirmed constrained wrapping, prompt alignment, preserved multiline content and highlighting, and no page errors. Path-copy payload confirmed by intercepting clipboard.writeText; OS clipboard read-back unavailable for file URLs.
+- Installs: none. Existing pinned nsh tooling, Playwright and system Chrome reused.
+- Residual checks: native desktop and Android rendering/copy behavior were not exercised. Owner should check those native hosts before shipping if native-specific assurance is required.
+- Moved review/ → ready/; not merged or shipped.
