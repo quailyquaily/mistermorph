@@ -6,8 +6,8 @@
 // shows it as plain text in place of SKILL.md until SKILL.md is chosen again.
 import type { ScrollRef, ViewRef } from "nsh";
 import { batch, computed, effect, keymap, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
-import { Button as BaseButton, Popover } from "nsh/base";
-import { Button, DropdownMenu, Fab, Icon, MENU_POPUP, MENU_POPUP_STYLE, MENU_STARTING, MessageDialog, Modal, Page, TextField } from "../../components/ui";
+import { Button as BaseButton } from "nsh/base";
+import { Button, DropdownMenu, Fab, Icon, MessageDialog, Modal, Page, TextField } from "../../components/ui";
 import { createSlidingSelection, FadeText, SCROLLBAR } from "../../components/motion";
 import { AppMarkdownEditor } from "../../components/shared/MarkdownEditor";
 import { SkillFileTree } from "../../components/knowledge/SkillFileTree";
@@ -160,7 +160,6 @@ export function SkillsPage() {
   const removeTarget = signal<Skill | null>(null);
   const removeBusy = signal(false);
   const removeErr = signal("");
-  const menuOpen = signal(false);
 
   const addOpen = signal(false);
   const addLink = signal("");
@@ -430,7 +429,6 @@ export function SkillsPage() {
     }
   }
 
-  const setEnabled = (value: boolean) => void saveSkills({ enabled: Boolean(value), load: untracked(catalog).load });
   const setLoaded = (skill: Skill, value: boolean) => {
     const now = untracked(catalog);
     void saveSkills(skillToggleSettings({ enabled: now.enabled, load: now.load }, now.skills, skill, Boolean(value)));
@@ -528,9 +526,7 @@ export function SkillsPage() {
   // Escape: menus and dialogs close themselves; the editor keeps its own Escape; on a phone an open
   // skill goes back to the list.
   keymap.bind("escape", () => {
-    if (untracked(menuOpen)) {
-      menuOpen.set(false);
-    } else if (untracked(editing) || untracked(removeTarget) || untracked(addOpen)) {
+    if (untracked(editing) || untracked(removeTarget) || untracked(addOpen)) {
       return;
     } else if (untracked(isMobile) && untracked(selected)) {
       closeSkill();
@@ -587,42 +583,6 @@ export function SkillsPage() {
       <If when={!isMobile()}>
         <HeadButton icon="PhPlus" title={t("skills_add")} disabled={unsupported()} onPress={openAdd} testID="skills-add" />
       </If>
-      <Popover
-        open={menuOpen()}
-        onOpenChange={({ open }) => menuOpen.set(open)}
-        placement="bottom"
-        align="end"
-        popupClass={`${MENU_POPUP} w-[280px]`}
-        popupStyle={MENU_POPUP_STYLE}
-        popupStartingClass={MENU_STARTING}
-        popupEndingClass="opacity-0"
-        trigger={
-          <View
-            role="button"
-            accessibilityLabel={t("skills_more")}
-            testID="skills-more"
-            class={`size-9.5 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press ${menuOpen() ? "bg-hover" : ""}`}
-            style={ROW_TRANSITION}
-          >
-            <Icon name="PhDotsThree" size={13} color="subtle" />
-          </View>
-        }
-      >
-        {/* One row holding the global switch, in the menu's frame: its title and note, the switch at the end. */}
-        <View class="flex-row items-center justify-between gap-4 px-4 py-2">
-          <View class="flex-1 gap-[3px]">
-            <Text class="text-sm text-foreground">{t("skills_enabled")}</Text>
-            <Text class="text-xs leading-[20.3px] text-muted-foreground">{t("skills_enabled_note")}</Text>
-          </View>
-          <SwitchOnly
-            checked={catalog().enabled}
-            disabled={locked() || unsupported()}
-            label={t("skills_enabled")}
-            onChange={(value) => setEnabled(value)}
-            testID="skills-enabled"
-          />
-        </View>
-      </Popover>
     </>
   );
 
