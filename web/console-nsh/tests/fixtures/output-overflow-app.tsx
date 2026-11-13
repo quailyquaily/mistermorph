@@ -1,19 +1,25 @@
-// A test entry for tests/chat-output-overflow.test.tsx: the detail panel (ActivityDetailPanel) as
-// wide as the window, showing a reply's progress or one of its coders, with runs that do not wrap
-// (a long command, a multiline script parameter, a long tool name, nested calls, a long process)
-// beside output, notes and errors that wrap. Every such run's line (OverflowLine) reports its
-// widths, whether it scrolls and its offset; they and the panel's width are read out below it as
-// JSON. The buttons switch what the panel shows, the empty states included, and draw it as the
-// workbench does (`dark`: one scroll area, where runs wrap).
+// A test entry for tests/chat-output-overflow.test.tsx and tests/chat-activity-params.test.tsx: the
+// detail panel (ActivityDetailPanel) as wide as the window, showing a reply's progress or one of its
+// coders, with runs that do not wrap (a long tool name, a long process) beside parameters and
+// nested calls (short, long, unbroken and multiline commands, a coder's own calls, an empty one)
+// and output, notes and errors that wrap. Every run's line (OverflowLine) reports its widths,
+// whether it scrolls and its offset, and every parameter's and nested call's parts where they lie
+// (probeActivityParams); they and the panel's width are read out below it as JSON. The buttons
+// switch what the panel shows, the empty states included, and draw it as the workbench does
+// (`dark`: one scroll area, where runs wrap).
 import { mount, signal, Text, View } from "nsh";
 import { Button } from "../../components/ui";
 import type { ActivityDetailRef } from "../../components/chat/activityDetail";
 import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
+import { probeActivityParams } from "../../components/chat/ChatStatusCard";
+import type { PartFrame } from "../../components/shared/partProbe";
 import { probeOverflowLines, type OverflowLineFrame } from "../../components/chat/OverflowLine";
 import { ActivityDetailPanel } from "../../pages/chat/ActivityDetailPanel";
 import { normalizeActivity } from "../../lib/core/chat-task-history.js";
 
 const PATH = "/home/user/projects/very/long/path/to/some/deeply/nested/module/that/never/ends/file_name.go:1234:56";
+// A command with no space to break at: it can only break inside.
+const TOKEN = `printf%s${"0123456789abcdefghijklmnopqrstuvwxyz".repeat(3)}`;
 const OUTPUT = `${PATH}\nNAME        READY   STATUS    RESTARTS   AGE\napi-7f9c8d  1/1     Running   0          3d4h\nThis sentence of prose keeps wrapping inside the panel.`;
 const activity = normalizeActivity({
   history: [
@@ -30,6 +36,20 @@ const activity = normalizeActivity({
         { id: "c2", kind: "tool", name: "bash", status: "failed", args: { cmd: "ls" }, error: `ls: ${PATH}: No such file` },
       ],
     },
+    { id: "a4", kind: "tool", name: "bash", status: "done", args: { cmd: TOKEN } },
+    { id: "a5", kind: "tool", name: "bash", status: "queued", args: { cmd: "" } },
+    {
+      id: "a6",
+      kind: "tool",
+      name: "coder",
+      status: "failed",
+      args: { task: "Fix the build", backend: "codex", cwd: PATH },
+      children: [
+        { id: "k1", kind: "tool", name: "bash", status: "done", args: { cmd: `rg -n "OverflowLine" ${PATH}` } },
+        { id: "k2", kind: "tool", name: "bash", status: "done", args: { command: TOKEN } },
+        { id: "k3", kind: "tool", name: "bash", status: "failed", args: { cmd: "go vet\ngo test" } },
+      ],
+    },
   ],
   workers: [
     {
@@ -39,6 +59,7 @@ const activity = normalizeActivity({
       avatar_index: 0,
       kind: "coder",
       status: "failed",
+      activity_id: "a6",
       processes: [
         { pid: 4242, program: "/opt/tools/very-long-install-prefix/bin/codex-cli-wrapper-with-a-long-name" },
         { pid: 99, program: "bash" },
@@ -60,10 +81,12 @@ const item = () =>
 const lines = signal<Record<number, OverflowLineFrame>>({});
 const panel = signal(0);
 probeOverflowLines((frame) => lines.update((all) => ({ ...all, [frame.line]: frame })));
+const parts = signal<Record<string, PartFrame>>({});
+probeActivityParams((name, frame) => parts.update((all) => ({ ...all, [name]: frame })));
 
 function Show(props: { id: string; label: string; onPress: () => void }) {
   // What the panel showed goes: its lines report nothing more.
-  return <Button testID={props.id} size="xs" label={props.label} onPress={() => (lines.set({}), props.onPress())} />;
+  return <Button testID={props.id} size="xs" label={props.label} onPress={() => (lines.set({}), parts.set({}), props.onPress())} />;
 }
 
 function Page() {
@@ -94,7 +117,7 @@ function Page() {
           )}
         </Each>
       </View>
-      <Text class="text-[6px]">{JSON.stringify({ panel: panel(), lines: Object.values(lines()) })}</Text>
+      <Text class="text-[6px]">{JSON.stringify({ panel: panel(), lines: Object.values(lines()), parts: parts() })}</Text>
     </View>
   );
 }

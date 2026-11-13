@@ -219,6 +219,12 @@ Headless tests prove behaviour, not the look.
   on a sideways scroller inside a vertical one does not scroll the outer one (chat code blocks do
   this). Progress and coder runs that do not wrap are a plain row while they fit and a sideways
   scroller only while they overflow (`components/chat/OverflowLine.tsx`).
+- A `Text` in a flex row is at least as wide as its longest word (its min-content), so one long
+  word (a path, a token) widens the row and everything around it. With `min-w-0` (and `flex-1`)
+  it takes the room left instead, and nsh breaks a word longer than a line between characters.
+  On the web a line may also break where one span's style ends and the next one's begins, so a
+  mark that must stay beside a text's first line (a command's `$`) goes in a column of its own,
+  not in the text (`ParamRow` in `components/chat/ChatStatusCard.tsx`).
 - On a touch screen such a drag must not take a swipe from the list's scroll view, so it waits for
   a finger to rest (`pages/chat/topicDrag.ts`: 450ms within 8pt). nsh/base's `Button` takes no
   `onLongPress`, so the hold is timed in JS from the touch events of the view around the button

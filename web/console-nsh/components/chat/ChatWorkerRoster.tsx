@@ -17,10 +17,10 @@ export interface WorkerAsk {
 import { Tip, TipButton } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { rosterWorkers, workerProcessLabel } from "../../lib/core/chat-workers.js";
-import { ActivityCallTree } from "./ChatStatusCard";
+import { ActivityCallTree, ParamRow } from "./ChatStatusCard";
 import { workerAvatarURL } from "../../lib/core/worker-avatars.js";
 import { t } from "./i18n";
-import { TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
+import { TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, terminalNoteClass } from "./ChatTerminal";
 import { OverflowLine } from "./OverflowLine";
 import { KindChip, NEON, StatusTag, TerminalText } from "./TerminalText";
 
@@ -188,14 +188,7 @@ export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; a
             </View>
           </If>
           <Each of={props.ask?.settings ?? []} key={(setting) => setting.key}>
-            {(setting) => (
-              <View class="flex-row items-start gap-2 pl-3">
-                <Text class="w-[64px] shrink-0 font-mono text-[11px] leading-[18px] line-clamp-1" style={{ color: NEON.key }}>
-                  {setting().key}
-                </Text>
-                <TerminalText text={setting().value} class={`flex-1 font-mono text-xs leading-[18px] ${TERMINAL_VALUE}`} />
-              </View>
-            )}
+            {(setting) => <ParamRow name={setting().key} value={setting().value} limit={0} class="pl-3" testID="chat-worker-setting" />}
           </Each>
         </View>
       </If>
