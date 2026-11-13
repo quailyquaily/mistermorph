@@ -261,11 +261,14 @@ Headless tests prove behaviour, not the look.
   (`focusComposerOnEntry`). Headless runs render at once and pass either way; check in Chrome.
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
   then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
-  blurs it and lowers the keyboard as it closes, and focuses it as it opens
-  (`components/shared/dialogFieldFocus.ts`). A one-line `Input` blurs itself on Enter
-  (`blurAndSubmit`): a dialog that stays open when its Enter fails passes `submitBehavior="submit"`.
+  blurs it and lowers the keyboard as it closes, and focuses it as it opens, selecting its text
+  when asked to (`selectOnOpen`; `components/shared/dialogFieldFocus.ts`). A one-line `Input`
+  blurs itself on Enter (`blurAndSubmit`): a dialog that stays open when its Enter fails passes
+  `submitBehavior="submit"`.
   Headless runs settle the closing motion before the next step, so none of this shows there; test
-  it on the helper.
+  it on the helper. Headless inputs also ignore `setSelection` (typing lands at the end), and
+  `app.type` presses the field first, collapsing a selection on every target: see one under
+  `nsh test --target web` with `app.paste` into the focused field, which replaces it.
 - The phone's bottom navigation floats over the foot of every page that shows it
   (`mobileBottomNavVisible`), so nothing there is laid out above it by itself: a page's list ends
   with `MobileBarSpacer`, and so does a column with a fixed control at its foot (the chat's composer
