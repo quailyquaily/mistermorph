@@ -322,7 +322,9 @@ export const voiceRecording = {
 
 /**
  * A file the user picked. Its bytes stay in the host (a browser cannot pass a `File` over the
- * host's JSON channel); upload it with `uploadFile`. `preview` is a URL an `Image` can show, or "".
+ * host's JSON channel); upload it with `uploadFile`. `preview` is a URL an `Image` can show (an
+ * image's), or "". The host owns it: it stays valid until `releaseFile`, which revokes it, and the
+ * app never revokes it itself.
  */
 export interface PickedFile {
   id: string;
@@ -360,8 +362,32 @@ export interface UploadResult {
   body: string;
 }
 
-export async function pickFiles(options: { accept?: string; multiple?: boolean } = {}): Promise<PickedFile[]> {
-  return (await hostChannel.call("morph.file.pick", options, { timeout: 0 })) as PickedFile[];
+/**
+ * Where a pick comes from: `"gallery"` is the system's photo picker (images only), `"files"` the
+ * system's document picker (files of any type). Without one the host shows its usual picker: the
+ * desktop app's open dialog, the browser's file input.
+ */
+export type PickSource = "gallery" | "files";
+
+export interface PickOptions {
+  /** The browser input's `accept`; `source: "gallery"` defaults it to images. */
+  accept?: string;
+  multiple?: boolean;
+  source?: PickSource;
+}
+
+/** What `pickFiles` asks the host for: a gallery pick offers images only, a files pick any file. */
+export function pickRequest(options: PickOptions = {}): PickOptions {
+  const request: PickOptions = { ...options };
+  if (options.source === "gallery") request.accept = options.accept || "image/*";
+  else if (options.source === "files") request.accept = options.accept ?? "";
+  return request;
+}
+
+/** The host's picker: the files the user picked, `[]` when they cancel. */
+export async function pickFiles(options: PickOptions = {}): Promise<PickedFile[]> {
+  const picked = await hostChannel.call("morph.file.pick", pickRequest(options), { timeout: 0 });
+  return Array.isArray(picked) ? (picked as PickedFile[]) : [];
 }
 
 const progressListeners = new Map<string, (loaded: number, total: number) => void>();

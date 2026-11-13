@@ -10,7 +10,7 @@ import { MOTION_SLOW, motionMs } from "../../components/motion/tokens";
 import type { ListRef } from "nsh";
 import { approvalDetailsByID, taskApprovalState } from "../../lib/core/chat-approvals.js";
 import { formatDate, formatNumber } from "../../lib/core/intl-format.js";
-import { buildComposerSubmission, composerFileDraftKey, composerFileExtension } from "../../lib/core/chat-composer-files.js";
+import { buildComposerSubmission, composerFileDraftKey } from "../../lib/core/chat-composer-files.js";
 import { chatDraft, clearChatDraft, rememberChatDraft } from "../../lib/core/chat-draft-memory.js";
 import { normalizeComposerCommandItems, normalizeComposerSkillItems } from "../../lib/core/chat-composer-suggestions.js";
 import {
@@ -103,7 +103,7 @@ import {
 import { agentLinkAvatarURL, agentLinkInstanceID } from "../../lib/core/agent-link-avatar.js";
 import { pushNotice } from "../../lib/core/notices.js";
 import { createTopicRename, type TopicRenameSession } from "./topicRename";
-import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile } from "../../lib/platform";
+import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile, type PickSource } from "../../lib/platform";
 import { currentRoute, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { dismissSoftKeyboard } from "../../lib/softKeyboard";
@@ -126,6 +126,7 @@ import {
   type ActivityDetailRef,
 } from "../../components/chat/activityDetail";
 import { fetchEndpointBlob, saveEndpointFile, transcribeRecording, uploadPickedFile } from "../../components/chat/files";
+import { createFilePreview, draftFilePreviewable, isBrowserFile, isPickedFile, localImageSource, type FilePreviewState } from "../../components/chat/filePreview";
 import { t } from "../../components/chat/i18n";
 import { createVoiceInput, voiceErrorKey } from "../../components/chat/voice";
 
@@ -153,8 +154,6 @@ export type RightPanel = { kind: "none" } | { kind: "workspace" };
 const RIGHT_PANEL_NONE: RightPanel = { kind: "none" };
 const RIGHT_PANEL_WORKSPACE: RightPanel = { kind: "workspace" };
 export const TOPIC_TAB_ID = "topic";
-const COMPOSER_FILE_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".bmp", ".ico"]);
-
 export type SidebarView = "date" | "tags" | "agents" | "cron";
 
 export function agentLinkTopicContactID(topicID: unknown) {
@@ -346,19 +345,7 @@ export type TopicRow =
   | { kind: "group"; key: string; group: any; collapsible: boolean; collapsed: boolean }
   | { kind: "topic"; key: string; topic: any; group: any };
 
-export interface FilePreviewState {
-  open: boolean;
-  loading: boolean;
-  name: string;
-  kind: "" | "image" | "pdf" | "text";
-  url: string;
-  text: string;
-  error: string;
-  items: any[];
-  index: number;
-}
-
-const CLOSED_PREVIEW: FilePreviewState = { open: false, loading: false, name: "", kind: "", url: "", text: "", error: "", items: [], index: -1 };
+export type { FilePreviewState };
 
 export function createChatController() {
   let viewActive = true;
@@ -450,7 +437,13 @@ export function createChatController() {
   const composerFiles = signal<ComposerFileItem[]>([]);
   const composerUploading = () => composerFiles().some((item) => item.status === "uploading");
   const composerFilesPending = () => composerFiles().some((item) => item.status !== "ready");
-  const filePreview = signal<FilePreviewState>(CLOSED_PREVIEW);
+  // The file preview dialog (components/chat/filePreview.ts): the composer's attachments preview
+  // from the device first, sent files from the agent.
+  const preview = createFilePreview({
+    fetchRemote: (item) => fetchUploadedFile(item),
+    unavailable: () => t("chat_composer_file_preview_unavailable"),
+  });
+  const filePreview = preview.state;
   const topicContext = signal<any>(null);
   // The workspace panel's open state is remembered across visits (only the toggle changes what is
   // remembered); the detail panel is never restored.
@@ -507,8 +500,6 @@ export function createChatController() {
   let composerLLMProfilesLoadSeq = 0;
   let composerSkillsLoadSeq = 0;
   let composerFileSequence = 0;
-  let filePreviewSequence = 0;
-  let filePreviewObjectURL = "";
   let workspaceRequestSeq = 0;
 
   /* ---------- derived ---------- */
@@ -1256,13 +1247,27 @@ export function createChatController() {
     if (!suppressDraftPersistence) persistComposerDraft();
   }
 
+  // Every change of a draft's attachments goes through here: a picked file the draft no longer
+  // holds (removed, sent, uploaded and not kept for its preview) goes back to the host, which frees
+  // its bytes and revokes its preview URL; a pasted browser File needs nothing.
   function setComposerFileDraft(scope: any, items: ComposerFileItem[]) {
     const key = composerFileDraftKey(scope);
     if (!key) return;
+    const previous = composerFileDrafts.get(key) || [];
     const next = Array.isArray(items) ? [...items] : [];
     if (next.length > 0) composerFileDrafts.set(key, next);
     else composerFileDrafts.delete(key);
-    if (key === composerFileDraftKey(untracked(composerDraftScope))) composerFiles.set(next);
+    const kept = new Set(next.map((item) => item.sourceFile));
+    for (const item of previous) {
+      if (isPickedFile(item.sourceFile) && !kept.has(item.sourceFile)) {
+        kept.add(item.sourceFile);
+        releaseFile(item.sourceFile);
+      }
+    }
+    if (key === composerFileDraftKey(untracked(composerDraftScope))) {
+      composerFiles.set(next);
+      preview.followDraft(next, draftFilePreviewable);
+    }
   }
 
   function updateComposerFileDraft(scope: any, update: (items: ComposerFileItem[]) => ComposerFileItem[]) {
@@ -1297,15 +1302,16 @@ export function createChatController() {
 
   /* ---------- attachments ---------- */
 
-  function isBrowserFile(file: unknown): file is File {
-    return typeof File !== "undefined" && file instanceof File;
-  }
-
-  async function openComposerFilePicker() {
+  /**
+   * Picks files for the composer and uploads them. `source`: the phone's Gallery (photos) or File
+   * (any document) choice; without one, the host's usual picker (the desktops' open dialog). A
+   * cancelled picker changes nothing.
+   */
+  async function openComposerFilePicker(source?: PickSource) {
     if (untracked(composerAddDisabled)) return;
     let picked: PickedFile[] = [];
     try {
-      picked = await pickFiles({ multiple: true });
+      picked = await pickFiles(source ? { multiple: true, source } : { multiple: true });
     } catch (error) {
       err.set(errorMessage(error, t("chat_composer_upload_failed")));
       return;
@@ -1324,11 +1330,16 @@ export function createChatController() {
   }
 
   async function uploadComposerFileList(files: (PickedFile | File)[], retryID = "") {
-    if (files.length === 0 || untracked(composerDisabled)) return;
+    // Picked files that never reach a draft go back to the host at once.
+    const dropPicked = () => {
+      if (!retryID) for (const file of files) if (isPickedFile(file)) releaseFile(file);
+    };
+    if (files.length === 0) return;
+    if (untracked(composerDisabled)) return dropPicked();
     const endpointRef = String(untracked(submitEndpointRef) || "").trim();
     if (!endpointRef) {
       err.set(t("msg_select_endpoint"));
-      return;
+      return dropPicked();
     }
     const scope = untracked(composerDraftScope);
     const uploadScope = { endpointRef: String(scope.endpointRef || "").trim(), topicID: normalizeTopicID(scope.topicID) };
@@ -1372,11 +1383,20 @@ export function createChatController() {
             return;
           }
           if (dirName === "workspace_dir") workspaceChanged = true;
-          if (!isBrowserFile(sources[index])) releaseFile(sources[index] as PickedFile);
+          // An image stays on the device for its preview until the draft lets it go
+          // (setComposerFileDraft releases it); any other file goes back to the host now.
           updateComposerFileDraft(uploadScope, (current) =>
             current.map((item) =>
               item.id === upload.id
-                ? { ...item, name: String(uploaded?.name || "").trim() || item.name, status: "ready", dirName, path, error: "", sourceFile: undefined }
+                ? {
+                    ...item,
+                    name: String(uploaded?.name || "").trim() || item.name,
+                    status: "ready",
+                    dirName,
+                    path,
+                    error: "",
+                    sourceFile: localImageSource(item) ? item.sourceFile : undefined,
+                  }
                 : item,
             ),
           );
@@ -1405,13 +1425,8 @@ export function createChatController() {
     if (item?.sourceFile) void uploadComposerFileList([item.sourceFile as PickedFile | File], item.id);
   }
 
-  function releasePreviewURL() {
-    if (filePreviewObjectURL) URL.revokeObjectURL(filePreviewObjectURL);
-    filePreviewObjectURL = "";
-  }
-
-  async function resolveFilePreviewSource(item: any): Promise<Blob> {
-    if (isBrowserFile(item?.sourceFile)) return item.sourceFile;
+  /** The bytes of a file uploaded to the agent, for its preview. */
+  async function fetchUploadedFile(item: any): Promise<Blob> {
     const endpointRef = String(item?.endpointRef || untracked(submitEndpointRef) || "").trim();
     const dirName = String(item?.dirName || item?.dir_name || "").trim();
     const path = String(item?.path || "").trim();
@@ -1430,65 +1445,35 @@ export function createChatController() {
   }
 
   function closeComposerFilePreview() {
-    filePreviewSequence += 1;
-    releasePreviewURL();
-    filePreview.set(CLOSED_PREVIEW);
+    preview.close();
   }
 
-  async function loadComposerFilePreview(item: any) {
-    if (String(item?.status || "").trim() !== "ready") return;
-    releasePreviewURL();
-    const sequence = ++filePreviewSequence;
-    filePreview.update((state) => ({ ...state, open: true, loading: true, name: String(item?.name || "").trim(), kind: "", url: "", text: "", error: "" }));
-    const extension = composerFileExtension(item?.name);
-    try {
-      const source = await resolveFilePreviewSource(item);
-      if (sequence !== filePreviewSequence) return;
-      const mime = String(source?.type || "").trim().toLowerCase();
-      if (COMPOSER_FILE_IMAGE_EXTENSIONS.has(extension) || (mime.startsWith("image/") && mime !== "image/svg+xml")) {
-        filePreviewObjectURL = URL.createObjectURL(source);
-        filePreview.update((state) => ({ ...state, kind: "image", url: filePreviewObjectURL }));
-      } else if (extension === ".pdf" || mime === "application/pdf") {
-        filePreviewObjectURL = URL.createObjectURL(source);
-        filePreview.update((state) => ({ ...state, kind: "pdf", url: filePreviewObjectURL }));
-      } else {
-        const buffer = await source.arrayBuffer();
-        if (sequence !== filePreviewSequence) return;
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-        filePreview.update((state) => ({ ...state, kind: "text", text }));
-      }
-    } catch {
-      if (sequence === filePreviewSequence) filePreview.update((state) => ({ ...state, error: t("chat_composer_file_preview_unavailable") }));
-    } finally {
-      if (sequence === filePreviewSequence) filePreview.update((state) => ({ ...state, loading: false }));
-    }
-  }
-
+  /**
+   * Opens the preview on a file: a sent message's (it brings its message's files as `previewItems`)
+   * or one of the composer's attachments, among those that can be previewed now. Opening it
+   * submits nothing and leaves the draft as it is.
+   */
   function previewComposerFile(item: any) {
-    const items = (Array.isArray(item?.previewItems) ? item.previewItems : [item]).filter(
-      (candidate: any) => String(candidate?.status || "").trim() === "ready",
-    );
-    if (items.length === 0) return;
-    const index = Math.max(0, items.findIndex((candidate: any) => String(candidate?.id || "").trim() === String(item?.id || "").trim()));
-    filePreview.update((state) => ({ ...state, items, index }));
-    void loadComposerFilePreview(items[index]);
+    if (Array.isArray(item?.previewItems)) {
+      const items = item.previewItems.filter((candidate: any) => String(candidate?.status || "").trim() === "ready");
+      preview.open(items, String(item?.id || ""), "sent");
+      return;
+    }
+    const id = String(item?.id || "").trim();
+    const items = untracked(composerFiles).filter(draftFilePreviewable);
+    if (!items.some((candidate) => candidate.id === id)) return;
+    preview.open(items, id, "draft");
   }
 
   function navigateComposerFilePreview(offset: number) {
-    const state = untracked(filePreview);
-    const next = state.index + offset;
-    if (next < 0 || next >= state.items.length) return;
-    filePreview.update((current) => ({ ...current, index: next }));
-    void loadComposerFilePreview(state.items[next]);
+    preview.navigate(offset);
   }
 
   function removeComposerFile(item: ComposerFileItem) {
     const id = String(item?.id || "").trim();
     if (!id || untracked(sending)) return;
-    if (item.sourceFile && !isBrowserFile(item.sourceFile)) releaseFile(item.sourceFile as PickedFile);
+    // Its picked file goes back to the host, and a preview showing it closes (setComposerFileDraft).
     updateComposerFileDraft(untracked(composerDraftScope), (current) => current.filter((entry) => entry.id !== id));
-    const preview = untracked(filePreview);
-    if (preview.open && preview.items[preview.index]?.id === id) closeComposerFilePreview();
   }
 
   /* ---------- the workspace ---------- */
@@ -3071,7 +3056,8 @@ export function createChatController() {
     const userHistoryID = pushHistoryItem({
       role: "user",
       text: task,
-      files: submittedFiles,
+      // A picked file goes back to the host as the draft clears; a pasted File may stay with the message.
+      files: submittedFiles.map((file) => (isBrowserFile(file?.sourceFile) ? file : { ...file, sourceFile: null })),
       endpointRef,
       topicID: requestBody.topic_id,
       timeText: formatChatHistoryTime(new Date().toISOString(), currentLocale()),
@@ -3366,6 +3352,8 @@ export function createChatController() {
       previousScope = scope;
       restoreComposerDraft(scope);
       restoreComposerFileDraft(scope);
+      // A preview of the last draft's attachments does not follow into another draft.
+      if (untracked(filePreview).source === "draft") preview.close();
     });
   });
 
@@ -3373,6 +3361,11 @@ export function createChatController() {
     viewActive = false;
     topicActivityTracker.beginRequest();
     closeComposerFilePreview();
+    // The drafts go with the controller: their picked files go back to the host.
+    for (const key of [...composerFileDrafts.keys()]) {
+      for (const item of composerFileDrafts.get(key) || []) if (isPickedFile(item.sourceFile)) releaseFile(item.sourceFile);
+    }
+    composerFileDrafts.clear();
     historyLoadVersion += 1;
     persistComposerDraft();
     clearPollTimers();

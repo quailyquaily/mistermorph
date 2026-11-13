@@ -43,24 +43,36 @@ function pageURL(url) {
   return base === "/" ? url : `${base}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
-// Files stay here: a File cannot cross the host's JSON channel.
+// Files stay here: a File cannot cross the host's JSON channel. An image's preview URL is made
+// here and revoked here when the app releases the file (it never revokes it itself).
 const files = new Map();
 let nextFileID = 1;
 
-function pickFiles({ accept = "", multiple = false } = {}) {
+// Images the app shows before they are sent (an SVG never shows as an image).
+const PREVIEW_TYPES = /^image\/(png|jpe?g|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)$/i;
+
+// The browser's file input. The app asks for its Gallery choice with `accept: "image/*"` (a phone's
+// browser offers its photos) and for File with no `accept` (any file: the system's file chooser);
+// `source` is the app's name for that choice and changes nothing here. A cancelled input gives [].
+/** @typedef {{ createObjectURL(blob: Blob): string; revokeObjectURL(url: string): void }} ObjectURLs */
+/** @param {{ accept?: string; multiple?: boolean; source?: string }} [options] @param {{ document: any; URL: ObjectURLs }} [env] */
+export function pickFiles({ accept = "", multiple = false } = {}, env = { document, URL }) {
   return new Promise((resolve) => {
-    const input = document.createElement("input");
+    const input = env.document.createElement("input");
     input.type = "file";
     input.accept = accept;
     input.multiple = multiple;
     input.style.display = "none";
-    document.body.append(input);
+    env.document.body.append(input);
+    let done = false;
     const finish = (list) => {
+      if (done) return;
+      done = true;
       input.remove();
       resolve(
         list.map((file) => {
           const id = String(nextFileID++);
-          const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
+          const preview = PREVIEW_TYPES.test(file.type || "") ? env.URL.createObjectURL(file) : "";
           files.set(id, { file, preview });
           return { id, name: file.name, size: file.size, type: file.type, preview };
         }),
@@ -70,6 +82,14 @@ function pickFiles({ accept = "", multiple = false } = {}) {
     input.addEventListener("cancel", () => finish([]), { once: true });
     input.click();
   });
+}
+
+// The app is done with a picked file: its bytes go, and its preview URL with them.
+/** @param {string} id @param {ObjectURLs} [urls] */
+export function releasePickedFile(id, urls = URL) {
+  const entry = files.get(id);
+  if (entry && entry.preview) urls.revokeObjectURL(entry.preview);
+  files.delete(id);
 }
 
 // Crops, scales and re-encodes a picked image (an avatar must be image/webp).
@@ -567,16 +587,9 @@ export function createHost(player) {
         return true;
       },
     ],
-    ["morph.file.pick", pickFiles],
+    ["morph.file.pick", (args) => pickFiles(args)],
     ["morph.file.upload", (args) => uploadFile(player, args)],
-    [
-      "morph.file.release",
-      ({ id }) => {
-        const entry = files.get(id);
-        if (entry && entry.preview) URL.revokeObjectURL(entry.preview);
-        files.delete(id);
-      },
-    ],
+    ["morph.file.release", ({ id }) => releasePickedFile(id)],
     ["morph.file.save", saveFile],
     ["morph.voice.support", () => voice.support()],
     ["morph.voice.start", (args) => voice.start(args)],

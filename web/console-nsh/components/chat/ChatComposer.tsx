@@ -42,6 +42,9 @@ import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
 import { followComposerLayout, ONE_ROW, type ComposerLayout } from "./composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheets";
 import { t } from "./i18n";
+import { AttachSourceSheet, type AttachSource, type AttachSourceLabels } from "./AttachSourceSheet";
+import { draftFilePillClass, fileIcon } from "./filePill";
+import { draftFilePreviewable } from "./filePreview";
 
 // Around the 38-point mic, for a 44-point touch target.
 /** The gap between the composer's edge and a list beyond it (the profile picker's, the add menu's). */
@@ -121,6 +124,12 @@ export interface ChatComposerProps {
   onStop?: () => void;
   onAttach?: () => void;
   onUpload?: () => void;
+  /**
+   * Touch screens: Upload files asks where from first (AttachSourceSheet: Gallery or File), then
+   * this opens that picker. Without it, or on a desktop, Upload files is `onUpload` at once.
+   */
+  onUploadFrom?: (source: AttachSource) => void;
+  uploadSourceLabels?: AttachSourceLabels;
   onAttachFiles?: (files: File[]) => void;
   onRetryFile?: (item: ComposerFileItem) => void;
   onVoice?: () => void;
@@ -490,8 +499,20 @@ export function ChatComposer(props: ChatComposerProps) {
     props.onSubmit?.();
   }
 
+  // Upload files on a touch screen asks Gallery or File first (the system's photo or document
+  // picker); the keyboard stays down through it, as for the pickers. Cancelled, nothing changes.
+  const sourceSheetOpen = signal(false);
+  function upload() {
+    if (touchScreen() && props.onUploadFrom) sourceSheetOpen.set(true);
+    else props.onUpload?.();
+  }
+  function chooseSource(source: AttachSource) {
+    sourceSheetOpen.set(false);
+    props.onUploadFrom?.(source);
+  }
+
   const addItems = () => [
-    { id: "chat-composer-upload-files", label: props.uploadLabel || "", icon: "PhPaperclip" as IconName, onSelect: () => leaveFromSheet(() => props.onUpload?.()) },
+    { id: "chat-composer-upload-files", label: props.uploadLabel || "", icon: "PhPaperclip" as IconName, onSelect: () => leaveFromSheet(upload) },
     { id: "chat-composer-add-workspace", label: props.attachLabel || "", icon: "PhCube" as IconName, onSelect: () => leaveFromSheet(() => props.onAttach?.()) },
   ];
 
@@ -892,24 +913,30 @@ export function ChatComposer(props: ChatComposerProps) {
           </View>
         </If>
         <If when={(props.fileItems ?? []).length}>
-          <View class="flex-row flex-wrap gap-1.5 px-2.5 pt-2.5" accessibilityLabel={fileLabels().files} testID="chat-composer-files">
+          <View class="flex-row flex-wrap items-start gap-1.5 px-2.5 pt-2.5" accessibilityLabel={fileLabels().files} testID="chat-composer-files">
             <Each of={props.fileItems ?? []} key={(item) => item.id}>
               {(item) => (
-                <View
-                  class={`flex-row items-center gap-1 rounded-(--radius) border px-1.5 py-1 ${item().status === "failed" ? "border-danger" : "border-line-faint"} bg-card`}
-                >
+                // A pill (filePill.ts): the file's glyph and name preview it, while it can be (an image
+                // on the device at once, any file once uploaded); Retry and Remove are buttons of
+                // their own beside it, so neither is ever a press on the preview.
+                <View class={draftFilePillClass(item().status === "failed")} testID={`chat-composer-file-${item().id}`}>
                   <TipButton
-                    disabled={item().status !== "ready"}
-                    onPress={() => item().status === "ready" && props.onPreviewFile?.(item())}
+                    disabled={!draftFilePreviewable(item())}
+                    onPress={() => draftFilePreviewable(item()) && props.onPreviewFile?.(item())}
                     accessibilityLabel={`${fileLabels().preview}: ${item().name}`}
-                    tooltip={<Tip text={item().status === "ready" ? fileLabels().preview : item().status === "uploading" ? fileLabels().uploading : item().error || fileLabels().failed} />}
-                    class="flex-row items-center gap-1.5"
+                    tooltip={<Tip text={item().status === "uploading" ? fileLabels().uploading : item().status === "failed" ? item().error || fileLabels().failed : fileLabels().preview} />}
+                    class="min-w-0 shrink flex-row items-center gap-1.5"
+                    testID="chat-composer-file-preview"
                   >
-                    <Icon name="PhPaperclip" size={13} color={item().status === "failed" ? "danger" : "subtle"} />
-                    <View class="gap-px">
+                    <Icon
+                      name={fileIcon(item().name, (item().sourceFile as { type?: string } | undefined)?.type)}
+                      size={13}
+                      color={item().status === "failed" ? "danger" : "subtle"}
+                    />
+                    <View class="min-w-0 shrink gap-px">
                       <Text class="max-w-48 text-xs text-foreground line-clamp-1">{item().name}</Text>
                       <If when={item().status === "uploading" || item().status === "failed"}>
-                        <Text class={`max-w-60 text-xs ${item().status === "failed" ? "text-danger" : "text-muted-foreground"}`}>
+                        <Text class={`max-w-60 text-xs ${item().status === "failed" ? "text-danger" : "text-muted-foreground"} line-clamp-2`}>
                           {item().status === "uploading" ? fileLabels().uploading : item().error || fileLabels().failed}
                         </Text>
                       </If>
@@ -922,6 +949,7 @@ export function ChatComposer(props: ChatComposerProps) {
                       label={fileLabels().retry}
                       disabled={props.disabled || props.attachDisabled}
                       onPress={() => props.onRetryFile?.(item())}
+                      class="rounded-full"
                     />
                   </If>
                   <Button
@@ -932,6 +960,8 @@ export function ChatComposer(props: ChatComposerProps) {
                     title={`${fileLabels().remove}: ${item().name}`}
                     disabled={props.disabled}
                     onPress={() => props.onRemoveFile?.(item())}
+                    class="rounded-full"
+                    testID="chat-composer-file-remove"
                   />
                 </View>
               )}
@@ -1026,6 +1056,12 @@ export function ChatComposer(props: ChatComposerProps) {
           <BorderBeam length={96} radius={COMPOSER_RADIUS} testID="chat-composer-beam" />
         </If>
       </View>
+      <AttachSourceSheet
+        open={sourceSheetOpen()}
+        onClose={() => sourceSheetOpen.set(false)}
+        onChoose={chooseSource}
+        labels={props.uploadSourceLabels}
+      />
       <If when={props.footerText}>
         <Text class="px-3 text-center font-mono text-[11px] leading-[15.4px] tracking-[0.02em] text-muted-foreground">{props.footerText}</Text>
       </If>

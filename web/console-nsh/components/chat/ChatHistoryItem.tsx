@@ -43,7 +43,8 @@ import { t } from "./i18n";
 import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
 import type { KeyedState } from "./rowState";
-import { BUBBLE_CLASS, FILES_CLASS, fileRowCornerClass } from "./userBubble";
+import { BUBBLE_CLASS, FILES_CLASS } from "./userBubble";
+import { fileIcon, SENT_FILE_PILL_CLASS } from "./filePill";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../shared/partProbe";
 import { CHECK_CORNER_AT, CHECK_DRAW_MS, CHECK_SIZE, checkAction, checkDash, checkDashOffset, checkStroke } from "./copyCheck";
 
@@ -90,10 +91,6 @@ function isTerminalStatus(status: string) {
   return status === "done" || status === "failed" || status === "canceled";
 }
 
-function fileKind(file: any) {
-  const match = /\.([a-z0-9]{1,6})$/i.exec(String(file?.name || ""));
-  return match ? match[1].toUpperCase() : "";
-}
 
 // Arrivals already played (by id): a row bound again later does not replay its entrance.
 const playedArrivals = new Set<string>();
@@ -554,17 +551,11 @@ export function ChatHistoryItem(props: {
                       fileFrames.set(index, boundsFrame(event));
                       parts.report(`file-${index}`, filesNode, () => fileFrames.get(index));
                     }}
-                    class={`group/file flex-row items-center gap-2 py-[5px] pl-[9px] pr-2 hover:bg-hover-soft ${fileRowCornerClass(
-                      userFiles().indexOf(file()),
-                      userFiles().length,
-                      textBlockVisible(),
-                    )}`}
+                    class={SENT_FILE_PILL_CLASS}
                   >
-                    <Icon name="PhPaperclip" size={13} color="muted-foreground" />
-                    <Text class="flex-1 font-mono text-xs text-subtle line-clamp-1 group-hover/file:text-blue">{file().name}</Text>
-                    <If when={fileKind(file())}>
-                      <Text class="font-mono text-[11px] font-medium tracking-[0.1em] text-muted-foreground">{fileKind(file())}</Text>
-                    </If>
+                    <Icon name={fileIcon(file().name)} size={13} color="muted-foreground" />
+                    {/* The name with its extension says the type: no type label at the right. */}
+                    <Text class="min-w-0 flex-1 font-mono text-xs text-subtle line-clamp-1 group-hover/file:text-blue">{file().name}</Text>
                   </TipButton>
                 )}
               </Each>
