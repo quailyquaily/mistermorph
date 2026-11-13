@@ -49,3 +49,17 @@ Tests: Manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && 
 Visual inspection: Coder rendered real details using headless Chrome at widths 1280 and 390 in light/dark presentations for coder and subagent; confirmed wrapping, scroll to final line and no horizontal overflow. Not checked: physical Android device or native GPUI desktop window.
 
 Installs: none; reused existing pinned tools. No forbidden paths changed. Initial code push lacked repository-aware credentials; the single retry with command-local credential.useHttpPath=true succeeded. Review should focus on exact-task propagation, roster retention and persistence/redaction compatibility.
+
+## factory · review · 2026-11-13 13:09
+head: b9980932f3557e786a6726d13d14329ae215f4b5
+verdict: pass
+notes:
+- [P2] agent/engine_helpers.go:292-293: Unbounded display tasks also enter the bounded chattrace collector, crowding out unrelated execution records or losing the entire argument map. Keep the trace task summary bounded independently of the full activity-detail task. Verified example from Claude Code probe against the real helper and collector: 40 read_file calls followed by a coder call with a 158327-byte multiline task retain only 1 entry and omit 81, versus all 82 entries with the base helper; a 253327-byte task drops all coder trace argument keys instead of retaining three. Collector limits remain unchanged, but exact activity tasks should not displace unrelated trace detail.
+
+Reviewed with Claude Code: origin/master...HEAD, base 588ad961, all 9 changed files and relevant consumers. No P0/P1 findings; per factory policy, the P2 note does not block ready/. Worktree remains clean; no code changes or commits.
+
+Validation: mandatory gofmt/vet/go test gate passed (162 packages); nsh 0.5.0 check passed; nsh test --web-host tests/noHost.js passed (854 passed, 0 failed); targeted Node worker tests passed (10/10). Tests used an absolute throwaway HOME. Installs: none.
+
+Limits: no new visual/device inspection; desktop/mobile layout relies on automated detail-panel coverage and the build's headless check. Guard does not redact activity arguments before or after this change; configured task-key redaction still applies. Repeated large prompts increase stream payload size; runtime frame overhead was not measured. Historic truncated prompts remain unrecoverable. No linked issue or PR was identified in the item.
+
+Moved review/ → ready/. Owner should inspect the P2 trace-retention regression before shipping.
