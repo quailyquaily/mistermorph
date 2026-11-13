@@ -17,7 +17,7 @@ import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
-import { BackButton, Icon, TextField, type IconName } from "../ui";
+import { BackButton, BAR_ICON_SIZE, CircleButton, Icon, TextField, type IconName } from "../ui";
 import type { PartLayoutListener } from "../shared/partProbe";
 import { MobileBarSpacer } from "../frame/mobileBar";
 import { listTitleSize } from "../frame/metrics";
@@ -181,19 +181,22 @@ export function WorkspaceTitle(props: { text: string; class?: string }) {
   );
 }
 
-/** A 38pt plain icon button of an index head (13pt icon), as `.skills-index-button`. */
+/**
+ * An icon button of an index column's head: the standard round one (CircleButton, 38pt) with a
+ * regular icon button's 16pt icon (BAR_ICON_SIZE), as the Topics and TODO heads' buttons are; its
+ * title is its tooltip.
+ */
 export function HeadButton(props: { icon: IconName; title: string; disabled?: boolean; onPress: () => void; testID?: string }) {
   return (
-    <BaseButton
-      onPress={() => props.onPress()}
+    <CircleButton
+      icon={props.icon}
+      iconSize={BAR_ICON_SIZE}
+      title={props.title}
       disabled={props.disabled}
-      accessibilityLabel={props.title}
+      onPress={() => props.onPress()}
+      class="disabled:opacity-50"
       testID={props.testID}
-      class="size-9.5 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press disabled:opacity-50"
-      style={ROW_TRANSITION}
-    >
-      <Icon name={props.icon} size={13} color="subtle" />
-    </BaseButton>
+    />
   );
 }
 

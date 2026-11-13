@@ -14,7 +14,7 @@
 // on a touch screen once a finger has rested on it (a swipe stays the list's scroll).
 import { Image, Scroll, signal, Text, token, View, type InputRef, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { BAR_ICON_SIZE, Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
+import { BAR_ICON_SIZE, Button, circleButtonClass, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
@@ -33,8 +33,9 @@ import { createTopicDrag } from "./topicDrag";
 import { provideShortcut, shortcutLabel } from "../../lib/shortcuts";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../../components/shared/partProbe";
 
-// A view toggle in the head: a 38pt square with a 16pt icon (BAR_ICON_SIZE, a regular icon-only
-// Button's), the buttons flush; on, a blue icon on a blue tint. While TODO runs are running, the
+// A view toggle in the head: the standard round icon button (circleButtonClass, 38pt) with a 16pt
+// icon (BAR_ICON_SIZE, a regular icon-only Button's), the buttons flush; on, a blue icon on a blue
+// tint. While TODO runs are running, the
 // TODO toggle's alarm clock has its hands turning, as a clock's do while it is being set
 // (components/motion/AdjustingClock.tsx), in place of a loading look: no busy beam or hairline (the
 // plain button's, FT61) and no ring off the icon's corner, so the square keeps its size, fill and
@@ -69,7 +70,7 @@ export function ViewToggle(props: {
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
-      class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-blue/12"
+      class={`${circleButtonClass()} selected:bg-blue/12`}
     >
       {props.icon === "PhAlarm" ? (
         <AdjustingClock
@@ -483,7 +484,7 @@ export function TopicSidebar(props: {
               tooltip={<Tip text={t("chat_topic_new")} shortcut={shortcutLabel("chat.newTopic")} />}
               testID="chat-topic-new"
               onLayout={headButtonLayout("new", () => true)}
-              class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
+              class={circleButtonClass()}
             >
               <Icon name="PhPlus" size={BAR_ICON_SIZE} color="subtle" onLayout={headIconLayout("new", () => true)} />
             </TipButton>

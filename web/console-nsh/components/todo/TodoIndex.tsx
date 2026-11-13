@@ -18,7 +18,7 @@ import { translate } from "../../lib/core/context.js";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
 import { gutterX, gutterY, listTitleSize } from "../frame/metrics";
 import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR } from "../motion";
-import { BAR_BUTTON_SIZE, Button, Icon, StatusMark } from "../ui";
+import { BAR_ICON_SIZE, CircleButton, Icon, StatusMark } from "../ui";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
 
@@ -39,7 +39,7 @@ export const TODO_HEAD_HEIGHT = 57;
 // inside the row's, as a topic's), and the head's right padding puts the icon there (16pt): Add
 // ends where the rows do.
 // Centres, not edges: the mark is 7pt, the button 38.
-/** The head's buttons (`Button` sm, icon only; the calendar toggle is BAR_BUTTON_SIZE, as the phone bars' back arrows). */
+/** The head's buttons: the standard round icon button (CircleButton, 38pt) with a regular icon button's 16pt icon (BAR_ICON_SIZE). */
 export const TODO_HEAD_BUTTON = 38;
 /** The marker's slot at an item's end (RunMarker), the mark in its middle. */
 export const TODO_MARKER_SLOT = 16;
@@ -196,11 +196,9 @@ export function TodoIndex(props: {
         {/* Buttons sit at the top of their box (self-start); a wrapper centres them in the head. The
             last one's icon is centred over the items' markers (above). */}
         <View {...parts.probe(() => (props.mobile ? "head-action" : null))}>
-          <Button
-            variant="plain"
-            size={BAR_BUTTON_SIZE}
-            iconOnly
+          <CircleButton
             icon="PhCalendarBlank"
+            iconSize={BAR_ICON_SIZE}
             title={t("todo_view_calendar")}
             testID="todo-view-toggle"
             onPress={state.toggleTodoView}
@@ -208,14 +206,7 @@ export function TodoIndex(props: {
         </View>
         <If when={!props.mobile}>
           <View {...parts.probe(() => "head-action")}>
-            <Button
-              variant="plain"
-              iconOnly
-              icon="PhPlus"
-              title={t("todo_action_add")}
-              testID="todo-add"
-              onPress={state.addTask}
-            />
+            <CircleButton icon="PhPlus" iconSize={BAR_ICON_SIZE} title={t("todo_action_add")} testID="todo-add" onPress={state.addTask} />
           </View>
         </If>
       </View>
