@@ -58,7 +58,7 @@ for (const item of SCROLLING) {
     const app = await openPanel(item.width, "activity");
     expectContained(app);
     const scrolling = (id: string) => linesOf(app, id).filter((line) => line.scrolls).length;
-    expect(linesOf(app, "chat-activity-title").length).toBe(6);
+    expect(linesOf(app, "chat-activity-title").length).toBe(7);
     expect(scrolling("chat-activity-title")).toBe(item.title);
     // Parameters and nested calls are in no such line.
     expect(linesOf(app, "chat-activity-param").length).toBe(0);

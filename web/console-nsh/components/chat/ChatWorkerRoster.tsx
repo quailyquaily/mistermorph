@@ -172,7 +172,7 @@ export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; a
         >
           {(process) => (
             <OverflowLine testID="chat-worker-process">
-              <TerminalText text={workerProcessLabel(process())} class={`font-mono text-[11px] leading-[18px] ${TERMINAL_MUTED}`} />
+              <TerminalText text={workerProcessLabel(process())} class={`shrink font-mono text-[11px] leading-[18px] ${TERMINAL_MUTED}`} />
             </OverflowLine>
           )}
         </Each>

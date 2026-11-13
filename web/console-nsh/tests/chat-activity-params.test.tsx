@@ -141,3 +141,12 @@ test("a command wraps as the window narrows and unwraps as it widens, staying in
   await app.waitUntil(() => report(app).panel === 1400 && token().h <= line + 0.5);
   expectInside(app);
 });
+
+test("the panel shows a parameter whole, past the 120 characters a nested call shows", async () => {
+  for (const dark of [false, true]) {
+    const app = await openPanel(360, { dark });
+    expectInside(app);
+    expect(app.texts().some((text) => text.startsWith("Write story.c in ") && text.endsWith("run it: whole-value-end"))).toBe(true);
+    await app.dispose();
+  }
+});

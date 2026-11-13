@@ -253,7 +253,8 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
               <KindChip label={kindLabel(entry())} tone={normalizeActivityKind(entry()?.kind) === "subtask" ? "violet" : "cyan"} />
             </If>
             <OverflowLine testID="chat-activity-title">
-              <Text class={`font-mono text-[13px] font-medium leading-[18px] ${TERMINAL_FG}`}>
+              {/* shrink: where lines wrap (OverflowWraps) the name takes the line's width and wraps. */}
+              <Text class={`shrink font-mono text-[13px] font-medium leading-[18px] ${TERMINAL_FG}`}>
                 {entryTitle(entry())}
                 {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
               </Text>
@@ -271,7 +272,8 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
           <If when={activityParams(entry()).length > 0}>
             <View class="gap-0.5">
               <Each of={activityParams(entry())} key={(param) => param.key}>
-                {(param) => <ParamRow name={param().key} value={param().value} />}
+                {/* The detail panel is where a parameter is read: its value whole (it wraps). */}
+                {(param) => <ParamRow name={param().key} value={param().value} limit={0} />}
               </Each>
             </View>
           </If>

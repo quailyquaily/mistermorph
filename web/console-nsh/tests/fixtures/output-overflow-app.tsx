@@ -20,6 +20,8 @@ import { normalizeActivity } from "../../lib/core/chat-task-history.js";
 const PATH = "/home/user/projects/very/long/path/to/some/deeply/nested/module/that/never/ends/file_name.go:1234:56";
 // A command with no space to break at: it can only break inside.
 const TOKEN = `printf%s${"0123456789abcdefghijklmnopqrstuvwxyz".repeat(3)}`;
+// A value longer than the 120 characters a nested call shows: the panel shows a parameter whole.
+const PROMPT = "Write story.c in /tmp/try-cc (create directory if needed), a C99 program that prints a short story one line at a time, then build it and run it: whole-value-end";
 const OUTPUT = `${PATH}\nNAME        READY   STATUS    RESTARTS   AGE\napi-7f9c8d  1/1     Running   0          3d4h\nThis sentence of prose keeps wrapping inside the panel.`;
 const activity = normalizeActivity({
   history: [
@@ -50,6 +52,7 @@ const activity = normalizeActivity({
         { id: "k3", kind: "tool", name: "bash", status: "failed", args: { cmd: "go vet\ngo test" } },
       ],
     },
+    { id: "a7", kind: "tool", name: "write_note", status: "done", args: { task: PROMPT } },
   ],
   workers: [
     {
