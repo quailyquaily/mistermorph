@@ -50,3 +50,12 @@ notes:
 - Installs: none. Existing pinned nsh tooling, Playwright and system Chrome reused.
 - Residual checks: native desktop and Android rendering/copy behavior were not exercised. Owner should check those native hosts before shipping if native-specific assurance is required.
 - Moved review/ → ready/; not merged or shipped.
+
+## factory · 2026-11-13 19:24
+Shipped to master. Merge commit: 262fe117bd0453525a8779e79fa5a59ddf444056. Release tag: v0.3.106.
+
+Merged without conflicts or code fixes. Per-merge nsh check and full Console suite passed (873 tests, zero failures); changed tests passed. Final combined suite: 897/897; final configured gofmt/vet/go test gate passed. No unpinned installs or forbidden-path changes.
+
+Claude Code prepared FT104–FT107 but was blocked by repeated Cloudflare HTTP 403 responses during testing; manager completed the remaining merge and shell checks directly. No fresh browser/native Android/native desktop visual verification in this ship run; remote CI completion unverified.
+
+No linked GitHub issues or PRs identified; none closed. Branch retained (clean not configured). Moved ready/ → done/.

@@ -44,3 +44,12 @@ Reviewed origin/master...HEAD (base 588ad961), all four changed files. No qualif
 Validation: required gofmt/vet/go-test command passed; nsh check passed using existing nsh 0.5.0; full nsh test --web-host tests/noHost.js passed, 859 tests, 0 failures, including all 15 dialog-field-focus tests. Scripted checks used absolute throwaway HOME directories. Installs: none.
 
 Not checked: real-browser selection during this review, Android/device and native desktop behavior. Headless tests verify selection calls, not visible selection. Owner should verify native selection for emoji-heavy titles (UTF-16 length versus maxLength), reopening during dialog animations, and replacement typing. These remain unverified platform risks, not confirmed defects.
+
+## factory · 2026-11-13 19:24
+Shipped to master. Merge commit: aee7b30cc8f671079db8d4228e9c1d1497cdc286. Release tag: v0.3.106.
+
+Merged without conflicts or code fixes. Per-merge nsh check and full Console suite passed (859 tests, zero failures); changed tests passed. Final combined suite: 897/897; final configured gofmt/vet/go test gate passed. No unpinned installs or forbidden-path changes.
+
+Claude Code prepared FT104–FT107 but was blocked by repeated Cloudflare HTTP 403 responses during testing; manager completed the remaining merge and shell checks directly. No fresh browser/native Android/native desktop visual verification in this ship run; remote CI completion unverified.
+
+No linked GitHub issues or PRs identified; none closed. Branch retained (clean not configured). Moved ready/ → done/.

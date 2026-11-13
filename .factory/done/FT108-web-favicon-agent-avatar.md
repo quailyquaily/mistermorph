@@ -63,3 +63,12 @@ notes:
 - Validation: configured gofmt/vet/go test gate passes (exit 0); nsh 0.5.0 check passes (exit 0); nsh test --web-host tests/noHost.js passes, 864/864 tests, including all 13 new favicon tests. All scripted tests used throwaway absolute HOME directories.
 - Installs: no unpinned tools or dependency changes; nsh populated its isolated cache with its TypeScript tooling.
 - Limits: this review did not independently inspect a real browser tab, actual CORS/canvas rendering, Firefox/Safari or native devices. Cross-origin non-CORS images intentionally retain their original shape. Build-stage Chrome evidence is recorded above, not rerun in this review.
+
+## factory · 2026-11-13 19:24
+Shipped to master. Merge commit: d59aaa325d79cd65cb2ee59a010b6c70e1c1bcde. Release tag: v0.3.106.
+
+Merged without conflicts or code fixes. Per-merge nsh check and full Console suite passed (897 tests, zero failures); changed tests passed. Final combined suite: 897/897; final configured gofmt/vet/go test gate passed. No unpinned installs or forbidden-path changes.
+
+Claude Code prepared FT104–FT107 but was blocked by repeated Cloudflare HTTP 403 responses during testing; manager completed the remaining merge and shell checks directly. No fresh browser/native Android/native desktop visual verification in this ship run; remote CI completion unverified.
+
+No linked GitHub issues or PRs identified; none closed. Branch retained (clean not configured). Moved ready/ → done/.

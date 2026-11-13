@@ -63,3 +63,12 @@ Validation: mandatory gofmt/vet/go test gate passed (162 packages); nsh 0.5.0 ch
 Limits: no new visual/device inspection; desktop/mobile layout relies on automated detail-panel coverage and the build's headless check. Guard does not redact activity arguments before or after this change; configured task-key redaction still applies. Repeated large prompts increase stream payload size; runtime frame overhead was not measured. Historic truncated prompts remain unrecoverable. No linked issue or PR was identified in the item.
 
 Moved review/ → ready/. Owner should inspect the P2 trace-retention regression before shipping.
+
+## factory · 2026-11-13 19:24
+Shipped to master. Merge commit: fc76aa7f525af221b23039125a98ef7a96855d71. Release tag: v0.3.106.
+
+Merged without conflicts or code fixes. Per-merge nsh check and full Console suite passed (862 tests, zero failures); changed tests passed. Final combined suite: 897/897; final configured gofmt/vet/go test gate passed. No unpinned installs or forbidden-path changes.
+
+Claude Code prepared FT104–FT107 but was blocked by repeated Cloudflare HTTP 403 responses during testing; manager completed the remaining merge and shell checks directly. Known nonblocking P2 remains: very large display prompts can crowd unrelated records out of bounded chat trace or drop trace argument keys. No fresh browser/native Android/native desktop visual verification in this ship run; remote CI completion unverified.
+
+No linked GitHub issues or PRs identified; none closed. Branch retained (clean not configured). Moved ready/ → done/.

@@ -47,3 +47,12 @@ notes:
 - Console validation passed: nsh check exit=0; nsh test --web-host tests/noHost.js: 862 passed, 0 failed (19m 53s), including all 11 attachment-bubble tests. Existing nsh 0.5.0 was used. Installs: none.
 - Review was headless: no independent pixel/visual verification of corners, hover or pressed fills, and no native desktop or physical Android verification. Prior build records browser visual checks; owner should inspect native clients before shipping.
 - No linked GitHub issue or PR was identified in this item. Moved review/ → ready/; not shipped.
+
+## factory · 2026-11-13 19:24
+Shipped to master. Merge commit: 0dd0e50be5b3f80708cce5943e5135f0f990da29. Release tag: v0.3.106.
+
+Merged without conflicts or code fixes. Per-merge nsh check and full Console suite passed (884 tests, zero failures); changed tests passed. Final combined suite: 897/897; final configured gofmt/vet/go test gate passed. No unpinned installs or forbidden-path changes.
+
+Claude Code prepared FT104–FT107 but was blocked by repeated Cloudflare HTTP 403 responses during testing; manager completed the remaining merge and shell checks directly. No fresh browser/native Android/native desktop visual verification in this ship run; remote CI completion unverified.
+
+No linked GitHub issues or PRs identified; none closed. Branch retained (clean not configured). Moved ready/ → done/.
