@@ -76,16 +76,15 @@ export function shownCoders(payload: CoderQuotaPayload) {
   }));
 }
 
-/** A window named by its length: "5h", "7d", "7d opus". */
+/** A window named by its length, and a model's own window by its model too: "5h", "7d", "7d fable". */
 export function windowLabel(w: QuotaWindow): string {
   const minutes = w.window_minutes ?? 0;
   let label = w.kind;
   if (minutes > 0 && minutes % 1440 === 0) label = `${minutes / 1440}d`;
   else if (minutes > 0 && minutes % 60 === 0) label = `${minutes / 60}h`;
   else if (minutes > 0) label = `${minutes}m`;
-  for (const model of ["opus", "sonnet"]) {
-    if (w.kind.endsWith(`_${model}`)) label += ` ${model}`;
-  }
+  const model = /^(?:five_hour|seven_day)_(.+)$/.exec(w.kind)?.[1];
+  if (model && minutes > 0) label += ` ${model.replace(/_/g, " ")}`;
   return label;
 }
 
