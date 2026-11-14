@@ -13,20 +13,24 @@ starts with a comment on why it is built the way it is; keep that when changing 
 | `Entrance` | Content that rises 6pt into place and fades in when `watch` changes (not on first render). Vue: `core/page-transitions.js`. The page host (`components/frame/PageStack.tsx`) already does this for top-level pages on wide windows. | `<Entrance watch={key()} class="flex-1">…</Entrance>` |
 | `pageSlide` | The phone's page slides: `push` (in from the right over the page, which drifts a third left), `pop` (the reverse), `tab-forward` / `tab-back` (two pages side by side moving a whole width, the navigation's order). `MOTION_PAGE_SLIDE` 280 ms, translateX only; `SlideDriver` lets tests hold a slide. | Used by `PageStack` and `PaneStack`; `slideFrames(kind, width)` gives the start and end of each page. |
 | `createPaneStack(level)` | A page's own levels on phones (a list 0, an item 1, deeper 2): the same slides between panes of one page instance, the pane going out kept mounted and inert until its slide ends, `held(level, read)` for what it showed. `level` null on wide windows (nothing moves). See docs/console/page-transitions.md. | `const panes = createPaneStack(() => (isMobile() ? (open() ? 1 : 0) : null));` `<If when={panes.shown(1, open())}><View style={panes.style(1)} accessibilityElementsHidden={panes.hidden(1) \|\| undefined}>…</View></If>` |
+| `PixelResolve` | Content coming into focus as the brand's "pixel becomes smooth": coarse square pixels (12pt) that step finer to smooth over 320 ms (`PIXEL_RESOLVE_MS`), through a WGSL `ShaderEffect`; a fade where the platform draws no shaders. Plays when made and each time `watch` changes. | `<PixelResolve watch={id()} size={88}>…</PixelResolve>` (the Contacts panel's avatar, through `KindAvatar`'s `resolve`). Keep icons out of it (PORTING.md). |
 | `createArrivalTint()` | A row that just arrived: selection-blue tint that holds, then fades back (1.6 s). Vue: `.is-arrived`. | `const tint = createArrivalTint();` `style={{ backgroundColor: tint.color }}`, `tint.play()` when it arrives. |
 | `AdjustingClock` | The alarm icon whose two hands turn while something runs, as a clock's do while it is being set: the minute hand in eased 1.2 s laps, the hour hand steadily at a twelfth of that, both in blue; they settle back to three o'clock (the plain alarm icon) when it ends. The face never moves. Reduced motion: the hands stand at ten past ten. Used by the topic head's TODO runs toggle in place of a button loading look. | `<AdjustingClock adjusting={running()} size={14} color="subtle" />` (the same box as `<Icon name="PhAlarm" size={14} />`) |
 | `notePress` / `recentPress` | Where the last press went down; `Modal` / `MessageDialog` grow out of it (dialog origin). The shell feeds it. | Nothing to do: every `Modal` and `MessageDialog` uses it. |
-| Tokens | `MOTION_FAST` 120, `MOTION_NORMAL` 180, `MOTION_SLOW` 260, `MOTION_PAGE` 220 ms, `MOTION_EASE` (`[0.2, 0, 0, 1]`, CSS form `MOTION_EASE_CSS`), `motionMs(ms)` (0 under reduced motion). | `style={{ transitionProperty: "colors", transitionDuration: motionMs(MOTION_FAST), transitionTimingFunction: MOTION_EASE_CSS }}` |
+| Tokens | `MOTION_FAST` 120, `MOTION_NORMAL` 180, `MOTION_SLOW` 260, `MOTION_PAGE` 220 ms, `MOTION_EASE` (`[0.2, 0, 0, 1]`, CSS form `MOTION_EASE_CSS`); for what goes away `MOTION_EXIT` 140 ms on `MOTION_EXIT_EASE` (`[0.4, 0, 1, 1]`), and sheets `MOTION_SHEET_IN` 280 / `MOTION_SHEET_OUT` 200 ms; `motionMs(ms)` (0 under reduced motion). | `style={{ transitionProperty: "colors", transitionDuration: motionMs(MOTION_FAST), transitionTimingFunction: MOTION_EASE_CSS }}` |
 
 ## Controls in `components/ui.tsx` that now carry the motion
 
 - `Tabs`: the segmented control of Vue's `AppTabs` (38pt box, hairline border, 32pt options, ink on
   blue 16 % with a sliding indicator). Same props as before; `equal` gives each option the same
   share, `icon` on an item shows an icon.
-- `Modal`, `MessageDialog`: scale in from the pressed control (0.9) or from the centre (0.98) with a
-  fade, and back out on close. Where they are sheets at the bottom (windows under 720pt: phones),
-  they slide up from the bottom edge (260 ms) and back down, staying mounted until out of sight;
-  reopened on the way down, they turn back from where they are. Reduced motion: in place at once.
+- `Modal`, `MessageDialog`, `SettingDialog`: scale in from the pressed control (0.9) or from the
+  centre (0.98) with a fade (`MOTION_NORMAL`, 180 ms), and back out on close, quicker
+  (`MOTION_EXIT`, 140 ms, on `MOTION_EXIT_EASE`). Where they are sheets at the bottom (windows
+  under 720pt: phones), they slide up from the bottom edge and back down as the phone's More and
+  agent sheets do (`MOTION_SHEET_IN` 280 ms, `MOTION_SHEET_OUT` 200 ms on `MOTION_EXIT_EASE`),
+  staying mounted until out of sight; reopened on the way down, they turn back from where they
+  are. Reduced motion: in place at once.
 - `DropdownMenu`, `SelectField` popups: drop in 4pt from the trigger with a fade (120 ms).
 - `Button`: Vue's sizes (`md` 44, `sm` 38, `xs` 32, `xxs` 24pt), 500 weight, press overlay, hover
   colours with the ui-kit's transitions.

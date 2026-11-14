@@ -59,7 +59,7 @@ for (const layout of ["phone", "desktop"] as const) {
       await app.waitFor("text:No contacts");
       await app.waitFor("id:contact-row:tg:1001", { state: "gone" });
       expect(app.shows("id:contacts-list")).toBe(true);
-      if (layout === "desktop") expect(app.shows("text:No contact selected")).toBe(true);
+      if (layout === "desktop") await app.waitFor("id:contact-detail", { state: "gone" });
     });
   }
 }

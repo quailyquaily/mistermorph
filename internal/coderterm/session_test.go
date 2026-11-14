@@ -120,6 +120,86 @@ func TestTranscriptWaitsForThisTurnsFinalMessage(t *testing.T) {
 	}
 }
 
+func TestTranscriptWaitsForBackgroundAgents(t *testing.T) {
+	notification := func(id string) string {
+		return "<task-notification>\n<task-id>t-" + id + "</task-id>\n<tool-use-id>" + id + "</tool-use-id>\n<status>completed</status>\n</task-notification>"
+	}
+	queued := func(id string) string {
+		line, _ := json.Marshal(map[string]any{"type": "queue-operation", "operation": "enqueue", "content": notification(id)})
+		return string(line) + "\n"
+	}
+	woken := func(id string) string {
+		line, _ := json.Marshal(map[string]any{"type": "user", "turnOrigin": "task_notification", "message": map[string]any{"content": notification(id)}})
+		return string(line) + "\n"
+	}
+	launched := func(id, result string) string {
+		return `{"type":"assistant","message":{"id":"m-` + id + `","content":[{"type":"tool_use","id":"` + id + `","name":"Agent"}],"stop_reason":"tool_use"}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"` + id + `","content":"launched"}]},"toolUseResult":` + result + `}
+`
+	}
+	const agent = `{"isAsync":true,"status":"async_launched","agentId":"a1"}`
+	ended := func(id, text string) string {
+		return `{"type":"assistant","message":{"id":"end-` + id + `","content":[{"type":"text","text":"` + text + `"}],"stop_reason":"end_turn"}}
+`
+	}
+	// A leftover report from an earlier task's agent lands before this task.
+	start := queued("old") + woken("old") + `{"type":"user","message":{"content":"task"}}
+`
+	tests := []struct {
+		name  string
+		steps []string // the transcript as it grows; done only after the last
+	}{
+		{"agent", []string{start + launched("a", agent) + ended("1", "LAUNCHED"), queued("a") + woken("a") + ended("2", "FINAL")}},
+		{"report queued before its turn is written", []string{
+			start + launched("a", agent) + ended("1", "LAUNCHED"),
+			queued("a"),
+			woken("a") + ended("2", "FINAL"),
+		}},
+		{"two agents", []string{
+			start + launched("a", agent) + launched("b", agent) + ended("1", "LAUNCHED"),
+			queued("a") + woken("a") + ended("2", "one back"),
+			queued("b") + woken("b") + ended("3", "FINAL"),
+		}},
+		{"report absorbed mid-turn", []string{start + launched("a", agent) + `{"type":"assistant","message":{"id":"w","content":[{"type":"tool_use","id":"x","name":"Bash"}],"stop_reason":"tool_use"}}
+` + queued("a") + `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"x","content":"ok"}]}}
+` + ended("2", "FINAL")}},
+		{"report before launch", []string{start + queued("a") + launched("a", agent) + ended("2", "FINAL")}},
+		{"command timed out into the background", []string{
+			start + launched("c", `{"stdout":"","backgroundTaskId":"b1","timedOutAfterMs":120000}`) + ended("1", "waiting on tests"),
+			queued("c") + woken("c") + ended("2", "FINAL"),
+		}},
+		{"server run in the background", []string{start + launched("s", `{"stdout":"","backgroundTaskId":"b2"}`) + ended("2", "FINAL")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.jsonl")
+			r := claudeTranscript{path: path, expected: "task"}
+			for i, step := range tt.steps {
+				f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = f.WriteString(step)
+				f.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := r.read(); err != nil {
+					t.Fatal(err)
+				}
+				text, done, err := r.state()
+				if err != nil {
+					t.Fatal(err)
+				}
+				last := i == len(tt.steps)-1
+				if done != last || (last && text != "FINAL") {
+					t.Fatalf("step %d: text=%q done=%v transcript=%+v", i, text, done, r)
+				}
+			}
+		})
+	}
+}
+
 func TestTranscriptAcceptsWrappedPaste(t *testing.T) {
 	tests := []struct {
 		name, recorded string
