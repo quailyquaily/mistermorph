@@ -104,7 +104,12 @@ func fetchJSON(ctx context.Context, rawURL string, userAgent string, out any) er
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("http status %d", resp.StatusCode)
+		return httpStatusError{code: resp.StatusCode}
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out)
 }
+
+// httpStatusError is a non-2xx answer, so callers can tell a missing file (404).
+type httpStatusError struct{ code int }
+
+func (e httpStatusError) Error() string { return fmt.Sprintf("http status %d", e.code) }

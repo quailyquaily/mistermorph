@@ -44,8 +44,18 @@ type Options struct {
 	// ManifestURL overrides the channel's manifest URL.
 	ManifestURL string
 	UserAgent   string
-	GOOS        string
-	GOARCH      string
+	// GOOS and GOARCH pick the platform this program updates to; empty means
+	// the running binary's.
+	GOOS   string
+	GOARCH string
+	// Download, when set, also picks the release's file for another machine
+	// (a Console client) into Result.Download. It never changes the platform
+	// above, and that platform missing from the manifest is then no error
+	// unless AutoDownload is set.
+	Download *DownloadTarget
+	// ReleaseBaseURL is where the channels' release.json files are; empty
+	// means DefaultBaseURL. Only Download reads it.
+	ReleaseBaseURL string
 }
 
 type Manifest struct {
@@ -80,6 +90,8 @@ type Result struct {
 	Downloaded      bool   `json:"downloaded"`
 	DownloadStatus  string `json:"download_status,omitempty"`
 	DownloadPath    string `json:"download_path,omitempty"`
+	// Download is the file for Options.Download, the client's machine.
+	Download *Download `json:"download,omitempty"`
 }
 
 // ResolveManifestURL returns the manifest URL that Check fetches for opts.
@@ -122,15 +134,9 @@ func Check(ctx context.Context, opts Options) (Result, error) {
 		goarch = runtime.GOARCH
 	}
 	platformKey := PlatformKey(goos, goarch)
-	platform, ok := manifest.Platforms[platformKey]
-	if !ok {
-		return Result{}, fmt.Errorf("update manifest has no platform %q", platformKey)
-	}
-	if strings.TrimSpace(platform.URL) == "" {
-		return Result{}, fmt.Errorf("update manifest platform %q has empty url", platformKey)
-	}
-	if strings.TrimSpace(platform.Checksum) == "" {
-		return Result{}, fmt.Errorf("update manifest platform %q has empty checksum", platformKey)
+	platform, platformErr := manifestPlatform(manifest, platformKey)
+	if platformErr != nil && (opts.Download == nil || opts.AutoDownload) {
+		return Result{}, platformErr
 	}
 
 	currentVersion := NormalizeVersion(opts.CurrentVersion)
@@ -150,9 +156,15 @@ func Check(ctx context.Context, opts Options) (Result, error) {
 		Mandatory:      manifest.Mandatory,
 		ReleaseDate:    strings.TrimSpace(manifest.ReleaseDate),
 		ReleaseNotes:   manifest.ReleaseNotes,
-		AssetURL:       strings.TrimSpace(platform.URL),
-		AssetSize:      platform.Size,
-		Checksum:       strings.TrimSpace(platform.Checksum),
+	}
+	if platformErr == nil {
+		result.AssetURL = strings.TrimSpace(platform.URL)
+		result.AssetSize = platform.Size
+		result.Checksum = strings.TrimSpace(platform.Checksum)
+	}
+	if opts.Download != nil {
+		download := SelectDownload(ctx, manifest, *opts.Download, opts.ReleaseBaseURL, channel, opts.UserAgent)
+		result.Download = &download
 	}
 
 	if !result.ChannelSwitch {
@@ -179,6 +191,21 @@ func Check(ctx context.Context, opts Options) (Result, error) {
 		result.DownloadPath = downloadPath
 	}
 	return result, nil
+}
+
+// manifestPlatform is the manifest's file for platformKey, complete enough to update from.
+func manifestPlatform(manifest Manifest, platformKey string) (Platform, error) {
+	platform, ok := manifest.Platforms[platformKey]
+	if !ok {
+		return Platform{}, fmt.Errorf("update manifest has no platform %q", platformKey)
+	}
+	if strings.TrimSpace(platform.URL) == "" {
+		return Platform{}, fmt.Errorf("update manifest platform %q has empty url", platformKey)
+	}
+	if strings.TrimSpace(platform.Checksum) == "" {
+		return Platform{}, fmt.Errorf("update manifest platform %q has empty checksum", platformKey)
+	}
+	return platform, nil
 }
 
 func FetchManifest(ctx context.Context, manifestURL string, userAgent string) (Manifest, error) {

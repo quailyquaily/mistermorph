@@ -404,3 +404,79 @@ func TestHandleAutoUpdateCheckOtherChannel(t *testing.T) {
 		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
+
+// The Console asks for its own machine's download: an Android phone talking
+// to a server gets the APK from the release, never the server's own binary.
+func TestHandleAutoUpdateCheckDownloadForTheClient(t *testing.T) {
+	serverKey := updatecheck.PlatformKey(runtime.GOOS, runtime.GOARCH)
+	var base string
+	base = testhttp.WithDefaultTransport(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		channel := updatecheck.BuildChannel()
+		switch r.URL.Path {
+		case "/update.json":
+			_ = json.NewEncoder(w).Encode(updatecheck.Manifest{
+				Version: "0.2.42",
+				Platforms: map[string]updatecheck.Platform{
+					serverKey:       {URL: base + "/server.tar.gz", Size: 1, Checksum: "sha256:" + strings.Repeat("a", 64)},
+					"windows-amd64": {URL: base + "/MrMorph-windows-amd64.zip", Size: 2, Checksum: "sha256:" + strings.Repeat("b", 64)},
+				},
+			})
+		case "/" + channel + "/releases/v0.2.42/release.json":
+			_ = json.NewEncoder(w).Encode(updatecheck.Release{Channel: channel, Tag: "v0.2.42", Files: []updatecheck.ReleaseFile{
+				{Name: "MrMorph-android.apk", URL: base + "/MrMorph-android.apk", Size: 3},
+				{Name: "MrMorph-android.apk.sha256", URL: base + "/MrMorph-android.apk.sha256", Size: 90},
+			}})
+		case "/MrMorph-android.apk.sha256":
+			_, _ = fmt.Fprintf(w, "%s  MrMorph-android.apk\n", strings.Repeat("c", 64))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	previousManifestURL, previousReleaseBaseURL := autoUpdateManifestURL, autoUpdateReleaseBaseURL
+	autoUpdateManifestURL, autoUpdateReleaseBaseURL = base+"/update.json", base
+	t.Cleanup(func() {
+		autoUpdateManifestURL, autoUpdateReleaseBaseURL = previousManifestURL, previousReleaseBaseURL
+	})
+	setAutoUpdateTestConfig(t, "auto_update:\n  enabled: false\n")
+
+	check := func(query string) updatecheck.Result {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/settings/auto-update/check"+query, nil)
+		rec := httptest.NewRecorder()
+		(&server{cfg: serveConfig{version: "0.2.41"}}).handleAutoUpdateCheck(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d (%s)", query, rec.Code, rec.Body.String())
+		}
+		var payload updatecheck.Result
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		return payload
+	}
+
+	android := check("?download_os=android")
+	if android.Download == nil || android.Download.Status != updatecheck.DownloadAvailable ||
+		android.Download.URL != base+"/MrMorph-android.apk" || android.Download.Checksum != "sha256:"+strings.Repeat("c", 64) {
+		t.Fatalf("android download = %#v, want the APK", android.Download)
+	}
+	// The server's own update target is unchanged.
+	if android.Platform != serverKey || android.AssetURL != base+"/server.tar.gz" {
+		t.Fatalf("server platform = %q %q, want %s", android.Platform, android.AssetURL, serverKey)
+	}
+
+	windows := check("?download_os=windows&download_arch=amd64")
+	if windows.Download == nil || windows.Download.Status != updatecheck.DownloadAvailable || windows.Download.Platform != "windows-amd64" {
+		t.Fatalf("windows download = %#v, want windows-amd64", windows.Download)
+	}
+
+	unknown := check("?download_os=")
+	if unknown.Download == nil || unknown.Download.Status != updatecheck.DownloadUnavailable || unknown.Download.Reason != updatecheck.DownloadUnknownPlatform {
+		t.Fatalf("unknown download = %#v, want unavailable: unknown platform", unknown.Download)
+	}
+
+	// Callers that send no target get the answer they always got.
+	legacy := check("")
+	if legacy.Download != nil || legacy.AssetURL != base+"/server.tar.gz" {
+		t.Fatalf("legacy answer = %#v, want no download block", legacy)
+	}
+}
