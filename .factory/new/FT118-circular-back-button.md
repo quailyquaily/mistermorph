@@ -33,3 +33,15 @@ Tests: configured gofmt/vet/go test gate passed, independently verified by manag
 Visual check: Chrome Chat hover screenshot shows the square-to-circle change with centered arrow; rest screenshots identical as expected for an unfilled plain button. Not manually checked: real Android device, desktop native app, dark mode, keyboard-focus appearance, Skill store desktop and Audit ledger screenshots. Automated light/dark and Android-platform layout checks passed. Review should examine these remaining manual checks and the pre-existing flaky drum test.
 Push: initial credential-helper request lacked repository path; adding per-command credential.useHttpPath=true succeeded. No persistent credential/settings changes.
 Moved new/ → review/ for review; not merged or deployed.
+
+## factory · review · 2026-11-14 20:12
+head: e2edf50a32fe63212418d6a818b8d66d45faf0af
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/chat-composer-drum.test.tsx:43: The required full nsh suite failed (936/938 passed; linux and android cases report `expected 0 to be 1`). Obtain a passing required suite before promotion; if baseline flakiness still blocks it, record the evidence for the owner rather than make unrelated composer changes. This is a factory test-gate failure, not a defect introduced by FT118.
+notes:
+- Claude Code reviewed origin/master...HEAD, merge base 45c12569, all six changed files; no introduced code defects found. Navigation, accessible labels, sizing and circle styling retained. All 16 mobile-back-button and Audit tests passed.
+- Configured gofmt/vet/go test gate passed; nsh check passed. Full nsh suite failed as above. Isolated drum test repeated three times each failed 1/3 on baseline 45c12569 and 1/3 on HEAD, confirming an existing intermittent failure. Factory review policy treats failing required tests as P1 even when pre-existing.
+- Installs: none. No tracked changes or commits from review.
+- Not visually verified in this review: real Android hardware, native desktop, dark mode appearance, keyboard focus and rendered circular shape. Test coverage validates classes and geometry, not actual rendered screenshots.
+- Round 1 of 3: moved review/ → new/ for a follow-up build. No code pushed, merged or deployed.
