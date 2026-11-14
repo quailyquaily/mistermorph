@@ -54,3 +54,15 @@ notes:
 - Installs: none. No code changes or commits made by reviewer; worktree clean.
 - Real Android system UI, real mobile browsers, keyboard-up visuals, dark theme and on-device open/close animation remain unchecked.
 - No linked GitHub issues or PRs. Moved review/ → new/ for fix round 2 (round 1 of max 3).
+
+## factory · review · 2026-11-14 20:42
+head: 6e4b1c34637dd07ec637dfed5fee1d0a9e711e75
+verdict: pass
+notes:
+- Review by Claude Code in the owner's session, at the owner's request; the owner then asked for the move to ready/. No fix round was built: the round 1 finding was the test gate, not this item's code.
+- The branch now holds master (merge 6e4b1c34 of f9e8da5e, no conflicts) over the item's one commit 31d49d34.
+- No defects found in the 7 changed source files against master. Traced who takes the bottom inset on Android phones in every case (keyboard up, navigation strip, open workbench, the page column's foot): it is taken once and never dropped, on login and standalone pages too. Wide windows and desktop are unchanged. In phone browsers the sheet pads itself by the bottom inset and by the side insets less its 8pt margin.
+- Go gate (gofmt, go vet ./..., go test ./...) passed on this head. `nsh check` passed.
+- Console suite on this head: web/console-nsh/scripts/test.sh, which master now has (one `nsh test` per file, several at a time; a file that failed runs once more alone): 109 files, 0 failed. The serial `nsh test --web-host tests/noHost.js` run was still going when this was written, with no failure so far.
+- The round 1 P1: chat-composer-drum counts the drum in the frame right after a keypress and misses it on a busy machine. It fails the same way on master and passes alone; this item does not touch it. The avatar-preview failure did not recur.
+- Still unchecked: a real Android device's system bars, real phone browsers, keyboard-up visuals, dark theme, and the open and close animation on a device.
