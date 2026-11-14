@@ -25,6 +25,10 @@ func TestCodexTurnWaitsForSubAgents(t *testing.T) {
 	activity := func(kind, id string) string {
 		return fmt.Sprintf(`{"type":"event_msg","payload":{"type":"sub_agent_activity","kind":%q,"agent_thread_id":%q,"agent_path":"/root/%s"}}`+"\n", kind, id, id)
 	}
+	// Codex 0.169 records the activity as a completed item.
+	item := func(kind, id string) string {
+		return fmt.Sprintf(`{"type":"event_msg","payload":{"type":"item_completed","turn_id":"t1","item":{"type":"SubAgentActivity","kind":%q,"agent_thread_id":%q,"agent_path":"/root/%s"}}}`+"\n", kind, id, id)
+	}
 	task := started("t1") + `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"task"}]}}` + "\n"
 
 	// Each step appends to rollouts by thread ("parent" or a sub-agent's ID), moves the clock,
@@ -47,6 +51,11 @@ func TestCodexTurnWaitsForSubAgents(t *testing.T) {
 			{write: map[string]string{"parent": task + activity("started", "a"), "a": started("x")}},
 			{write: map[string]string{"parent": complete("t1", "started a")}},
 			{write: map[string]string{"a": complete("x", "a done")}, done: true, reply: "started a\n\n[Sub-agent /root/a finished after this reply]\na done"},
+		}},
+		{"activity recorded as an item", []step{
+			{write: map[string]string{"parent": task + item("started", "a"), "a": started("x")}},
+			{write: map[string]string{"parent": complete("t1", "started a")}},
+			{write: map[string]string{"a": complete("x", "KIWI"), "parent": item("completed", "a")}, done: true, reply: "started a\n\n[Sub-agent /root/a finished after this reply]\nKIWI"},
 		}},
 		{"parent woken by it", []step{
 			{write: map[string]string{"parent": task + activity("started", "a"), "a": started("x")}},

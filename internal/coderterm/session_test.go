@@ -121,8 +121,29 @@ func TestTranscriptWaitsForThisTurnsFinalMessage(t *testing.T) {
 }
 
 func TestTranscriptWaitsForBackgroundAgents(t *testing.T) {
+	// Reports name the work by its task ID (here "t-" and the tool call's); an agent's later
+	// reports leave the tool call out.
 	notification := func(id string) string {
 		return "<task-notification>\n<task-id>t-" + id + "</task-id>\n<tool-use-id>" + id + "</tool-use-id>\n<status>completed</status>\n</task-notification>"
+	}
+	const waiting = `<task-notification>
+<task-id>t-a</task-id>
+<tool-use-id>a</tool-use-id>
+<status>completed</status>
+<summary>Agent "Sleep" is waiting on its own background work</summary>
+<note>This agent stopped with background work of its own still running. It may resume on its own when that work completes or reports, and the same task-id notifies again if it does; the result below may be interim.</note>
+<result>not yet</result>
+</task-notification>`
+	const finished = `<task-notification>
+<task-id>t-a</task-id>
+<status>completed</status>
+<summary>Agent "Sleep" finished</summary>
+<result>PINEAPPLE</result>
+</task-notification>`
+	report := func(text string) string {
+		queue, _ := json.Marshal(map[string]any{"type": "queue-operation", "operation": "enqueue", "content": text})
+		turn, _ := json.Marshal(map[string]any{"type": "user", "turnOrigin": "task_notification", "message": map[string]any{"content": text}})
+		return string(queue) + "\n" + string(turn) + "\n"
 	}
 	queued := func(id string) string {
 		line, _ := json.Marshal(map[string]any{"type": "queue-operation", "operation": "enqueue", "content": notification(id)})
@@ -137,7 +158,7 @@ func TestTranscriptWaitsForBackgroundAgents(t *testing.T) {
 {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"` + id + `","content":"launched"}]},"toolUseResult":` + result + `}
 `
 	}
-	const agent = `{"isAsync":true,"status":"async_launched","agentId":"a1"}`
+	agent := func(id string) string { return `{"isAsync":true,"status":"async_launched","agentId":"t-` + id + `"}` }
 	ended := func(id, text string) string {
 		return `{"type":"assistant","message":{"id":"end-` + id + `","content":[{"type":"text","text":"` + text + `"}],"stop_reason":"end_turn"}}
 `
@@ -149,26 +170,33 @@ func TestTranscriptWaitsForBackgroundAgents(t *testing.T) {
 		name  string
 		steps []string // the transcript as it grows; done only after the last
 	}{
-		{"agent", []string{start + launched("a", agent) + ended("1", "LAUNCHED"), queued("a") + woken("a") + ended("2", "FINAL")}},
+		{"agent", []string{start + launched("a", agent("a")) + ended("1", "LAUNCHED"), queued("a") + woken("a") + ended("2", "FINAL")}},
+		{"agent that waits on its own background work reports twice", []string{
+			start + launched("a", agent("a")) + ended("1", "LAUNCHED"),
+			report(waiting) + ended("2", "not yet, it will report again"),
+			// Its own command's report passes through the queue on its way to the agent.
+			queued("its-command"),
+			report(finished) + ended("3", "FINAL"),
+		}},
 		{"report queued before its turn is written", []string{
-			start + launched("a", agent) + ended("1", "LAUNCHED"),
+			start + launched("a", agent("a")) + ended("1", "LAUNCHED"),
 			queued("a"),
 			woken("a") + ended("2", "FINAL"),
 		}},
 		{"two agents", []string{
-			start + launched("a", agent) + launched("b", agent) + ended("1", "LAUNCHED"),
+			start + launched("a", agent("a")) + launched("b", agent("b")) + ended("1", "LAUNCHED"),
 			queued("a") + woken("a") + ended("2", "one back"),
 			queued("b") + woken("b") + ended("3", "FINAL"),
 		}},
-		{"report absorbed mid-turn", []string{start + launched("a", agent) + `{"type":"assistant","message":{"id":"w","content":[{"type":"tool_use","id":"x","name":"Bash"}],"stop_reason":"tool_use"}}
+		{"report absorbed mid-turn", []string{start + launched("a", agent("a")) + `{"type":"assistant","message":{"id":"w","content":[{"type":"tool_use","id":"x","name":"Bash"}],"stop_reason":"tool_use"}}
 ` + queued("a") + `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"x","content":"ok"}]}}
 ` + ended("2", "FINAL")}},
-		{"report before launch", []string{start + queued("a") + launched("a", agent) + ended("2", "FINAL")}},
+		{"report before launch", []string{start + queued("a") + launched("a", agent("a")) + ended("2", "FINAL")}},
 		{"command timed out into the background", []string{
-			start + launched("c", `{"stdout":"","backgroundTaskId":"b1","timedOutAfterMs":120000}`) + ended("1", "waiting on tests"),
+			start + launched("c", `{"stdout":"","backgroundTaskId":"t-c","timedOutAfterMs":120000}`) + ended("1", "waiting on tests"),
 			queued("c") + woken("c") + ended("2", "FINAL"),
 		}},
-		{"server run in the background", []string{start + launched("s", `{"stdout":"","backgroundTaskId":"b2"}`) + ended("2", "FINAL")}},
+		{"server run in the background", []string{start + launched("s", `{"stdout":"","backgroundTaskId":"t-s"}`) + ended("2", "FINAL")}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
