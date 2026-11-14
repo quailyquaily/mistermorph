@@ -34,7 +34,7 @@ func toUniaiCacheControlForProvider(provider, model string, ctrl llm.CacheContro
 func adaptRequestForProvider(req llm.Request, provider, model, cacheTTL string) llm.Request {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "anthropic":
-		return req
+		return markConversationTail(req)
 	case "bedrock":
 		// uniai's Bedrock provider takes cache points on message parts only, and only for
 		// Claude model ARNs; any other ARN rejects the whole request.
@@ -47,6 +47,63 @@ func adaptRequestForProvider(req llm.Request, provider, model, cacheTTL string) 
 	default:
 		return stripExplicitCacheControl(req, true, true, true)
 	}
+}
+
+// anthropicMaxCacheMarks is how many cache marks Anthropic takes in one request.
+const anthropicMaxCacheMarks = 4
+
+// markConversationTail marks the last message of a request that already has cache marks, with
+// their TTL. Anthropic writes its cache only at marks. The engine marks the system prompt and the
+// last message of the earlier conversation, so everything after those was sent uncached in every
+// request: the run's metadata, the current message and each tool call and result so far, which is
+// most of a long run's input. With the last message marked too, each step reads what the step
+// before it sent, and writes only what is new.
+func markConversationTail(req llm.Request) llm.Request {
+	var ctrl *llm.CacheControl
+	marks := 0
+	for _, tool := range req.Tools {
+		if tool.CacheControl != nil {
+			marks++
+		}
+	}
+	for _, msg := range req.Messages {
+		for _, part := range msg.Parts {
+			if part.CacheControl != nil {
+				marks++
+				if ctrl == nil {
+					ctrl = part.CacheControl
+				}
+			}
+		}
+	}
+	last := len(req.Messages) - 1
+	if ctrl == nil || marks >= anthropicMaxCacheMarks || last < 0 {
+		return req
+	}
+	msg := req.Messages[last]
+	if strings.EqualFold(strings.TrimSpace(msg.Role), "system") {
+		return req
+	}
+	parts := append([]llm.Part(nil), msg.Parts...)
+	if len(parts) == 0 && strings.TrimSpace(msg.Content) != "" {
+		parts = []llm.Part{{Type: llm.PartTypeText, Text: msg.Content}}
+	}
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i].CacheControl != nil {
+			return req // Already marked: the earlier conversation ends the request.
+		}
+		if parts[i].Type != llm.PartTypeText || strings.TrimSpace(parts[i].Text) == "" {
+			continue
+		}
+		mark := *ctrl
+		parts[i].CacheControl = &mark
+		msg.Parts = parts
+		messages := append([]llm.Message(nil), req.Messages...)
+		messages[last] = msg
+		req.Messages = messages
+		return req
+	}
+	return req
 }
 
 // bedrockModelSupportsCachePoints mirrors uniai's Bedrock check on the configured model ARN.

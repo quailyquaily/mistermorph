@@ -33,7 +33,9 @@ func TestHistoryCacheBreakpointsReachHTTP(t *testing.T) {
 		{"openai_resp", "gpt-6.1-sol", "long", "prompt_cache_breakpoint", 2},
 		{"openai_resp", "openai/gpt-6.1-sol", "short", "prompt_cache_breakpoint", 2},
 		{"openai_resp", "models/GPT-6.1-SOL-2026-10-01", "short", "prompt_cache_breakpoint", 2},
-		{"anthropic", "claude-sonnet-4-6", "short", "cache_control", 2},
+		// Anthropic: the system prompt, the earlier conversation's last message, and the request's
+		// last message (markConversationTail).
+		{"anthropic", "claude-sonnet-4-6", "short", "cache_control", 3},
 		{"openai", "gpt-5.5", "short", "", 0},
 		{"openai_resp", "gpt-5.5", "short", "", 0},
 		{"openai", "gpt-5.6", "off", "", 0},
@@ -113,7 +115,9 @@ func TestHistoryCacheBreakpointsReachHTTP(t *testing.T) {
 				if tc.marker != "" {
 					for _, message := range messages {
 						text := string(message)
-						wantMarker := strings.Contains(text, "stable-system") || strings.Contains(text, "last-history")
+						wantMarker := strings.Contains(text, "stable-system") || strings.Contains(text, "last-history") ||
+							// Anthropic also takes one on the request's last message.
+							(tc.provider == "anthropic" && strings.Contains(text, "current-input"))
 						if strings.Contains(text, `"`+tc.marker+`"`) != wantMarker {
 							t.Fatalf("cache marker on wrong message: %s", text)
 						}

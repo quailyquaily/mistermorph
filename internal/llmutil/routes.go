@@ -530,13 +530,25 @@ func runtimeValuesForNamedProfile(shared RuntimeValues, profile ProfileConfig) R
 
 func resolveProfileValues(values RuntimeValues, profileName string) (RuntimeValues, error) {
 	if profileName == "" || profileName == RouteProfileDefault {
-		return runtimeValuesForDefaultProfile(values), nil
+		return withDefaultCacheTTL(runtimeValuesForDefaultProfile(values)), nil
 	}
 	profile, ok := values.Profiles[profileName]
 	if !ok {
 		return RuntimeValues{}, &MissingProfileError{Profile: profileName}
 	}
-	return runtimeValuesForNamedProfile(values, profile), nil
+	return withDefaultCacheTTL(runtimeValuesForNamedProfile(values, profile)), nil
+}
+
+// withDefaultCacheTTL turns prompt caching on for Anthropic when cache_ttl is not set. Anthropic
+// caches only what a request marks, and the marks are sent only with a cache_ttl: a profile
+// without one, as the Console makes them, sent every request whole, at full price. "off" still
+// turns it off.
+func withDefaultCacheTTL(values RuntimeValues) RuntimeValues {
+	if strings.TrimSpace(values.CacheTTL) == "" &&
+		(strings.EqualFold(strings.TrimSpace(values.Provider), "anthropic") || strings.EqualFold(strings.TrimSpace(values.InferenceProvider), "anthropic")) {
+		values.CacheTTL = "short"
+	}
+	return values
 }
 
 func profileSource(values RuntimeValues, profileName string) string {

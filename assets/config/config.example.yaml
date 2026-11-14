@@ -82,6 +82,9 @@ llm:
   # For these models, non-off values keep implicit caching and explicit breakpoints.
   # Codex: off skips the automatic session cache key; other values do not set a TTL.
   # Codex uses the session cache key for its session routing headers as well.
+  # Anthropic caches only what a request marks: with a non-off value the system prompt, the
+  # earlier conversation and the request's last message are marked (5m for short, 1h for long).
+  # An Anthropic profile that leaves cache_ttl unset uses "short"; set "off" to send no marks.
   cache_ttl: "short"
   # Optional prefix added to generated prompt_cache_key values for providers that support it.
   # Change this value to force a new cache group during testing.
