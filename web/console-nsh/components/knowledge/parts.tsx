@@ -82,7 +82,7 @@ export function Note(props: { text: string; class?: string; testID?: string }) {
 
 /**
  * The search field at the top of an index or a grid. Memories uses the plain 32pt field (AppInput,
- * 12pt text); Skills and the store add the magnifier. Topics and Contacts use `IndexSearch`.
+ * 12pt text); Skills and the store add the magnifier. Topics, Contacts and Settings use `IndexSearch`.
  */
 export function SearchField(props: {
   value: string;
@@ -123,7 +123,7 @@ export function indexSearchMetrics(mobile: boolean) {
 }
 
 /**
- * The search at the top of the Topics and Contacts lists, one field for both: a 14pt text field
+ * The search at the top of the Topics, Contacts and Settings lists, one field for all: a 14pt text field
  * with the magnifier and a clear button, 38pt tall on a desktop and 44pt (a touch target) on a
  * phone, as wide as the column less its gutters. Escape empties it while it has the focus and holds
  * text. It owns its spacing and gutters: make it the list's first view (outside any gutter of the
@@ -138,6 +138,12 @@ export function IndexSearch(props: {
   testID: string;
   /** The field, to focus it (a keyboard shortcut). */
   inputRef?: (node: InputRef) => void;
+  /** Enter in the field (Settings opens its first result). */
+  onSubmit?: (text: string) => void;
+  /** Called after the clear button emptied the field. */
+  onClear?: () => void;
+  /** The clear button's accessible name (default "Clear"). */
+  clearLabel?: string;
 }) {
   const metrics = () => indexSearchMetrics(props.mobile ?? isMobile());
   const focused = signal(false);
@@ -158,6 +164,7 @@ export function IndexSearch(props: {
       <TextField
         value={props.value}
         onChange={(value) => props.onChange(value)}
+        onSubmit={(text) => props.onSubmit?.(text)}
         onFocus={() => focused.set(true)}
         onBlur={() => focused.set(false)}
         placeholder={props.placeholder}
@@ -165,6 +172,8 @@ export function IndexSearch(props: {
         leadingIcon="PhMagnifyingGlass"
         size={metrics().size}
         clearable
+        onClear={() => props.onClear?.()}
+        clearLabel={props.clearLabel}
         testID={props.testID}
         inputRef={(node) => props.inputRef?.(node)}
       />

@@ -624,6 +624,8 @@ export interface TextFieldProps {
   clearable?: boolean;
   /** Called after the clear button emptied the field. */
   onClear?: () => void;
+  /** The clear button's accessible name (default "Clear"). */
+  clearLabel?: string;
   class?: string;
   inputClass?: string;
   testID?: string;
@@ -695,7 +697,7 @@ export function TextField(props: TextFieldProps) {
               props.onChange?.("");
               props.onClear?.();
             }}
-            accessibilityLabel="Clear"
+            accessibilityLabel={props.clearLabel || "Clear"}
             testID={props.testID ? `${props.testID}-clear` : undefined}
             class="group mr-[5px] items-center justify-center rounded-(--radius) transition-colors duration-180 hover:bg-hover active:bg-press"
             style={{ width: CLEAR_SIZES[props.size ?? "md"], height: CLEAR_SIZES[props.size ?? "md"] }}
