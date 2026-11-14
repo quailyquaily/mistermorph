@@ -13,7 +13,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `App.tsx` | Boot (host data, session, language), router start, the frame |
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
-| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker, voice input and task notifications through the native part |
+| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the pickers (Gallery: the photo picker; File: the document picker), voice input and task notifications through the native part |
 | `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) and the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) |
 | `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
@@ -272,6 +272,12 @@ Headless tests prove behaviour, not the look.
   renders after a press handler): a focus asked for in the same handler goes to the composer that
   was there before, or to none. Ask a microtask later, for the one there then
   (`focusComposerOnEntry`). Headless runs render at once and pass either way; check in Chrome.
+- Headless on the system clock, a step returns once its native animations ended and no batch came
+  for 100 ms, without waiting for what the animation's promise does next: whether the render that
+  follows (a view that shows only while the animation runs) came before the next `count` was a race
+  (the composer drum tests failed about one run in three, and were removed). Test such a view by
+  holding the animation's promise in the fixture, not by counting after the step; on a manual
+  clock, steps finish the animation and its follow-up both, so the view is never seen.
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
   then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
   blurs it and lowers the keyboard as it closes, and focuses it as it opens, selecting its text
@@ -364,8 +370,10 @@ Headless tests prove behaviour, not the look.
 - The packaged app gets no `usesCleartextTraffic`, and its `fetch` goes through HttpURLConnection,
   which then refuses `http://`: `scripts/build-android.sh` runs `nsh package` with an SDK whose
   `aapt2` adds it, for console servers on the local network.
-- 0.4.0 has the photo picker but no `Picker.pickFiles` and no `Notifications`: the Android app
-  attaches images only. Avatars (crop and re-encode) and saving files are not available there yet;
+- 0.4.0 had the photo picker but no `Picker.pickFiles`; 0.5.0 has both (`pickFiles` is Android's
+  `ACTION_OPEN_DOCUMENT`), so the phone's Upload files asks Gallery or File (`AttachSourceSheet`)
+  and `lib/mobileHost.ts` takes the matching picker. Headless tests answer either with
+  `app.onPick` (`pick.kind` says which). There are still no `Notifications`. Avatars (crop and re-encode) and saving files are not available there yet;
   they say so. Task notifications come from the app's own Java (a JobScheduler job reading
   `/api/notifications/events` while the app is away: the page, and its socket, are suspended then);
   see `docs/feat/feat_20261110_android_task_notifications.md`.

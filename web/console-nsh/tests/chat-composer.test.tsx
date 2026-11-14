@@ -382,10 +382,16 @@ test("on a phone the add menu lowers the keyboard, and closing it gives the fiel
   await app.keyboard.press("shift+1");
   await app.waitUntil(() => app.value("id:chat-composer-input") === "half a thought!");
 
-  // Upload goes on to the photo picker: the keyboard stays down, the draft stays.
+  // Upload asks Gallery or File (a sheet), then goes on to that picker: the keyboard stays down,
+  // the draft stays.
   await app.press("id:chat-composer-add");
   await app.press("text:Upload Files");
+  await app.waitFor("id:chat-attach-source-gallery");
+  expect(await fieldFocused(app)).toBe(false);
+  await app.press("id:chat-attach-source-gallery");
   await app.waitUntil(() => app.picks().length === 1);
+  expect(app.picks()[0].kind).toBe("images");
+  await app.waitFor("id:chat-attach-source-gallery", { state: "gone" });
   expect(await fieldFocused(app)).toBe(false);
   expect(app.value("id:chat-composer-input")).toBe("half a thought!");
 });

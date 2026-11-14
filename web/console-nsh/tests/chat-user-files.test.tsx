@@ -2,12 +2,17 @@
 // as a text-only bubble is, so its edge and its corners (14pt round, 2pt at the top right) stay
 // whole: it used to be a rounded top box with a second box hung beneath it for the files, and the
 // rows' square hover/pressed fill reached the edge, covering the round bottom corners. Now the rows
-// sit inset in the frame and round the corners they share with it (concentric), a message of files
-// alone has no blank text block, long names stay inside, and the rows still preview their file and
-// copy still copies, on a desktop and on a phone. The fixture: tests/fixtures/chat-user-files-app.tsx.
+// sit inset in the frame, a message of files alone has no blank text block, long names stay inside,
+// and the rows still preview their file and copy still copies, on a desktop and on a phone.
+// FT110: each file is a pill (filePill.ts), round at both ends as the one-row composer, 4pt apart,
+// and its name alone says its type (no type label at its right). Its ends (half its height) are
+// rounder than the 10pt concentric with the bubble's corners, so it stays inside the curve.
+// The fixture: tests/fixtures/chat-user-files-app.tsx.
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
-import { BUBBLE_CLASS, FILES_CLASS, fileRowCornerClass } from "../components/chat/userBubble";
+import { BUBBLE_CLASS, FILES_CLASS } from "../components/chat/userBubble";
+import { draftFilePillClass, FILE_PILL_SHAPE, SENT_FILE_PILL_CLASS } from "../components/chat/filePill";
+import { COMPOSER_RADIUS } from "../components/chat/composerField";
 
 type Frame = { x: number; y: number; w: number; h: number };
 
@@ -55,21 +60,20 @@ const rows = (all: Record<string, Frame>, region: string) =>
     .sort((a, b) => Number(a.split("-").pop()) - Number(b.split("-").pop()))
     .map((key) => all[key]);
 
-test("the bubble is one frame with the text-only shape; file rows round only the corners they share", () => {
+test("the bubble is one frame with the text-only shape; its file pills are round at both ends", () => {
   // One frame: 14pt corners with the 2pt top right, a whole border, never a cut bottom edge.
   expect(BUBBLE_CLASS).toContain("rounded-[14px] rounded-tr-[2px] border ");
   expect(/rounded-b-none|border-b-0|border-t-0/.test(BUBBLE_CLASS)).toBe(false);
-  // The rows' block is inset 4pt at the sides, 3pt at the ends (+ the 1pt border: 14 - 4 = 10).
-  expect(FILES_CLASS).toBe("px-1 py-[3px]");
-  // Under text: only the last row rounds, its bottom corners.
-  expect(fileRowCornerClass(0, 1, true)).toBe("rounded-(--radius) rounded-b-[10px]");
-  expect(fileRowCornerClass(0, 3, true)).toBe("rounded-(--radius)");
-  expect(fileRowCornerClass(1, 3, true)).toBe("rounded-(--radius)");
-  expect(fileRowCornerClass(2, 3, true)).toBe("rounded-(--radius) rounded-b-[10px]");
-  // Files alone: the first row also takes the top left (the top right is the 2pt tail).
-  expect(fileRowCornerClass(0, 1, false)).toBe("rounded-(--radius) rounded-tl-[10px] rounded-b-[10px]");
-  expect(fileRowCornerClass(0, 2, false)).toBe("rounded-(--radius) rounded-tl-[10px]");
-  expect(fileRowCornerClass(1, 2, false)).toBe("rounded-(--radius) rounded-b-[10px]");
+  // The pills' block is inset 4pt at the sides, 3pt at the ends (+ the 1pt border: 14 - 4 = 10), 4pt between pills.
+  expect(FILES_CLASS).toBe("gap-1 px-1 py-[3px]");
+  // Sent and draft pills share the composer's full curvature (half their height, as COMPOSER_RADIUS
+  // is half the one-row composer's), never the 2pt ui-kit corners.
+  expect(COMPOSER_RADIUS).toBe(27);
+  expect(FILE_PILL_SHAPE).toBe("rounded-full");
+  for (const pill of [SENT_FILE_PILL_CLASS, draftFilePillClass(false), draftFilePillClass(true)]) {
+    expect(pill).toContain(` ${FILE_PILL_SHAPE} `);
+    expect(/rounded-\(--radius\)|rounded-\[2px\]|rounded-(t|b|l|r|tl|tr|bl|br)-/.test(pill)).toBe(false);
+  }
 });
 
 for (const item of WIDTHS) {
@@ -88,9 +92,12 @@ for (const item of WIDTHS) {
     expect(near(text.y, bubble.y + 1)).toBe(true);
     expect(near(files.y, bottom(text))).toBe(true);
     expect(near(bottom(files), bottom(bubble) - 1)).toBe(true);
-    // The row stays 4pt in from the bubble's sides and its bottom (1pt border + the block's padding).
+    // The row stays 4pt in from the bubble's sides and its bottom (1pt border + the block's padding),
+    // and its round ends (half its height) are rounder than the 10pt concentric with the bubble's
+    // corners there: its border and fill stay inside the curve.
     const [row] = rows(all, "text-file");
     expectInside(row, bubble, "row", 5, 4);
+    expect(row.h / 2).toBeGreaterThanOrEqual(10);
     // A text-only bubble is just its text block in the same frame.
     expect(near(all["text:bubble"].h, all["text:text"].h + 2)).toBe(true);
     expect(app.count("id:v-text >> id:chat-user-files")).toBe(0);
@@ -120,13 +127,14 @@ for (const item of WIDTHS) {
     for (const [index, row] of list.entries()) {
       expectInside(row, bubble, `row ${index}`, 5, 1);
       expect(near(row.w, list[0].w)).toBe(true);
-      if (index > 0) expect(near(row.y, bottom(list[index - 1]))).toBe(true);
+      if (index > 0) expect(near(row.y, bottom(list[index - 1]) + 4)).toBe(true);
     }
     expect(bottom(list[3])).toBeLessThanOrEqual(bottom(bubble) - 4 + 0.5);
-    // Names and kinds still show (the long ones ellipsized on one line).
+    // Names still show (the long ones ellipsized on one line), with their extensions; the type
+    // labels that repeated them at the pills' right are gone.
     const texts = app.texts();
     for (const name of ["notes.md", "README"]) expect(texts.includes(name)).toBe(true);
-    for (const kind of ["MD", "PNG", "PDF"]) expect(texts.includes(kind)).toBe(true);
+    for (const kind of ["MD", "PNG", "PDF"]) expect({ kind, shown: texts.includes(kind) }).toEqual({ kind, shown: false });
   });
 
   test(`on ${item.name} each file row previews its file and copy still copies`, async () => {

@@ -93,6 +93,14 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
       onStop={() => void c.stopActiveTask()}
       onAttach={() => c.openWorkspaceBrowser({ pending: true })}
       onUpload={() => void c.openComposerFilePicker()}
+      onUploadFrom={(source) => void c.openComposerFilePicker(source)}
+      uploadSourceLabels={{
+        title: t("chat_composer_upload_files"),
+        gallery: t("chat_composer_upload_gallery"),
+        galleryHint: t("chat_composer_upload_gallery_hint"),
+        files: t("chat_composer_upload_file"),
+        filesHint: t("chat_composer_upload_file_hint"),
+      }}
       onAttachFiles={(files) => void c.uploadComposerFileList(files)}
       onRetryFile={(item) => c.retryComposerFile(item)}
       onVoice={() => c.voice.toggle()}

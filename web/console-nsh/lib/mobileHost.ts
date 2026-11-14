@@ -6,8 +6,9 @@
 // whose address the user enters on the login page (`setServer` in lib/platform.ts) and which is kept
 // here with the other saved values.
 //
-// What nsh 0.4.0 offers on Android shapes what works: saved values (`Storage`), the app's state
-// (`lifecycle`), the photo picker (`Picker.pickImages`; there is no picker for other files yet) and
+// What nsh 0.5.0 offers on Android shapes what works: saved values (`Storage`), the app's state
+// (`lifecycle`), the system's pickers (`Picker.pickImages`, the photo picker, for a gallery pick;
+// `Picker.pickFiles`, the document picker (`ACTION_OPEN_DOCUMENT`), for files of any type) and
 // `fetch` with `FormData` for uploads. There is no way to save a file, so that reports
 // "unsupported" and the console explains it.
 //
@@ -122,8 +123,9 @@ export function previousEntry(): string {
   return index > 0 ? entries[index - 1] : "";
 }
 
-// Files the user picked: their bytes stay here, as on the web (a File cannot cross the JSON contract).
-const files = new Map<string, File>();
+// Files the user picked: their bytes stay here, as on the web (a File cannot cross the JSON contract),
+// with the preview URL made for an image, which is this host's to revoke when the file is released.
+const files = new Map<string, { file: File; preview: string }>();
 let nextFileID = 1;
 
 /* ---------- voice input (the native part) ---------- */
@@ -271,22 +273,54 @@ function kvSet(data: { area?: string; key?: string; value?: string | null }) {
   return Storage.setItem(key, String(value)).then(() => null);
 }
 
-async function pick(options: { accept?: string; multiple?: boolean }) {
-  const accept = String(options?.accept || "");
-  // nsh 0.4.0 has the photo picker only: images are what the phone app can attach.
-  if (accept && !/image\//i.test(accept) && !/\.(png|jpe?g|gif|webp|heic|bmp)\b/i.test(accept)) {
-    throw new Error("Only images can be attached in the phone app.");
+/** Whether `accept` (a file input's) asks for images alone: `image/*`, image types or image extensions. */
+export function acceptsImagesOnly(accept: string): boolean {
+  const parts = String(accept || "")
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+  return parts.length > 0 && parts.every((part) => part.startsWith("image/") || /^\.(png|jpe?g|gif|webp|heic|heif|avif|bmp)$/.test(part));
+}
+
+/** The extensions of `accept` for the document picker's filter (its MIME types it cannot take). */
+function acceptExtensions(accept: string): string[] {
+  return String(accept || "")
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => /^\.[a-z0-9]+$/.test(part))
+    .map((part) => part.slice(1));
+}
+
+/** Which of nsh's pickers answers a pick: the photo picker for a gallery pick or images alone, else the document picker. */
+export function pickerFor(options: { accept?: string; source?: string }): "images" | "files" {
+  if (options?.source === "gallery") return "images";
+  if (options?.source === "files") return "files";
+  return acceptsImagesOnly(String(options?.accept || "")) ? "images" : "files";
+}
+
+const PREVIEW_TYPES = /^image\/(png|jpe?g|gif|webp|avif|bmp)$/i;
+
+async function pick(options: { accept?: string; multiple?: boolean; source?: string }) {
+  const multiple = Boolean(options?.multiple);
+  let picked: File[];
+  if (pickerFor(options) === "images") {
+    picked = (await Picker.pickImages({ multiple, format: "compatible" })).map(({ file }) => file);
+  } else {
+    const extensions = acceptExtensions(String(options?.accept || ""));
+    picked = (await Picker.pickFiles({ multiple, filters: extensions.length ? [{ name: "Files", extensions }] : null })).map(({ file }) => file);
   }
-  const picked = await Picker.pickImages({ multiple: Boolean(options?.multiple), format: "compatible" });
-  return picked.map(({ file }) => {
+  return picked.map((file) => {
     const id = `m${nextFileID++}`;
-    files.set(id, file);
     let preview = "";
-    try {
-      preview = URL.createObjectURL(file);
-    } catch {
-      // No preview: the console shows the file's name.
+    // An image the console may show before it is sent (SVG is never shown as an image).
+    if (PREVIEW_TYPES.test(String(file.type || ""))) {
+      try {
+        preview = URL.createObjectURL(file);
+      } catch {
+        // No preview: the console shows the file's name.
+      }
     }
+    files.set(id, { file, preview });
     return { id, name: file.name, size: file.size, type: file.type, preview };
   });
 }
@@ -300,7 +334,7 @@ async function upload(data: {
   fields?: Record<string, string>;
   image?: unknown;
 }) {
-  const file = files.get(String(data?.id || ""));
+  const file = files.get(String(data?.id || ""))?.file;
   if (!file) throw new Error("The picked file is no longer available.");
   if (data.image) {
     // Avatars are cropped and re-encoded as WebP by the host; the phone app cannot read pixels.
@@ -320,7 +354,17 @@ async function upload(data: {
 }
 
 function release(data: { id?: string }) {
-  files.delete(String(data?.id || ""));
+  const id = String(data?.id || "");
+  const entry = files.get(id);
+  files.delete(id);
+  // The preview was this host's: nothing shows it once the console let the file go.
+  if (entry?.preview) {
+    try {
+      URL.revokeObjectURL(entry.preview);
+    } catch {
+      // Already gone.
+    }
+  }
   return null;
 }
 
