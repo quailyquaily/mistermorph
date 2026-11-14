@@ -1,7 +1,9 @@
 // The Contacts library on phones: at least three cards a row at 320, 360, 390 and 430pt, the cards
 // compact (ContactCard.tsx) and nothing past the page's or a card's edges, with long names, missing
-// names and avatars, people and agents. Frames come from tests/fixtures/contacts-library-app.tsx
-// (the real page, its `onPartLayout`); the last test opens the whole console as the Android app.
+// names and avatars, people and agents. The library shows one kind at a time (the head's tabs,
+// ContactKindTabs: people first), each kind in the same grid, by contact id while no interaction is
+// recorded. Frames come from tests/fixtures/contacts-library-app.tsx (the real page, its
+// `onPartLayout`); the last test opens the whole console as the Android app.
 import type { App, StubRequest, StubResponse } from "nsh/test";
 import { expect, open, test } from "nsh/test";
 import { openConsole } from "./harness";
@@ -24,8 +26,19 @@ const CONTACTS = [
   { contact_id: "mm:inst_research", nickname: "Research-and-Development-Coordination-Agent-Number-Seventeen", kind: "agent", channel: "console" },
   { contact_id: "discord_user:900000000000000001", nickname: "山田太郎左衛門尉藤原朝臣信長公記編纂委員会", kind: "human", channel: "discord" },
   { contact_id: "tg:1007", nickname: "Bo", kind: "human", channel: "telegram", tg_username: "bo" },
+  { contact_id: "tg:1008", nickname: "Cy", kind: "human", channel: "telegram", tg_username: "cy" },
+  { contact_id: "tg:1009", nickname: "Dee", kind: "human", channel: "telegram", tg_username: "dee" },
 ];
-const IDS = CONTACTS.map((contact) => contact.contact_id);
+/** A tab's cards in the library's order: no interaction is recorded here, so by contact id. */
+const idsOfKind = (kind: string) =>
+  CONTACTS.filter((contact) => contact.kind === kind)
+    .map((contact) => contact.contact_id)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+/** The people: the tab the page opens on. */
+const IDS = idsOfKind("human");
+/** The agents: the other tab. */
+const AGENT_IDS = idsOfKind("agent");
+const TELEGRAM_IDS = IDS.filter((id) => id.startsWith("tg:"));
 const PARTS = ["avatar", "name", "kind", "foot", "handle"];
 const GUTTER = 12;
 
@@ -150,7 +163,6 @@ for (const width of [320, 360, 390, 430]) {
     expect(app.shows("id:contact-row:tg:1004 >> text:Maximilian Alexander von Hohenzollern-Sigmaringen the Third")).toBe(true);
     expect(app.shows("id:contact-row:tg:1004 >> text:HUMAN")).toBe(true);
     expect(app.shows("id:contact-row:tg:1004 >> text:@maximilia…zollern")).toBe(true);
-    expect(app.shows("id:contact-row:mm:inst_research >> text:AGENT")).toBe(true);
     expect(app.shows("id:contact-row:slack:T1:U99 >> text:U99")).toBe(true);
     expect(app.shows("id:contact-row:slack:T1:U99 >> text:Unnamed User")).toBe(true);
 
@@ -162,6 +174,14 @@ for (const width of [320, 360, 390, 430]) {
     await app.waitFor("id:contact-row:tg:1004");
     await app.waitFor("id:contact-detail", { state: "gone" });
     expectGrid(await measured(app, frames), IDS, width, 3, COMPACT);
+
+    // The Agents tab: the same compact grid, from the first column.
+    await app.press("id:contacts-tab-agent");
+    await app.waitFor("id:contact-row:mm:inst_research");
+    await app.waitFor("id:contact-row:tg:1007", { state: "gone" });
+    const agents = expectGrid(await measured(app, frames, AGENT_IDS), AGENT_IDS, width, 3, COMPACT);
+    check(Math.abs(agents.w - first.w) <= 0.5, "an agent's card the width of a person's", { agents, first });
+    expect(app.shows("id:contact-row:mm:inst_research >> text:AGENT")).toBe(true);
   });
 }
 
@@ -169,14 +189,17 @@ test("a filter keeps the compact grid; the cards it leaves close ranks from the 
   const { app, frames } = await openLibrary(390);
   await app.waitFor("id:contact-row:tg:1007");
   const before = (await measured(app, frames))["card:tg:1001"];
-  await app.type("id:contacts-filter", "console");
-  await app.waitFor("id:contact-row:tg:1001", { state: "gone" });
-  const agents = [`mm:${AGENT_INSTANCE}`, "mm:inst_research"];
-  await app.waitUntil(() => Math.abs(frames()[`card:${agents[0]}`].x - GUTTER) <= 0.5);
-  const first = expectGrid(await measured(app, frames, agents), agents, 390, 3, COMPACT);
+  // Among the people, tg:1001 stands in the third column until the filter leaves Telegram's only.
+  check(before.x > GUTTER + before.w, "tg:1001 past the first column", before);
+  await app.type("id:contacts-filter", "telegram");
+  await app.waitFor("id:contact-row:slack:T1:U99", { state: "gone" });
+  await app.waitFor("id:contact-row:discord_user:900000000000000001", { state: "gone" });
+  await app.waitUntil(() => Math.abs(frames()[`card:${TELEGRAM_IDS[0]}`].x - GUTTER) <= 0.5);
+  const first = expectGrid(await measured(app, frames, TELEGRAM_IDS), TELEGRAM_IDS, 390, 3, COMPACT);
   check(Math.abs(first.w - before.w) <= 0.5, "the cards keep their width", { first, before });
   await app.clear("id:contacts-filter");
-  await app.waitFor("id:contact-row:tg:1001");
+  await app.waitFor("id:contact-row:slack:T1:U99");
+  await app.waitUntil(() => Math.abs(frames()["card:tg:1001"].x - before.x) <= 0.5);
   expectGrid(await measured(app, frames), IDS, 390, 3, COMPACT);
 });
 
@@ -256,6 +279,9 @@ test("the Android app's library opens a compact card's contact and comes back", 
   });
   await app.waitFor("id:contact-row:tg:1007");
   expect(app.shows("label:Maximilian Alexander von Hohenzollern-Sigmaringen the Third")).toBe(true);
+  // The agents are on their own tab.
+  await app.press("id:contacts-tab-agent");
+  await app.waitFor("id:contact-row:mm:inst_research");
   await app.press("id:contact-row:mm:inst_research");
   await app.waitFor("id:contact-detail");
   await app.waitFor("text:AGENT · CONSOLE");
