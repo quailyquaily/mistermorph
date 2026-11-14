@@ -116,6 +116,10 @@ func (r *claudeTranscript) state() (string, bool, error) {
 	if r.failure != "" {
 		return r.assistant, false, fmt.Errorf("Claude: %s", r.failure)
 	}
+	if len(r.background) > 0 {
+		// Claude takes another turn when its background work reports.
+		return r.assistant, false, nil
+	}
 	if r.complete && strings.TrimSpace(r.assistant) == "" {
 		// A turn can end on thinking alone; an empty result reads as lost output.
 		return noTextReply, true, nil
