@@ -62,3 +62,15 @@ notes:
 
 ## factory · 2026-11-14 21:09
 Moved new/ → review/ at the owner's explicit request: "move FT112, FT113, FT118 to review/". No code changes or tests run; existing review findings remain recorded. This move is not a passing review or a test-gate waiver.
+
+## factory · review · 2026-11-14 23:53
+head: 9ee0e0f7959fb315efc61a3394f5f300c15c0c3c
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (merge base 2e37a15f), all 14 changed files, against the request and plan. No P0–P3 findings. Independent skills/MCP/Tools save payloads, persistence/defaults, guards, retained route, localized labels, and removal from Tools were checked. Three additional temporary persistence/revision/discard/error-path probes passed and were removed.
+- Required gofmt + go vet ./... + go test ./... gate passed (163 packages ok, 19 without tests). nsh 0.5.0 check passed. Required scripts/test.sh passed: 107 files, 937 tests, 0 failures, no isolated reruns needed. Manager checked successful retained gate/check/suite logs and clean worktree at the reviewed head.
+- The earlier composer-drum gate blocker no longer applies on this head: those tests were removed on master and merged into this branch before this review. No test deletion or code fix was made by this review. Current origin/master is 6d98cf1f; this is a merge-base range review, not validation of a new integration merge. Manager verified a clean merge-tree with current base.
+- Installs: nsh check automatically downloaded TypeScript 7.0.2 into the throwaway cache; no manifest/lockfile changes or system installs. Existing pinned nsh 0.5.0 reused.
+- Not manually checked: actual desktop/mobile browser or Android rendering, label overflow, real reload persistence, and save-bar layout beside an open server pane. Test-host checks do not replace device checks.
+- No code commits or tracked changes. Coder reported writing a tooling-location memory note despite the run-directory constraint; that note is not repository content and was not used as review evidence.
+- Moved review/ → ready/. No linked GitHub issue or PR was present; no GitHub comment required. Not merged or deployed.
