@@ -190,10 +190,12 @@ func TestConsoleShellDiagnosticsInCodeModeCall(t *testing.T) {
 	tool := builtin.NewBashTool(true, 5*time.Second, 4096, pathroots.PathRoots{})
 	observation, err := tool.Execute(context.Background(), map[string]any{"cmd": "printf 'fatal: no remote\\n' >&2; exit 128"})
 	progress, _ = updateConsoleActivityProgress(progress, agent.Event{
-		Kind: agent.EventKindToolDone, ActivityID: "cm.0", ParentActivityID: "cm", ToolName: "bash", Status: "failed", Text: observation, Error: err.Error(),
+		Kind: agent.EventKindToolDone, ActivityID: "cm.0", ParentActivityID: "cm", ToolName: "bash", Status: "failed",
+		// A nested call's observation is framed by the engine like a direct one.
+		Text: observation + "\n\nerror: " + err.Error(), Error: err.Error(),
 	})
 	child := progress.History[0].Children[0]
-	if child.Shell == nil || child.Shell.Stderr != "fatal: no remote\n" || child.Shell.ExitCode != 128 {
+	if child.Shell == nil || child.Shell.Stderr != "fatal: no remote\n" || child.Shell.Stdout != "" || child.Shell.ExitCode != 128 {
 		t.Fatalf("codemode call shell = %+v", child.Shell)
 	}
 }

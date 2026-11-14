@@ -522,7 +522,8 @@ func buildConsoleShellResult(event agent.Event) *consoleShellResult {
 	if !builtin.IsShellTool(tool) {
 		return nil
 	}
-	parsed, ok := builtin.ParseShellObservation(event.Text)
+	// The engine ends a failed call's observation with its error; that is not command output.
+	parsed, ok := builtin.ParseShellObservation(event.Text, event.Error)
 	if !ok {
 		return nil
 	}
