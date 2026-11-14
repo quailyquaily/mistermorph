@@ -324,6 +324,11 @@ export function SettingsCard(props: {
   );
 }
 
+/** A group's heading inside a card (`.settings-tool-group-title`): 12pt semibold caps. */
+export function GroupTitle(props: { text: string }) {
+  return <Text class="text-xs font-semibold uppercase tracking-[0.04em] text-subtle">{props.text}</Text>;
+}
+
 /**
  * The full-width dashed button that adds an item at the end of a list (`.settings-profile-placeholder`,
  * the ui-kit's `placeholder` button): 44pt, a dashed hairline, the label in the middle. Its look is

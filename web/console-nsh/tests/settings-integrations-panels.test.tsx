@@ -88,6 +88,16 @@ test("MCP: read-only shows why and blocks adding; the page's validation error sh
   await invalid.app.waitFor("MCP config is invalid");
 });
 
+test("MCP: blocked by another save of the same settings, nothing changes and nothing saves", async () => {
+  // Settings' SKILLs & MCP page blocks the servers while its Load skills saves.
+  const { app, eventsNamed } = await openFixture({ view: "mcp", params: { servers: [GITHUB], blocked: true } });
+  await app.waitFor("text:https://mcp.github.example/mcp");
+  expect(app.enabled("id:mcp-add")).toBe(false);
+  expect(app.enabled("id:mcp-enable-0")).toBe(false);
+  expect(app.enabled("label:github")).toBe(false);
+  expect(eventsNamed("mcp.save").length).toBe(0);
+});
+
 test("MCP: with a pane target the server opens in the page's pane column", async () => {
   const { app } = await openFixture({ view: "mcp", params: { servers: [GITHUB], outlet: true } });
   await app.press("label:github");

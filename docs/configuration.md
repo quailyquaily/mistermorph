@@ -72,7 +72,7 @@ This deadline conclusion does not apply to explicit cancellation, child agents, 
 
 ## Web Settings
 
-Console Settings can read and edit every supported public field in the example config. Settings are grouped by Agent, Tools, MCP, ACP, Skills, Channels, Automation, Security, and System rather than by raw YAML nesting.
+Console Settings can read and edit every supported public field in the example config. Settings are grouped by Agent, Tools, SKILLs & MCP (Load skills and the MCP servers), ACP, Skills, Channels, Automation, Security, and System rather than by raw YAML nesting.
 
 The browser submits only changed fields and the revision of the file it loaded. A stale revision returns `409 Conflict`; it does not overwrite a newer external edit. Saving preserves unrelated YAML fields and comments.
 

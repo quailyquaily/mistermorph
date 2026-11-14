@@ -143,6 +143,7 @@ function MCPScenario() {
           saving={saving()}
           loading={option("loading", false)}
           readOnly={option("readOnly", false)}
+          blocked={option("blocked", false)}
           readOnlyMessage="Settings are read-only."
           validationError={option("validationError", "")}
           paneTarget={option("outlet", false) ? pane : undefined}
