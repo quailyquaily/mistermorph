@@ -266,6 +266,19 @@ func toolArgsSummary(toolName string, params map[string]any, opts LogOptions, de
 	return out
 }
 
+// toolDisplayCommandMaxChars bounds a bash or powershell command in tool events (what the Console's
+// progress shows): any command a person would read whole, a long heredoc cut with a label.
+const toolDisplayCommandMaxChars = 6000
+
+// truncateDisplayRunes keeps the first max characters of s, and says how many more there were.
+func truncateDisplayRunes(s string, max int) string {
+	runes := []rune(s)
+	if max <= 0 || len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + fmt.Sprintf("\n…(%d more characters not shown)", len(runes)-max)
+}
+
 func toolDisplayArgsSummary(toolName string, params map[string]any, opts LogOptions) map[string]any {
 	if len(params) == 0 {
 		return nil
@@ -274,6 +287,13 @@ func toolDisplayArgsSummary(toolName string, params map[string]any, opts LogOpti
 	opts = normalizeLogOptions(opts)
 	opts.IncludeToolParams = true
 	if out := toolArgsSummary(toolName, params, opts, false); len(out) > 0 {
+		if toolName == "bash" || toolName == "powershell" {
+			// Logs keep a command's start; what a UI shows is the command a person reads to see
+			// why it failed, so it is whole up to toolDisplayCommandMaxChars, line breaks kept.
+			if cmd, ok := params["cmd"].(string); ok {
+				out["cmd"] = truncateDisplayRunes(strings.TrimSpace(cmd), toolDisplayCommandMaxChars)
+			}
+		}
 		return out
 	}
 

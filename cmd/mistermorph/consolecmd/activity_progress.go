@@ -2,6 +2,7 @@ package consolecmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -99,6 +100,27 @@ type consoleActivityEntry struct {
 	ChildrenOmitted int                    `json:"children_omitted,omitempty"`
 	// Messages are what agent_send exchanged with another agent over Agent Link, in order.
 	Messages []consoleActivityMessage `json:"messages,omitempty"`
+	// Shell is how a failed bash or powershell call ended and what it printed, so its cause shows
+	// beside its command; nil for other calls, calls still running and calls that succeeded.
+	Shell *consoleShellResult `json:"shell,omitempty"`
+}
+
+// consoleShellResult is a failed shell call's exit code and output, as its observation reported
+// them (after the engine's Guard). Each stream keeps its last consoleActivityOutputMaxChars
+// characters: StdoutOmitted and StderrOmitted count the ones before them dropped here, and
+// StdoutTruncated and StderrTruncated report the tool's own output limit (max_output_bytes) cut
+// the stream before. Empty streams stay empty strings: the Console says so, it never guesses.
+type consoleShellResult struct {
+	ExitCode        int    `json:"exit_code"`
+	Stdout          string `json:"stdout"`
+	Stderr          string `json:"stderr"`
+	StdoutTruncated bool   `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool   `json:"stderr_truncated,omitempty"`
+	StdoutOmitted   int    `json:"stdout_omitted,omitempty"`
+	StderrOmitted   int    `json:"stderr_omitted,omitempty"`
+	// Reason is the call's error when it says more than its exit code (a timeout, a command that
+	// could not start, an approval declined).
+	Reason string `json:"reason,omitempty"`
 }
 
 // consoleActivityMessage is one message between this agent and another over Agent Link.
@@ -163,6 +185,10 @@ func cloneConsoleActivityEntry(entry *consoleActivityEntry) *consoleActivityEntr
 	}
 	if len(entry.Messages) > 0 {
 		out.Messages = append([]consoleActivityMessage(nil), entry.Messages...)
+	}
+	if entry.Shell != nil {
+		shell := *entry.Shell
+		out.Shell = &shell
 	}
 	return &out
 }
@@ -413,6 +439,9 @@ func buildConsoleActivityEntry(event agent.Event) *consoleActivityEntry {
 	if entry.Kind == "tool" && entry.Name == "" {
 		entry.Name = "tool"
 	}
+	if strings.TrimSpace(event.Kind) == agent.EventKindToolDone {
+		entry.Shell = buildConsoleShellResult(event)
+	}
 	if entry.Kind == "subtask" && entry.Name == "" {
 		entry.Name = "subtask"
 	}
@@ -477,7 +506,51 @@ func mergeConsoleActivityEntry(base consoleActivityEntry, update consoleActivity
 	if strings.TrimSpace(update.OutputKind) != "" {
 		base.OutputKind = strings.TrimSpace(update.OutputKind)
 	}
+	// A later event without a shell result (a subtask's completion, a status) never clears one.
+	if update.Shell != nil {
+		shell := *update.Shell
+		base.Shell = &shell
+	}
 	return base
+}
+
+// buildConsoleShellResult reads how a bash or powershell call ended from its completion event,
+// for a call that failed or exited non-zero; nil otherwise, or when the observation is not a
+// shell result (the call was refused before it ran, or Guard blocked its output).
+func buildConsoleShellResult(event agent.Event) *consoleShellResult {
+	tool := strings.TrimSpace(event.ToolName)
+	if !builtin.IsShellTool(tool) {
+		return nil
+	}
+	parsed, ok := builtin.ParseShellObservation(event.Text)
+	if !ok {
+		return nil
+	}
+	errText := strings.TrimSpace(event.Error)
+	if errText == "" && parsed.ExitCode == 0 && strings.TrimSpace(event.Status) != "failed" {
+		return nil
+	}
+	shell := &consoleShellResult{
+		ExitCode:        parsed.ExitCode,
+		StdoutTruncated: parsed.StdoutTruncated,
+		StderrTruncated: parsed.StderrTruncated,
+	}
+	shell.Stdout, shell.StdoutOmitted = keepConsoleTail(parsed.Stdout, consoleActivityOutputMaxChars)
+	shell.Stderr, shell.StderrOmitted = keepConsoleTail(parsed.Stderr, consoleActivityOutputMaxChars)
+	if errText != "" && errText != fmt.Sprintf("%s exited with code %d", tool, parsed.ExitCode) {
+		shell.Reason = errText
+	}
+	return shell
+}
+
+// keepConsoleTail keeps the last max characters of text (where a failing command prints why), and
+// returns how many before them it dropped.
+func keepConsoleTail(text string, max int) (string, int) {
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text, 0
+	}
+	return string(runes[len(runes)-max:]), len(runes) - max
 }
 
 // Merge snapshots by process identity: output callbacks may deliver older snapshots after
