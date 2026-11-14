@@ -4,7 +4,7 @@
 // first. The sections are in ./sections, the state and requests in ./store.ts.
 import type { InputRef, JSX, ScrollRef } from "nsh";
 import { batch, cleanup, effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button as BaseButton, Input } from "nsh/base";
+import { Button as BaseButton } from "nsh/base";
 import { endpointState } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { buildSettingsSearchIndex, searchSettings } from "../../lib/core/settings-search.js";
@@ -14,7 +14,7 @@ import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
 import { BackButton, confirm, Icon, type IconName, MessageDialog, Page, PageBar, PageTitle } from "../../components/ui";
-import { IndexColumn } from "../../components/knowledge/parts";
+import { IndexColumn, IndexSearch } from "../../components/knowledge/parts";
 import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
 import { SettingsCanBrowsePaths } from "../../components/settings/SettingFields";
@@ -301,10 +301,10 @@ export function SettingsPage() {
   // The selected row is marked by the highlight alone: Vue's list keeps a dot for it but hides it.
   const sectionSelected = (id: string) => !mobile() && sectionID() === id;
   const selection = createSlidingSelection(() => (mobile() ? null : sectionID()));
-  const searchFocused = signal(false);
   let searchInput: InputRef | undefined;
   // The section list is an index column as Todo's, Contacts' and Skills' are: the page's title in
-  // its head (there is no bar over both columns), the search under it, then the sections.
+  // its head (there is no bar over both columns), the shared index search under it (Topics' and
+  // Contacts' field), then the sections.
   const index = () => (
     <IndexColumn
       title={t("settings_title")}
@@ -313,47 +313,21 @@ export function SettingsPage() {
       hidden={panes.hidden(0)}
       testID="settings-index"
       search={
-        <View
-          class={`mx-4 mt-4 h-[34px] flex-row items-center gap-2 rounded-(--radius) border bg-card px-2.5 ${
-            searchFocused() ? "border-subtle" : "border-line"
-          }`}
-        >
-          <Icon name="PhMagnifyingGlass" size={14} color="muted-foreground" />
-          <Input
-            ref={(node: InputRef) => {
-              searchInput = node;
-            }}
-            value={query()}
-            onChange={({ value }) => query.set(value)}
-            onSubmit={() => {
-              const first = untracked(results)[0];
-              if (first) void goToSetting(first);
-            }}
-            onKeyPress={({ key }) => {
-              if (key === "Escape" && untracked(query)) query.set("");
-            }}
-            onFocus={() => searchFocused.set(true)}
-            onBlur={() => searchFocused.set(false)}
-            placeholder={t("settings_search_placeholder")}
-            accessibilityLabel={t("settings_search_placeholder")}
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="settings-search"
-            class="flex-1 px-0.5 text-xs text-foreground placeholder:text-placeholder"
-          />
-          <If when={searching()}>
-            <BaseButton
-              onPress={() => {
-                query.set("");
-                searchInput?.focus();
-              }}
-              accessibilityLabel={t("audit_clear_filter")}
-              class="size-4 items-center justify-center rounded-(--radius) hover:bg-blue/6"
-            >
-              <Icon name="PhX" size={11} color="subtle" />
-            </BaseButton>
-          </If>
-        </View>
+        <IndexSearch
+          value={query()}
+          onChange={(value) => query.set(value)}
+          onSubmit={() => {
+            const first = untracked(results)[0];
+            if (first) void goToSetting(first);
+          }}
+          onClear={() => searchInput?.focus()}
+          clearLabel={t("audit_clear_filter")}
+          placeholder={t("settings_search_placeholder")}
+          testID="settings-search"
+          inputRef={(node) => {
+            searchInput = node;
+          }}
+        />
       }
     >
       <If
