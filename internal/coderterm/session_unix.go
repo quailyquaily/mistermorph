@@ -231,7 +231,7 @@ func (s *session) run(parent context.Context, req Request) (output string, err e
 	} else {
 		progress(name + " is starting")
 	}
-	expected := "Coding task:\n" + normalizeTask(req.Task)
+	expected := "Coding task:\n" + normalizeTask(req.Task) + taskEndRule
 	var turn turnReader
 	var offset int64
 	var sent, declined, idle bool
@@ -386,6 +386,11 @@ func (s *session) run(parent context.Context, req Request) (output string, err e
 		if err := turn.read(); err != nil {
 			return "", err
 		}
+		if notes, ok := turn.(noteTaker); ok && req.Note != nil {
+			for _, note := range notes.takeNotes() {
+				req.Note(note)
+			}
+		}
 		text, done, err := turn.state()
 		if err != nil {
 			if declined {
@@ -481,6 +486,13 @@ func (s *session) submit(ctx context.Context, text string, paste bool) error {
 
 // normalizeTask applies the edits Claude Code makes to submitted input (tabs become four
 // spaces, trailing whitespace is trimmed), so the transcript records exactly what was sent.
+// taskEndRule follows every task. A task's reply is what the CLI says when its turn ends, and a
+// CLI that put a build or a test run in the background on purpose ends its turn with "I will
+// report when it finishes": the caller then had only that, and had to ask again. Commands run in
+// the background on purpose are not waited for here (a server never ends), so the CLI is asked to
+// wait itself.
+const taskEndRule = "\n\nBefore you end your turn: if work you started in the background is still running and your reply depends on its result, wait for it to finish and report the result. Leave running only what is meant to keep running, such as a server or a watcher."
+
 func normalizeTask(task string) string {
 	return strings.TrimRight(strings.ReplaceAll(task, "\t", "    "), " \t\r\n")
 }
