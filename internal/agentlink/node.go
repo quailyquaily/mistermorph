@@ -120,6 +120,8 @@ type Node struct {
 	inboundReserved int64
 	// inlineDispatchBytes is the queued file bytes read back into memory for inline sends.
 	inlineDispatchBytes int64
+	// queuing are the messages whose files are being copied into the queue, by message ID.
+	queuing map[string]bool
 
 	notifyMu    sync.Mutex
 	listeners   map[int]func([]Peer)
@@ -222,6 +224,7 @@ func NewNode(opts Options) (*Node, error) {
 		streams:      make(map[string]*outStream),
 		inStreams:    make(map[string]*inStream),
 		inTransfers:  make(map[string]*inStream),
+		queuing:      make(map[string]bool),
 	}
 	if err := n.loadOutbox(); err != nil {
 		return nil, err
@@ -506,7 +509,9 @@ func (n *Node) SendWithAttachments(ctx context.Context, to string, envelope busr
 	entry := &outboxEntry{Message: msg, CreatedAt: now, ExpiresAt: now.Add(n.opts.QueueTTL)}
 
 	n.mu.Lock()
-	if _, exists := n.outbox[msg.MessageID]; exists {
+	if _, exists := n.outbox[msg.MessageID]; exists || n.queuing[msg.MessageID] {
+		// Queued already, or being queued by another send of the same message, whose copies of
+		// the files this one must not replace.
 		n.mu.Unlock()
 		return SendResult{MessageID: msg.MessageID, Status: StatusQueued}, nil
 	}
@@ -529,12 +534,14 @@ func (n *Node) SendWithAttachments(ctx context.Context, to string, envelope busr
 			return SendResult{}, fmt.Errorf("%w: %d bytes of files already wait for delivery (at most %d); try again later", ErrFileQueueFull, n.queuedFileBytes, n.maxQueuedFileBytes)
 		}
 	}
-	// Reserve the queue's room while the files are copied.
+	// Reserve the queue's room, and the message ID, while the files are copied.
 	n.queuedFileBytes += fileBytes
+	n.queuing[msg.MessageID] = true
 	n.mu.Unlock()
 	release := func() {
 		n.mu.Lock()
 		n.queuedFileBytes -= fileBytes
+		delete(n.queuing, msg.MessageID)
 		n.mu.Unlock()
 	}
 	if streamed(msg.Attachments) {
@@ -544,19 +551,15 @@ func (n *Node) SendWithAttachments(ctx context.Context, to string, envelope busr
 		}
 	}
 	n.mu.Lock()
-	if _, exists := n.outbox[msg.MessageID]; exists {
-		n.mu.Unlock()
-		release()
-		return SendResult{MessageID: msg.MessageID, Status: StatusQueued}, nil
-	}
 	if err := n.writeEntry(entry); err != nil {
 		n.mu.Unlock()
-		release()
 		if streamed(msg.Attachments) {
 			_ = os.RemoveAll(n.filesDir(msg.MessageID))
 		}
+		release()
 		return SendResult{}, err
 	}
+	delete(n.queuing, msg.MessageID)
 	n.outbox[msg.MessageID] = entry
 	result := make(chan SendResult, 1)
 	n.waiters[msg.MessageID] = append(n.waiters[msg.MessageID], result)

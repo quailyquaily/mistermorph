@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -338,6 +339,50 @@ func TestStreamRoomAfterAuthorization(t *testing.T) {
 	}
 	if !transfers["parked"] || !transfers["connected"] || transfers["too-big"] || len(partFiles(t, b2Cache)) != 5 {
 		t.Fatalf("transfers %v, partial files %v", transfers, partFiles(t, b2Cache))
+	}
+}
+
+// TestStreamQueueSameMessageID: sends of one message at once queue it once, and the second never
+// replaces the first's copies of the files.
+func TestStreamQueueSameMessageID(t *testing.T) {
+	for round := 0; round < 5; round++ {
+		a := newTestNode(t, "A")
+		data := binaryData(t, 4<<20)
+		attachment := openAttachment(t, writeFile(t, "big.bin", data))
+		to := newTestNode(t, "B").InstanceID()
+		env := envelope("")
+		env.MessageID = "msg_same"
+		var wg sync.WaitGroup
+		errs := make(chan error, 4)
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res, err := a.SendWithAttachments(context.Background(), to, env, []Attachment{attachment}, 1, 0)
+				if err == nil && res.Status != StatusQueued {
+					err = errors.New("not queued: " + res.Status)
+				}
+				errs <- err
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: %v", round, err)
+			}
+		}
+		a.mu.Lock()
+		entry := a.outbox["msg_same"]
+		queued, reserving := a.queuedFileBytes, len(a.queuing)
+		a.mu.Unlock()
+		if entry == nil || !a.checkSnapshots(entry.Message) || queued != int64(len(data)) || reserving != 0 {
+			t.Fatalf("round %d: entry %v, snapshots intact %v, queued %d bytes, %d reserved", round, entry != nil, entry != nil && a.checkSnapshots(entry.Message), queued, reserving)
+		}
+		copied, err := os.ReadFile(a.snapshotPath("msg_same", 0))
+		if err != nil || !bytes.Equal(copied, data) {
+			t.Fatalf("round %d: queued copy: %v", round, err)
+		}
 	}
 }
 
