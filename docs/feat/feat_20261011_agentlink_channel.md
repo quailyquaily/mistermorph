@@ -77,7 +77,7 @@ JSON frames:
 }
 ```
 
-`attachments` is optional; see `feat_20261111_agentlink_file_transfer.md`.
+`attachments` is optional; see `feat_20261111_agentlink_file_transfer.md` and, for streamed files, `feat_20261113_agentlink_streamed_files.md`.
 
 Relaying one message, from A to B:
 

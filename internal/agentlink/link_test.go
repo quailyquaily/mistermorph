@@ -13,7 +13,7 @@ import (
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 )
 
-func newTestNode(t *testing.T, name string) *Node {
+func newTestNode(t testing.TB, name string) *Node {
 	t.Helper()
 	node, err := NewNode(Options{StateDir: t.TempDir(), AgentName: func() string { return name }, LeaseTimeout: 200 * time.Millisecond})
 	if err != nil {
@@ -25,7 +25,7 @@ func newTestNode(t *testing.T, name string) *Node {
 }
 
 // attach connects node to relay in process and returns a function that disconnects it.
-func attach(t *testing.T, ctx context.Context, node *Node, relay *Relay, label string) (disconnect func(), relayErr <-chan error) {
+func attach(t testing.TB, ctx context.Context, node *Node, relay *Relay, label string) (disconnect func(), relayErr <-chan error) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(ctx)
 	a, b := Pipe()
@@ -35,7 +35,7 @@ func attach(t *testing.T, ctx context.Context, node *Node, relay *Relay, label s
 	return cancel, errs
 }
 
-func waitFor(t *testing.T, what string, cond func() bool) {
+func waitFor(t testing.TB, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {

@@ -273,7 +273,13 @@ func TestAgentSendFilesOverAgentLink(t *testing.T) {
 	})
 
 	t.Run("refused before anything is sent", func(t *testing.T) {
-		big := f.write(t, f.cache, "big.bin", make([]byte, agentlink.MaxAttachmentBytes+1))
+		big := filepath.Join(f.cache, "big.bin")
+		sparse, err := os.Create(big)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = sparse.Truncate(agentlink.MaxStreamAttachmentBytes + 1)
+		_ = sparse.Close()
 		f.write(t, f.outside, "secret.txt", []byte("secret"))
 		if err := os.Symlink(filepath.Join(f.outside, "secret.txt"), filepath.Join(f.cache, "escape.txt")); err != nil {
 			t.Fatal(err)
@@ -290,7 +296,7 @@ func TestAgentSendFilesOverAgentLink(t *testing.T) {
 			params map[string]any
 			want   string
 		}{
-			"oversized":           {map[string]any{"path": big}, "too large for Agent Link"},
+			"oversized":           {map[string]any{"path": big}, "too large"},
 			"outside the roots":   {map[string]any{"path": filepath.Join(f.outside, "secret.txt")}, "outside file_cache_dir"},
 			"a symlink out":       {map[string]any{"path": "file_cache_dir/escape.txt"}, "outside file_cache_dir"},
 			"traversal":           {map[string]any{"path": "file_cache_dir/../outside/secret.txt"}, ""},
@@ -344,6 +350,57 @@ func TestAgentSendFilesOverAgentLink(t *testing.T) {
 		}
 	})
 
+	t.Run("a file over the inline limit is streamed", func(t *testing.T) {
+		large := make([]byte, agentlink.MaxAttachmentBytes+1)
+		for i := range large {
+			large[i] = byte(i * 13)
+		}
+		f.write(t, f.cache, "large.bin", large)
+		result, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": peerContact, "path": "file_cache_dir/large.bin"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if outcome := result["outcome"].(map[string]any); outcome["accepted"] != true {
+			t.Fatalf("result = %v", result)
+		}
+		msg := peer.messages()[len(peer.messages())-1]
+		saved, err := os.ReadFile(msg.Attachments[0].Path)
+		if err != nil || !bytes.Equal(saved, large) {
+			t.Fatalf("peer saved %d bytes: %v", len(saved), err)
+		}
+	})
+
+	t.Run("a route that does not stream keeps the inline limit", func(t *testing.T) {
+		farNode, err := agentlink.NewNode(agentlink.Options{StateDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		farNode.Close()
+		far := farNode.InstanceID()
+		if err := contacts.NewStore(f.contactsDir).PutContact(f.ctx, contacts.Contact{ContactID: agentlink.ContactID(far), Kind: contacts.KindAgent, Channel: contacts.ChannelAgentLink, ContactNickname: "Far"}); err != nil {
+			t.Fatal(err)
+		}
+		// A Console from before streamed files lists the agent as taking files, not streams.
+		linkCtx, cancel := context.WithCancel(f.ctx)
+		defer cancel()
+		runtimeEnd, console := agentlink.Pipe()
+		go func() { _ = f.node.Serve(linkCtx, runtimeEnd) }()
+		if err := console.WriteFrame(linkCtx, agentlink.Frame{Type: agentlink.FrameRoster, Agents: []agentlink.Peer{{InstanceID: far, Capabilities: []string{agentlink.CapabilityFiles}}}}); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for !f.node.SupportsFiles(far) {
+			if time.Now().After(deadline) {
+				t.Fatal("the agent never became reachable")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		_, err = execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": agentlink.ContactID(far), "path": "file_cache_dir/large.bin"})
+		if !errors.Is(err, agentlink.ErrFileTooLarge) || !strings.Contains(err.Error(), "does not stream") {
+			t.Fatalf("error = %v, want the inline limit", err)
+		}
+	})
+
 	t.Run("a peer that takes no files gets an explicit error", func(t *testing.T) {
 		old := f.peer(t, relay, "Old", false)
 		oldContact := agentlink.ContactID(old.node.InstanceID())
@@ -387,7 +444,8 @@ func TestAgentSendAttachesFileToReply(t *testing.T) {
 	askerContact := agentlink.ContactID(asker.node.InstanceID())
 	data := []byte("report body")
 	f.write(t, f.cache, "report.txt", data)
-	replyFiles := agentlink.NewReplyFiles(asker.node.InstanceID())
+	replyFiles := agentlink.NewReplyFiles(asker.node.InstanceID(), t.TempDir())
+	defer replyFiles.Close()
 	ctx := agentlink.WithReplyFiles(agentlink.WithIncomingHop(f.ctx, 1), replyFiles)
 
 	result, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact, "path": "file_cache_dir/report.txt", "message_text": "here"})
@@ -398,8 +456,12 @@ func TestAgentSendAttachesFileToReply(t *testing.T) {
 		t.Fatalf("result = %v", result)
 	}
 	files := replyFiles.Attachments()
-	if len(files) != 1 || !bytes.Equal(files[0].Data, data) || files[0].Filename != "report.txt" {
+	if len(files) != 1 || files[0].Filename != "report.txt" || files[0].Size != int64(len(data)) {
 		t.Fatalf("reply files = %+v", files)
+	}
+	// The answer carries a private copy of the file, made when it was attached.
+	if source, err := os.ReadFile(files[0].Source); err != nil || !bytes.Equal(source, data) || files[0].Source == filepath.Join(f.cache, "report.txt") {
+		t.Fatalf("reply file source %q: %q, %v", files[0].Source, source, err)
 	}
 	if len(asker.messages()) != 0 {
 		t.Fatal("the file went as a message of its own")
@@ -408,11 +470,74 @@ func TestAgentSendAttachesFileToReply(t *testing.T) {
 	if _, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact + "," + agentlink.ContactID(other.node.InstanceID()), "path": "file_cache_dir/report.txt"}); err == nil || !strings.Contains(err.Error(), "own agent_send call") {
 		t.Fatalf("with another recipient: error = %v", err)
 	}
-	big := f.write(t, f.cache, "big.bin", make([]byte, agentlink.MaxAttachmentBytes))
-	if _, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact, "path": big}); err == nil || !strings.Contains(err.Error(), "would pass") {
+	// Over the inline limit is fine on a route that streams; a fifth file is not.
+	big := f.write(t, f.cache, "big.bin", make([]byte, agentlink.MaxAttachmentBytes+1))
+	for i := 0; i < agentlink.MaxAttachments-1; i++ {
+		if _, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact, "path": big}); err != nil {
+			t.Fatalf("file %d: %v", i+2, err)
+		}
+	}
+	if _, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact, "path": big}); err == nil || !strings.Contains(err.Error(), "already has 4 files") {
 		t.Fatalf("over the answer's limit: error = %v", err)
 	}
-	if len(replyFiles.Attachments()) != 1 {
+	if len(replyFiles.Attachments()) != agentlink.MaxAttachments {
 		t.Fatal("a refused file was attached")
+	}
+}
+
+// TestAgentSendReplyFileIsSnapshot: a file attached to an answer goes as it was when it was
+// attached, even when its source changes or goes before the answer is sent.
+func TestAgentSendReplyFileIsSnapshot(t *testing.T) {
+	f := newFileSendFixture(t)
+	relay := f.relay(t)
+	asker := f.peer(t, relay, "Asker", true)
+	askerContact := agentlink.ContactID(asker.node.InstanceID())
+	v1 := []byte("v1,1\n")
+	source := f.write(t, f.cache, "report.csv", v1)
+	replyFiles := agentlink.NewReplyFiles(asker.node.InstanceID(), f.node.ReplyFilesDir())
+	ctx := agentlink.WithReplyFiles(agentlink.WithIncomingHop(f.ctx, 1), replyFiles)
+	result, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact, "path": "file_cache_dir/report.csv"})
+	if err != nil || result["status"] != "attached_to_reply" {
+		t.Fatalf("attach = %v, %v", result, err)
+	}
+
+	for name, change := range map[string]func(){
+		"overwritten": func() {
+			if err := os.WriteFile(source, []byte("v2,22\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"removed": func() {
+			if err := os.Remove(source); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		change()
+		files := replyFiles.Attachments()
+		res, err := f.node.SendWithAttachments(f.ctx, asker.node.InstanceID(), busruntime.MessageEnvelope{Text: "answer " + name, ReplyTo: "msg_question"}, files, 2, 10*time.Second)
+		if err != nil || res.Status != agentlink.StatusDelivered {
+			t.Fatalf("%s: answer = %+v, %v", name, res, err)
+		}
+		msgs := asker.messages()
+		got := msgs[len(msgs)-1]
+		if len(got.Attachments) != 1 {
+			t.Fatalf("%s: asker got %+v", name, got)
+		}
+		if saved, err := os.ReadFile(got.Attachments[0].Path); err != nil || !bytes.Equal(saved, v1) {
+			t.Fatalf("%s: asker saved %q, %v; want the attached bytes %q", name, saved, err, v1)
+		}
+	}
+	snapshot := replyFiles.Attachments()[0].Source
+	replyFiles.Close()
+	if _, err := os.Stat(snapshot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the answer's copy stays after Close: %v", err)
+	}
+	// A file that changed between the check and the attach is refused.
+	f.write(t, f.cache, "report.csv", v1)
+	again := agentlink.NewReplyFiles(asker.node.InstanceID(), f.node.ReplyFilesDir())
+	defer again.Close()
+	if _, err := again.AddFile(source, "report.csv", int64(len(v1)), strings.Repeat("0", 64), agentlink.MaxStreamMessageBytes); err == nil || !strings.Contains(err.Error(), "changed after it was checked") {
+		t.Fatalf("a changed file: error = %v", err)
 	}
 }
