@@ -57,3 +57,15 @@ Installs: none; reused existing nsh 0.5.0. No manifest or lockfile changes.
 Tests: manager independently passed gofmt check, go vet ./... and go test ./... with a throwaway HOME; forbidden-path check passed. Claude Code also passed the configured Go checks, uncached engine/Console shell diagnostics tests, nsh 0.5.0 check, and the required parallel Console test script (109 files, 0 failed). The old composer drum timing tests were already removed on base, not by this item.
 Not checked: no manual browser/desktop/Android inspection or desktop/Android build; PowerShell has shared-parser coverage but no engine-driven execution. Retained payload size and prior capture limits are unchanged.
 Moved new/ → review/, round 2. No linked issue or PR.
+
+## factory · review · 2026-11-15 02:07
+head: 16a5080d6c7608fd752db6e47871acb3b46cff51
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (merge base 6d98cf1f), all 13 changed files. No P0/P1/P2 findings; the previous engine-suffix P1 is fixed. Current base merges cleanly. Worktree remained clean; no code commits were made.
+- [P3] tools/builtin/shell_runner.go:339: A stderr payload containing its own blank-line `stderr:` heading is split at the last heading, mislabelling earlier stderr as stdout. Verified real-engine example: `printf 'a\n\nstderr:\nb' >&2; printf 'out'; exit 1` produces stdout `out\n\nstderr:\na`, stderr `b`; no text is lost. Prefer structured completion streams or unambiguous framing.
+- [P3] tools/builtin/shell_runner.go:311: With Guard on, an empty MISTER_MORPH_* assignment can cause redaction to consume observation framing. Verified real-engine example: `printf 'MISTER_MORPH_FOO=\n'; exit 1` yields shell=null and generic failure fallback; printing the empty assignment to stderr can retain the synthetic engine error. Parse before per-stream redaction or protect framing from cross-newline matching. Guard-off cases parse correctly.
+- Validation: configured gofmt check, go vet ./... and go test ./... passed (163 packages ok, 19 without tests); nsh 0.5.0 check passed; required parallel Console script passed 109 files, 942 tests, zero retries/failures; task-history Node tests passed 22/22. All scripted tests used a throwaway HOME. No new/unpinned installs.
+- Engine acceptance checks passed for stderr/exit128, stdout-only, empty output, success, genuine matching suffix text, limits, redaction, retention, timeout and subtask envelopes. Codemode tests fall back to direct bash; nested events remain fixture-based.
+- Residual risks: no manual browser/desktop/Android inspection or platform builds; no engine-driven PowerShell or elevated-command checks. Whitespace-only output displays as no output. Bounded retained payload size and Guard-off unredacted command behavior remain as recorded previously.
+- Round 2 of max_rounds 3: moved review/ → ready/. Only P0/P1 block factory progression. No linked issue or PR, so no GitHub review comment required.
