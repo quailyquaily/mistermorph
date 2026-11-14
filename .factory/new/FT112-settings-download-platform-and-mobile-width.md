@@ -54,3 +54,16 @@ Coder confirmed these are intermittent baseline failures and isolated repeats pa
 UI checked by coder in real headless Chrome against stubbed APIs: emulated Android selects APK, mobile full width, 300pt long-label wrapping without overflow, desktop natural width at 1280pt. Automated native-Android fixture and 320/390/1280pt layout tests added. Not checked: real Android hardware/emulator, APK build/install, real artifact downloads/live release feeds, HTTPS architecture hints, Safari/Firefox/Windows/iPad, live Go server or GPUI desktop.
 
 Push initially refused because credential requests lacked repository path; one retry with per-command credential.useHttpPath and GH_REPO succeeded. No changes outside allowed item scope; no forbidden paths changed. Moved new/ → review/, round 1.
+
+## factory · review · 2026-11-14 12:11
+head: dcac7267d0deadb05ccc622e022d343d00e4684e
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/chat-composer-drum.test.tsx:43: required full Console suite fails intermittently (linux typing test: expected 0 to be 1). Restore a green required suite by stabilising the test without weakening its assertion; the same failure reproduces on baseline, so do not change FT112 download logic to address it. Factory policy treats a failing required test as P1; this is a validation blocker, not an introduced FT112 defect.
+notes:
+- Claude Code reviewed origin/master...HEAD (merge-base 75eec416), all 18 files and 2 commits; no confirmed defects introduced by FT112. The branch merges cleanly with master. Review-only worktree remained clean; no commits or installs.
+- Required gofmt/vet/go test command passed (163 packages ok); nsh 0.5.0 check passed. Full nsh suite: 937 tests, 936 passed, 1 failed (linux drum typing). All 33 new/changed FT112 tests passed.
+- Verified example: full suite reaches the linux drum typing assertion with presses=0 instead of 1. Isolated drum repeats: HEAD failed twice (linux, then linux+android) and passed once; baseline 75eec416 passed twice and failed once (linux). This confirms a pre-existing intermittent failure, not causality from the download changes.
+- Used repository-required, already installed nsh 0.5.0 rather than incompatible default 0.4.0. Tests used absolute throwaway HOME; installs: none.
+- Not checked: real Android hardware/emulator, APK build/install, real artifact downloads/live release feeds, real browsers including Android desktop-site mode, GPUI desktop or live Go server. Automated Android target and mobile/desktop layout tests passed.
+- Round 1 of 3: review/ → new/ for the required-suite blocker. Owner should inspect the baseline flake evidence; factory cannot waive the test gate automatically. No linked issues or PRs.
