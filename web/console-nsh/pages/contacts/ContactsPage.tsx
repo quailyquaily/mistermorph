@@ -1,5 +1,6 @@
 // The agent's contacts (web/console/src/views/ContactsView.js): an index of contacts with a filter,
-// and the picked contact's card: avatar, the owner switch, its connections (copyable handles), the
+// in two icon tabs, people and agents (ContactKindTabs), each the latest interaction first, and the
+// picked contact's card: avatar, the owner switch, its connections (copyable handles), the
 // agent's memories about it, its activity, and its YAML for editing. On a phone the index and the
 // card take turns, with a back button.
 import { batch, computed, effect, Image, List, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
@@ -35,14 +36,19 @@ import {
   channelLabel,
   channelLogo,
   contactAccessibilityLabel,
+  contactsOfKind,
   displayName,
   isAgent,
   kindText,
   matchesFilter,
+  normalizeKind,
   primaryContactMeta,
   relativeTime,
+  sortByLastInteraction,
   type Contact,
+  type ContactKind,
 } from "./contact-format";
+import { ContactKindTabs } from "./ContactKindTabs";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { createPullSearch } from "../../components/shared/pullSearch";
 
@@ -112,6 +118,9 @@ export function ContactsPage() {
   const store = useContactsStore();
 
   const err = signal("");
+  // Which kind of contact the index lists (the head's tabs): people first, as the page always
+  // opened on them; the filter's text stays as the tabs change.
+  const kind = signal<ContactKind>("human");
   const filterText = signal("");
   // On a touch phone the filter hides until the index is pulled down from its top
   // (components/shared/pullSearch.ts), then heads the list; once shown it stays while the page
@@ -135,7 +144,16 @@ export function ContactsPage() {
   const deleting = signal(false);
 
   const items = () => (store.items || []) as Contact[];
-  const filteredItems = () => items().filter((item) => matchesFilter(item, filterText()));
+  const kindItems = computed(() => contactsOfKind(items(), kind()));
+  // The tab's contacts that match the filter, the one the agent last talked with first (only its
+  // recorded last interaction counts; none, or an unreadable one, last), sorted again on each load.
+  const filteredItems = computed(() => sortByLastInteraction(kindItems().filter((item) => matchesFilter(item, filterText()))));
+  const emptyText = () =>
+    items().length === 0
+      ? t("contacts_empty")
+      : kindItems().length === 0
+        ? t(kind() === "agent" ? "contacts_empty_agents" : "contacts_empty_humans")
+        : t("contacts_empty_filtered");
   const selectedContact = computed(() => {
     const id = selectedContactID().trim();
     return id ? items().find((item) => contactID(item) === id) || null : null;
@@ -243,11 +261,24 @@ export function ContactsPage() {
     if (untracked(isMobile)) mobileEditorVisible.set(true);
   }
 
+  // The tabs: a contact of the other kind does not stay open (nor its editor) once its tab is left.
+  function showKind(next: ContactKind) {
+    if (next === untracked(kind)) return;
+    const contact = untracked(selectedContact);
+    batch(() => {
+      if (contact && normalizeKind(contact.kind) !== next) clearSelection();
+      kind.set(next);
+    });
+  }
+
   async function load() {
     err.set("");
     try {
       await store.load({ force: true });
       if (untracked(selectedContactID) && !untracked(selectedContact)) clearSelection();
+      // A contact whose kind a save changed moves to its tab, and the open contact with it.
+      const contact = untracked(selectedContact);
+      if (contact && normalizeKind(contact.kind) !== untracked(kind)) kind.set(normalizeKind(contact.kind));
     } catch (e: any) {
       err.set(e?.message || t("msg_load_failed"));
     }
@@ -433,7 +464,7 @@ export function ContactsPage() {
         </View>
         <View class={store.loading ? "hidden" : ""}>
           <Note
-            text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
+            text={emptyText()}
             class="mx-4 mt-1 leading-normal"
             testID="contacts-empty"
           />
@@ -480,6 +511,7 @@ export function ContactsPage() {
         <If when={panes.shown(0, showIndexPane())}>
           <IndexColumn
             title={t("contacts_title")}
+            actions={<ContactKindTabs value={kind()} onChange={showKind} mobile={isMobile()} />}
             fill={isMobile()}
             style={panes.style(0)}
             hidden={panes.hidden(0)}

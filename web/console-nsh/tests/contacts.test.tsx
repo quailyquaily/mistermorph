@@ -64,6 +64,8 @@ test("an Agent Link contact shows its agent's avatar and no owner switch", async
     endpoints: [localEndpoint(), localEndpoint({ endpoint_ref: "ep_helper", name: "Helper", instance_id: AGENT_INSTANCE, avatar_url: PIXEL })],
     api: { ...list([{ ...BOT, avatar_url: "/contacts/avatar?contact_id=bot" }]), "GET /proxy:/memories": { body: { items: [] } } },
   });
+  // Agents have a tab of their own (tests/contacts-kinds.test.tsx).
+  await app.press("id:contacts-tab-agent");
   await app.press("id:contact-row:" + BOT.contact_id);
   await app.waitFor("id:contact-detail");
   expect(app.shows("text:Agent · Console")).toBe(true);

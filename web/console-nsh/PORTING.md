@@ -150,6 +150,13 @@ Headless tests prove behaviour, not the look.
   never show it (headless presses do no hit test). `scrollbar={false}` on that `Scroll` brings the
   clicks back; the agent switcher left the menu for `PopoverPicker`, whose rows took every click
   in a GPUI window with the theme on.
+- `Tabs` (ui.tsx) gives each option `role="tab"`, but every option is a Tab stop of its own and
+  arrow keys do nothing. nsh/base's `Tabs` and `Tab` (0.5.0) are WAI-ARIA's tab list: one Tab stop
+  at the selected tab, Left/Right/Up/Down/Home/End move the focus and select (each `Tab` reports
+  `onPress`), `aria-selected` on the current one (seen in Chrome). A `Tab` takes no `hitSlop`: size
+  it for touch. The Contacts tabs put their tooltips on a view around each tab, as `TipButton` does
+  for `Button`, and style the tab's states in its children with `group-selected:` and
+  `group-focus-visible:` under `group` (`pages/contacts/ContactKindTabs.tsx`).
 - nsh/base's `Select` opens its list over the field on the web (`placement` is ignored there):
   `SelectField` is a `Menu` below the field, as Vue's dropdown; only the searchable one is a Select.
 - A `TextView` table can't be narrower than column floors nsh estimates from character counts
