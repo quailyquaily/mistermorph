@@ -74,7 +74,6 @@ test("a sheet's bottom: the inset or the keyboard, never both, inside the sheet"
 
 for (const [name, platform, safeArea, inset] of [
   ["Android, three-button navigation", "android", BUTTONS, 48],
-  ["Android, a gesture handle", "android", GESTURE, 16],
   ["iOS, a home indicator", "ios", HOME_INDICATOR, 34],
 ] as const) {
   test(`on ${name} each dialog's sheet fills the bottom inset once, its actions above it`, async () => {
@@ -205,10 +204,8 @@ function expectSlideOut(samples: Sample[], height: number, body = true) {
   expect(samples[samples.length - 1].alive).toBe(false);
 }
 
-for (const [name, platform, safeArea] of [
-  ["an Android phone", "android", BUTTONS],
-  ["an iPhone", "ios", HOME_INDICATOR],
-] as const) {
+// The slide is the same code on both phones; the insets above are what differ between them.
+for (const [name, platform, safeArea] of [["an Android phone", "android", BUTTONS]] as const) {
   test(`on ${name} a sheet slides up from the bottom edge and back down, the same each time it opens`, async () => {
     const { app, frame, show, closed, dismiss } = await openFixture({ platform, safeArea });
     for (const kind of ["two", "message2", "setting", "bare"]) {

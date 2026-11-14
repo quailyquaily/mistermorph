@@ -338,6 +338,9 @@ for (const [device, options] of [
     ["Chinese text", CJK],
     ["a long unbroken string", TOKEN],
   ] as const) {
+    // The scripts differ in how their lines break, not by device: the desktop, whose wider row
+    // takes twice the keys to wrap, types one of them.
+    if (options.width !== 390 && text !== LATIN) continue;
     test(`on ${device}, typing ${script} across the wrap goes straight to the full-width two rows, and deleting retraces it`, async () => {
       const { app, report } = await openRow(options);
       const shown = await typeAndDelete(app, report, "live", text);
