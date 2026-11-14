@@ -1,6 +1,6 @@
 ---
 branch: factory/FT114-contacts-tabs-recency-sort-and-todo-calendar-button
-round: 1
+round: 2
 ---
 # Contacts: Agents/Humans tabs and recent-interaction sorting; circular Todo calendar toggle
 
@@ -59,3 +59,18 @@ notes:
 - Validation: configured gofmt/vet/go-test gate passed (163 packages ok); nsh 0.5.0 check passed. Full nsh suite: 939 tests, 938 passed, 1 failed as above. All 38 tests in new/changed Contacts/TODO files passed. Separate keyboard probe passed. Scripted tests used an absolute throwaway HOME.
 - Installs: none. Native Android/iOS/GPUI appearance and focus rings not checked. Switching tabs discards unsaved YAML edits as accepted in the plan; owner should consider that behavior.
 - Round 1/3: review/ → new/ for the next fix round. No linked GitHub issue or PR; no GitHub comments required.
+
+## factory · 2026-11-14 21:17
+Fix round 2, done by Claude Code in the owner's session at the owner's request; the owner then asked for the move to review/. Pushed 5e6496ffe0870a82995de2a8303b5facb18513d5 on the branch: a merge of master (2e37a15f), no other commit. Moved new/ → review/ (round 2).
+
+The round 1 finding: master no longer has tests/chat-composer-drum.test.tsx (2e37a15f). It counted the drum right after a keypress while the turn lasts 240 ms of real time, so it failed whenever the machine was busy. The merge brings that removal here.
+
+Conflict: master made Contacts a library of cards with the contact in a panel (45c12569), and web/console-nsh/pages/contacts/ContactsPage.tsx conflicted in 7 places. Resolved: the Humans and Agents tabs sit in the library's head; the library shows the tab's contacts, latest interaction first, through master's filter motion; leaving a tab closes the other kind's panel and editor, and takes the arrow keys off its card (new here). Switching tabs has no motion of its own.
+
+Tests changed with it: three in contacts-kinds.test.tsx read the panel (no "No contact selected" page; the kind line in capitals); two of master's in contacts.test.tsx use people only for the panel and the arrow keys, an agent being on its own tab.
+
+Installs: none.
+
+Tests on this head: gofmt, go vet ./... and go test ./... passed. `nsh check` passed. Console suite with web/console-nsh/scripts/test.sh (one `nsh test` per file, several at a time): 111 files, 0 failed. The serial `nsh test --web-host tests/noHost.js` was not run on this head.
+
+Not checked: nobody has looked at the tabs in the library's head, in a browser or on a device, on a desktop or a phone. The review's P3 note (keyboard coverage for the tabs) is not addressed.
