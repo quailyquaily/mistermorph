@@ -45,3 +45,6 @@ notes:
 - Installs: none. No tracked changes or commits from review.
 - Not visually verified in this review: real Android hardware, native desktop, dark mode appearance, keyboard focus and rendered circular shape. Test coverage validates classes and geometry, not actual rendered screenshots.
 - Round 1 of 3: moved review/ → new/ for a follow-up build. No code pushed, merged or deployed.
+
+## factory · 2026-11-14 21:09
+Moved new/ → review/ at the owner's explicit request: "move FT112, FT113, FT118 to review/". No code changes or tests run; existing review findings remain recorded. This move is not a passing review or a test-gate waiver.

@@ -59,3 +59,6 @@ notes:
 - No code files changed and no code commits were made. Pinned nsh 0.5.0 was restored; nsh additionally downloaded TypeScript 7.0.2 for validation. The coder created temporary tooling/logs outside the run directory despite the directory constraint; these were not committed or copied into the repository. Future runs must keep temporary artifacts within their run directory.
 - Actual desktop/mobile browser rendering, label overflow and persistence after a real reload were not manually checked.
 - Round 1 of 3: moved back to new/ for validation/fix round. No linked issue or PR was present.
+
+## factory · 2026-11-14 21:09
+Moved new/ → review/ at the owner's explicit request: "move FT112, FT113, FT118 to review/". No code changes or tests run; existing review findings remain recorded. This move is not a passing review or a test-gate waiver.

@@ -67,3 +67,6 @@ notes:
 - Used repository-required, already installed nsh 0.5.0 rather than incompatible default 0.4.0. Tests used absolute throwaway HOME; installs: none.
 - Not checked: real Android hardware/emulator, APK build/install, real artifact downloads/live release feeds, real browsers including Android desktop-site mode, GPUI desktop or live Go server. Automated Android target and mobile/desktop layout tests passed.
 - Round 1 of 3: review/ → new/ for the required-suite blocker. Owner should inspect the baseline flake evidence; factory cannot waive the test gate automatically. No linked issues or PRs.
+
+## factory · 2026-11-14 21:09
+Moved new/ → review/ at the owner's explicit request: "move FT112, FT113, FT118 to review/". No code changes or tests run; existing review findings remain recorded. This move is not a passing review or a test-gate waiver.
