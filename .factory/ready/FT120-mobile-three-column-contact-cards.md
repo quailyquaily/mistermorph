@@ -44,3 +44,16 @@ Manager verification: gofmt check, `go vet ./...`, `go test ./...`, `nsh check`,
 Not checked: physical Android device/emulator, GPUI desktop visual rendering, screen reader, before/after desktop screenshots and dark scheme. Automated layout checks do not replace those visual checks.
 
 Moved from `new/` to `review/`, round 1. No base branch or tag was pushed.
+
+
+## factory · review · 2026-11-15 02:29
+head: 1c5b1f31f0f464ec8c5c0ea167914b04de5f40dd
+verdict: pass
+notes:
+- Claude Code reviewed all five changed files in `origin/master...HEAD` and related geometry, text, selection and loading code. No qualifying P0–P3 findings.
+- Validation passed: gofmt check, `go vet ./...`, `go test ./...` (163 packages), `nsh check`, and the required parallel Console script (112 files, 0 failed). Two unrelated files, chat-topic-drag and chat-scroll-anchor, passed the script's isolated retry.
+- Successful test runs used a throwaway HOME. The coder initially launched the Go gate with the real HOME, killed it within seconds and discarded that result before rerunning correctly.
+- Extra headless Linux layout probes at 300, 412 and 493 points passed. Android probe could not measure layout because its standalone fixture lacks a server address (`Invalid URL: /api/proxy…`). Android compact FadeText geometry remains unmeasured; existing Android coverage checks navigation and labels at 320 points only.
+- No new installs. Worktree clean; no code commits or code pushes made during review.
+- Not checked: physical Android device/emulator, GPUI rendering, screen reader or dark scheme. Owner should visually check compact Android names/handles before shipping.
+- Moved from `review/` to `ready/`; no base branch or tag pushed.
