@@ -21,6 +21,7 @@ import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR
 import { BAR_ICON_SIZE, CircleButton, Icon, StatusMark } from "../ui";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
+import { TodoViewToggle } from "./TodoViewToggle";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -166,7 +167,8 @@ export function TodoIndex(props: {
   mobile?: boolean;
   /** Hears where parts lie on the page (tests): `index`, `head-action` (the head's last button),
    * `marker-<item>` and `title-<item>` (`heartbeat`, else the task's id), `empty-marker` (the
-   * empty list's add icon slot). */
+   * empty list's add icon slot), `view-toggle` and `view-toggle-icon` (the calendar toggle and its
+   * icon). */
   onPartLayout?: PartLayoutListener;
 }) {
   const state = props.state;
@@ -196,13 +198,7 @@ export function TodoIndex(props: {
         {/* Buttons sit at the top of their box (self-start); a wrapper centres them in the head. The
             last one's icon is centred over the items' markers (above). */}
         <View {...parts.probe(() => (props.mobile ? "head-action" : null))}>
-          <CircleButton
-            icon="PhCalendarBlank"
-            iconSize={BAR_ICON_SIZE}
-            title={t("todo_view_calendar")}
-            testID="todo-view-toggle"
-            onPress={state.toggleTodoView}
-          />
+          <TodoViewToggle calendar={false} onPress={state.toggleTodoView} onPartLayout={props.onPartLayout} />
         </View>
         <If when={!props.mobile}>
           <View {...parts.probe(() => "head-action")}>

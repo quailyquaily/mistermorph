@@ -10,8 +10,10 @@ import { projectTodoCalendar, visibleCalendarDays } from "../../lib/core/todo-ca
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { gutterX, gutterY } from "../frame/metrics";
 import { MOTION_EASE_CSS } from "../motion";
-import { Button, Tip, TipButton, type IconName } from "../ui";
-import { TODO_HEAD_HEIGHT, TODO_INDEX_WIDTH } from "./TodoIndex";
+import { BAR_ICON_SIZE, Button, CircleButton, Tip, TipButton, type IconName } from "../ui";
+import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
+import { TODO_HEAD_HEIGHT, TODO_INDEX_WIDTH, todoHeadPaddingRight } from "./TodoIndex";
+import { TodoViewToggle } from "./TodoViewToggle";
 import type { CalendarSelection, TodoTask } from "./todo-state";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -89,9 +91,13 @@ export interface TodoCalendarProps {
   onSelectDate?: (selection: CalendarSelection) => void;
   onSelectTask?: (task: TodoTask) => void;
   onShowList?: () => void;
+  /** Hears where parts lie on the page (tests): `view-toggle` and `view-toggle-icon` (the list
+   * toggle in the head and its icon), `head` (the head's row over the list's width). */
+  onPartLayout?: PartLayoutListener;
 }
 
 export function TodoCalendar(props: TodoCalendarProps) {
+  const parts = createPartProbe(() => props.onPartLayout);
   const timezone = browserTimezone();
   const selectedDate = signal("");
   const expandedDate = signal("");
@@ -425,14 +431,13 @@ export function TodoCalendar(props: TodoCalendarProps) {
   };
 
   /** A plain icon button of the toolbar, centred in its row (Button sits at the top of its box). */
-  const ToolButton = (buttonProps: { icon: IconName; title: string; testID?: string; selected?: boolean; onPress: () => void }) => (
+  const ToolButton = (buttonProps: { icon: IconName; title: string; testID?: string; onPress: () => void }) => (
     <View>
       <Button
         variant="plain"
         iconOnly
         icon={buttonProps.icon}
         title={buttonProps.title}
-        selected={buttonProps.selected}
         testID={buttonProps.testID}
         onPress={buttonProps.onPress}
       />
@@ -453,21 +458,25 @@ export function TodoCalendar(props: TodoCalendarProps) {
         class={props.mobile ? "" : "flex-row items-center gap-4"}
         style={{ height: props.mobile ? undefined : TODO_HEAD_HEIGHT, marginHorizontal: props.mobile ? -gutterX() : -8 }}
       >
+        {/* The list's head as TodoIndex draws it (the same padding, the same round buttons, its
+            hairline's 1pt, here never drawn), so the toggle stays where it was, the same circle,
+            as the view switches. */}
         <View
-          class="flex-row items-center"
+          class="flex-row items-center border-b border-transparent"
           style={{
             width: props.mobile ? undefined : TODO_INDEX_WIDTH,
             minHeight: TODO_HEAD_HEIGHT,
             paddingLeft: gutterX(),
-            paddingRight: props.mobile ? gutterX() : 0,
+            paddingRight: todoHeadPaddingRight(!!props.mobile),
           }}
+          {...parts.probe(() => "head")}
         >
           <Text class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground" role="header" style={{ numberOfLines: 1 }}>
             {t("todo_title")}
           </Text>
-          <ToolButton icon="PhCalendarBlank" title={t("todo_view_list")} selected testID="todo-view-toggle" onPress={() => props.onShowList?.()} />
+          <TodoViewToggle calendar onPress={() => props.onShowList?.()} onPartLayout={props.onPartLayout} />
           <If when={!props.mobile}>
-            <ToolButton icon="PhPlus" title={t("todo_action_add")} testID="todo-calendar-add" onPress={() => props.onAddTask?.()} />
+            <CircleButton icon="PhPlus" iconSize={BAR_ICON_SIZE} title={t("todo_action_add")} testID="todo-calendar-add" onPress={() => props.onAddTask?.()} />
           </If>
         </View>
         <View
