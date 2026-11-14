@@ -27,7 +27,7 @@ import {
 import { onSystemBack } from "../../lib/systemBack";
 import { MOTION_EASE, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
-import { Icon, MENU_POPUP_STYLE, Tip, TipButton, type IconName } from "../ui";
+import { Icon, MENU_POPUP_STYLE, POPUP_RADIUS, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
@@ -87,8 +87,6 @@ function navigateTo(item: NavItem) {
 const SHEET_IN_MS = 280;
 const SHEET_OUT_MS = 200;
 const SHEET_OUT_EASE: [number, number, number, number] = [0.4, 0, 1, 1];
-/** The sheet's corner radius: the popover bubbles' (components/shared/PopoverPicker.tsx). */
-const SHEET_RADIUS = 16;
 /** The sheet's title row (min-h-9.5) and its hairline. */
 const SHEET_HEADER = 39;
 
@@ -186,7 +184,7 @@ function SheetLayer(props: {
           right: frame().side,
           bottom: bottom(),
           maxHeight: sheetMax(),
-          borderRadius: SHEET_RADIUS,
+          borderRadius: POPUP_RADIUS,
           // As the bar: no outer shadow on Android, where it would not follow the corners.
           boxShadow: platform.os === "android" ? undefined : MENU_POPUP_STYLE.boxShadow,
           transform: [

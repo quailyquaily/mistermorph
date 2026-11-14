@@ -97,9 +97,10 @@ for (const [name, platform, safeArea, inset] of [
       // Below the status bar.
       expect(sheet.y).toBeGreaterThanOrEqual(safeArea.top);
     }
-    // The footer's row sits on the inset: the panel's 1pt border and the inset under it.
+    // The footer's row sits on the inset: a sheet has no border at the bottom edge, only the
+    // inset under it.
     const footer = withInset.frame("two.footer");
-    expect(footer.y + footer.h).toBe(HEIGHT - inset - 1);
+    expect(footer.y + footer.h).toBe(HEIGHT - inset);
     bare.app.dispose();
     withInset.app.dispose();
   });
@@ -113,7 +114,7 @@ test("a long sheet keeps its body to the room above the inset, its actions in vi
   // 90 % of the room between the status bar and the navigation bar, plus that bar.
   expect(Math.abs(panel.h - dialogSheetInsets(BUTTONS, 0, HEIGHT)!.maxHeight)).toBeLessThanOrEqual(1);
   const footer = frame("long.footer");
-  expect(footer.y + footer.h).toBe(HEIGHT - 48 - 1);
+  expect(footer.y + footer.h).toBe(HEIGHT - 48);
   // The body still scrolls under the title bar, the footer staying where it is.
   await app.scroll("id:row-0", 1200);
   await app.wait(100);
@@ -286,3 +287,4 @@ test("a desktop dialog keeps its settle in place: no slide", async () => {
   expect(exit.some((s) => s.alive && s.o > 0 && s.o < 1)).toBe(true);
   app.dispose();
 });
+
