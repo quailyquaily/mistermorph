@@ -72,7 +72,8 @@ stays the reference for behaviour, states and copy until the cutover.
 node scripts/generate.mjs                     # after changing assets/config or icon folders
 nsh check                                     # types (the only type check)
 nsh build                                     # bundler: unknown classes, text in a View
-nsh test tests --web-host tests/noHost.js     # headless tests; one file: tests/x.test.tsx
+scripts/test.sh                               # headless tests, the files several at a time (about 3 minutes)
+nsh test tests/x.test.tsx --web-host tests/noHost.js  # one file
 node --test lib/core/*.test.mjs               # the copied pure logic
 node --test scripts/android-manifest.test.mjs # what the APK's manifest adds
 scripts/android-host.sh test                  # the Android native part on the JDK
