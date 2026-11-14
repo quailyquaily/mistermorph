@@ -26,9 +26,9 @@ import {
   type NavItem,
 } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
-import { MOTION_EASE, motionMs } from "../motion/tokens";
+import { MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SHEET_OUT, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
-import { Icon, MENU_POPUP_STYLE, Tip, TipButton, type IconName } from "../ui";
+import { Icon, MENU_POPUP_STYLE, POPUP_RADIUS, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
@@ -82,14 +82,10 @@ function navigateTo(item: NavItem) {
 }
 
 // The sheets slide up from the window's foot, behind the bar, to float above it, and slide back
-// down (the Vue console's 280ms in, 200ms out). Reopening one while it slides out turns it round
-// from where it is, as the motion runs from the animated value's current position. A closing sheet
-// takes no presses; with reduced motion it appears and goes at once.
-const SHEET_IN_MS = 280;
-const SHEET_OUT_MS = 200;
-const SHEET_OUT_EASE: [number, number, number, number] = [0.4, 0, 1, 1];
-/** The sheet's corner radius: the popover bubbles' (components/shared/PopoverPicker.tsx). */
-const SHEET_RADIUS = 16;
+// down (MOTION_SHEET_IN in, MOTION_SHEET_OUT out on MOTION_EXIT_EASE, as dialogs on phones).
+// Reopening one while it slides out turns it round from where it is, as the motion runs from the
+// animated value's current position. A closing sheet takes no presses; with reduced motion it
+// appears and goes at once.
 /** The sheet's title row (min-h-9.5) and its hairline. */
 const SHEET_HEADER = 39;
 
@@ -118,10 +114,10 @@ function BottomSheet(props: {
       if (open) {
         closing.set(false);
         if (!shown()) shown.set(true);
-        void progress.timing(1, { duration: motionMs(SHEET_IN_MS), easing: MOTION_EASE });
+        void progress.timing(1, { duration: motionMs(MOTION_SHEET_IN), easing: MOTION_EASE });
       } else if (shown()) {
         closing.set(true);
-        void progress.timing(0, { duration: motionMs(SHEET_OUT_MS), easing: SHEET_OUT_EASE }).then(() => {
+        void progress.timing(0, { duration: motionMs(MOTION_SHEET_OUT), easing: MOTION_EXIT_EASE }).then(() => {
           if (run === generation) {
             closing.set(false);
             shown.set(false);
@@ -187,7 +183,7 @@ function SheetLayer(props: {
           right: frame().side,
           bottom: bottom(),
           maxHeight: sheetMax(),
-          borderRadius: SHEET_RADIUS,
+          borderRadius: POPUP_RADIUS,
           // As the bar: no outer shadow on Android, where it would not follow the corners.
           boxShadow: platform.os === "android" ? undefined : MENU_POPUP_STYLE.boxShadow,
           transform: [
