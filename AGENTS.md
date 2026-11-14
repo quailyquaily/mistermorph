@@ -26,7 +26,8 @@
 The Console is a TSX app on nsh (0.5.0). The web Console, the desktop app (`desktop/nsh`) and the
 Android app are all built from it; the CLI embeds its web build.
 
-- Type check: `nsh check`; tests: `nsh test --web-host tests/noHost.js` (both in `web/console-nsh`).
+- Type check: `nsh check` (in `web/console-nsh`).
+- Tests: `web/console-nsh/scripts/test.sh` runs the test files several at a time (about 3 minutes); one file: `nsh test --web-host tests/noHost.js tests/<name>.test.tsx` in `web/console-nsh`.
 - Web build: `web/console-nsh/scripts/build-web.sh <dir>`; Android: `web/console-nsh/scripts/build-android.sh`.
 - `scripts/build-backend.sh` builds the web Console, stages it and builds the backend with it embedded.
 - `web/console-nsh/PORTING.md` lists the nsh traps already found.

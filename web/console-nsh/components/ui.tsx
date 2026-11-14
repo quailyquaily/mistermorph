@@ -31,7 +31,17 @@ import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
 import { bottomSheetInsets, dialogLayerInsets, dialogSheetInsets } from "../lib/systemInsets";
-import { MOTION_EASE, MOTION_EASE_CSS, MOTION_NORMAL, MOTION_SLOW, motionMs } from "./motion/tokens";
+import {
+  MOTION_EASE,
+  MOTION_EASE_CSS,
+  MOTION_EXIT,
+  MOTION_EXIT_EASE,
+  MOTION_NORMAL,
+  MOTION_SHEET_IN,
+  MOTION_SHEET_OUT,
+  MOTION_SLOW,
+  motionMs,
+} from "./motion/tokens";
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 import { createPartProbe, type PartLayoutListener } from "./shared/partProbe";
 import { isMobile } from "../lib/shell";
@@ -450,8 +460,9 @@ export function BusyBeam(props: {
 export const CIRCLE_BUTTON_SIZES = { md: 38, sm: 32 } as const;
 export type CircleButtonSize = keyof typeof CIRCLE_BUTTON_SIZES;
 /** `plain`: bare, the plain button's fill on hover and press; `outlined`: a hairline ring; `primary`:
- * filled ink; `danger`: filled red (the danger button's), lighter on hover. */
-export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger";
+ * filled ink; `danger`: filled red (the danger button's), lighter on hover; `close`: a dialog's
+ * close button, the soft red tint of the close strip it replaced, deeper on hover. */
+export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger" | "close";
 
 /**
  * A circle button's look, for a control that draws its own box (a menu's trigger): round, the
@@ -464,6 +475,8 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
       ? "border border-primary bg-primary hover:bg-ink"
       : options.variant === "danger"
         ? "border border-destructive bg-destructive hover:bg-danger-light hover:border-danger-light"
+        : options.variant === "close"
+          ? "bg-close hover:bg-close-hover focus:bg-close-hover active:bg-close-hover"
         : options.variant === "outlined"
           ? "border border-line-soft bg-transparent hover:bg-hover active:bg-press"
           : // The plain button's look (BUTTON_VARIANTS.plain): a fill on hover, a deeper one pressed.
@@ -974,6 +987,12 @@ export const MENU_POPUP_STYLE = {
   transitionTimingFunction: MOTION_EASE_CSS,
 } as const;
 export const MENU_STARTING = "opacity-0 -translate-y-1";
+/**
+ * The large corners of the console's floating paper: the popover bubbles (PopoverPicker's
+ * `rounded-[16px]`), the phone's bottom sheets (MobileBottomNav) and the dialogs (DialogLayer: all
+ * four corners, or a sheet's top two).
+ */
+export const POPUP_RADIUS = 16;
 
 /**
  * A dropdown's `popupStyle` on touch screens, where nsh/base's `Menu`, `Select` and `DatePicker`
@@ -1459,7 +1478,10 @@ export function Tabs(props: {
 //
 // Motion (styles/base.css, core/dialog-origin.js): it settles in from 98 % as it fades, and when a
 // press opened it (within 900 ms) it grows out of that point from 90 % instead, and goes back into
-// it on close. A sheet slides up from the bottom edge instead, and back down on close. The backdrop
+// it on close. A sheet slides up from the bottom edge instead, and back down on close. The panel has
+// the popups' large corners (POPUP_RADIUS): all four on a dialog, the top two on a sheet, whose
+// bottom edge is the screen's; it clips what it holds to them (a title bar, a painted footer). The
+// backdrop
 // and the panel are drawn here (the base Dialog is only the layer), so both can move, natively, on
 // opacity and transform alone; the panel stays drawn until it is out.
 const DIALOG_SHADOW = "0 12px 24px rgba(20, 24, 32, 0.14)";
@@ -1521,8 +1543,11 @@ export function DialogLayer(props: {
   // in from its own height below the bottom edge; reopened while going out, from where it is.
   let fromBelow = true;
   const narrow = dialogIsSheet;
-  // A sheet slides the whole way in and out: a little longer than a dialog's settle.
-  const duration = (sheet: boolean) => motionMs(sheet ? MOTION_SLOW : MOTION_NORMAL);
+  // A sheet slides the whole way in and out, as the phone's other sheets do (MobileBottomNav): a
+  // little longer than a dialog's settle. Going out is quicker than coming in, on an easing that
+  // starts slow and leaves fast (MOTION_EXIT_EASE), so it gets out of the way.
+  const duration = (sheet: boolean) => motionMs(sheet ? MOTION_SHEET_IN : MOTION_NORMAL);
+  const exitDuration = (sheet: boolean) => motionMs(sheet ? MOTION_SHEET_OUT : MOTION_EXIT);
 
   const enter = (bounds?: { origin: { x: number; y: number }; size: { width: number; height: number } }) => {
     if (!pendingEnter) return;
@@ -1580,18 +1605,21 @@ export function DialogLayer(props: {
         closing = true;
         pendingEnter = false;
         const sheet = narrow();
-        const ms = duration(sheet);
+        const ms = exitDuration(sheet);
         if (ms <= 0) {
           shown.set(false);
           return;
         }
-        void scrim.timing(0, { duration: ms, easing: MOTION_EASE });
+        void scrim.timing(0, { duration: ms, easing: MOTION_EXIT_EASE });
         // The panel stays drawn (and its contents mounted) while it goes out.
         const out = sheet
-          ? panel.translateY.timing(panelBox?.size.height ?? windowSize().height, { duration: ms, easing: MOTION_EASE })
+          ? panel.translateY.timing(panelBox?.size.height ?? windowSize().height, { duration: ms, easing: MOTION_EXIT_EASE })
           : panel.play({
               duration: ms,
-              keyframes: { opacity: [{ value: 1, easing: MOTION_EASE }, 0], scale: [{ value: 1, easing: MOTION_EASE }, origin() ? 0.9 : 0.98] },
+              keyframes: {
+                opacity: [{ value: 1, easing: MOTION_EXIT_EASE }, 0],
+                scale: [{ value: 1, easing: MOTION_EXIT_EASE }, origin() ? 0.9 : 0.98],
+              },
             });
         void out.then(() => {
           if (closing) shown.set(false);
@@ -1635,8 +1663,19 @@ export function DialogLayer(props: {
         props.probe?.layout?.(event.bounds);
         enter(event.bounds);
       }}
-      class={`max-h-[90%] border border-dialog-line bg-dialog ${narrow() ? "w-full" : "rounded-(--radius)"} ${props.panelClass}`}
-      style={{ ...(props.panelStyle ?? {}), ...panelInsetStyle(), boxShadow: DIALOG_SHADOW, transformOrigin: origin() ?? "center", ...panel.style }}
+      class={`max-h-[90%] overflow-hidden border border-dialog-line bg-dialog ${narrow() ? "w-full border-b-0" : ""} ${props.panelClass}`}
+      style={{
+        ...(props.panelStyle ?? {}),
+        ...panelInsetStyle(),
+        ...(narrow()
+          ? { borderTopLeftRadius: POPUP_RADIUS, borderTopRightRadius: POPUP_RADIUS }
+          : { borderRadius: POPUP_RADIUS }),
+        // Not on Android, as the bottom sheets: a shadow there would not follow the corners, and
+        // a view that clips and casts one moves its children into a box of their own (PORTING.md).
+        boxShadow: platform.os === "android" ? undefined : DIALOG_SHADOW,
+        transformOrigin: origin() ?? "center",
+        ...panel.style,
+      }}
     >
       {props.children}
     </View>,
@@ -1791,18 +1830,21 @@ export function Modal(props: {
             <Text class="text-xs text-muted-foreground">{props.description}</Text>
           </If>
         </View>
-        <If when={props.headerActions}>
-          <View class="flex-row items-center gap-1 pr-1">{props.headerActions}</View>
-        </If>
-        <TipButton
-          onPress={props.onClose}
-          accessibilityLabel={props.closeLabel ?? "Close"}
-          tooltip={<Tip text={props.closeLabel ?? "Close"} />}
-          testID={props.testID ? `${props.testID}-close` : undefined}
-          class="w-11 items-center justify-center bg-close transition-colors duration-180 hover:bg-close-hover focus:bg-close-hover"
-        >
-          <Icon name="PhX" size={14} color="danger" />
-        </TipButton>
+        {/* The close button: a round one, 6pt in from the top and the side, so it sits in the
+            panel's round corner as the corner's own curve does (it was a red strip flush in the
+            corner, which the corner would clip). */}
+        <View class="flex-row items-center gap-1 pr-1.5">
+          {props.headerActions}
+          <CircleButton
+            title={props.closeLabel ?? "Close"}
+            icon="PhX"
+            iconColor="danger"
+            size="sm"
+            variant="close"
+            onPress={props.onClose}
+            testID={props.testID ? `${props.testID}-close` : undefined}
+          />
+        </View>
       </View>
       <If when={props.scroll !== false} else={<View class="flex-1 p-4">{props.children}</View>}>
         <EdgeScroll class="shrink" contentClass="p-4 gap-3">
