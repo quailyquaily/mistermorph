@@ -52,7 +52,7 @@ const LAYOUTS = [
   { name: "phone", options: PHONE },
 ] as const;
 
-/** The contacts' titles in the index, top to bottom (a desktop's open card repeats one: the index's comes first). */
+/** The contacts' titles in the library, in its order (a desktop's open panel repeats one: the library's comes first). */
 function listed(app: App): string[] {
   const seen: string[] = [];
   for (const text of app.texts()) if (NAMES.has(text) && !seen.includes(text)) seen.push(text);
@@ -184,13 +184,13 @@ test("desktop: leaving a tab closes its open contact and editor; the other kind'
 
   await app.press("id:contacts-tab-agent");
   await app.waitFor("id:contact-yaml", { state: "gone" });
+  // The panel closes with it: the library takes the page again.
   await app.waitFor("id:contact-detail", { state: "gone" });
-  expect(app.shows("text:No contact selected")).toBe(true);
 
-  // An agent: its card, YAML editing, copying and the delete menu, as a human's (no owner switch,
+  // An agent: its panel, YAML editing, copying and the delete menu, as a human's (no owner switch,
   // as before the tabs).
   await app.press("id:contact-row:mm:a3");
-  await app.waitFor("text:Agent · Console");
+  await app.waitFor("text:AGENT · CONSOLE");
   expect(app.shows("id:contact-owner")).toBe(false);
   await app.press("id:contact-copy-id");
   await app.waitFor("text:Copied to clipboard");
@@ -207,7 +207,7 @@ test("desktop: leaving a tab closes its open contact and editor; the other kind'
   await app.waitFor("id:contact-row:mm:a3", { state: "gone" });
   expectTab(app, "agent");
   expect(listed(app)).toEqual(["Bolt", "Atlas"]);
-  expect(app.shows("text:No contact selected")).toBe(true);
+  expect(app.shows("id:contact-detail")).toBe(false);
 
   // Back on Humans, nothing of the agent is open, and Ivan's editor did not come back.
   await app.press("id:contacts-tab-human");
@@ -252,7 +252,7 @@ test("desktop: a reload sorts the tab again by the new interaction times", async
   await app.waitFor("id:contact-yaml", { state: "gone" });
   await app.waitFor("id:contacts-tab-agent-selected");
   expect(listed(app)).toEqual(["Bolt", "Max", "Atlas", "Cog"]);
-  expect(app.shows("text:Agent · Telegram")).toBe(true);
+  expect(app.shows("text:AGENT · TELEGRAM")).toBe(true);
 });
 
 test("phone: an agent opens from its tab and the index comes back on it", async () => {
@@ -262,7 +262,7 @@ test("phone: an agent opens from its tab and the index comes back on it", async 
   await app.press("id:contact-row:mm:a2");
   await app.waitFor("id:contact-detail");
   await app.waitFor("id:contacts-index", { state: "gone" });
-  expect(app.shows("text:Agent · Console")).toBe(true);
+  expect(app.shows("text:AGENT · CONSOLE")).toBe(true);
   await app.press("id:mobile-back");
   await app.waitFor("id:contacts-index");
   expectTab(app, "agent");

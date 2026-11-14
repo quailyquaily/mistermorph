@@ -32,7 +32,8 @@
 import type { JSX, ViewRef } from "nsh";
 import { Canvas, cleanup, effect, keymap, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton, Input, Popover } from "nsh/base";
-import { MENU_POPUP_STYLE, Tip } from "../ui";
+// POPUP_RADIUS is the popup's `rounded-[16px]`, which the tail keeps off.
+import { MENU_POPUP_STYLE, POPUP_RADIUS, Tip } from "../ui";
 
 export interface PickerItem {
   value: string;
@@ -110,8 +111,6 @@ const LIST_INSET = 8;
 /** How far the tail's canvas reaches back over the popup: its border row and one inside it, so
  *  the fill covers the border under the tail wherever the edge falls on the pixels. */
 const TAIL_OVERLAP = 2;
-/** The popup's corner radius (`rounded-[16px]`), which the tail keeps off. */
-const POPUP_RADIUS = 16;
 /** How the popup opens and closes: from a little short of its place toward the trigger, a touch
  *  smaller, transparent (MENU_STARTING's fade, with the scale its tail grows it from). */
 const PICKER_STARTING_BELOW = "opacity-0 -translate-y-1.5 scale-[0.96]";

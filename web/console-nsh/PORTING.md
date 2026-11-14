@@ -72,7 +72,8 @@ stays the reference for behaviour, states and copy until the cutover.
 node scripts/generate.mjs                     # after changing assets/config or icon folders
 nsh check                                     # types (the only type check)
 nsh build                                     # bundler: unknown classes, text in a View
-nsh test tests --web-host tests/noHost.js     # headless tests; one file: tests/x.test.tsx
+scripts/test.sh                               # headless tests, the files several at a time (about 3 minutes)
+nsh test tests/x.test.tsx --web-host tests/noHost.js  # one file
 node --test lib/core/*.test.mjs               # the copied pure logic
 node --test scripts/android-manifest.test.mjs # what the APK's manifest adds
 scripts/android-host.sh test                  # the Android native part on the JDK
@@ -232,6 +233,12 @@ Headless tests prove behaviour, not the look.
   On the web a line may also break where one span's style ends and the next one's begins, so a
   mark that must stay beside a text's first line (a command's `$`) goes in a column of its own,
   not in the text (`ParamRow` in `components/chat/ChatStatusCard.tsx`).
+- `flex-1` is a share of the row on a wide window but, in a column (the same views stacked on a
+  phone), a share of the column's height: nsh lays out as React Native does, with no
+  `min-height: auto`, so stacked `flex-1` cards each get an equal part of their total height,
+  however tall their content is. A short card gets blank room and a tall one draws past its own
+  bottom edge, over the next card. Give `flex-1` only where the views sit side by side (Settings ›
+  Runtime's model and channels cards).
 - On a touch screen such a drag must not take a swipe from the list's scroll view, so it waits for
   a finger to rest (`pages/chat/topicDrag.ts`: 450ms within 8pt). nsh/base's `Button` takes no
   `onLongPress`, so the hold is timed in JS from the touch events of the view around the button
@@ -301,6 +308,10 @@ Headless tests prove behaviour, not the look.
   scroll to 656pt, and 532pt across (the runtime's `nsh-spacer` is sized from the core's content
   size). Put such an image in a View of its size with `overflow-hidden` (`AgentAvatar`). Headless
   tests and GPUI do not show it; read the scroll's `nsh-spacer` in a browser.
+- On the web, what a `ShaderEffect` draws through its shader (`sample_content`) loses the masks
+  inside it: an `Icon` (a tinted mask) comes out as a solid square of its colour. The Contacts
+  panel's avatar resolves through one (`PixelResolve`) with its kind badge kept outside it, over
+  it. Headless tests draw no shaders (`shadersAvailable()` is false there): look in a browser.
 
 ### Android (nsh 0.4.0)
 
