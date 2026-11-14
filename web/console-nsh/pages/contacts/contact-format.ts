@@ -209,6 +209,16 @@ export function primaryContactMeta(item: Contact | null) {
   return contactID ? `${channel} · ${contactID}` : channel;
 }
 
+/**
+ * The handle a library card shows under its channel's logo: the first handle's short form, the
+ * contact's id when it has none, or "Unnamed User" for a contact without a name (whose title is then
+ * its handle already).
+ */
+export function cardHandle(item: Contact | null) {
+  if (!namedTitle(item)) return t("contacts_unnamed");
+  return channelHandles(item)[0]?.short || shortenIdentifier(item?.contact_id) || "";
+}
+
 export function matchesFilter(item: Contact, query: string) {
   const needle = String(query || "").trim().toLowerCase();
   if (!needle) return true;

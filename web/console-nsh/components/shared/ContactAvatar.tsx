@@ -19,8 +19,9 @@ export interface ContactAvatarProps {
   name?: string;
   /** The endpoint the contact belongs to (its avatar is downloaded from there). */
   endpointRef: string;
-  /** `list` (40 points) or `detail` (64 points). */
-  size?: "list" | "detail";
+  /** `list` (40 points), `detail` (64 points), or a diameter of its own in points (the Contacts
+   * library's cards and panel). */
+  size?: "list" | "detail" | number;
   /** A round notch cut out of the avatar where a badge sits (its centre and radius, in points): the
    * row behind shows through the gap instead of the badge wearing a ring. Drawn on a canvas
    * (CutoutAvatar), so every platform cuts it. */
@@ -58,7 +59,7 @@ export function ContactAvatar(props: ContactAvatarProps) {
   const directURL = computed(() => String(props.imageURL || "").trim());
   const avatarPath = computed(() => (directURL() ? "" : String(props.item?.avatar_url || "").trim()));
   const shown = () => (directURL() ? (failed() ? "" : directURL()) : source());
-  const dimension = () => (props.size === "detail" ? 64 : 40);
+  const dimension = () => (typeof props.size === "number" ? props.size : props.size === "detail" ? 64 : 40);
 
   async function load(endpointRef: string, path: string, ticket: number) {
     const key = `${endpointRef}\u0000${path}`;
@@ -104,7 +105,11 @@ export function ContactAvatar(props: ContactAvatarProps) {
   }
 
   const initial = () => (
-    <Text class={`font-semibold leading-none text-blue ${props.size === "detail" ? "text-[22px]" : "text-[15px]"}`}>
+    <Text
+      class={`font-semibold leading-none text-blue ${typeof props.size === "number" ? "" : props.size === "detail" ? "text-[22px]" : "text-[15px]"}`}
+      // A diameter of its own: the initial at the same share of it as the 64pt avatar's 22pt.
+      style={typeof props.size === "number" ? { fontSize: Math.round(props.size * 0.34) } : undefined}
+    >
       {contactInitial(props.name)}
     </Text>
   );

@@ -20,8 +20,15 @@ Every bitmap uses the drawing made for its size, never a scaled-down large one:
   mode, Suimen in dark. The worker avatars (worker-avatars/) are the 64 circle in each of the
   seven colourways the icons come in.
   safari-pinned-tab.svg is the 16 drawing's lines in one colour.
+- Android (web/console-nsh/android/res, linked into the phone app by scripts/build-android.sh): the
+  adaptive icon's foreground at each density, mipmap-<density>/ic_launcher_foreground.png, which is
+  the lines alone on a 108 dp layer, the panel's radius on the mask's 36 dp. The ground is the
+  background layer (values/ic_launcher.xml) and the launcher's mask draws the edge, so there is no
+  panel and no rim. The foreground is the themed icon's monochrome layer too. The drawing is the one
+  for the 48 dp the launcher shows the icon at. Also the notification icon,
+  drawable-<density>/ic_stat_morph.png: the lines in white, the panel 22 dp across on 24 dp.
 """
-import json, os, shutil, struct, sys
+import json, os, re, shutil, struct, sys
 
 sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -36,6 +43,7 @@ WEB = os.path.join(ROOT, 'web', 'console-nsh', 'assets')
 WEB_ASSETS = os.path.join(ROOT, 'web', 'console-nsh', 'assets', 'images')
 COLOURWAY = 'aojashin'
 WORKER_AVATARS = os.path.join(ROOT, 'web', 'console-nsh', 'assets', 'worker-avatars')
+ANDROID_RES = os.path.join(ROOT, 'web', 'console-nsh', 'android', 'res')
 # The colourways design/brand/icons is drawn in; the console picks worker avatars among them.
 WORKER_AVATAR_COLOURWAYS = ('aojashin', 'night', 'paper', 'suimen', 'rinko', 'bunko', 'denko')
 
@@ -48,6 +56,8 @@ MAC_ICONSET = [('icon_16x16.png', 16), ('icon_16x16@2x.png', 32), ('icon_32x32.p
 WINDOWS_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 256]
 LINUX_SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 256, 512]
 FAVICON_SIZES = [16, 32, 48]
+# Android's densities, in pixels per dp.
+ANDROID_DENSITIES = [('mdpi', 1), ('hdpi', 1.5), ('xhdpi', 2), ('xxhdpi', 3), ('xxxhdpi', 4)]
 
 
 def drawing_for(pixels):
@@ -92,6 +102,22 @@ def filled(size):
     return placed(size, size - 2 * margin)
 
 
+def lines_only(pixels, colour=None):
+    """The circle icon's lines at the drawing for a panel this many pixels across: no panel and no rim, for a
+    platform that draws the ground and the edge itself. colour recolours them (a one-colour silhouette)."""
+    body = re.sub(r'<circle [^>]*></circle>', '', circle.circle_icon(drawing_for(pixels), COLOURWAY))
+    return body.replace(circle.COLOURS[COLOURWAY]['line'], colour) if colour else body
+
+
+def android(canvas_dp, panel_dp, shown_dp, density, colour=None):
+    """Lines on a transparent canvas of canvas_dp, the panel panel_dp across and centred, drawn for shown_dp."""
+    size = round(canvas_dp * density)
+    scale = panel_dp * density / (2 * circle.PANEL_R)
+    offset = size / 2 - 50 * scale
+    return svg(size, f'<g transform="translate({offset:g} {offset:g}) scale({scale:g})">'
+                     f'{lines_only(shown_dp * density, colour)}</g>')
+
+
 def plan():
     """Every file to render: (svg text, png path, size)."""
     jobs = []
@@ -106,7 +132,22 @@ def plan():
     for size in (192, 512):
         jobs.append((placed(size, size), os.path.join(WEB_ASSETS, f'android-chrome-{size}x{size}.png'), size))
     jobs.append((placed(180, 180, square=True), os.path.join(WEB, 'apple-touch-icon.png'), 180))
+    for name, density in ANDROID_DENSITIES:
+        launcher = android(108, 72, 48, density)
+        jobs.append((launcher, os.path.join(ANDROID_RES, f'mipmap-{name}', 'ic_launcher_foreground.png'), round(108 * density)))
+        status = android(24, 22, 22, density, '#FFFFFF')
+        jobs.append((status, os.path.join(ANDROID_RES, f'drawable-{name}', 'ic_stat_morph.png'), round(24 * density)))
     return jobs
+
+
+def android_colours():
+    """The adaptive icon's background layer: the panel's ground."""
+    path = os.path.join(ANDROID_RES, 'values', 'ic_launcher.xml')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as fh:
+        fh.write('<?xml version="1.0" encoding="utf-8"?>\n<!-- Written by design/brand/generator/platforms.py. -->\n'
+                 f'<resources>\n  <color name="ic_launcher_background">{circle.COLOURS[COLOURWAY]["bg"]}</color>\n'
+                 '</resources>\n')
 
 
 def console_svgs():
@@ -153,6 +194,7 @@ def write_sources():
     with open(scalable, 'w') as fh:
         fh.write(filled(512).replace('width="512" height="512"', 'width="512" height="512" role="img" aria-label="Mister Morph"'))
     console_svgs()
+    android_colours()
     print(f'wrote {len(listed)} jobs to platform-jobs.json, the scalable Linux icon and the console SVGs')
 
 

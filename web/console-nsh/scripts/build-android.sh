@@ -106,8 +106,13 @@ ln -s "$runtime/lib" "$shim/nsh-runtime/android/release/lib"
 # console server is usually plain http:// on the local network, nsh's Android runtime fetches through
 # HttpURLConnection, which enforces it, and `nsh package` declares it only for its development
 # builds), voice input's permission, Application and permission activity, and the task
-# notifications' permissions, activities and job. So nsh runs with an
-# SDK whose aapt2 patches the manifest before linking it; everything else is the real SDK.
+# notifications' permissions, activities and job. Nor has it a launcher icon that fits Android's
+# launchers: nsh links one PNG (nsh.json's icon), which they shrink onto a plate, so the link also
+# takes android/res (from design/brand/generator/platforms.py): the adaptive icon
+# (mipmap-anydpi-v26/ic_launcher), which every device the app runs on (min SDK 26) takes instead,
+# and the task notifications' icon (drawable-*/ic_stat_morph). So nsh runs with an SDK whose aapt2
+# patches the manifest before linking it and links android/res with it; everything else is the real SDK.
+"$build_tools/aapt2" compile --dir "$app/android/res" -o "$shim/res.zip"
 tools="$shim/sdk/build-tools/$(basename "$build_tools")"
 mkdir -p "$tools"
 for entry in "$sdk"/*; do
@@ -126,6 +131,7 @@ if [ "\$1" = link ]; then
     fi
     previous="\$arg"
   done
+  exec "$build_tools/aapt2" "\$@" "$shim/res.zip"
 fi
 exec "$build_tools/aapt2" "\$@"
 EOF
@@ -147,6 +153,13 @@ if [[ "$format" == apk ]]; then
     com.mistermorph.console.TaskNotifierJob; do
     if ! grep -q "$wanted" <<<"$manifest"; then
       echo "the APK's manifest lacks $wanted: did nsh stop linking its manifest with aapt2?" >&2
+      exit 1
+    fi
+  done
+  resources=$("$build_tools/aapt2" dump resources "$built")
+  for wanted in "anydpi-v26/ic_launcher.xml" "drawable-xxxhdpi-v4/ic_stat_morph.png"; do
+    if ! grep -q "$wanted" <<<"$resources"; then
+      echo "the APK lacks $wanted: did nsh stop linking its resources with aapt2?" >&2
       exit 1
     fi
   done
