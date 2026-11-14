@@ -811,6 +811,13 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 						request.Progress(status, status+"\n", status)
 					}
 				},
+				// What the CLI says while it works goes into the output as lines of its own; the
+				// status label stays what the CLI is doing.
+				Note: func(text string) {
+					if request.Progress != nil {
+						request.Progress("", text+"\n", "")
+					}
+				},
 			}
 			if ask != nil {
 				terminalRequest.Ask = func(ctx context.Context, question coderterm.Question) (coderterm.Answer, error) {

@@ -65,6 +65,23 @@ type claudeTranscript struct {
 	// past their timeout. Claude ends its turn while they run and takes a new one when each reports,
 	// so the task is not done until they have. ended holds the reports seen before their launch.
 	background, ended map[string]bool
+	// notes holds what Claude said while working, until it is taken: the text beside a tool call,
+	// and a reply that turned out not to be the last (its turn ended and another followed).
+	notes []string
+	// lastEnd is the text of the message a turn last ended on, while it is the latest message.
+	lastEnd string
+}
+
+func (r *claudeTranscript) takeNotes() []string {
+	notes := r.notes
+	r.notes = nil
+	return notes
+}
+
+func (r *claudeTranscript) note(text string) {
+	if text = trimNote(text); text != "" {
+		r.notes = append(r.notes, text)
+	}
 }
 
 // backgroundLaunch is what a tool result records when its work goes on in the background.
@@ -237,16 +254,28 @@ func (r *claudeTranscript) read() error {
 			continue
 		}
 		if entry.Message.ID == "" || entry.Message.ID != r.messageID {
+			if r.lastEnd != "" {
+				// A turn ended on this, and Claude went on (its background work reported).
+				r.note(r.lastEnd)
+			}
 			r.messageID = entry.Message.ID
 			r.assistant = ""
 			r.complete = false
 		}
+		r.lastEnd = ""
 		if text != "" {
 			if r.assistant != "" {
 				r.assistant += "\n\n"
 			}
 			r.assistant += text
+			if entry.Message.StopReason == "tool_use" {
+				// Said on the way to a tool call: never the reply.
+				r.note(text)
+			}
 		}
 		r.complete = entry.Message.StopReason == "end_turn" || entry.Message.StopReason == "stop_sequence"
+		if r.complete {
+			r.lastEnd = r.assistant
+		}
 	}
 }

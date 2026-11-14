@@ -220,6 +220,7 @@ type codexTurn struct {
 	// woke is the latest turn the parent took by itself after ours; woken is that it has ended.
 	woke     string
 	woken    bool
+	notes    []string  // what Codex said while working, until it is taken
 	answer   string    // the reply of the last turn that gave one: ours, or a later one of the parent's
 	answered time.Time // when the rollout recorded it
 }
@@ -256,6 +257,12 @@ func (r *codexTurn) clock() time.Time {
 		return r.now()
 	}
 	return time.Now()
+}
+
+func (r *codexTurn) takeNotes() []string {
+	notes := r.notes
+	r.notes = nil
+	return notes
 }
 
 func (r *codexTurn) state() (string, bool, error) {
@@ -309,6 +316,11 @@ type codexEntry struct {
 		Item struct {
 			Type string `json:"type"`
 			codexAgentActivity
+			// AgentMessage: what Codex says, "commentary" while it works and "final_answer" at the end.
+			Phase   string `json:"phase"`
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
 		} `json:"item"`
 	} `json:"payload"`
 }
@@ -421,6 +433,16 @@ func (r *codexTurn) read() error {
 		case r.turnID == "":
 		case isAgentActivity(entry):
 			r.noteAgent(entry)
+		case entry.Type == "event_msg" && p.Type == "item_completed" && p.Item.Type == "AgentMessage" && p.Item.Phase == "commentary" &&
+			(p.TurnID == r.turnID || p.TurnID == r.woke):
+			// Said while working, in our turn or one the parent took after it: never the reply.
+			var parts []string
+			for _, block := range p.Item.Content {
+				parts = append(parts, block.Text)
+			}
+			if note := trimNote(strings.Join(parts, "\n")); note != "" {
+				r.notes = append(r.notes, note)
+			}
 		case r.woke != "" && p.TurnID == r.woke && entry.Type == "event_msg" &&
 			(p.Type == "task_complete" || p.Type == "turn_aborted"):
 			// The parent's own turn after ours, woken by its sub-agents: its reply is the newer one.

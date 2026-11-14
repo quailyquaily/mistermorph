@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 // screenView is what a backend recognized on the current screen.
@@ -66,6 +67,28 @@ type turnReader interface {
 	read() error
 	// state reports text so far, whether the turn finished, and why it failed.
 	state() (output string, done bool, err error)
+}
+
+// noteTaker is a turnReader that also collects what the CLI said while working.
+type noteTaker interface {
+	// takeNotes returns the interim messages read since the last call.
+	takeNotes() []string
+}
+
+// noteMax bounds one interim message, in bytes.
+const noteMax = 2000
+
+// trimNote is an interim message as it is reported: trimmed, and cut between characters when long.
+func trimNote(text string) string {
+	text = strings.TrimSpace(text)
+	if len(text) <= noteMax {
+		return text
+	}
+	cut := noteMax
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + " …"
 }
 
 func backendFor(name string) (backend, error) {
