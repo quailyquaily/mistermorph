@@ -83,3 +83,8 @@ Shipped ready/ → done/ on owner approval after current-head passing reviews an
 - No merge conflicts, unpinned installs or protected-path changes. No linked GitHub issues/PRs to close. Branch retained (clean is not configured).
 - Real Android/native desktop and fresh full-app visual verification were not performed; prior review limitations remain.
 - Nonblocking P3 retained: Enter in a nonempty agent filter with no enabled matches selects Overview.
+
+## factory · 2026-11-15 00:20
+Owner note from Console: remove the drum test.
+
+Record this as a follow-up request to remove the composer drum animation test (`web/console-nsh/tests/chat-composer-drum.test.tsx`), not to remove the drum animation itself. This update only records the request; no source or test files were changed, and FT100 remains in done/.
