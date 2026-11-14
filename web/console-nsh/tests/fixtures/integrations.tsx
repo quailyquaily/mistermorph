@@ -212,7 +212,12 @@ function AppScenario() {
   return (
     <View class="gap-4 p-4">
       <SettingsAppPanel />
-      <SettingsUpdatePanel endpointRef={LOCAL} configRevision="rev-1" onConfigRevision={(revision) => report("update.revision", revision)} />
+      <SettingsUpdatePanel
+        endpointRef={LOCAL}
+        configRevision="rev-1"
+        onConfigRevision={(revision) => report("update.revision", revision)}
+        onPartLayout={option("probeUpdate", false) ? (name, frame) => report("update.part", { name, frame }) : undefined}
+      />
     </View>
   );
 }

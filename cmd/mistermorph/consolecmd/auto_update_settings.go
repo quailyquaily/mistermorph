@@ -28,6 +28,9 @@ const consoleUpdateUserAgent = "mistermorph-console"
 // autoUpdateManifestURL overrides the channel manifest URL in tests.
 var autoUpdateManifestURL = ""
 
+// autoUpdateReleaseBaseURL overrides where release.json files are read in tests.
+var autoUpdateReleaseBaseURL = ""
+
 type autoUpdatePayload struct {
 	Enabled bool `json:"enabled"`
 	// Channel is the configured release channel; empty means the build channel.
@@ -99,10 +102,25 @@ func (s *server) handleAutoUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		CurrentVersion: s.autoUpdateCurrentVersion(),
 		ManifestURL:    autoUpdateManifestURL,
 		UserAgent:      consoleUpdateUserAgent,
+		ReleaseBaseURL: autoUpdateReleaseBaseURL,
+	}
+	// download_os (and download_arch when the client knows it) name the
+	// machine the Console runs on: the answer's "download" is the file for
+	// it, which may differ from this server's own (a phone, another
+	// computer's browser). Empty download_os means the client cannot tell.
+	if query.Has("download_os") {
+		opts.Download = &updatecheck.DownloadTarget{
+			OS:   strings.TrimSpace(query.Get("download_os")),
+			Arch: strings.TrimSpace(query.Get("download_arch")),
+		}
 	}
 	resolvedChannel, _ := updatecheck.NormalizeChannel(channel)
 	manifestURL, _ := updatecheck.ResolveManifestURL(opts)
-	s.logger().Info("console_update_check", "channel", resolvedChannel, "manifest_url", manifestURL)
+	logArgs := []any{"channel", resolvedChannel, "manifest_url", manifestURL}
+	if opts.Download != nil {
+		logArgs = append(logArgs, "download_os", opts.Download.OS, "download_arch", opts.Download.Arch)
+	}
+	s.logger().Info("console_update_check", logArgs...)
 	result, err := updatecheck.Check(ctx, opts)
 	if err != nil {
 		s.logger().Warn("console_update_check_failed", "channel", resolvedChannel, "manifest_url", manifestURL, "error", err.Error())

@@ -5,6 +5,7 @@
 // the functions below, and only this file knows a host exists.
 import { Clipboard, host, locale, openUrl, platform } from "nsh";
 import * as mobileHost from "./mobileHost";
+import { type BrowserInfo, browserTarget, type DownloadTarget, nativeTarget, UNKNOWN_TARGET } from "./downloadTarget";
 
 /** The phone app: a client of a console server elsewhere, whose address the user enters. */
 const MOBILE = platform.os === "android" || platform.os === "ios";
@@ -417,6 +418,20 @@ export async function pickDirectory(options: { title?: string; current?: string 
 /** Checks for a desktop update; `channel` null uses the saved setting. */
 export async function checkDesktopUpdate(channel: string | null = null): Promise<unknown> {
   return await hostChannel.call("morph.desktop.checkUpdate", { channel }, { timeout: 0 });
+}
+/**
+ * The system this app runs on, for the Updates card's download (lib/downloadTarget.ts): the phone
+ * and desktop apps know their OS (not the architecture); a browser tells what it can through the
+ * web host (`morph.client.platform`). Unknown parts stay "".
+ */
+export async function downloadTarget(): Promise<DownloadTarget> {
+  if (config.runtime === "mobile" || config.runtime === "desktop") return nativeTarget(platform.os);
+  if (!hosted) return UNKNOWN_TARGET;
+  try {
+    return browserTarget((await hostChannel.call("morph.client.platform", {}, { timeout: 3000 })) as BrowserInfo);
+  } catch {
+    return UNKNOWN_TARGET;
+  }
 }
 /** Restarts the bundled backend (after setup or a settings change that needs it). */
 export async function restartDesktopApp() {
