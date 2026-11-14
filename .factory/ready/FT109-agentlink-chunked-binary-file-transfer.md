@@ -95,3 +95,18 @@ Fixed stale acknowledgements/chunks/aborts/results by binding them to a random d
 Checks: manager independently passed gofmt cleanliness, go vet ./..., go test ./... and git diff --check. Claude reports slow-receiver reconnect regressions over real WebSocket and pipe, stale-attempt/capacity/authorization/snapshot-mutation/deletion tests; focused race -count=10, agentlink suite -count=5 and race tests of agentlink/tools/builtin/channelruntime all passed. Scripted tests used an absolute throwaway HOME. No unpinned installs.
 
 Not checked: multi-machine networks, Android, separate-process mixed versions or receiver restart. Receiver resume remains intentionally in-memory. Concurrent same-ID regression is timing-based. No Console sources changed; visual/nsh checks not applicable. Moved ready/ → review/ because the previous review covers the old head; requires a fresh review. No master merge, deployment or tag.
+
+
+## factory · review · 2026-11-14 18:31
+head: f1758d75ac32a9c1fd09db4a49d0289c570945c4
+verdict: pass
+notes:
+- [P3] internal/agentlink/node.go:811 (with stream_send.go:272-274): Ending a sender stream on queue TTL expiry or queued-file read error immediately releases sender window slots, but the relay still counts its unacknowledged chunks. A concurrent second transfer can then exceed the relay's four-chunk source window and be permanently rejected as invalid_message. Verified 5/5 over real WebSockets: two 1 MiB messages to a receiver delayed 40 ms/chunk; first expires mid-transfer, second is aborted with "more than 4 chunks unacknowledged" and its partial files are deleted. Tell the relay to drop the old delivery before reusing its slots, or retain slots until relay accounting releases them.
+
+Previous findings: fixed. Random attempt IDs now bind delivery/chunk/ack/abort/result across reconnects; authorization and capacity checks precede room changes; reply files have immutable private attach-time snapshots with lifecycle cleanup. Concurrent same-ID snapshot reservations also work as intended.
+
+Validation: Claude Code reviewed all 27 files in origin/master...HEAD (base/merge base a72b391c), including security-sensitive paths and repository instructions. Required gofmt cleanliness, go vet ./..., go test ./... passed (163 packages; Go 1.26.1) using an absolute throwaway HOME and existing Go caches. Race tests passed for agentlink, channelruntime/agentlink, contactsruntime and tools/builtin; focused reconnect/stale-attempt/authorization/capacity/same-ID/reply-file regressions passed -count=10. Temporary reproduction probe ran in a scratch copy and was removed. Manager independently verified clean checkout, unchanged reviewed head and git diff --check. No unpinned installations or manifest changes. No Console source changes, so no nsh or visual checks applicable.
+
+Residual risks: no real multi-machine networks, Android, separate-process mixed versions or receiver restart exercised; receiver resume remains intentionally in-memory. Sanitized message-ID snapshot-directory collisions and finish/remove racing an immediate ID reuse were not reproduced and current callers generate unique IDs. A concurrent duplicate send can return queued before the first enqueue later fails. Multiple processes sharing a state directory were not exercised. No linked issue or PR identified in this thread.
+
+Under factory review policy no P0/P1 blocks readiness: moved review/ → ready/. The reproduced P3 above remains for owner attention; this review does not ship or override conditional shipping approval.
