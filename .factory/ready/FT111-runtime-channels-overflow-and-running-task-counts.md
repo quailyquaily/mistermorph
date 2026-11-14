@@ -46,3 +46,15 @@ Verification: manager independently reran configured gate `test -z "$(gofmt -l .
 Browser/live checks: Chrome 1280/390/320 widths, Japanese narrow layout, no horizontal overflow; keyboard Tab/Enter/Space and visible focus checked. Mock-LLM live Console + CLI-API task running counts returned to zero without reload (tasks ended failed due mock response format). Not checked: real morph chat shared-process execution, real messaging accounts, desktop application, Android device/emulator, screen reader. Closed Collapsible omits aria-expanded=false in nsh upstream.
 
 Installs: none. Initial branch push failed because credential helper needed credential.useHttpPath=true; one retry with command-scoped option succeeded. No secrets/settings changed.
+
+## factory · review · 2026-11-14 10:11
+head: c8f18ea46570ab1b8f34ea4db31e392e00b579a8
+verdict: pass
+notes:
+- [P3] web/console-nsh/pages/settings/RuntimePanel.tsx:363-369: a failed refresh retains the last known running-task counts. Example verified with a throwaway nsh test: first response has console=0, cli=0, telegram=2; next refresh returns 502, yet entries still show zero/zero/two alongside the panel's Stale data warning. Clear running_tasks on a current refresh error or render counts unknown while err is set; add failed-refresh coverage.
+
+Reviewed by Claude Code: origin/master (75eec416) ... c8f18ea4, both item commits and all 12 changed files. Attribution, steered-task exclusion, store lifecycle, state filtering, unknown values, layout and protected paths reviewed. No P0/P1 findings; review/ → ready/.
+
+Validation: configured gofmt/vet/go-test gate PASS with throwaway HOME; nsh check PASS. Full nsh suite 925/927 passed: the two failures are linux/android variants of existing chat-composer-drum “typing turns the drum”. Isolated repeated tests verified this on base (3/4 failures) and head (2/4 failures); unchanged composer, not an introduced failure. New item tests pass. Stale-count reproduction confirmed in a scratch frontend copy; tracked worktree clean, no commits or edits by reviewer. Installs: none.
+
+Residual risks: no live real morph-chat/shared-store process, messaging accounts, desktop app, Android device or screen-reader verification in this review. Counts retain the existing one-minute polling delay. The overview adds another shared-store journal read/lock per poll; not load-tested. No linked issue/PR in the item, so no GitHub review comment required.
