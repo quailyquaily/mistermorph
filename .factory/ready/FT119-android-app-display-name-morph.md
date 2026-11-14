@@ -38,3 +38,14 @@ Tests: gofmt cleanliness, go vet ./... and go test ./... passed, independently r
 Not checked: Full APK/AAB packaging was not run because nsh Android runtime/nsh.aar are unavailable locally and the script would download binaries. No device/emulator was used; launcher and Android Settings UI were not visually verified. Review should inspect actual packaging/device labels before release.
 
 Push note: first credential-helper attempt lacked repository path; retry with command-local credential.useHttpPath=true succeeded. No persistent credential configuration changed.
+
+## factory · review · 2026-11-14 22:47
+head: d4d44d53e88d8ddcf2cb47cb274af5790fb01393
+verdict: pass
+notes:
+- Claude Code found no qualifying defects in origin/master...HEAD against base f9e8da5e. Android-only literal Morph label, launcher overrides, locale independence, idempotency, package preservation and APK badging gate were checked.
+- Validation passed with throwaway HOME: configured gofmt/vet/go test checks (163 packages), nsh check, Console test script (107 files, no failures), Node manifest tests (9/9), and bash syntax check.
+- Existing aapt2 resource-only APK checks verified localized labels all become Morph, package remains unchanged, gate rejects old labels, and the installed nsh manifest template patches and links correctly.
+- No installs. Worktree unchanged. No linked GitHub issue or PR.
+- Not verified: full APK/AAB packaging and actual launcher/Settings UI on a device; local nsh Android runtime/nsh.aar unavailable. AAB output has no badging gate. Owner should check an installable build before release.
+- master advanced to 45bf4165 after validation; no merge into base or shipping was performed. Ship must validate integration against current base.
