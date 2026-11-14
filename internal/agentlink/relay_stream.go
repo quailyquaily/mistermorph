@@ -7,6 +7,10 @@ import "fmt"
 // the next one of its file, of the right length and within the sender's window, and forwards the
 // target's acknowledgements back with the sender's lease ID. It holds only the chunks forwarded and
 // not yet acknowledged: at most streamWindow per sending connection.
+//
+// Chunks and acknowledgements count only for the attempt that the delivery carries: those of an
+// earlier attempt of the same message (still in flight when the sender reconnected or sent it
+// again) are dropped, not taken as protocol errors and not as the new attempt's start.
 
 type relayStream struct {
 	transfers map[string]*relayTransfer
@@ -84,6 +88,12 @@ func (r *Relay) forwardChunk(source *relayMember, frame Frame) {
 		r.logger.Debug("agentlink_stale_chunk", "endpoint", source.label, "transfer_id", chunk.TransferID)
 		return
 	}
+	if chunk.Attempt != p.attempt {
+		// Sent in an earlier attempt of the delivery, before the sender gave it up.
+		r.mu.Unlock()
+		r.logger.Debug("agentlink_stale_chunk", "endpoint", source.label, "transfer_id", chunk.TransferID, "offset", chunk.Offset)
+		return
+	}
 	id := p.messageID
 	t := p.stream.transfers[chunk.TransferID]
 	var problem string
@@ -122,7 +132,9 @@ func (r *Relay) forwardChunk(source *relayMember, frame Frame) {
 func (r *Relay) forwardAck(target *relayMember, frame Frame) {
 	r.mu.Lock()
 	p := r.pending[frame.MessageID]
-	if p == nil || p.target != target || p.stream == nil {
+	if p == nil || p.target != target || p.stream == nil || frame.Attempt != p.attempt {
+		// No such delivery, or an acknowledgement of an earlier attempt: the receiver says where
+		// the current attempt starts in its own first acknowledgement of it.
 		r.mu.Unlock()
 		return
 	}
@@ -153,7 +165,7 @@ func (r *Relay) forwardAck(target *relayMember, frame Frame) {
 	}
 	p.timer.Reset(streamIdleTimeout)
 	r.mu.Unlock()
-	p.source.send(Frame{Type: FrameChunkAck, LeaseID: p.leaseID, MessageID: frame.MessageID, TransferID: frame.TransferID, Offset: offset})
+	p.source.send(Frame{Type: FrameChunkAck, LeaseID: p.leaseID, Attempt: p.attempt, MessageID: frame.MessageID, TransferID: frame.TransferID, Offset: offset})
 }
 
 // abortStream tells both ends that the relay dropped a delivery for a protocol error: the sender's
@@ -161,7 +173,7 @@ func (r *Relay) forwardAck(target *relayMember, frame Frame) {
 func (r *Relay) abortStream(messageID string, p *pendingDelivery, problem string) {
 	r.logger.Warn("agentlink_transfer_aborted", "message_id", messageID, "from", p.source.peer.InstanceID, "to", p.target.peer.InstanceID, "reason", problem)
 	p.source.send(Frame{Type: FrameSendResult, LeaseID: p.leaseID, MessageID: messageID, Status: StatusRejected, Reason: ReasonInvalid})
-	p.target.send(Frame{Type: FrameTransferAbort, MessageID: messageID, Status: StatusRejected, Reason: ReasonInvalid})
+	p.target.send(Frame{Type: FrameTransferAbort, MessageID: messageID, Attempt: p.attempt, Status: StatusRejected, Reason: ReasonInvalid})
 }
 
 // StreamBytes is the streamed bytes the relay forwarded and their receivers did not acknowledge

@@ -749,7 +749,7 @@ func (n *Node) handleChunkAck(c *nodeConn, frame Frame) {
 	n.mu.Lock()
 	entry := n.outbox[id]
 	s := n.streams[id]
-	if entry == nil || s == nil || entry.lease != c || entry.leaseID != frame.LeaseID || s.leaseID != frame.LeaseID {
+	if entry == nil || s == nil || entry.lease != c || entry.leaseID != frame.LeaseID || s.leaseID != frame.LeaseID || s.attempt != frame.Attempt {
 		n.mu.Unlock()
 		return
 	}
@@ -829,7 +829,7 @@ func (n *Node) finish(id string, result SendResult) {
 
 func (n *Node) handleDeliver(c *nodeConn, frame Frame) {
 	reply := func(status, reason string) {
-		c.send(Frame{Type: FrameDeliverResult, MessageID: frame.MessageID, Status: status, Reason: reason})
+		c.send(Frame{Type: FrameDeliverResult, MessageID: frame.MessageID, Attempt: frame.Attempt, Status: status, Reason: reason})
 	}
 	if frame.Message == nil {
 		reply(StatusRejected, ReasonInvalid)
@@ -842,7 +842,7 @@ func (n *Node) handleDeliver(c *nodeConn, frame Frame) {
 		return
 	}
 	if streamed(msg.Attachments) {
-		n.handleStreamDeliver(c, msg, reply)
+		n.handleStreamDeliver(c, frame.Attempt, msg, reply)
 		return
 	}
 	withFiles := len(msg.Attachments) > 0
@@ -1075,11 +1075,13 @@ func (n *Node) dispatch() {
 		c := candidates[entry.attempts%len(candidates)]
 		msg := entry.Message
 		leaseID := uuid.NewString()
+		var attempt string
 		var stream *outStream
 		var loaded int64
 		switch {
 		case len(streams) > 0:
-			stream = n.newOutStream(c, msg, leaseID)
+			attempt = newAttemptID()
+			stream = n.newOutStream(c, msg, leaseID, attempt)
 		case streamForm && withFiles:
 			if n.inlineDispatchBytes+fileBytes > maxInlineDispatchBytes {
 				// Enough files are in memory already; this one waits for the next round.
@@ -1093,7 +1095,7 @@ func (n *Node) dispatch() {
 			}
 			msg, loaded = inlined, fileBytes
 		}
-		if !c.send(Frame{Type: FrameSend, LeaseID: leaseID, MessageID: msg.MessageID, Message: &msg}) {
+		if !c.send(Frame{Type: FrameSend, LeaseID: leaseID, Attempt: attempt, MessageID: msg.MessageID, Message: &msg}) {
 			continue
 		}
 		entry.lease = c

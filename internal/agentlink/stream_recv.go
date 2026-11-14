@@ -33,8 +33,10 @@ type inStream struct {
 	reserved int64
 
 	mu sync.Mutex
-	// conn is the connection the delivery arrives on; nil while it waits for a resume.
-	conn *nodeConn
+	// conn is the connection the delivery arrives on; nil while it waits for a resume. attempt is
+	// the sender's attempt that conn carries: chunks and aborts of any other are stale.
+	conn    *nodeConn
+	attempt string
 	// ready is set once the partial files exist and the first acknowledgements went out.
 	ready bool
 	// finishing is set once every byte arrived; closed once the delivery is dropped.
@@ -93,8 +95,12 @@ func (s *inStream) status() []TransferStatus {
 	return out
 }
 
-// handleStreamDeliver starts or resumes a streamed delivery.
-func (n *Node) handleStreamDeliver(c *nodeConn, msg Message, reply func(status, reason string)) {
+// handleStreamDeliver starts or resumes a streamed delivery of attempt.
+func (n *Node) handleStreamDeliver(c *nodeConn, attempt string, msg Message, reply func(status, reason string)) {
+	if !validAttemptID(attempt) {
+		reply(StatusRejected, ReasonInvalid)
+		return
+	}
 	key := streamKey(msg.From, msg.MessageID)
 	n.mu.Lock()
 	if _, seen := n.seen[msg.MessageID]; seen {
@@ -121,7 +127,7 @@ func (n *Node) handleStreamDeliver(c *nodeConn, msg Message, reply func(status, 
 	}
 	if s := n.inStreams[key]; s != nil {
 		n.mu.Unlock()
-		n.resumeStream(c, s, msg, reply)
+		n.resumeStream(c, s, attempt, msg, reply)
 		return
 	}
 	for _, a := range msg.Attachments {
@@ -148,7 +154,7 @@ func (n *Node) handleStreamDeliver(c *nodeConn, msg Message, reply func(status, 
 		reply(StatusUnreachable, "")
 		return
 	}
-	s := &inStream{key: key, msg: msg, inbox: inbox, answer: answer, reserved: total, conn: c, lastActive: n.opts.Now()}
+	s := &inStream{key: key, msg: msg, inbox: inbox, answer: answer, reserved: total, conn: c, attempt: attempt, lastActive: n.opts.Now()}
 	n.inStreams[key] = s
 	for _, a := range msg.Attachments {
 		n.inTransfers[a.TransferID] = s
@@ -173,7 +179,7 @@ func (n *Node) handleStreamDeliver(c *nodeConn, msg Message, reply func(status, 
 		return
 	}
 	s.ready = true
-	conn := s.conn
+	conn, attempt := s.conn, s.attempt
 	complete := s.complete()
 	if complete {
 		s.finishing = true
@@ -183,7 +189,7 @@ func (n *Node) handleStreamDeliver(c *nodeConn, msg Message, reply func(status, 
 		"files", len(msg.Attachments), "size", total)
 	if conn != nil {
 		for _, a := range msg.Attachments {
-			conn.send(Frame{Type: FrameChunkAck, MessageID: msg.MessageID, TransferID: a.TransferID, Offset: 0})
+			conn.send(Frame{Type: FrameChunkAck, Attempt: attempt, MessageID: msg.MessageID, TransferID: a.TransferID, Offset: 0})
 		}
 	}
 	if complete {
@@ -192,9 +198,9 @@ func (n *Node) handleStreamDeliver(c *nodeConn, msg Message, reply func(status, 
 	}
 }
 
-// resumeStream moves an unfinished delivery to the connection that delivered it again, and tells
-// the sender what it holds.
-func (n *Node) resumeStream(c *nodeConn, s *inStream, msg Message, reply func(status, reason string)) {
+// resumeStream moves an unfinished delivery to the connection and attempt that delivered it again,
+// and tells the sender what it holds.
+func (n *Node) resumeStream(c *nodeConn, s *inStream, attempt string, msg Message, reply func(status, reason string)) {
 	s.mu.Lock()
 	switch {
 	case s.closed || !s.ready || s.finishing:
@@ -207,11 +213,13 @@ func (n *Node) resumeStream(c *nodeConn, s *inStream, msg Message, reply func(st
 		reply(StatusRejected, ReasonInvalid)
 		return
 	}
+	// From here on, chunks and aborts of the attempt before are stale.
 	s.conn = c
+	s.attempt = attempt
 	s.lastActive = n.opts.Now()
 	acks := make([]Frame, 0, len(s.files))
 	for _, f := range s.files {
-		acks = append(acks, Frame{Type: FrameChunkAck, MessageID: msg.MessageID, TransferID: f.transferID, Offset: f.written})
+		acks = append(acks, Frame{Type: FrameChunkAck, Attempt: attempt, MessageID: msg.MessageID, TransferID: f.transferID, Offset: f.written})
 	}
 	s.mu.Unlock()
 	for _, ack := range acks {
@@ -322,8 +330,8 @@ func (n *Node) handleChunk(c *nodeConn, frame Frame) {
 		return
 	}
 	s.mu.Lock()
-	if s.closed || s.conn != c {
-		// Sent before the delivery moved to another connection.
+	if s.closed || s.conn != c || chunk.Attempt != s.attempt {
+		// Sent in an attempt before the delivery moved to another connection or attempt.
 		s.mu.Unlock()
 		return
 	}
@@ -366,9 +374,9 @@ func (n *Node) handleChunk(c *nodeConn, frame Frame) {
 	if complete {
 		s.finishing = true
 	}
-	written := f.written
+	written, attempt := f.written, s.attempt
 	s.mu.Unlock()
-	c.send(Frame{Type: FrameChunkAck, MessageID: s.msg.MessageID, TransferID: chunk.TransferID, Offset: written})
+	c.send(Frame{Type: FrameChunkAck, Attempt: attempt, MessageID: s.msg.MessageID, TransferID: chunk.TransferID, Offset: written})
 	if complete {
 		go n.completeStream(s)
 	}
@@ -388,7 +396,8 @@ func (n *Node) handleTransferAbort(c *nodeConn, frame Frame) {
 		return
 	}
 	target.mu.Lock()
-	if target.conn != c || target.finishing {
+	if target.conn != c || target.finishing || frame.Attempt != target.attempt {
+		// Not the delivery's current attempt: the relay dropped one that has been replaced.
 		target.mu.Unlock()
 		return
 	}
@@ -445,12 +454,12 @@ func (n *Node) rejectStream(s *inStream, reason string, err error) {
 		return
 	}
 	s.closed = true
-	conn := s.conn
+	conn, attempt := s.conn, s.attempt
 	closeParts(s.files)
 	s.mu.Unlock()
 	n.logger.Warn("agentlink_transfer_rejected", "message_id", s.msg.MessageID, "from", s.msg.From, "reason", reason, "error", err.Error())
 	if reason != "" && conn != nil {
-		conn.send(Frame{Type: FrameDeliverResult, MessageID: s.msg.MessageID, Status: StatusRejected, Reason: reason})
+		conn.send(Frame{Type: FrameDeliverResult, Attempt: attempt, MessageID: s.msg.MessageID, Status: StatusRejected, Reason: reason})
 	}
 }
 
@@ -546,10 +555,10 @@ func (n *Node) completeStream(s *inStream) {
 	n.mu.Unlock()
 	reply := func(status, reason string) {
 		s.mu.Lock()
-		conn := s.conn
+		conn, attempt := s.conn, s.attempt
 		s.mu.Unlock()
 		if conn != nil {
-			conn.send(Frame{Type: FrameDeliverResult, MessageID: s.msg.MessageID, Status: status, Reason: reason})
+			conn.send(Frame{Type: FrameDeliverResult, Attempt: attempt, MessageID: s.msg.MessageID, Status: status, Reason: reason})
 		}
 	}
 	saved, err := n.publishParts(s)

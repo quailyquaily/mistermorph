@@ -81,7 +81,10 @@ type pendingDelivery struct {
 	source    *relayMember
 	target    *relayMember
 	leaseID   string
-	timer     *time.Timer
+	// attempt is the sender's attempt ID of a streamed delivery; only frames with it belong to
+	// the delivery.
+	attempt string
+	timer   *time.Timer
 	// fileBytes is the inline attachment bytes the delivery carries.
 	fileBytes int64
 	// stream is the state of a delivery with streamed files.
@@ -265,7 +268,7 @@ func (r *Relay) removeMember(member *relayMember, reason string) {
 	}
 	for i, p := range gone {
 		// The receiver keeps what it got, for when the sender delivers the message again.
-		p.target.send(Frame{Type: FrameTransferAbort, MessageID: goneIDs[i], Status: StatusUnreachable})
+		p.target.send(Frame{Type: FrameTransferAbort, MessageID: goneIDs[i], Attempt: p.attempt, Status: StatusUnreachable})
 	}
 	r.logger.Info("agentlink_member_left", "instance_id", member.peer.InstanceID, "endpoint", member.label, "reason", reason)
 }
@@ -287,10 +290,13 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		return
 	}
 	withStream := streamed(msg.Attachments)
-	if withStream && r.noStream {
-		// What a Console from before streamed files answers.
+	if withStream && (r.noStream || !validAttemptID(frame.Attempt)) {
+		// What a Console from before streamed files answers; a streamed send names its attempt.
 		result(StatusRejected, ReasonInvalid)
 		return
+	}
+	if !withStream {
+		frame.Attempt = ""
 	}
 	fileBytes := inlineBytes(msg.Attachments)
 	timeout := deliverTimeout
@@ -340,7 +346,7 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		// The sender's lease ran out and it sent again through this Console; answer the new lease.
 		r.dropPendingLocked(msg.MessageID, previous)
 	}
-	p := &pendingDelivery{messageID: msg.MessageID, source: source, target: target, leaseID: frame.LeaseID, fileBytes: fileBytes}
+	p := &pendingDelivery{messageID: msg.MessageID, source: source, target: target, leaseID: frame.LeaseID, attempt: frame.Attempt, fileBytes: fileBytes}
 	p.timer = time.AfterFunc(timeout, func() { r.expireDelivery(msg.MessageID, p) })
 	r.pending[msg.MessageID] = p
 	r.fileBytes += fileBytes
@@ -351,7 +357,7 @@ func (r *Relay) route(source *relayMember, frame Frame) {
 		}
 	}
 	r.mu.Unlock()
-	if !target.send(Frame{Type: FrameDeliver, MessageID: msg.MessageID, Message: &msg}) {
+	if !target.send(Frame{Type: FrameDeliver, MessageID: msg.MessageID, Attempt: p.attempt, Message: &msg}) {
 		r.expireDelivery(msg.MessageID, p)
 	}
 }
@@ -378,7 +384,7 @@ func (r *Relay) expireDelivery(messageID string, p *pendingDelivery) {
 	p.source.send(Frame{Type: FrameSendResult, LeaseID: p.leaseID, MessageID: messageID, Status: StatusUnreachable})
 	if p.stream != nil {
 		// No progress for streamIdleTimeout; the receiver keeps what it got for a resume.
-		p.target.send(Frame{Type: FrameTransferAbort, MessageID: messageID, Status: StatusUnreachable})
+		p.target.send(Frame{Type: FrameTransferAbort, MessageID: messageID, Attempt: p.attempt, Status: StatusUnreachable})
 	}
 }
 
@@ -386,7 +392,8 @@ func (r *Relay) completeDelivery(target *relayMember, frame Frame) {
 	id := strings.TrimSpace(frame.MessageID)
 	r.mu.Lock()
 	p := r.pending[id]
-	if p == nil || p.target != target {
+	if p == nil || p.target != target || (p.stream != nil && frame.Attempt != p.attempt) {
+		// No delivery, or the result of an earlier attempt of a streamed one.
 		r.mu.Unlock()
 		return
 	}

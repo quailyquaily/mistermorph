@@ -122,6 +122,9 @@ type Frame struct {
 	Status       string   `json:"status,omitempty"`
 	Reason       string   `json:"reason,omitempty"`
 	Message      *Message `json:"message,omitempty"`
+	// Attempt identifies one delivery attempt of a streamed message: the sender picks a new one for
+	// every send, and the deliver, chunk_ack, transfer_abort and results of that attempt carry it.
+	Attempt string `json:"attempt,omitempty"`
 	// TransferID and Offset are a chunk_ack's transfer and the bytes the receiver holds.
 	TransferID string `json:"transfer_id,omitempty"`
 	Offset     int64  `json:"offset,omitempty"`

@@ -10,10 +10,16 @@ import (
 
 // Streamed file transfer. A message whose attachments carry a TransferID travels without their
 // bytes: its JSON send/deliver frames hold the metadata only, and each file's bytes follow as
-// binary WebSocket frames of at most streamChunkSize bytes, each tagged with the transfer ID and its
-// offset. The receiver acknowledges every chunk it wrote (FrameChunkAck); its first
-// acknowledgement of a transfer is the offset it already holds, so a delivery after a reconnect
-// continues from there. A sender keeps at most streamWindow unacknowledged chunks per connection, and
+// binary WebSocket frames of at most streamChunkSize bytes, each tagged with the transfer ID, the
+// delivery attempt and its offset. The receiver acknowledges every chunk it wrote (FrameChunkAck);
+// its first acknowledgement of a transfer in an attempt is the offset it already holds, so a
+// delivery after a reconnect continues from there.
+//
+// Every send of a streamed message is a new attempt with its own random ID, which its deliver,
+// chunks, acknowledgements, aborts and results carry. A relay and a receiver act only on the frames
+// of the attempt they currently carry: a chunk or an acknowledgement still in flight from an
+// attempt that ended (a sender that reconnected, a lease that ran out) is dropped, so it can neither
+// set where the next attempt starts nor fail it. A sender keeps at most streamWindow unacknowledged chunks per connection, and
 // a relay drops a transfer whose sender passes the window. See
 // docs/feat/feat_20261113_agentlink_streamed_files.md.
 const (
@@ -59,21 +65,26 @@ const (
 //	0       1     version, 1
 //	1       1     kind, 1 = file data
 //	2       16    transfer ID (the 32 hex characters of transfer_id, as bytes)
-//	18      8     offset of the data in the file
-//	26      n     data, 1..streamChunkSize bytes
+//	18      16    attempt ID (the 32 hex characters of the frames' attempt, as bytes)
+//	34      8     offset of the data in the file
+//	42      n     data, 1..streamChunkSize bytes
 const (
 	chunkVersion    = 1
 	chunkKindData   = 1
 	transferIDBytes = 16
-	chunkHeaderSize = 2 + transferIDBytes + 8
+	attemptIDBytes  = 16
+	chunkOffsetAt   = 2 + transferIDBytes + attemptIDBytes
+	chunkHeaderSize = chunkOffsetAt + 8
 	maxChunkFrame   = chunkHeaderSize + streamChunkSize
 )
 
 // Chunk is a piece of a streamed file, carried by a binary frame.
 type Chunk struct {
 	TransferID string
-	Offset     int64
-	Data       []byte
+	// Attempt is the delivery attempt the chunk belongs to.
+	Attempt string
+	Offset  int64
+	Data    []byte
 }
 
 var errBadChunk = errors.New("malformed binary frame")
@@ -84,6 +95,10 @@ func encodeChunk(c *Chunk) ([]byte, error) {
 	if err != nil || len(id) != transferIDBytes {
 		return nil, fmt.Errorf("invalid transfer id %q", c.TransferID)
 	}
+	attempt, err := hex.DecodeString(c.Attempt)
+	if err != nil || len(attempt) != attemptIDBytes {
+		return nil, fmt.Errorf("invalid attempt id %q", c.Attempt)
+	}
 	if c.Offset < 0 || len(c.Data) == 0 || len(c.Data) > streamChunkSize {
 		return nil, fmt.Errorf("invalid chunk (offset %d, %d bytes)", c.Offset, len(c.Data))
 	}
@@ -91,7 +106,8 @@ func encodeChunk(c *Chunk) ([]byte, error) {
 	out[0] = chunkVersion
 	out[1] = chunkKindData
 	copy(out[2:], id)
-	binary.BigEndian.PutUint64(out[2+transferIDBytes:], uint64(c.Offset))
+	copy(out[2+transferIDBytes:], attempt)
+	binary.BigEndian.PutUint64(out[chunkOffsetAt:], uint64(c.Offset))
 	copy(out[chunkHeaderSize:], c.Data)
 	return out, nil
 }
@@ -104,12 +120,13 @@ func decodeChunk(raw []byte) (*Chunk, error) {
 	if raw[0] != chunkVersion || raw[1] != chunkKindData {
 		return nil, fmt.Errorf("%w: version %d kind %d", errBadChunk, raw[0], raw[1])
 	}
-	offset := binary.BigEndian.Uint64(raw[2+transferIDBytes:])
+	offset := binary.BigEndian.Uint64(raw[chunkOffsetAt:])
 	if offset > uint64(MaxStreamAttachmentBytes) {
 		return nil, fmt.Errorf("%w: offset %d", errBadChunk, offset)
 	}
 	return &Chunk{
 		TransferID: hex.EncodeToString(raw[2 : 2+transferIDBytes]),
+		Attempt:    hex.EncodeToString(raw[2+transferIDBytes : chunkOffsetAt]),
 		Offset:     int64(offset),
 		Data:       raw[chunkHeaderSize:],
 	}, nil
@@ -117,6 +134,12 @@ func decodeChunk(raw []byte) (*Chunk, error) {
 
 // newTransferID returns a random transfer ID.
 func newTransferID() string { return randomHex(transferIDBytes) }
+
+// newAttemptID returns a random delivery attempt ID.
+func newAttemptID() string { return randomHex(attemptIDBytes) }
+
+// validAttemptID reports whether id is 32 lowercase hex characters.
+func validAttemptID(id string) bool { return validTransferID(id) }
 
 // validTransferID reports whether id is 32 lowercase hex characters.
 func validTransferID(id string) bool {

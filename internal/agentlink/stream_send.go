@@ -222,6 +222,8 @@ type outStream struct {
 	c       *nodeConn
 	msg     Message
 	leaseID string
+	// attempt is the delivery attempt the stream's chunks belong to.
+	attempt string
 	files   []*outFile
 	done    chan struct{}
 	// wake is signalled by every acknowledgement.
@@ -247,8 +249,8 @@ type outFile struct {
 	loggedAt int64
 }
 
-func (n *Node) newOutStream(c *nodeConn, msg Message, leaseID string) *outStream {
-	s := &outStream{n: n, c: c, msg: msg, leaseID: leaseID, done: make(chan struct{}), wake: make(chan struct{}, 1)}
+func (n *Node) newOutStream(c *nodeConn, msg Message, leaseID, attempt string) *outStream {
+	s := &outStream{n: n, c: c, msg: msg, leaseID: leaseID, attempt: attempt, done: make(chan struct{}), wake: make(chan struct{}, 1)}
 	for i, a := range msg.Attachments {
 		s.files = append(s.files, &outFile{
 			index: i, transferID: a.TransferID, filename: a.Filename, path: n.snapshotPath(msg.MessageID, i),
@@ -402,7 +404,7 @@ func (s *outStream) sendFile(f *outFile) error {
 			<-s.c.window
 			return errStreamStopped
 		}
-		if !s.c.send(Frame{Type: FrameChunk, Chunk: &Chunk{TransferID: f.transferID, Offset: offset, Data: data}}) {
+		if !s.c.send(Frame{Type: FrameChunk, Chunk: &Chunk{TransferID: f.transferID, Attempt: s.attempt, Offset: offset, Data: data}}) {
 			s.mu.Unlock()
 			<-s.c.window
 			return errStreamStopped

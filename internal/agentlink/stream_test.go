@@ -375,8 +375,11 @@ func streamedMessage(t testing.TB, id, from, to string, files ...[]byte) Message
 	return msg
 }
 
+// testAttempt is the attempt of the deliveries a test makes itself.
+const testAttempt = "0123456789abcdef0123456789abcdef"
+
 func chunkFrame(transferID string, offset int64, data []byte) Frame {
-	return Frame{Type: FrameChunk, Chunk: &Chunk{TransferID: transferID, Offset: offset, Data: data}}
+	return Frame{Type: FrameChunk, Chunk: &Chunk{TransferID: transferID, Attempt: testAttempt, Offset: offset, Data: data}}
 }
 
 // readUntil reads frames until one matches.
@@ -422,7 +425,7 @@ func TestStreamRejectsBadChunks(t *testing.T) {
 				b.SetHandler(got.handler(nil))
 				msg := streamedMessage(t, "m-"+strings.ReplaceAll(name, " ", "-"), newTestNode(t, "A").InstanceID(), b.InstanceID(), big, []byte("small"))
 				console := oldConsole(t, ctx, b)
-				if err := console.WriteFrame(ctx, Frame{Type: FrameDeliver, MessageID: msg.MessageID, Message: &msg}); err != nil {
+				if err := console.WriteFrame(ctx, Frame{Type: FrameDeliver, Attempt: testAttempt, MessageID: msg.MessageID, Message: &msg}); err != nil {
 					t.Fatal(err)
 				}
 				readUntil(t, ctx, console, func(f Frame) bool { return f.Type == FrameChunkAck && f.TransferID == msg.Attachments[1].TransferID })
@@ -467,7 +470,7 @@ func TestStreamRejectsBadChunks(t *testing.T) {
 				waitMember(t, relay, b.InstanceID())
 				rogue := fakeRuntime(t, ctx, relay, newTestNode(t, "Rogue").InstanceID(), []string{CapabilityFiles, CapabilityFilesStream})
 				msg := streamedMessage(t, "r-"+strings.ReplaceAll(name, " ", "-"), rogue.id, b.InstanceID(), big, []byte("small"))
-				if err := rogue.conn.WriteFrame(ctx, Frame{Type: FrameSend, LeaseID: "lease", MessageID: msg.MessageID, Message: &msg}); err != nil {
+				if err := rogue.conn.WriteFrame(ctx, Frame{Type: FrameSend, LeaseID: "lease", Attempt: testAttempt, MessageID: msg.MessageID, Message: &msg}); err != nil {
 					t.Fatal(err)
 				}
 				readUntil(t, ctx, rogue.conn, func(f Frame) bool { return f.Type == FrameChunkAck && f.TransferID == msg.Attachments[1].TransferID })
@@ -502,7 +505,7 @@ func TestStreamRejectsBadChunks(t *testing.T) {
 		rogue := fakeRuntime(t, ctx, relay, newTestNode(t, "Rogue").InstanceID(), []string{CapabilityFiles, CapabilityFilesStream})
 		data := binaryData(t, 8*streamChunkSize)
 		msg := streamedMessage(t, "w1", rogue.id, b.InstanceID(), data)
-		if err := rogue.conn.WriteFrame(ctx, Frame{Type: FrameSend, LeaseID: "lease", MessageID: msg.MessageID, Message: &msg}); err != nil {
+		if err := rogue.conn.WriteFrame(ctx, Frame{Type: FrameSend, LeaseID: "lease", Attempt: testAttempt, MessageID: msg.MessageID, Message: &msg}); err != nil {
 			t.Fatal(err)
 		}
 		readUntil(t, ctx, rogue.conn, func(f Frame) bool { return f.Type == FrameChunkAck })
@@ -546,13 +549,13 @@ func TestStreamRejectsBadChunks(t *testing.T) {
 				t.Errorf("%s: decoded", name)
 			}
 		}
-		c := &Chunk{TransferID: newTransferID(), Offset: 12345, Data: []byte("data")}
+		c := &Chunk{TransferID: newTransferID(), Attempt: newAttemptID(), Offset: 12345, Data: []byte("data")}
 		raw, err := encodeChunk(c)
 		if err != nil {
 			t.Fatal(err)
 		}
 		back, err := decodeChunk(raw)
-		if err != nil || back.TransferID != c.TransferID || back.Offset != c.Offset || string(back.Data) != "data" {
+		if err != nil || back.TransferID != c.TransferID || back.Attempt != c.Attempt || back.Offset != c.Offset || string(back.Data) != "data" {
 			t.Fatalf("round trip = %+v, %v", back, err)
 		}
 	})
@@ -758,7 +761,7 @@ func TestStreamInboundBounds(t *testing.T) {
 	from := newTestNode(t, "A").InstanceID()
 	start := func(console Conn, id string) Message {
 		msg := streamedMessage(t, id, from, b.InstanceID(), make([]byte, 1000))
-		if err := console.WriteFrame(ctx, Frame{Type: FrameDeliver, MessageID: id, Message: &msg}); err != nil {
+		if err := console.WriteFrame(ctx, Frame{Type: FrameDeliver, Attempt: testAttempt, MessageID: id, Message: &msg}); err != nil {
 			t.Fatal(err)
 		}
 		return msg
@@ -785,7 +788,7 @@ func TestStreamInboundBounds(t *testing.T) {
 		}
 		return true
 	})
-	if err := other.WriteFrame(ctx, Frame{Type: FrameDeliver, MessageID: msg.MessageID, Message: &msg}); err != nil {
+	if err := other.WriteFrame(ctx, Frame{Type: FrameDeliver, Attempt: testAttempt, MessageID: msg.MessageID, Message: &msg}); err != nil {
 		t.Fatal(err)
 	}
 	readUntil(t, ctx, other, func(f Frame) bool { return f.Type == FrameChunkAck && f.MessageID == "fifth" })

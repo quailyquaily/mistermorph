@@ -816,7 +816,11 @@ func TestAttachmentInterrupted(t *testing.T) {
 func deliverDirect(t *testing.T, ctx context.Context, node *Node, msg Message) (string, string) {
 	t.Helper()
 	console := oldConsole(t, ctx, node)
-	if err := console.WriteFrame(ctx, Frame{Type: FrameDeliver, MessageID: msg.MessageID, Message: &msg}); err != nil {
+	attempt := ""
+	if streamed(msg.Attachments) {
+		attempt = testAttempt
+	}
+	if err := console.WriteFrame(ctx, Frame{Type: FrameDeliver, Attempt: attempt, MessageID: msg.MessageID, Message: &msg}); err != nil {
 		t.Fatal(err)
 	}
 	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -865,7 +869,11 @@ func fakeRuntime(t *testing.T, ctx context.Context, relay *Relay, id string, cap
 
 func (r *rogueRuntime) send(t *testing.T, ctx context.Context, msg Message) (string, string) {
 	t.Helper()
-	if err := r.conn.WriteFrame(ctx, Frame{Type: FrameSend, LeaseID: "lease", MessageID: msg.MessageID, Message: &msg}); err != nil {
+	attempt := ""
+	if streamed(msg.Attachments) {
+		attempt = testAttempt
+	}
+	if err := r.conn.WriteFrame(ctx, Frame{Type: FrameSend, LeaseID: "lease", Attempt: attempt, MessageID: msg.MessageID, Message: &msg}); err != nil {
 		t.Fatal(err)
 	}
 	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
