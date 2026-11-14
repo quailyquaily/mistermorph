@@ -74,3 +74,10 @@ notes:
 - Not manually checked: actual desktop/mobile browser or Android rendering, label overflow, real reload persistence, and save-bar layout beside an open server pane. Test-host checks do not replace device checks.
 - No code commits or tracked changes. Coder reported writing a tooling-location memory note despite the run-directory constraint; that note is not repository content and was not used as review evidence.
 - Moved review/ → ready/. No linked GitHub issue or PR was present; no GitHub comment required. Not merged or deployed.
+
+## factory · 2026-11-15 00:11
+Shipped at the owner's request using Claude Code. Merged into master and pushed: f62b7ff33b56ee2c1bd13e3cfe2d7cb0b4667e87 (reviewed head 9ee0e0f7959fb315efc61a3394f5f300c15c0c3c). No conflicts or fix commits. No tag created or pushed, as requested.
+
+Validation on the merged head: gofmt, go vet ./..., go test ./... all passed (163 packages ok, 19 without tests); pinned nsh 0.5.0 check passed; required scripts/test.sh passed (111 files, zero failures, no isolated reruns). No new installs. Real browser/device rendering and live persistence were not manually checked. No linked issue or PR; branch retained (no clean action requested).
+
+Coder used existing machine Go caches outside the run directory; all throwaway HOME/temp/logs were within the ship directory. No repository change resulted from cache reuse.
