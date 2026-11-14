@@ -41,3 +41,16 @@ Tests: configured `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` pas
 UI checking: headless Chrome real web build with overridden safe-area insets, light theme, at 390×844 (47/0/34/0), 844×390 (0/47/21/47), zero-inset phone and 1280×800 desktop. Verified bottom padding, landscape cutout clearance, open/close and output screenshots against base. Real Android device/emulator, actual gesture/button system UI, real iOS/mobile browsers, desktop app and keyboard-up Chrome were NOT checked. Android inset/keyboard cases are headless tests only. Dark-theme visual checks were not performed; coder reports the web Console has no dark-mode handling. Owner should check real Android edge-to-edge and mobile safe-area rendering.
 
 No linked GitHub issue or PR. Initial push needed command-scoped credential.useHttpPath=true; branch push then succeeded without persistent configuration changes.
+
+## factory · review · 2026-11-14 19:12
+head: 31d49d346d9f85168d6ec4b6ce3af0309b0b13a0
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/chat-composer-drum.test.tsx:43: Required `nsh test --web-host tests/noHost.js` gate is not green: 936/938 passed, with the Android composer drum and persona avatar-preview tests failing. Obtain a green required run or owner disposition of the pre-existing failures before shipping; do not change unrelated behavior to hide the failures.
+notes:
+- Claude Code found no introduced code defects across all 13 changed files against origin/master (a72b391c). This P1 is a required-test gate finding under factory review rules, not a claim that FT117 caused either failure.
+- Go gate (gofmt, go vet ./..., go test ./...) passed; pinned nsh 0.5.0 check passed. Focused safe-area 9/9, Android 15/15, detail 22/22, navigation roots 12/12 and new-topic navigation 7/7 passed.
+- Composer drum focused reruns failed 2/3 on branch and 1/3 on unchanged base; the Linux variant also failed. Avatar preview focused reruns passed 3/3 on branch and 3/3 on base; its full-suite failure remains an intermittent validation issue, not a confirmed introduced defect.
+- Installs: none. No code changes or commits made by reviewer; worktree clean.
+- Real Android system UI, real mobile browsers, keyboard-up visuals, dark theme and on-device open/close animation remain unchecked.
+- No linked GitHub issues or PRs. Moved review/ → new/ for fix round 2 (round 1 of max 3).
