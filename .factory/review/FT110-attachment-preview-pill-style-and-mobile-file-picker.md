@@ -1,6 +1,6 @@
 ---
 branch: factory/FT110-attachment-preview-pill-style-and-mobile-file-picker
-round: 1
+round: 2
 ---
 # Attachment previews, rounded file pills, and mobile file picking
 
@@ -65,3 +65,17 @@ Validation: Claude Code reviewed origin/master...HEAD (master snapshot 75eec416b
 Installs: none. No worktree changes or commits by reviewers. Real Android Gallery/document pickers, real mobile browsers and desktop app window were not checked; preview rendering was not visually inspected. Headless tests do not prove native picker behavior or real-device rendering.
 
 Moved review/ → new/ at round 1 of 3 for the next fix round. No linked GitHub issue or PR in the owner request; no GitHub review comment required.
+
+## factory · plan · 2026-11-14 23:04
+Fix-round addition: preserve all attachment behavior and fix the review's pre-existing animation-test race in the test fixture only. Hold animation completion explicitly, assert the intermediate drum and target for Linux/Android, release it and await settled controls. Preserve reversal, Stop and reduced-motion coverage. Run repeated focused tests, full nsh checks and configured Go gate. No unrelated production fixes.
+
+## factory · 2026-11-14 23:04
+Built fix round 2 with Claude Code and pushed 6f9cc66ad561ad37d7e0624c479b709a0e214c28. Moved new/ → review/.
+
+Recovered a stopped build: retained merge ed726bc6 and inspected relevant uncommitted changes in PORTING.md, chat-composer-drum.test.tsx and fixtures/voice-control-app.tsx; committed them as 60badfc4. Nothing discarded. Merged current origin/master f9e8da5e cleanly in 6f9cc66a; no rebase.
+
+Fixed headless animation-completion scheduling race using fixture hold/release gates and explicit target assertions, retaining intermediate and settled-state checks. Added English timing guidance. No production attachment behavior, dependency manifests or config changed. Installs: none; existing pinned nsh 0.5.0 used.
+
+Tests on pushed head: nsh check passed; full nsh test --web-host tests/noHost.js passed, 939/939 (18m25s); configured gofmt/vet/go test gate passed and was independently rerun by manager successfully. Focused drum test passed 15/15 fresh runs, 6 tests each. Earlier stopped-build logs showed 40/40 new-test passes, not rerun as part of that count. No remaining failing gate.
+
+Not checked: real Android Gallery/document pickers, real phone browsers, desktop app window or visual preview rendering this round. Owner should inspect actual mobile picking and preview rendering; headless tests do not establish native behavior. No unpinned installs. New parallel test script was not run; required direct full-suite command was run.
