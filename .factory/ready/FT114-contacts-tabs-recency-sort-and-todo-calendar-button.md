@@ -74,3 +74,14 @@ Installs: none.
 Tests on this head: gofmt, go vet ./... and go test ./... passed. `nsh check` passed. Console suite with web/console-nsh/scripts/test.sh (one `nsh test` per file, several at a time): 111 files, 0 failed. The serial `nsh test --web-host tests/noHost.js` was not run on this head.
 
 Not checked: nobody has looked at the tabs in the library's head, in a browser or on a device, on a desktop or a phone. The review's P3 note (keyboard coverage for the tabs) is not addressed.
+
+## factory · review · 2026-11-15 01:33
+head: 5e6496ffe0870a82995de2a8303b5facb18513d5
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/contacts/ContactsPage.tsx:428: Switching kind preserves the previous list scroll offset, so a long tab opens mid-list instead of at its newest contacts. Verified with 120 humans and 120 agents at width 1280: scroll Humans 3000pt then press Agents; MM050–MM053 are visible while contact-row:mm:000 is off screen. Reset list scroll when kind changes. Non-blocking under the factory P0/P1 gate.
+- Keyboard tab navigation still lacks committed Tab/arrows/Home/End regression assertions (round 1 coverage note); not recorded as a runtime defect. Other suggested stylistic, expected-behavior and unverified candidates were excluded from findings.
+- Claude Code reviewed all 15 changed files on origin/master...HEAD (base snapshot 627af7fe, merge-base 2e37a15f), including integration with master's card library. No P0/P1 findings; branch merges cleanly with base. No source changes or commits remain.
+- Validation: configured gofmt/vet/go-test gate passed, 163 packages ok; pinned nsh 0.5.0 check passed; required parallel Console script passed, 111 files, 0 failed in 171s. chat-voice.test.tsx initially failed 9/10 during parallel execution then passed 10/10 on the script's required solo retry; that test and chat implementation are unchanged against master. Contacts and TODO tests passed first run. Scripted tests used absolute throwaway HOME directories. Serial full-suite nsh test was deliberately not run.
+- Installs: none. No browser visual inspection, real Android/iOS or GPUI desktop inspection this round; real-device focus, tint, tooltip and circular-toggle appearance remain unchecked. Headless test probes do not establish actual browser/device appearance.
+- Round 2/3: review/ → ready/. Owner should inspect the retained-scroll behavior and real-device UI before ship. No linked GitHub issue/PR in the request, so no GitHub comments required.
