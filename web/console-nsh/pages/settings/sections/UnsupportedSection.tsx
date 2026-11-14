@@ -7,8 +7,14 @@ import type { SettingsStore } from "../store";
 import { t } from "../i18n";
 
 export function UnsupportedSection(props: { s: SettingsStore }) {
+  // SKILLs & MCP is spelled as written, not in the heads' caps.
   return (
-    <SettingsCard title={props.s.selectedSection()?.title} meta={props.s.selectedSection()?.meta} testID="settings-unsupported">
+    <SettingsCard
+      title={props.s.selectedSection()?.title}
+      meta={props.s.selectedSection()?.meta}
+      literal={props.s.selectedSection()?.id === "mcp"}
+      testID="settings-unsupported"
+    >
       <View class="items-center gap-2 px-6 py-8">
         <Icon name="PhPlugs" size={28} color="muted-foreground" />
         <Text class="text-sm font-medium text-foreground">{t("settings_agent_endpoint_unsupported")}</Text>

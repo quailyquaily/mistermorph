@@ -4,9 +4,10 @@
 //
 // Vue to nsh: `modelValue` is `servers`; `save` is `onSave(servers)`, `pane-change` is
 // `onPaneChange(open)`; `paneTarget` is a PaneTarget (see PaneTarget.tsx).
+import type { JSX } from "nsh";
 import { batch, cleanup, computed, effect, signal, Text, untracked, View } from "nsh";
 import { Button, Icon, Skeleton, Tabs, TextField } from "../ui";
-import { SettingSwitch, SettingsCard, SettingToggleRow } from "../settings-page/parts";
+import { GroupTitle, SettingSwitch, SettingsCard, SettingToggleRow } from "../settings-page/parts";
 import { t } from "./DialogShell";
 import { type PaneTarget, SettingsPane, usePaneTarget } from "./PaneTarget";
 
@@ -47,6 +48,17 @@ export interface MCPSettingsPanelProps {
   /** The whole new list, to save. */
   onSave?: (servers: MCPServer[]) => void;
   onPaneChange?: (open: boolean) => void;
+  /** The card's head; "MCP" and its note when unset. A title is shown as written (`literal`). */
+  title?: string;
+  meta?: string;
+  /**
+   * Settings that share the card, above the servers (the Settings page's Load skills). With them,
+   * the servers get a group head of their own (`serversTitle`), which holds the add button.
+   */
+  before?: JSX.Element;
+  serversTitle?: string;
+  /** Another save of the same settings is running: no edits that would save now. */
+  blocked?: boolean;
 }
 
 type FullServer = Required<MCPServer> & { env_rows: Required<MCPPair>[]; header_rows: Required<MCPPair>[] };
@@ -96,7 +108,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
   const snapshot = signal("");
 
   const servers = () => (Array.isArray(props.servers) ? props.servers : []);
-  const busy = () => !!props.loading || !!props.saving || !!props.readOnly;
+  const busy = () => !!props.loading || !!props.saving || !!props.blocked || !!props.readOnly;
   const paneTitle = () =>
     editingIndex() < 0 ? t("settings_mcp_add_server") : editor().name.trim() || servers()[editingIndex()]?.name || "MCP Server";
   const dirty = computed(() => paneOpen() && JSON.stringify(cloneServer(editor())) !== snapshot());
@@ -442,91 +454,107 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
 
   usePaneTarget(() => (inTarget() ? props.paneTarget : undefined), paneOpen, paneKey, pane);
 
+  const addButton = () => (
+    <Button
+      variant="plain"
+      size="xs"
+      iconOnly
+      icon="PhPlus"
+      title={t("settings_mcp_add_server")}
+      disabled={busy()}
+      onPress={openAdd}
+      testID="mcp-add"
+    />
+  );
+
   return (
     <View class="flex-row" testID="mcp-settings">
       <View class="flex-1">
         <SettingsCard
-          title={t("settings_mcp_title")}
-          meta={t("settings_section_mcp_meta")}
-          actions={
-            <Button
-              variant="plain"
-              size="xs"
-              iconOnly
-              icon="PhPlus"
-              title={t("settings_mcp_add_server")}
-              disabled={busy()}
-              onPress={openAdd}
-              testID="mcp-add"
-            />
-          }
+          title={props.title ?? t("settings_mcp_title")}
+          meta={props.meta ?? t("settings_section_mcp_meta")}
+          literal={props.title !== undefined}
+          actions={props.serversTitle ? undefined : addButton()}
         >
           <If when={props.readOnly}>
             <View class="rounded-(--radius) border border-warn bg-card px-3 py-2.5">
               <Text class="text-xs text-foreground">{props.readOnlyMessage ?? ""}</Text>
             </View>
           </If>
-          <If when={!props.readOnly && props.validationError}>
-            <View class="rounded-(--radius) border border-danger bg-card px-3 py-2.5">
-              <Text class="text-xs text-danger" testID="mcp-validation-error">
-                {props.validationError ?? ""}
-              </Text>
-            </View>
-          </If>
-          <If
-            when={!props.loading}
-            else={<Skeleton rows={4} />}
-          >
-            <If
-              when={servers().length}
-              else={
-                <View class="min-h-45 items-center justify-center gap-2" testID="mcp-empty">
-                  <View class="mb-1">
-                    <Icon name="PhPlugsConnected" size={34} color="muted-foreground" />
-                  </View>
-                  <Text class="text-base font-semibold text-subtle">{t("settings_mcp_empty")}</Text>
-                  <Text class="text-center text-base text-muted-foreground">{t("settings_mcp_empty_note")}</Text>
+          {props.before}
+          <View class={props.serversTitle ? "gap-2" : "gap-4"} testID="mcp-servers">
+            <If when={props.serversTitle}>
+              <View class="flex-row items-center gap-2" testID="mcp-servers-head">
+                <View class="flex-1">
+                  <GroupTitle text={props.serversTitle ?? ""} />
                 </View>
-              }
-            >
-              <View>
-                <Each of={servers()} key={(server) => String(server._key || server.name)}>
-                  {(server, index) => (
-                    <View
-                      class={`flex-row items-center gap-3 ${index() > 0 ? "border-t border-line-soft" : ""} ${
-                        paneOpen() && editingIndex() === index() ? "bg-blue/9" : ""
-                      }`}
-                    >
-                      <View
-                        role="button"
-                        accessibilityLabel={server().name}
-                        accessibilityState={{ selected: paneOpen() && editingIndex() === index(), disabled: busy() }}
-                        disabled={busy()}
-                        onPress={() => openEdit(index())}
-                        class="flex-1 gap-0.5 px-2 py-3 hover:bg-hover"
-                      >
-                        <Text class="text-sm font-semibold text-foreground">{server().name}</Text>
-                        <Text class="font-mono text-xs text-muted-foreground line-clamp-1">
-                          {server().type === "http" ? server().url ?? "" : server().command ?? ""}
-                        </Text>
-                        <If when={server().on_demand}>
-                          <Text class="text-xs text-muted-foreground">{t("settings_mcp_on_demand_hint", { name: server().name })}</Text>
-                        </If>
-                      </View>
-                      <View class="pr-2">
-                        <SettingSwitch
-                          checked={server().enable !== false}
-                          disabled={busy()}
-                                                    testID={`mcp-enable-${index()}`}
-                          onChange={(value) => setServerEnabled(index(), value)}
-                        />
-                      </View>
-                    </View>
-                  )}
-                </Each>
+                {addButton()}
               </View>
             </If>
-          </If>
+            <If when={!props.readOnly && props.validationError}>
+              <View class="rounded-(--radius) border border-danger bg-card px-3 py-2.5">
+                <Text class="text-xs text-danger" testID="mcp-validation-error">
+                  {props.validationError ?? ""}
+                </Text>
+              </View>
+            </If>
+            <View class={props.serversTitle ? "border-t border-line-soft" : ""}>
+              <If
+                when={!props.loading}
+                else={<Skeleton rows={4} />}
+              >
+                <If
+                  when={servers().length}
+                  else={
+                    <View class="min-h-45 items-center justify-center gap-2" testID="mcp-empty">
+                      <View class="mb-1">
+                        <Icon name="PhPlugsConnected" size={34} color="muted-foreground" />
+                      </View>
+                      <Text class="text-base font-semibold text-subtle">{t("settings_mcp_empty")}</Text>
+                      <Text class="text-center text-base text-muted-foreground">{t("settings_mcp_empty_note")}</Text>
+                    </View>
+                  }
+                >
+                  <View>
+                    <Each of={servers()} key={(server) => String(server._key || server.name)}>
+                      {(server, index) => (
+                        <View
+                          class={`flex-row items-center gap-3 ${index() > 0 ? "border-t border-line-soft" : ""} ${
+                            paneOpen() && editingIndex() === index() ? "bg-blue/9" : ""
+                          }`}
+                        >
+                          <View
+                            role="button"
+                            accessibilityLabel={server().name}
+                            accessibilityState={{ selected: paneOpen() && editingIndex() === index(), disabled: busy() }}
+                            disabled={busy()}
+                            onPress={() => openEdit(index())}
+                            class="flex-1 gap-0.5 px-2 py-3 hover:bg-hover"
+                          >
+                            <Text class="text-sm font-semibold text-foreground">{server().name}</Text>
+                            <Text class="font-mono text-xs text-muted-foreground line-clamp-1">
+                              {server().type === "http" ? server().url ?? "" : server().command ?? ""}
+                            </Text>
+                            <If when={server().on_demand}>
+                              <Text class="text-xs text-muted-foreground">{t("settings_mcp_on_demand_hint", { name: server().name })}</Text>
+                            </If>
+                          </View>
+                          <View class="pr-2">
+                            <SettingSwitch
+                              checked={server().enable !== false}
+                              disabled={busy()}
+                              testID={`mcp-enable-${index()}`}
+                              onChange={(value) => setServerEnabled(index(), value)}
+                            />
+                          </View>
+                        </View>
+                      )}
+                    </Each>
+                  </View>
+                </If>
+              </If>
+            </View>
+          </View>
         </SettingsCard>
       </View>
       <If when={!inTarget()}>{pane()}</If>

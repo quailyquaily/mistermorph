@@ -439,8 +439,9 @@ export function createSettingsStore() {
   const agentNameSet = signal(DEFAULT_WORKER_NAME_SET);
   // False for a runtime too old to report the set: it would ignore one sent to it.
   const agentNameSetSupported = signal(true);
-  // The Tools page's Load skills switch (skills.enabled): off, no skill loads unless a task names it.
-  // Saved with the tool switches; only sent to a runtime that reported it.
+  // The SKILLs & MCP page's Load skills switch (skills.enabled): off, no skill loads unless a task
+  // names it. A draft of its own, saved through the page's save bar as `skills.enabled` alone (the MCP
+  // servers there save from their own pane); only sent to a runtime that reported it.
   const skillsEnabled = signal(true);
   const skillsEnabledSupported = signal(false);
   type ChannelKind = "telegram" | "slack" | "line" | "lark" | "mixin" | "discord" | "wechat" | "whatsapp" | "bluesky" | "x" | "guard";
@@ -473,6 +474,7 @@ export function createSettingsStore() {
   const loadedLLMSnapshot = signal("");
   const loadedToolsSnapshot = signal("");
   const loadedMCPSnapshot = signal("");
+  const loadedSkillsSnapshot = signal("");
   const agentSettingsLoaded = signal(false);
   const llmEnvManaged = signal<Record<string, any>>({});
   const llmSecretFields = signal<Record<string, any>>({});
@@ -688,8 +690,11 @@ export function createSettingsStore() {
     return JSON.stringify({
       tools: Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, !!state.tools[id]])),
       agent_name_set: agentNameSet(),
-      skills_enabled: skillsEnabled(),
     });
+  }
+
+  function buildSkillsSnapshot() {
+    return JSON.stringify({ enabled: skillsEnabled() });
   }
 
   function buildMCPSnapshot() {
@@ -820,12 +825,17 @@ export function createSettingsStore() {
     const loaded = loadedMCPSnapshot();
     return !!loaded && buildMCPSnapshot() !== loaded;
   });
+  const skillsDirty = computed(() => {
+    const loaded = loadedSkillsSnapshot();
+    return !!loaded && skillsEnabledSupported() && buildSkillsSnapshot() !== loaded;
+  });
 
   function clearLoadedAgentSnapshots() {
     batch(() => {
       loadedLLMSnapshot.set("");
       loadedToolsSnapshot.set("");
       loadedMCPSnapshot.set("");
+      loadedSkillsSnapshot.set("");
       agentSettingsLoaded.set(false);
     });
   }
@@ -856,6 +866,10 @@ export function createSettingsStore() {
         if (normalizedScope === "all" || normalizedScope === "mcp") {
           loadedMCPSnapshot.set(buildMCPSnapshot());
         }
+        // The Load skills switch is on the MCP section's page.
+        if (normalizedScope === "all" || normalizedScope === "mcp" || normalizedScope === "skills") {
+          loadedSkillsSnapshot.set(buildSkillsSnapshot());
+        }
       }),
     );
   }
@@ -867,8 +881,10 @@ export function createSettingsStore() {
       if (!untracked(loadedLLMSnapshot)) setLoadedAgentSnapshots("llm");
     } else if (scope === "tools" && !untracked(loadedToolsSnapshot)) {
       setLoadedAgentSnapshots("tools");
-    } else if (scope === "mcp" && !untracked(loadedMCPSnapshot)) {
-      setLoadedAgentSnapshots("mcp");
+    } else if (scope === "mcp") {
+      // Each on its own: setting one must not drop the other's draft.
+      if (!untracked(loadedMCPSnapshot)) untracked(() => loadedMCPSnapshot.set(buildMCPSnapshot()));
+      if (!untracked(loadedSkillsSnapshot)) setLoadedAgentSnapshots("skills");
     }
   }
 
@@ -960,7 +976,8 @@ export function createSettingsStore() {
       { id: "agent", icon: "PhRobot", title: t("settings_agent_block_title"), meta: t("settings_section_agent_meta"), saveKind: "agent" },
       { id: "routes", icon: "PhArrowsSplit", title: t("settings_routes_title"), meta: t("settings_section_routes_meta"), saveKind: "agent" },
       { id: "tools", icon: "PhToolbox", title: t("settings_tools_title"), meta: t("settings_section_tools_meta"), saveKind: "agent" },
-      { id: "mcp", icon: "PhPlugsConnected", title: t("settings_mcp_title"), meta: t("settings_section_mcp_meta"), saveKind: "agent" },
+      // The MCP section also holds Load skills: its id (and /settings/mcp) stay, its title is both.
+      { id: "mcp", icon: "PhPlugsConnected", title: t("settings_skills_mcp_title"), meta: t("settings_section_skills_mcp_meta"), saveKind: "agent" },
     ];
     if (selectedEndpointIsConsole()) {
       items.push({ id: "channels", icon: "PhChats", title: t("settings_console_channels_title"), saveKind: "console" });
@@ -1394,6 +1411,7 @@ export function createSettingsStore() {
   const mcpSaveDisabled = computed(
     () => agentLoading() || agentSaving() || agentSettingsReadOnly() || !mcpDirty() || mcpValidationError() !== "",
   );
+  const skillsSaveDisabled = computed(() => agentLoading() || agentSaving() || agentSettingsReadOnly() || !skillsDirty());
   const consoleTargetSaveDisabled = (target: string) => consoleLoading() || consoleSaving() || !consoleDirtyOf[target]?.();
 
   /* --- the section save bar --- */
@@ -1421,6 +1439,9 @@ export function createSettingsStore() {
     }
     if (id === "tools" && toolsDirty()) {
       units.push({ key: "tools", label: title, save: () => saveAgentSettings("tools", { notify: false }) });
+    }
+    if (id === "mcp" && skillsDirty()) {
+      units.push({ key: "skills", label: t("skills_enabled"), save: () => saveAgentSettings("skills", { notify: false }) });
     }
     const dirtyTargets = (CONSOLE_SECTION_TARGETS[id] || []).filter(([target]) => consoleDirtyOf[target]());
     if (dirtyTargets.length) {
@@ -2075,7 +2096,8 @@ export function createSettingsStore() {
     // Only `enabled`: the skills to load are the Skills page's, and stay as they are.
     const skills = skillsEnabledSupported() ? { skills: { enabled: skillsEnabled() } } : {};
     if (target === "llm") return { llm: buildLLMSettingsPayload() };
-    if (target === "tools") return { tools, ...skills };
+    if (target === "tools") return { tools };
+    if (target === "skills") return skills;
     const mcp = { servers: state.mcp.servers.map(serializeMCPServer) };
     if (target === "mcp") return { mcp };
     return { llm: buildLLMSettingsPayload(), tools, ...skills, mcp };
@@ -3042,11 +3064,12 @@ export function createSettingsStore() {
   }
 
   async function saveAgentSettings(target = "all", { notify = true } = {}) {
-    const normalizedTarget = ["all", "llm", "tools", "mcp"].includes(String(target)) ? String(target) : "all";
+    const normalizedTarget = ["all", "llm", "tools", "mcp", "skills"].includes(String(target)) ? String(target) : "all";
     if (untracked(agentSettingsReadOnly)) return false;
     if (normalizedTarget === "llm" && untracked(llmSaveDisabled)) return false;
     if (normalizedTarget === "tools" && untracked(toolsSaveDisabled)) return false;
     if (normalizedTarget === "mcp" && untracked(mcpSaveDisabled)) return false;
+    if (normalizedTarget === "skills" && untracked(skillsSaveDisabled)) return false;
     if (normalizedTarget === "all" && untracked(agentLoading)) return false;
     if ((normalizedTarget === "llm" || normalizedTarget === "all") && untracked(agentValidationError) !== "") {
       agentValidationVisible.set(true);
@@ -3072,6 +3095,7 @@ export function createSettingsStore() {
           const preservedNameSet = agentNameSet();
           const preservedSkillsEnabled = skillsEnabled();
           const previousToolsSnapshot = loadedToolsSnapshot();
+          const previousSkillsSnapshot = loadedSkillsSnapshot();
           batch(() => {
             applyPayload(payload, { snapshotScope: normalizedTarget === "llm" ? "llm" : "all" });
             state.llm.profiles = preservedProfiles;
@@ -3080,12 +3104,15 @@ export function createSettingsStore() {
               agentNameSet.set(preservedNameSet);
               skillsEnabled.set(preservedSkillsEnabled);
               loadedToolsSnapshot.set(previousToolsSnapshot);
+              loadedSkillsSnapshot.set(previousSkillsSnapshot);
             }
           });
         });
         await loadEndpoints();
       } else if (normalizedTarget === "tools") {
         loadedToolsSnapshot.set(untracked(buildToolsSnapshot));
+      } else if (normalizedTarget === "skills") {
+        loadedSkillsSnapshot.set(untracked(buildSkillsSnapshot));
       } else if (normalizedTarget === "mcp") {
         batch(() => {
           applyMCPPayload(payload?.mcp);
@@ -3379,6 +3406,7 @@ export function createSettingsStore() {
     llmDirty,
     toolsDirty,
     mcpDirty,
+    skillsDirty,
     loadAgentSettings,
     saveAgentSettings,
     saveConfigSettings,

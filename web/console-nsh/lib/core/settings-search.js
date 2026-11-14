@@ -34,6 +34,8 @@ const HAND_WRITTEN_FIELDS = {
     "settings_agent_profiles_title",
     "settings_agent_fallback_title",
   ],
+  // The SKILLs & MCP page's Load skills switch.
+  mcp: ["skills_enabled"],
   security: [
     "settings_console_guard_enabled_title",
     "settings_console_guard_allowed_url_prefixes_label",
