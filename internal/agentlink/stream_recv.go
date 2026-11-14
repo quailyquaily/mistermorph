@@ -14,7 +14,9 @@ import (
 )
 
 // The receiving side of streamed files. A streamed delivery is checked as a whole before any byte
-// is taken (the message, the sender's authorization, room in the inbox); then each file gets a
+// is taken: first the message, its attempt and the sender's authorization, and only then room in
+// the inbox, so a delivery that is refused never costs another one its partial files. Then each
+// file gets a
 // private partial file, chunks are written to it as they come and hashed on the way, and the last
 // chunk of a file checks its size and SHA-256. Once every file is complete, they are synced and
 // published, and the message goes to the waiting send or the handler, as an inline one does.
@@ -103,57 +105,47 @@ func (n *Node) handleStreamDeliver(c *nodeConn, attempt string, msg Message, rep
 	}
 	key := streamKey(msg.From, msg.MessageID)
 	n.mu.Lock()
-	if _, seen := n.seen[msg.MessageID]; seen {
-		// Saved before: nothing is taken again.
-		n.mu.Unlock()
-		reply(StatusAccepted, "")
-		return
-	}
-	inbox := n.files
+	adm := n.admitStreamLocked(key, msg)
+	n.mu.Unlock()
 	switch {
-	case inbox == nil:
-		n.mu.Unlock()
-		reply(StatusRejected, ReasonFilesUnsupported)
+	case adm.status != "":
+		reply(adm.status, adm.reason)
 		return
-	case n.noStream:
-		// What a runtime from before streamed files answers.
-		n.mu.Unlock()
-		reply(StatusRejected, ReasonInvalid)
-		return
-	case n.inflight[msg.MessageID]:
-		n.mu.Unlock()
-		reply(StatusUnreachable, "")
+	case adm.resume != nil:
+		n.resumeStream(c, adm.resume, attempt, msg, reply)
 		return
 	}
-	if s := n.inStreams[key]; s != nil {
-		n.mu.Unlock()
-		n.resumeStream(c, s, attempt, msg, reply)
-		return
-	}
-	for _, a := range msg.Attachments {
-		if n.inTransfers[a.TransferID] != nil {
-			// A transfer ID is one file of one message.
-			n.mu.Unlock()
-			reply(StatusRejected, ReasonInvalid)
+	// The sender's authorization comes before anything that takes room: a sender that may not
+	// send files must not cost an authorized delivery waiting for a resume its partial files.
+	if !adm.answer {
+		if err := n.authorizeFiles(adm.inbox, msg.From); err != nil {
+			n.logger.Warn("agentlink_transfer_rejected", "message_id", msg.MessageID, "from", msg.From, "reason", ReasonUnauthorized, "error", err.Error())
+			reply(StatusRejected, ReasonUnauthorized)
 			return
 		}
 	}
-	// An answer to a message this runtime sent is wanted; anything else needs authorizing.
-	answer := n.replyWaitingLocked(msg)
-	if slot := n.handler; !answer && (slot == nil || slot.handle == nil) {
+	total := attachmentBytes(msg.Attachments)
+	n.mu.Lock()
+	// Checked again: another Console may have delivered the message, or the inbox changed, while
+	// the authorizer ran.
+	again := n.admitStreamLocked(key, msg)
+	if again.status != "" || again.resume != nil || again.inbox != adm.inbox {
 		n.mu.Unlock()
-		reply(StatusRejected, ReasonNoHandler)
+		if again.status != "" {
+			reply(again.status, again.reason)
+		} else {
+			reply(StatusUnreachable, "")
+		}
 		return
 	}
-	total := attachmentBytes(msg.Attachments)
 	evicted, ok := n.makeRoomLocked(total)
 	if !ok {
 		// Other deliveries hold the room; the sender retries later.
 		n.mu.Unlock()
-		n.dropInStreams(evicted)
 		reply(StatusUnreachable, "")
 		return
 	}
+	inbox, answer := adm.inbox, adm.answer
 	s := &inStream{key: key, msg: msg, inbox: inbox, answer: answer, reserved: total, conn: c, attempt: attempt, lastActive: n.opts.Now()}
 	n.inStreams[key] = s
 	for _, a := range msg.Attachments {
@@ -163,12 +155,6 @@ func (n *Node) handleStreamDeliver(c *nodeConn, attempt string, msg Message, rep
 	n.mu.Unlock()
 	n.dropInStreams(evicted)
 
-	if !answer {
-		if err := n.authorizeFiles(inbox, msg.From); err != nil {
-			n.rejectStream(s, ReasonUnauthorized, err)
-			return
-		}
-	}
 	if err := n.openParts(s); err != nil {
 		n.rejectStream(s, ReasonAttachmentStore, err)
 		return
@@ -196,6 +182,47 @@ func (n *Node) handleStreamDeliver(c *nodeConn, attempt string, msg Message, rep
 		// Empty files only.
 		n.completeStream(s)
 	}
+}
+
+// streamAdmission is what admitStreamLocked found about a streamed delivery: a refusal (status),
+// an unfinished delivery to resume, or a new one for inbox (answer when a send waits for it).
+type streamAdmission struct {
+	status, reason string
+	resume         *inStream
+	inbox          *fileInbox
+	answer         bool
+}
+
+// admitStreamLocked checks what does not depend on room in the inbox. It changes nothing.
+func (n *Node) admitStreamLocked(key string, msg Message) streamAdmission {
+	if _, seen := n.seen[msg.MessageID]; seen {
+		// Saved before: nothing is taken again.
+		return streamAdmission{status: StatusAccepted}
+	}
+	switch {
+	case n.files == nil:
+		return streamAdmission{status: StatusRejected, reason: ReasonFilesUnsupported}
+	case n.noStream:
+		// What a runtime from before streamed files answers.
+		return streamAdmission{status: StatusRejected, reason: ReasonInvalid}
+	case n.inflight[msg.MessageID]:
+		return streamAdmission{status: StatusUnreachable}
+	}
+	if s := n.inStreams[key]; s != nil {
+		return streamAdmission{resume: s}
+	}
+	for _, a := range msg.Attachments {
+		if n.inTransfers[a.TransferID] != nil {
+			// A transfer ID is one file of one message.
+			return streamAdmission{status: StatusRejected, reason: ReasonInvalid}
+		}
+	}
+	// An answer to a message this runtime sent is wanted; anything else needs authorizing.
+	answer := n.replyWaitingLocked(msg)
+	if slot := n.handler; !answer && (slot == nil || slot.handle == nil) {
+		return streamAdmission{status: StatusRejected, reason: ReasonNoHandler}
+	}
+	return streamAdmission{inbox: n.files, answer: answer}
 }
 
 // resumeStream moves an unfinished delivery to the connection and attempt that delivered it again,
@@ -230,7 +257,8 @@ func (n *Node) resumeStream(c *nodeConn, s *inStream, attempt string, msg Messag
 }
 
 // makeRoomLocked checks there is room for a streamed delivery of total bytes, making it by dropping
-// the oldest deliveries that wait for a resume. It returns the deliveries to drop.
+// the oldest deliveries that wait for a resume. It returns the deliveries to drop; when there is no
+// room even without them it drops none.
 func (n *Node) makeRoomLocked(total int64) ([]*inStream, bool) {
 	count, reserved := len(n.inStreams), n.inboundReserved
 	dropping := make(map[*inStream]bool)
@@ -250,7 +278,7 @@ func (n *Node) makeRoomLocked(total int64) ([]*inStream, bool) {
 			}
 		}
 		if oldest == nil {
-			return evicted, false
+			return nil, false
 		}
 		dropping[oldest] = true
 		evicted = append(evicted, oldest)

@@ -3,7 +3,9 @@ package agentlink
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -228,5 +230,111 @@ func TestStreamStaleAttemptAtReceiver(t *testing.T) {
 	}
 	if parts := partFiles(t, bCache); len(parts) != 0 {
 		t.Fatalf("partial files = %v", parts)
+	}
+}
+
+// bigStreamedMessage announces files of the given sizes without the bytes (their digests are not
+// checked before the last chunk).
+func bigStreamedMessage(t *testing.T, id, from, to string, sizes ...int64) Message {
+	t.Helper()
+	msg := Message{MessageID: id, From: from, To: to, Hop: 1, Envelope: envelope("")}
+	for i, size := range sizes {
+		msg.Attachments = append(msg.Attachments, Attachment{
+			Filename: "big" + string(rune('0'+i)) + ".bin", MediaType: "application/octet-stream", Size: size,
+			SHA256: strings.Repeat("ab", 32), TransferID: newTransferID(),
+		})
+	}
+	if err := msg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	return msg
+}
+
+// TestStreamRoomAfterAuthorization: a delivery the receiver refuses (a sender it does not take files
+// from, or one there is no room for) never drops another delivery waiting for a resume.
+func TestStreamRoomAfterAuthorization(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	trusted, other := newTestNode(t, "A").InstanceID(), newTestNode(t, "C").InstanceID()
+	rogue := newTestNode(t, "Rogue").InstanceID()
+	b, bCache := filesNode(t, "B", func(_ context.Context, from string) error {
+		if from == rogue {
+			return errors.New("not a contact")
+		}
+		return nil
+	})
+	b.SetHandler((&inbox{}).handler(nil))
+	isResult := func(f Frame) bool { return f.Type == FrameDeliverResult }
+	deliver := func(console Conn, msg Message) {
+		t.Helper()
+		if err := console.WriteFrame(ctx, Frame{Type: FrameDeliver, Attempt: newAttemptID(), MessageID: msg.MessageID, Message: &msg}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	held := func() map[string]bool {
+		out := map[string]bool{}
+		for _, st := range b.Transfers() {
+			out[st.MessageID] = true
+		}
+		return out
+	}
+
+	// An authorized delivery of the largest message, with one chunk received, waits for a resume.
+	big := bigStreamedMessage(t, "big", trusted, b.InstanceID(), MaxStreamAttachmentBytes, MaxStreamAttachmentBytes, MaxStreamAttachmentBytes, MaxStreamAttachmentBytes)
+	firstCtx, closeFirst := context.WithCancel(ctx)
+	first := oldConsole(t, firstCtx, b)
+	if err := first.WriteFrame(ctx, Frame{Type: FrameDeliver, Attempt: testAttempt, MessageID: big.MessageID, Message: &big}); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, ctx, first, func(f Frame) bool { return f.Type == FrameChunkAck && f.TransferID == big.Attachments[3].TransferID })
+	if err := first.WriteFrame(ctx, chunkFrame(big.Attachments[0].TransferID, 0, make([]byte, streamChunkSize))); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, ctx, first, func(f Frame) bool { return f.Type == FrameChunkAck && f.Offset == streamChunkSize })
+	closeFirst()
+	waitFor(t, "parked", func() bool {
+		st, ok := receiving(b)
+		return ok && !st.Connected
+	})
+
+	// An unauthorized sender announces one byte: refused, and the big delivery keeps its files.
+	second := oldConsole(t, ctx, b)
+	deliver(second, bigStreamedMessage(t, "rogue", rogue, b.InstanceID(), 1))
+	if result := readUntil(t, ctx, second, isResult); result.Status != StatusRejected || result.Reason != ReasonUnauthorized {
+		t.Fatalf("the rogue's delivery = %+v, want rejected unauthorized", result)
+	}
+	if parts := partFiles(t, bCache); len(parts) != 4 || !held()["big"] {
+		t.Fatalf("after the rogue: partial files %v, transfers %v", parts, held())
+	}
+
+	// A connected delivery of 200 MiB holds the room; a parked one of 10 MiB is all that could go,
+	// and is not enough for 100 MiB more: nothing goes.
+	b2, b2Cache := filesNode(t, "B2", nil)
+	b2.SetHandler((&inbox{}).handler(nil))
+	parkedCtx, closeParked := context.WithCancel(ctx)
+	parkedConsole := oldConsole(t, parkedCtx, b2)
+	small := bigStreamedMessage(t, "parked", trusted, b2.InstanceID(), 10<<20)
+	if err := parkedConsole.WriteFrame(ctx, Frame{Type: FrameDeliver, Attempt: newAttemptID(), MessageID: small.MessageID, Message: &small}); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, ctx, parkedConsole, func(f Frame) bool { return f.Type == FrameChunkAck })
+	closeParked()
+	waitFor(t, "parked", func() bool {
+		st, ok := receiving(b2)
+		return ok && !st.Connected
+	})
+	live := oldConsole(t, ctx, b2)
+	deliver(live, bigStreamedMessage(t, "connected", trusted, b2.InstanceID(), 64<<20, 64<<20, 64<<20, 8<<20))
+	readUntil(t, ctx, live, func(f Frame) bool { return f.Type == FrameChunkAck && f.MessageID == "connected" })
+	deliver(live, bigStreamedMessage(t, "too-big", other, b2.InstanceID(), 64<<20, 36<<20))
+	if result := readUntil(t, ctx, live, isResult); result.Status != StatusUnreachable {
+		t.Fatalf("a delivery without room = %+v, want unreachable", result)
+	}
+	transfers := map[string]bool{}
+	for _, st := range b2.Transfers() {
+		transfers[st.MessageID] = true
+	}
+	if !transfers["parked"] || !transfers["connected"] || transfers["too-big"] || len(partFiles(t, b2Cache)) != 5 {
+		t.Fatalf("transfers %v, partial files %v", transfers, partFiles(t, b2Cache))
 	}
 }
