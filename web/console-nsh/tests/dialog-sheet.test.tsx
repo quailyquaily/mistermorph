@@ -288,3 +288,42 @@ test("a desktop dialog keeps its settle in place: no slide", async () => {
   app.dispose();
 });
 
+/** How long a motion ran, in the samples' milliseconds: from the first sample past its start to
+ *  the first at its end, and the sample nearest the middle of that time. */
+function run(samples: Sample[], started: (s: Sample) => boolean, ended: (s: Sample) => boolean) {
+  const first = samples.findIndex(started);
+  const last = samples.findIndex((s, i) => i >= first && ended(s));
+  expect(first).toBeGreaterThanOrEqual(0);
+  expect(last).toBeGreaterThan(first);
+  const middle = (samples[first].t + samples[last].t) / 2;
+  const nearest = samples.reduce((best, s) => (Math.abs(s.t - middle) < Math.abs(best.t - middle) ? s : best));
+  return { ms: samples[last].t - samples[first].t, middle: nearest };
+}
+
+test("a sheet goes out quicker than it came in (280ms, 200ms), leaving fast as the phone's other sheets do", async () => {
+  const { app, frame, show, closed, dismiss } = await openFixture({ safeArea: BUTTONS });
+  const entrance = drawn(await show("two"));
+  const height = frame("two.panel").h;
+  await dismiss();
+  const exit = await closed("two");
+  const coming = run(entrance, (s) => s.y < height, (s) => s.y === 0);
+  const going = run(exit, (s) => s.y > 0, (s) => s.y === height);
+  // 80ms quicker, give or take a sampled frame either side.
+  expect(going.ms).toBeLessThan(coming.ms - 32);
+  // MOTION_EXIT_EASE starts slow: half way through its time it has gone less than half the way.
+  expect(going.middle.y).toBeLessThan(height * 0.5);
+  app.dispose();
+});
+
+test("a desktop dialog goes out quicker than it settled in (180ms, 140ms), leaving fast", async () => {
+  const { app, show, closed } = await openFixture({ platform: "linux", width: 1280 });
+  const entrance = await show("two");
+  await app.press("id:dialog-two-close");
+  const exit = await closed("two");
+  const coming = run(entrance, (s) => s.o > 0, (s) => s.o === 1);
+  const going = run(exit, (s) => s.o < 1, (s) => s.o === 0);
+  expect(going.ms).toBeLessThan(coming.ms);
+  // Still mostly there half way through: it fades on MOTION_EXIT_EASE, not the settling curve.
+  expect(going.middle.o).toBeGreaterThan(0.5);
+  app.dispose();
+});

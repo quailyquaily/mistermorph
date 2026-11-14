@@ -31,7 +31,17 @@ import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
 import { bottomSheetInsets, dialogLayerInsets, dialogSheetInsets } from "../lib/systemInsets";
-import { MOTION_EASE, MOTION_EASE_CSS, MOTION_NORMAL, MOTION_SLOW, motionMs } from "./motion/tokens";
+import {
+  MOTION_EASE,
+  MOTION_EASE_CSS,
+  MOTION_EXIT,
+  MOTION_EXIT_EASE,
+  MOTION_NORMAL,
+  MOTION_SHEET_IN,
+  MOTION_SHEET_OUT,
+  MOTION_SLOW,
+  motionMs,
+} from "./motion/tokens";
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 import { createPartProbe, type PartLayoutListener } from "./shared/partProbe";
 import { isMobile } from "../lib/shell";
@@ -1528,8 +1538,11 @@ export function DialogLayer(props: {
   // in from its own height below the bottom edge; reopened while going out, from where it is.
   let fromBelow = true;
   const narrow = dialogIsSheet;
-  // A sheet slides the whole way in and out: a little longer than a dialog's settle.
-  const duration = (sheet: boolean) => motionMs(sheet ? MOTION_SLOW : MOTION_NORMAL);
+  // A sheet slides the whole way in and out, as the phone's other sheets do (MobileBottomNav): a
+  // little longer than a dialog's settle. Going out is quicker than coming in, on an easing that
+  // starts slow and leaves fast (MOTION_EXIT_EASE), so it gets out of the way.
+  const duration = (sheet: boolean) => motionMs(sheet ? MOTION_SHEET_IN : MOTION_NORMAL);
+  const exitDuration = (sheet: boolean) => motionMs(sheet ? MOTION_SHEET_OUT : MOTION_EXIT);
 
   const enter = (bounds?: { origin: { x: number; y: number }; size: { width: number; height: number } }) => {
     if (!pendingEnter) return;
@@ -1587,18 +1600,21 @@ export function DialogLayer(props: {
         closing = true;
         pendingEnter = false;
         const sheet = narrow();
-        const ms = duration(sheet);
+        const ms = exitDuration(sheet);
         if (ms <= 0) {
           shown.set(false);
           return;
         }
-        void scrim.timing(0, { duration: ms, easing: MOTION_EASE });
+        void scrim.timing(0, { duration: ms, easing: MOTION_EXIT_EASE });
         // The panel stays drawn (and its contents mounted) while it goes out.
         const out = sheet
-          ? panel.translateY.timing(panelBox?.size.height ?? windowSize().height, { duration: ms, easing: MOTION_EASE })
+          ? panel.translateY.timing(panelBox?.size.height ?? windowSize().height, { duration: ms, easing: MOTION_EXIT_EASE })
           : panel.play({
               duration: ms,
-              keyframes: { opacity: [{ value: 1, easing: MOTION_EASE }, 0], scale: [{ value: 1, easing: MOTION_EASE }, origin() ? 0.9 : 0.98] },
+              keyframes: {
+                opacity: [{ value: 1, easing: MOTION_EXIT_EASE }, 0],
+                scale: [{ value: 1, easing: MOTION_EXIT_EASE }, origin() ? 0.9 : 0.98],
+              },
             });
         void out.then(() => {
           if (closing) shown.set(false);
