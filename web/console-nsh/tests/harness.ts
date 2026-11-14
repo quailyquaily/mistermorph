@@ -56,7 +56,10 @@ export interface ConsoleOptions {
    * from the app's storage, where `location` and the console server's address are saved.
    */
   platform?: "android";
-  /** The system bars' insets (`safeArea()`), with `platform`. */
+  /**
+   * The system bars' insets (`safeArea()`): Android's with `platform`; without it, a phone
+   * browser's (`env(safe-area-inset-*)`, under its home indicator or a cutout).
+   */
   safeArea?: SafeArea;
   /** The desktop's OS (default `linux`): `macos` has Apple's keys (`mod` is Command, ⌘ labels). */
   os?: "linux" | "macos" | "windows";
@@ -192,6 +195,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     // A desktop idiom; "web" would load host.js, which needs a browser page.
     platform: options.os ?? "linux",
     locale: options.locale ?? "en-US",
+    safeArea: options.safeArea ?? null,
     reducedMotion: options.reducedMotion ?? false,
     clock: options.clock ? {} : null,
     host: {

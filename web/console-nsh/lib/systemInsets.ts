@@ -6,7 +6,13 @@
 // - the app's frame (App.tsx) moves everything below the status bar and inside the side insets, so
 //   every page's top bar sits whole under the status bar, at its own height;
 // - the bottom: the phone's navigation strip draws its card under the gesture handle (its own
-//   padding) while it shows; without the strip the frame keeps the page above the handle;
+//   padding) while it shows; on wide windows, without the strip, the frame keeps the page above
+//   the handle; on phones the foot of the page's column does (components/Shell.tsx), so the room
+//   under the pages stays the same whoever takes the inset;
+// - the phone's workbench (components/frame/Workbench.tsx), a sheet docked at the foot of that
+//   column, runs to the bottom edge while it is open: the column's foot and the strip leave the
+//   inset to it, and it takes it inside its own paper, so its background fills the room under its
+//   last line (`workbenchInsets`, on iOS and the web too, with their side insets);
 // - while the software keyboard is up, its height (which covers the navigation bar) replaces the
 //   bottom inset, so nothing adds both;
 // - dialogs are an Overlay over the whole surface, outside the frame: their layer takes the same
@@ -36,26 +42,56 @@ export interface FrameInsets {
   frame: Edges;
   /** The navigation strip's bottom padding, under its icons. */
   bottomNav: number;
+  /** On phones, the foot of the page's column: the bottom inset nothing else takes (0 elsewhere). */
+  foot: number;
 }
 
 const size = (value: number | undefined) => (Number.isFinite(value) && (value as number) > 0 ? (value as number) : 0);
 
 /**
- * The frame's and the navigation strip's padding, for the system bars' insets `area`, the software
- * keyboard's height (0 when hidden) and whether the navigation strip shows.
+ * The frame's, the navigation strip's and the page column's foot padding, for the system bars'
+ * insets `area`, the software keyboard's height (0 when hidden) and whether the navigation strip
+ * shows. `phone` is given on phones (no sidebar: the page's column is as wide as the frame), with
+ * whether the workbench is open there: the column then takes the bottom inset in place of the
+ * frame (its foot, or the workbench's sheet while it is open), so opening the workbench changes no
+ * height above it. While the keyboard is up the frame takes its height, and nothing else takes any.
  */
-export function frameInsets(area: Partial<Edges>, keyboard: number, bottomNav: boolean): FrameInsets {
+export function frameInsets(area: Partial<Edges>, keyboard: number, bottomNav: boolean, phone?: { workbench: boolean }): FrameInsets {
   const bottom = size(area.bottom);
   const raised = size(keyboard);
+  // Who takes the bottom inset while the keyboard is down: the workbench, the strip, the foot, the frame.
+  const workbench = Boolean(phone?.workbench);
   return {
     frame: {
       top: size(area.top),
       right: size(area.right),
       left: size(area.left),
-      bottom: raised > 0 ? Math.max(raised, bottom) : bottomNav ? 0 : bottom,
+      bottom: raised > 0 ? Math.max(raised, bottom) : bottomNav || phone ? 0 : bottom,
     },
-    bottomNav: raised > 0 || !bottomNav ? 0 : bottom,
+    bottomNav: raised > 0 || !bottomNav || workbench ? 0 : bottom,
+    foot: raised > 0 || !phone || bottomNav || workbench ? 0 : bottom,
   };
+}
+
+/** The padding inside the workbench's sheet on a phone. */
+export interface WorkbenchInsets {
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/**
+ * The padding inside the phone's workbench sheet (components/frame/Workbench.tsx), `margin` in from
+ * the window's sides and running to its bottom edge, for the system bars' insets `area` and the
+ * software keyboard's height. Its paper takes the bottom inset, so its background fills the room
+ * under its last line; while the keyboard is up the frame stands on it (its height replaces the
+ * inset) and the sheet takes none. The side insets (a cutout, the navigation bar in landscape) only
+ * where the frame does not take them (`frameSides`: Android's frame does), less the sheet's own
+ * margin there. Its top is never at the top of the screen: no top inset.
+ */
+export function workbenchInsets(area: Partial<Edges>, keyboard: number, frameSides: boolean, margin = 0): WorkbenchInsets {
+  const side = (value: number | undefined) => (frameSides ? 0 : Math.max(0, size(value) - size(margin)));
+  return { bottom: size(keyboard) > 0 ? 0 : size(area.bottom), left: side(area.left), right: side(area.right) };
 }
 
 /**

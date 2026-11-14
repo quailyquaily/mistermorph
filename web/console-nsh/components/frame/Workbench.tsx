@@ -16,13 +16,17 @@
 // slot's top edge while the page shortens or grows. What it showed stays drawn until it has gone.
 //
 // Its top is a grab strip with a pill in the middle, so it reads as a sheet whose height changes
-// (the pill brightens while it is hovered, focused or dragged). On phones it is the same sheet, and
-// it keeps the system's bottom inset clear.
+// (the pill brightens while it is hovered, focused or dragged). On phones it is the same sheet: it
+// runs to the bottom edge of the screen, its ink filling the system's bottom inset under what it
+// shows (the gesture handle, the navigation bar, a phone's home indicator), and keeps it clear,
+// as it does a side inset the frame leaves to it (lib/systemInsets.ts `workbenchInsets`).
 import type { JSX } from "nsh";
-import { cleanup, effect, keymap, LayoutAnimation, PanResponder, signal, untracked, View } from "nsh";
+import { batch, cleanup, effect, keyboardFrame, keymap, LayoutAnimation, PanResponder, safeArea, signal, untracked, View } from "nsh";
 import { localStore } from "../../lib/platform";
-import { systemInsets } from "../../lib/shell";
+import { EDGE_TO_EDGE, noteWorkbenchOpen } from "../../lib/shell";
+import { workbenchInsets } from "../../lib/systemInsets";
 import { translate } from "../../lib/core/context.js";
+import { TERMINAL_BG } from "../chat/ChatTerminal";
 import { Entrance } from "../motion";
 import { MOTION_SLOW, motionMs } from "../motion/tokens";
 import { Tip } from "../ui";
@@ -49,7 +53,11 @@ function setContent(next: WorkbenchContent | null) {
   if ((untracked(content) === null) !== (next === null) && duration > 0) {
     LayoutAnimation.configureNext({ duration, update: { type: "easeInEaseOut" } });
   }
-  content.set(next);
+  // The frame hands the bottom inset to the phone's sheet in the same commit (lib/shell.ts).
+  batch(() => {
+    content.set(next);
+    noteWorkbenchOpen(next !== null);
+  });
 }
 
 /**
@@ -92,16 +100,22 @@ const GRAB_STRIP = 16;
 const GRAB_INSET = 56;
 /** An arrow key's step, as a share of the room. */
 const KEY_STEP = 0.05;
+/** How far in from the window's sides it sits (its `mx-2`). */
+const SIDE_MARGIN = 8;
 
 /** A kept share, between a fifth and four fifths of the room (half if unreadable). */
 export function clampWorkbenchShare(share: number) {
   return Number.isFinite(share) ? Math.min(0.8, Math.max(0.2, share)) : DEFAULT_SHARE;
 }
 
-/** Its height in `room` for `share`, within the minimums at either end. */
-export function workbenchHeight(room: number, share: number) {
-  const most = Math.max(MIN_SHEET, room - MIN_ABOVE);
-  return Math.round(Math.min(most, Math.max(MIN_SHEET, room * share)));
+/**
+ * Its height in `room` for `share`, within the minimums at either end. `inset` is the system's
+ * bottom inset it takes inside on a phone: its least keeps the head and a few lines above it.
+ */
+export function workbenchHeight(room: number, share: number, inset = 0) {
+  const least = MIN_SHEET + Math.max(0, inset);
+  const most = Math.max(least, room - MIN_ABOVE);
+  return Math.round(Math.min(most, Math.max(least, room * share)));
 }
 
 const stored = localStore.getItem(SHARE_STORAGE_KEY);
@@ -118,7 +132,15 @@ function setShare(next: number, remember: boolean) {
  * frame (the sidebar and the page above it, and the sheet itself).
  */
 export function Workbench(props: { room: number; phone?: boolean }) {
-  const height = () => workbenchHeight(props.room, share());
+  // On phones the system's insets inside the sheet: the bottom one (none while the keyboard is up,
+  // the frame stands on it), and the sides where the frame does not take them.
+  const insets = () => (props.phone ? workbenchInsets(safeArea(), keyboardFrame().height, EDGE_TO_EDGE, SIDE_MARGIN) : null);
+  const inset = () => insets()?.bottom ?? 0;
+  const height = () => workbenchHeight(props.room, share(), inset());
+  const sheetID = () => {
+    const pad = insets();
+    return `workbench-sheet.bottom-${Math.round(pad?.bottom ?? 0)}.sides-${Math.round(pad?.left ?? 0)}-${Math.round(pad?.right ?? 0)}`;
+  };
   const open = () => content() !== null;
   // What it shows, kept while it slides out.
   const shown = signal<WorkbenchContent | null>(untracked(content));
@@ -140,7 +162,8 @@ export function Workbench(props: { room: number; phone?: boolean }) {
   const dragging = signal(false);
   let start = 0;
   let last = share();
-  const shareOf = (sheet: number) => (props.room > 0 ? workbenchHeight(props.room, sheet / props.room) / props.room : untracked(share));
+  const shareOf = (sheet: number) =>
+    props.room > 0 ? workbenchHeight(props.room, sheet / props.room, untracked(inset)) / props.room : untracked(share);
   const end = () => {
     if (!untracked(dragging)) return;
     dragging.set(false);
@@ -182,11 +205,12 @@ export function Workbench(props: { room: number; phone?: boolean }) {
       testID={open() ? "workbench" : "workbench-shut"}
     >
     {/* The sheet, on the terminal's dark ink (ChatTerminal's TERMINAL_BG): its edge against the
-        page needs no line. The grab strip over the top of what it shows; on phones the bottom
-        inset under. */}
+        page needs no line. The grab strip over the top of what it shows; on phones the system's
+        insets inside it, on the same ink, under and beside what it shows. */}
     <View
-      class={`relative bg-[#1b1f3b] ${props.phone && !systemInsets() ? "pb-[env(safe-area-inset-bottom)]" : ""}`}
-      style={{ height: height(), paddingBottom: props.phone ? systemInsets()?.bottomNav : undefined }}
+      class={`relative ${TERMINAL_BG}`}
+      style={{ height: height(), paddingBottom: insets()?.bottom, paddingLeft: insets()?.left, paddingRight: insets()?.right }}
+      testID={sheetID()}
     >
       <Each of={items()} key={() => "workbench"}>
         {(item) => (

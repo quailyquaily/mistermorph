@@ -23,8 +23,8 @@ import { PageView } from "./pages/routes";
 // over the area), including those nsh draws for itself (a reply's tables and code blocks).
 Scrollbar.setTheme(SCROLLBAR);
 
-// The frame's padding: on Android, the room the system bars and the keyboard take (lib/systemInsets.ts);
-// on iOS, the keyboard's.
+// The frame's padding: on Android, the room the system bars and the keyboard take (lib/systemInsets.ts;
+// on phones the bottom inset is the page column's, components/Shell.tsx); on iOS, the keyboard's.
 function frameStyle() {
   const insets = systemInsets();
   if (insets) {

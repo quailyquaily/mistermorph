@@ -55,14 +55,14 @@ for (const platform of [undefined, "android"] as const) {
     await app.waitFor("id:mobile-bottom-nav", { state: "gone" });
     // The composer sits at the foot, with no room kept for a bar; on Android above the handle.
     expect(app.shows("id:chat-main-bar-room")).toBe(false);
-    if (platform) await app.waitFor("id:app-frame.bottom-16");
+    if (platform) await app.waitFor("id:frame-foot-16");
     await app.type("id:chat-composer-input", "Plan a trip");
     expect(app.enabled("id:chat-composer-send")).toBe(true);
     if (platform) await app.back();
     else await app.press("id:chat-back");
     await app.waitFor("id:chat-topic-topic-1");
     await app.waitFor("id:mobile-bottom-nav");
-    if (platform) await app.waitFor("id:app-frame.bottom-0");
+    if (platform) await app.waitUntil(() => app.count("id:frame-foot-16") === 0);
   });
 
   test(`on ${where} the new topic without topics is the chat page, with the bottom navigation, whose slots still navigate`, async () => {

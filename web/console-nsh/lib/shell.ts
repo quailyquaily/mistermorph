@@ -141,11 +141,29 @@ export const mobileBottomNavVisible = computed(
   () => isMobile() && !inStandalone() && !inShellless() && isMobileNavRoot(route()) && !mobileDetailOpen(),
 );
 
+/** Whether a page has put something in the frame's workbench (components/frame/Workbench.tsx). */
+const workbenchFilled = signal(false);
+/** The workbench says when it opens and shuts, in the same tick as its own change. */
+export function noteWorkbenchOpen(open: boolean) {
+  workbenchFilled.set(open);
+}
+/**
+ * Whether the phone's workbench is open: its sheet then runs to the bottom edge of the frame and
+ * takes the bottom inset itself, so the page column's foot and the navigation strip (over the foot
+ * of the page, above the sheet) take none (lib/systemInsets.ts).
+ */
+export const phoneWorkbenchOpen = computed(() => workbenchFilled() && isMobile() && !inStandalone() && !inShellless());
+
 /** Android draws the app under its status and navigation bars (lib/systemInsets.ts). */
 export const EDGE_TO_EDGE = platform.os === "android";
-/** The frame's and the navigation strip's room for the system bars on Android; null elsewhere. */
+/**
+ * The frame's, the navigation strip's and (on phones) the page column's foot room for the system
+ * bars on Android; null elsewhere.
+ */
 export const systemInsets = computed(() =>
-  EDGE_TO_EDGE ? frameInsets(safeArea(), keyboardFrame().height, mobileBottomNavVisible()) : null,
+  EDGE_TO_EDGE
+    ? frameInsets(safeArea(), keyboardFrame().height, mobileBottomNavVisible(), isMobile() ? { workbench: phoneWorkbenchOpen() } : undefined)
+    : null,
 );
 /** A right-docked sheet's room for the system bars on Android (it covers the frame); null elsewhere. */
 export const rightSheetSystemInsets = computed(() => (EDGE_TO_EDGE ? rightSheetInsets(safeArea(), keyboardFrame().height) : null));

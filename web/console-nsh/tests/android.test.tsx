@@ -3,7 +3,7 @@
 // out from under the status and navigation bars (lib/systemBack.ts, lib/systemInsets.ts).
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
-import { dialogLayerInsets, frameInsets } from "../lib/systemInsets";
+import { dialogLayerInsets, frameInsets, workbenchInsets } from "../lib/systemInsets";
 import { MOBILE_LOCATION_KEY, openConsole } from "./harness";
 
 const NOW = new Date().toISOString();
@@ -19,6 +19,8 @@ const CONTEXT = {
 const QUIET = { "GET /proxy:/todo/tasks": EMPTY, "GET /proxy:/tasks": EMPTY };
 /** A phone with gesture navigation: a 24pt status bar, a 16pt gesture handle. */
 const BARS = { top: 24, right: 0, bottom: 16, left: 0 };
+/** A phone with button navigation: a 48pt navigation bar. */
+const BUTTONS = { top: 24, right: 0, bottom: 48, left: 0 };
 
 /** Where the app is: the location the phone app saves for its next launch. */
 const location = (app: App) => String(app.storage()[MOBILE_LOCATION_KEY] || "");
@@ -266,20 +268,64 @@ test("on the web and the desktop nothing listens to Back: the browser's back but
 });
 
 test("Android's frame takes the status bar at the top and the gesture handle at the bottom, once", () => {
-  // The bottom navigation shows: it draws under the handle, the frame does not add it again.
-  expect(frameInsets(BARS, 0, true)).toEqual({ frame: { top: 24, right: 0, bottom: 0, left: 0 }, bottomNav: 16 });
-  // No bottom navigation (an open topic, login): the frame keeps the page above the handle.
-  expect(frameInsets(BARS, 0, false)).toEqual({ frame: { top: 24, right: 0, bottom: 16, left: 0 }, bottomNav: 0 });
+  // Wide windows. The bottom navigation shows: it draws under the handle, the frame does not add it again.
+  expect(frameInsets(BARS, 0, true)).toEqual({ frame: { top: 24, right: 0, bottom: 0, left: 0 }, bottomNav: 16, foot: 0 });
+  // No bottom navigation: the frame keeps the page above the handle.
+  expect(frameInsets(BARS, 0, false)).toEqual({ frame: { top: 24, right: 0, bottom: 16, left: 0 }, bottomNav: 0, foot: 0 });
   // The keyboard covers the navigation bar: its height replaces the bottom inset, everywhere.
-  expect(frameInsets(BARS, 300, true)).toEqual({ frame: { top: 24, right: 0, bottom: 300, left: 0 }, bottomNav: 0 });
+  expect(frameInsets(BARS, 300, true)).toEqual({ frame: { top: 24, right: 0, bottom: 300, left: 0 }, bottomNav: 0, foot: 0 });
   expect(frameInsets(BARS, 300, false).frame.bottom).toBe(300);
   // Landscape with button navigation: the bar and the cutout are on the sides.
   expect(frameInsets({ top: 24, right: 48, bottom: 0, left: 32 }, 0, true)).toEqual({
     frame: { top: 24, right: 48, bottom: 0, left: 32 },
     bottomNav: 0,
+    foot: 0,
   });
   // Before the first insets arrive (or none reported): nothing.
-  expect(frameInsets({}, 0, true)).toEqual({ frame: { top: 0, right: 0, bottom: 0, left: 0 }, bottomNav: 0 });
+  expect(frameInsets({}, 0, true)).toEqual({ frame: { top: 0, right: 0, bottom: 0, left: 0 }, bottomNav: 0, foot: 0 });
+});
+
+test("on Android phones the page's column takes the bottom inset: its foot, the navigation, or the open workbench, once", () => {
+  const shut = { workbench: false };
+  const open = { workbench: true };
+  // The navigation shows: it takes the inset under its card.
+  expect(frameInsets(BARS, 0, true, shut)).toEqual({ frame: { top: 24, right: 0, bottom: 0, left: 0 }, bottomNav: 16, foot: 0 });
+  // An open topic, login: the column's foot keeps the page above the handle (not the frame).
+  expect(frameInsets(BARS, 0, false, shut)).toEqual({ frame: { top: 24, right: 0, bottom: 0, left: 0 }, bottomNav: 0, foot: 16 });
+  // The workbench is open: its sheet takes it, the foot goes and the navigation over the page above takes none.
+  expect(frameInsets(BARS, 0, false, open)).toEqual({ frame: { top: 24, right: 0, bottom: 0, left: 0 }, bottomNav: 0, foot: 0 });
+  expect(frameInsets(BARS, 0, true, open)).toEqual({ frame: { top: 24, right: 0, bottom: 0, left: 0 }, bottomNav: 0, foot: 0 });
+  expect(workbenchInsets(BARS, 0, true, 8)).toEqual({ bottom: 16, left: 0, right: 0 });
+  // Button navigation (a 48pt bar) under the sheet.
+  expect(frameInsets(BUTTONS, 0, false, open).foot).toBe(0);
+  expect(workbenchInsets(BUTTONS, 0, true, 8).bottom).toBe(48);
+  // The keyboard: the frame stands on it, in every case, and nothing else takes the inset.
+  for (const phone of [shut, open]) {
+    for (const nav of [true, false]) {
+      expect(frameInsets(BARS, 300, nav, phone)).toEqual({ frame: { top: 24, right: 0, bottom: 300, left: 0 }, bottomNav: 0, foot: 0 });
+    }
+  }
+  expect(workbenchInsets(BARS, 300, true, 8)).toEqual({ bottom: 0, left: 0, right: 0 });
+  // Landscape with button navigation on the side: the frame keeps the sides; the sheet takes none of them.
+  const SIDEWAYS = { top: 24, right: 48, bottom: 0, left: 32 };
+  expect(frameInsets(SIDEWAYS, 0, false, open)).toEqual({ frame: { top: 24, right: 48, bottom: 0, left: 32 }, bottomNav: 0, foot: 0 });
+  expect(workbenchInsets(SIDEWAYS, 0, true, 8)).toEqual({ bottom: 0, left: 0, right: 0 });
+  // No insets: nothing anywhere.
+  expect(frameInsets({}, 0, false, open)).toEqual({ frame: { top: 0, right: 0, bottom: 0, left: 0 }, bottomNav: 0, foot: 0 });
+  expect(workbenchInsets({}, 0, true, 8)).toEqual({ bottom: 0, left: 0, right: 0 });
+});
+
+test("elsewhere (the web, iOS) the phone's workbench takes the bottom inset and the side insets past its margin itself", () => {
+  // A phone held upright: the home indicator under the sheet.
+  expect(workbenchInsets({ top: 47, right: 0, bottom: 34, left: 0 }, 0, false, 8)).toEqual({ bottom: 34, left: 0, right: 0 });
+  // On its side: the cutout and the indicator; the sheet's 8pt margin already covers that much of a side.
+  expect(workbenchInsets({ top: 0, right: 47, bottom: 21, left: 47 }, 0, false, 8)).toEqual({ bottom: 21, left: 39, right: 39 });
+  // Side insets within the margin: nothing more.
+  expect(workbenchInsets({ top: 0, right: 6, bottom: 0, left: 0 }, 0, false, 8)).toEqual({ bottom: 0, left: 0, right: 0 });
+  // The keyboard is up: the frame stands on it, the sheet takes no bottom inset (once); the sides stay.
+  expect(workbenchInsets({ top: 0, right: 47, bottom: 21, left: 47 }, 280, false, 8)).toEqual({ bottom: 0, left: 39, right: 39 });
+  // Unreadable insets count as none.
+  expect(workbenchInsets({ bottom: Number.NaN, left: -3 }, Number.NaN, false, 8)).toEqual({ bottom: 0, left: 0, right: 0 });
 });
 
 test("Android's dialogs keep out from under the system bars, rising with the keyboard on phones", () => {

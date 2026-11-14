@@ -21,6 +21,7 @@ import {
   selectedEndpointItem,
   setMobileMoreOpen,
   switchEndpoint,
+  phoneWorkbenchOpen,
   systemInsets,
   type NavItem,
 } from "../../lib/shell";
@@ -312,8 +313,9 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
       // The capsule floats over the foot of the page, which scrolls on under it (each page's main
       // list ends with MobileBarSpacer). It sits above the bottom system bar: on Android by the
       // room lib/systemInsets.ts gives it (none while the keyboard is up), elsewhere by the safe
-      // area. Only the capsule takes presses; the page shows and works round it.
-      class={`absolute bottom-0 left-0 right-0 z-50 items-center ${systemInsets() ? "" : "pb-[env(safe-area-inset-bottom)]"}`}
+      // area; over an open workbench (phones), which takes that inset, by none. Only the capsule
+      // takes presses; the page shows and works round it.
+      class={`absolute bottom-0 left-0 right-0 z-50 items-center ${systemInsets() || phoneWorkbenchOpen() ? "" : "pb-[env(safe-area-inset-bottom)]"}`}
       onLayout={({ bounds }) => stripWidth.set(bounds.size.width)}
       style={{
         paddingLeft: BAR_SIDE,

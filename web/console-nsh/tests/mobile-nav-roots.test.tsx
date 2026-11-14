@@ -4,9 +4,9 @@
 // task, a skill, a log, a settings section) and a page below the navigation (an open topic, Logs,
 // the skill store, an address that matches no page) do not, whether opened by a press, by an
 // address, or by going back in the history; back on the list it shows again. While it is gone its
-// room at the foot of the page goes too, and on Android the frame keeps the page above the gesture
-// handle instead (`app-frame.bottom-<pt>` names the frame's bottom padding). Wide windows have no
-// bottom navigation. The chat's new topic is in tests/chat-new-topic-nav.test.tsx.
+// room at the foot of the page goes too, and on Android the foot of the page's column keeps the page
+// above the gesture handle instead (`frame-foot-<pt>`, components/Shell.tsx; the frame's own bottom
+// padding, `app-frame.bottom-<pt>`, stays 0 on phones). Wide windows have no bottom navigation. The chat's new topic is in tests/chat-new-topic-nav.test.tsx.
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import type { Route } from "../lib/router";
@@ -91,12 +91,14 @@ async function openPhone(where: string, api: Record<string, ApiHandler>, android
 async function expectNav(app: App, android = false) {
   await app.waitFor(NAV);
   if (android) await app.waitFor("id:app-frame.bottom-0");
+  if (android) await app.waitUntil(() => app.count("id:frame-foot-16") === 0);
 }
-/** No bottom navigation: on Android the frame keeps the page above the gesture handle. */
+/** No bottom navigation: on Android the column's foot keeps the page above the gesture handle. */
 async function expectNoNav(app: App, android = false) {
   await app.waitFor(NAV, { state: "gone" });
   expect(app.count("id:mobile-nav-more")).toBe(0);
-  if (android) await app.waitFor("id:app-frame.bottom-16");
+  if (android) await app.waitFor("id:frame-foot-16");
+  if (android) expect(app.count("id:app-frame.bottom-0")).toBe(1);
 }
 
 function route(path: string, meta: Route["meta"] = {}, page: Route["page"] = "contacts") {
