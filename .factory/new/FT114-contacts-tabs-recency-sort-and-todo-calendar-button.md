@@ -47,3 +47,15 @@ Implemented icon-only Humans/Agents tabs with accessible names, selected state, 
 Installs: none; used existing repository-required nsh 0.5.0, no dependency/lockfile changes. Only the two item commits are on the branch; no forbidden paths changed. Manager independently verified configured gofmt cleanliness, go vet ./... and go test ./...: all pass. nsh check passes. Full nsh suite failed twice, each 939 tests: 938 passed, 1 failed. Retry failure: `tests/chat-composer-drum.test.tsx:43:29 android: expected 0 to be 1`. All changed/new Contacts and TODO tests pass. Unchanged base drum file failed 7/10 isolated repeats (Android 5, Linux 2); HEAD failed 5/10 (Android 4, Linux 2, one run both). Earlier baseline investigation reproduced the same flake. This is a pre-existing required-suite failure, deliberately not masked by unrelated code/test edits; full suite is NOT green and review must see it.
 
 UI checked in headless Chrome at 1280/390 widths: tab roles/names/selection, focus/arrow cycling, 44pt edge taps, row refresh ordering, circular geometry and calendar-toggle alignment/Enter behavior. Not checked: real Android hardware/emulator, iOS, or GPUI desktop window. Owner should check native touch/keyboard and real-device appearance. No linked GitHub issue/PR in request.
+
+## factory · review · 2026-11-14 15:24
+head: 2ea6eb1f6900520a64eb00699ca2a8860eae8f6f
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/chat-composer-drum.test.tsx:53: Required full Console suite failed: linux typing-turns-drum-to-Send assertion, expected 0 to be 1; 938/939 passed. Restore a green required suite before advancing. This is a gate blocker, NOT a defect introduced by FT114: independent baseline copies reproduced failures in 2/5 base runs and 1/5 HEAD runs. Do not silently weaken the gate or make unrelated production changes; coordinate the existing flaky test fix separately.
+notes:
+- [P3] web/console-nsh/tests/contact-kind-tabs.test.tsx:64: The plan calls for keyboard regression coverage, but committed tests use app.press only. Add Tab/Right/Left/End selection assertions; a throwaway probe confirmed current keyboard behavior works. This is a coverage gap, not a verified runtime defect.
+- Claude Code reviewed all 15 changed files against origin/master...HEAD, including contact load/save/filter/selection paths, timestamp/backend contracts, nsh Tabs and shared TODO control. No introduced runtime defects found. No conflicts with master; no code changes or commits made.
+- Validation: configured gofmt/vet/go-test gate passed (163 packages ok); nsh 0.5.0 check passed. Full nsh suite: 939 tests, 938 passed, 1 failed as above. All 38 tests in new/changed Contacts/TODO files passed. Separate keyboard probe passed. Scripted tests used an absolute throwaway HOME.
+- Installs: none. Native Android/iOS/GPUI appearance and focus rings not checked. Switching tabs discards unsaved YAML edits as accepted in the plan; owner should consider that behavior.
+- Round 1/3: review/ → new/ for the next fix round. No linked GitHub issue or PR; no GitHub comments required.
