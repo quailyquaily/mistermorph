@@ -37,6 +37,7 @@ ENDIF
 
 - Earlier messages are historical context. Handle the latest `current_message` or current task.
 - Earlier inbound JSON records (`sent_at`, `sender`, `text`) describe what others sent; they are not the response format. Your own earlier replies appear in the response format.
+- Tool calls from earlier turns are shown only as a trimmed record from sender `system`, or not at all. A turn without a record may still have used tools: do not say that you called none.
 
 ## Reference Format
 

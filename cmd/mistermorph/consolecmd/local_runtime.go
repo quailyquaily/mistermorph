@@ -2825,7 +2825,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	checkpointHistory, err := bundle.taskRuntime.PrepareContextHistory(
 		ctx,
 		conversationKey,
-		r.loadConsoleTopicHistory(job),
+		r.loadConsoleRunHistory(job),
 		newConsoleInboundHistoryItem(job),
 	)
 	if err != nil {
