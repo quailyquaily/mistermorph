@@ -31,26 +31,40 @@ test("the chambers sit on an arc round an axis below the button, the top one cen
   expect(send.x[AT_0 - 1]).toBeLessThan(send.x[AT_0]);
 });
 
-// Headless, a native animation ends almost at once (and the drum, hidden from screen readers, is
-// not "shown" to waitFor): the drum is counted right after each change, then waited out.
+// Headless, a native animation ends almost at once, and the step that started a turn returns once
+// it ended: whether the drum's end (its turn's promise) came before the step returned was a race.
+// The fixture holds each turn's end until release-turns (hold-turns), so the drum is counted while
+// it turns, and the turn's target read, before it is let go and waited out. (The drum, hidden from
+// screen readers, is not "shown" to waitFor.)
+const turns = (app: { texts(): string[] }) =>
+  JSON.parse((app.texts().find((text) => text.startsWith("turns:")) ?? "turns:null").slice("turns:".length)) as number[];
+
 for (const platform of ["linux", "android"] as const) {
   test(`${platform}: typing turns the drum to Send, clearing turns it back, and it rests as the buttons`, async () => {
     const app = await open("./fixtures/voice-control-app.tsx", { width: 760, height: 600, locale: "en-US", platform });
     await app.waitFor("id:chat-composer-voice");
+    await app.press("id:hold-turns");
     expect(app.count(DRUM)).toBe(0);
 
     await app.type("id:chat-composer-input", "h");
+    // Turning to Send's chamber (1), the drum carries both glyphs.
+    expect(turns(app)).toEqual([1]);
     expect(app.count(DRUM)).toBe(1);
+    await app.press("id:release-turns");
     // Settled: the drum is gone and Send draws its own plane.
     await app.waitUntil(() => app.count(DRUM) === 0);
     expect(app.enabled("id:chat-composer-send")).toBe(true);
 
     // More typing turns nothing: Send is already on top.
     await app.type("id:chat-composer-input", "i");
+    expect(turns(app)).toEqual([1]);
     expect(app.count(DRUM)).toBe(0);
 
     await app.clear("id:chat-composer-input");
+    // Back to the mic's chamber (0).
+    expect(turns(app)).toEqual([1, 0]);
     expect(app.count(DRUM)).toBe(1);
+    await app.press("id:release-turns");
     await app.waitUntil(() => app.count(DRUM) === 0);
     expect(app.count("id:chat-composer-voice-icon.PhMicrophone.primary.primary-foreground")).toBe(1);
   });
