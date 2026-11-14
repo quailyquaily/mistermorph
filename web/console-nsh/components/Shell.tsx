@@ -13,7 +13,7 @@
 import type { JSX } from "nsh";
 import { signal, View } from "nsh";
 import { hasFavicon } from "../lib/platform";
-import { isMobile, mobileBottomNavVisible } from "../lib/shell";
+import { isMobile, mobileBottomNavVisible, systemInsets } from "../lib/shell";
 import { notePress } from "./motion/pressOrigin";
 import { AgentFavicon } from "./frame/AgentFavicon";
 import { InsecureBanner } from "./frame/InsecureBanner";
@@ -29,6 +29,7 @@ export function Shell(props: { shellless: boolean; standalone: boolean; children
   startShortcutDispatch();
   // The height of the page's column (beside the sidebar): the page, and the workbench under it.
   const room = signal(0);
+  const foot = () => systemInsets()?.foot ?? 0;
   // Every press passes here first (capture), so dialogs know which control opened them.
   return (
     // Plain paper: no grid behind the pages (design/ui-refresh.html, "no background patterns").
@@ -61,6 +62,10 @@ export function Shell(props: { shellless: boolean; standalone: boolean; children
           <If when={!props.shellless && !props.standalone && room() > 0}>
             <Workbench room={room()} phone={isMobile()} />
           </If>
+          {/* On Android phones, the bottom inset under the pages when neither the navigation strip
+              nor the open workbench takes it (lib/systemInsets.ts): inside the column, so the room
+              above stays the same as they take it and leave it, and it goes as the sheet comes. */}
+          <View accessibilityElementsHidden style={{ height: foot() }} testID={`frame-foot-${Math.round(foot())}`} />
         </View>
       </View>
       <NoticeHost />
