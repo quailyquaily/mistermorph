@@ -14,7 +14,7 @@ import { OverflowLine } from "./OverflowLine";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { KindChip, NEON, StatusTag, statusTag, TerminalText } from "./TerminalText";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
-import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
+import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
 
 export const PANEL_PLAN = "plan";
 export const PANEL_ACTIVITY = "activity";
@@ -162,7 +162,8 @@ function Column(props: { label: string; value?: string; selected: boolean; focus
 // The terminal's rows are a dashboard's readout (TerminalText.tsx): a bracketed state tag, the
 // entry's kind as a chip, its name bright; its parameters as a key column and typed values (a
 // command behind a `$` prompt); its output under a rule (red for an error), with the terms worth
-// copying pressable; its nested calls as a tree.
+// copying pressable (a failed shell call: its exit code, stderr and stdout, ShellResult); its
+// nested calls as a tree.
 
 /** The parameters that are a command line: their value shows behind a `$` prompt. */
 const COMMAND_KEYS = new Set(["cmd", "command", "script", "shell"]);
@@ -277,7 +278,10 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
               </Each>
             </View>
           </If>
-          <If when={entryNote(entry()) && children(entry()).length === 0}>
+          <If when={entry()?.shell && children(entry()).length === 0}>
+            <ShellResult shell={entry()?.shell} />
+          </If>
+          <If when={!entry()?.shell && entryNote(entry()) && children(entry()).length === 0}>
             <View
               selectable
               class="border-l-2 pl-2.5"
@@ -296,6 +300,96 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
         </View>
       )}
     </Each>
+  );
+}
+
+/** A call's command when the call tree's line cuts it (longer than PARAM_LIMIT, or more than one
+ *  line), else "". */
+function clippedCommand(entry: any) {
+  const param = activityParams(entry).find((item) => COMMAND_KEYS.has(item.key.toLowerCase()));
+  const value = param?.value ?? "";
+  return value.length > PARAM_LIMIT || value.includes("\n") ? value : "";
+}
+
+/** A stream a shell call printed to: its name, then what it printed as kept, with what was not
+ *  kept said above it (the server keeps a stream's end) and the tool's own cut below it; or that
+ *  it was empty. */
+function ShellStream(props: { name: "stderr" | "stdout"; text: string; omitted: number; truncated: boolean }) {
+  const text = () => props.text.replace(/\s+$/, "");
+  return (
+    <View class="gap-1" testID={`chat-activity-${props.name}`}>
+      <View class="flex-row items-center gap-2">
+        <Text class={TERMINAL_LABEL}>{props.name}</Text>
+        <If when={!text()}>
+          <Text class={`font-mono text-xs ${TERMINAL_MUTED}`} testID="chat-activity-stream-empty">
+            {t("chat_activity_stream_empty")}
+          </Text>
+        </If>
+      </View>
+      <If when={text()}>
+        <View
+          selectable
+          class="gap-0.5 border-l-2 pl-2.5"
+          style={{ borderColor: props.name === "stderr" ? `${NEON.fail}99` : "#ffffff1f" }}
+        >
+          <If when={props.omitted > 0}>
+            <Text class={`font-mono text-[11px] leading-[18px] ${TERMINAL_MUTED}`} testID="chat-activity-output-omitted">
+              {`┆ ${t("chat_activity_output_omitted", { count: props.omitted })}`}
+            </Text>
+          </If>
+          <TerminalText
+            text={text()}
+            copyOnly
+            class={`font-mono leading-[18px] ${terminalNoteClass(false)}`}
+            testID={`chat-activity-${props.name}-text`}
+          />
+          <If when={props.truncated}>
+            <Text class={`font-mono text-[11px] leading-[18px] ${TERMINAL_MUTED}`} testID="chat-activity-output-truncated">
+              {`┆ ${t("chat_activity_output_truncated")}`}
+            </Text>
+          </If>
+        </View>
+      </If>
+    </View>
+  );
+}
+
+/**
+ * How a failed shell call ended (chat-task-history.js's `shell`): its exit code, the reason when
+ * the error says more than that (a timeout, a command that could not start), then what it printed
+ * to stderr and to stdout, each whole as the server kept it; or that it printed nothing. The exit
+ * code is shown as it is: no cause is read into it. `command`: a command to show whole here too
+ * (one a call tree's line cut).
+ */
+export function ShellResult(props: { shell: any; command?: string }) {
+  const shell = () => props.shell ?? {};
+  const silent = () => !String(shell().stdout ?? "").trim() && !String(shell().stderr ?? "").trim();
+  return (
+    <View class="gap-1.5" testID="chat-activity-shell">
+      <If when={props.command}>
+        <ParamRow name="cmd" value={props.command ?? ""} limit={0} />
+      </If>
+      <View class="flex-row items-center gap-2" testID="chat-activity-exit">
+        <Text class={TERMINAL_LABEL}>{t("chat_activity_exit_code")}</Text>
+        <Text class="font-mono text-xs leading-[18px]" style={{ color: shell().exitCode === 0 ? NEON.ok : NEON.fail }} testID="chat-activity-exit-code">
+          {String(shell().exitCode)}
+        </Text>
+      </View>
+      <If when={shell().reason}>
+        <TerminalText text={String(shell().reason)} copyOnly class={`font-mono text-xs leading-[18px] ${TERMINAL_ERROR}`} testID="chat-activity-shell-reason" />
+      </If>
+      <If
+        when={!silent()}
+        else={
+          <Text class={`font-mono text-xs leading-[18px] ${TERMINAL_MUTED}`} testID="chat-activity-no-output">
+            {t("chat_activity_no_output")}
+          </Text>
+        }
+      >
+        <ShellStream name="stderr" text={String(shell().stderr ?? "")} omitted={Number(shell().stderrOmitted) || 0} truncated={Boolean(shell().stderrTruncated)} />
+        <ShellStream name="stdout" text={String(shell().stdout ?? "")} omitted={Number(shell().stdoutOmitted) || 0} truncated={Boolean(shell().stdoutTruncated)} />
+      </If>
+    </View>
   );
 }
 
@@ -343,7 +437,18 @@ export function ActivityCallTree(props: { itemID: string; calls: any[]; omitted?
                 </Text>
               </View>
             </View>
-            <If when={child()?.error}>
+            <If when={child()?.shell}>
+              <View class="flex-row gap-1.5">
+                <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
+                  {index() === props.calls.length - 1 ? "  " : "│ "}
+                </Text>
+                <View class="min-w-0 flex-1">
+                  {/* The line above shows the command's start: one cut there is here whole. */}
+                  <ShellResult shell={child()?.shell} command={clippedCommand(child())} />
+                </View>
+              </View>
+            </If>
+            <If when={!child()?.shell && child()?.error}>
               <View class="flex-row gap-1.5">
                 <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
                   {index() === props.calls.length - 1 ? "  " : "│ "}
