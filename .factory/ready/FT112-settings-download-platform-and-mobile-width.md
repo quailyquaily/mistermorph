@@ -70,3 +70,14 @@ notes:
 
 ## factory · 2026-11-14 21:09
 Moved new/ → review/ at the owner's explicit request: "move FT112, FT113, FT118 to review/". No code changes or tests run; existing review findings remain recorded. This move is not a passing review or a test-gate waiver.
+
+## factory · review · 2026-11-14 23:24
+head: dbb8a47c1a445a75c26cb67751a67bb9e27a0616
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD: merge-base 2e37a15f, master 45bf4165, 18 changed files. No verified introduced defects meeting the finding standard; no P0/P1 blockers. Android native targeting, exact client selection and unavailable states, legacy-server fallback, server-updater compatibility, stale-state clearing, checksums and localization reviewed.
+- Validation on this head: configured gofmt/vet/go-test gate exit 0 (163 packages ok); full nsh 0.5.0 Console suite 942/942 passed, exit 0. Manager independently reran nsh 0.5.0 check: exit 0. Scripted tests used absolute throwaway HOME. The prior drum gate blocker was removed upstream in 2e37a15f and brought here by merge, not weakened by this feature.
+- Candidate comments were not retained as findings: Android desktop-site and reduced Linux browser hints rely on unverified browser behavior; archive-vs-installer behavior predates this item; the 980pt breakpoint is the existing responsive convention; release-feed URL trust concerns lack a verified attacker-controlled entry or demonstrated regression. Browser-hint and outbound URL/openExternal behavior remain residual checks, not proven defects.
+- Not checked: real Android hardware/emulator, APK install, live artifact downloads/feeds/server, real browser desktop-site and secure-context architecture hints, Safari/Firefox/Windows/iPad, GPUI desktop, rendered intermediate-width layouts and non-HTTP external URL handling.
+- Installs: none reported. Worktree stayed clean; no code changes or code commits. Initially stale local item branch was fast-forwarded to the fetched origin head before review; final review head matches origin. No linked GitHub issue/PR in the request; no GitHub comments required.
+- Round 1 of 3: review/ → ready/. Owner should inspect real-device download selection and mobile layout before shipping. Not merged or deployed.
