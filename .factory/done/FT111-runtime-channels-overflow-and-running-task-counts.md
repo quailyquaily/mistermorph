@@ -58,3 +58,10 @@ Reviewed by Claude Code: origin/master (75eec416) ... c8f18ea4, both item commit
 Validation: configured gofmt/vet/go-test gate PASS with throwaway HOME; nsh check PASS. Full nsh suite 925/927 passed: the two failures are linux/android variants of existing chat-composer-drum “typing turns the drum”. Isolated repeated tests verified this on base (3/4 failures) and head (2/4 failures); unchanged composer, not an introduced failure. New item tests pass. Stale-count reproduction confirmed in a scratch frontend copy; tracked worktree clean, no commits or edits by reviewer. Installs: none.
 
 Residual risks: no live real morph-chat/shared-store process, messaging accounts, desktop app, Android device or screen-reader verification in this review. Counts retain the existing one-minute polling delay. The overview adds another shared-store journal read/lock per poll; not load-tested. No linked issue/PR in the item, so no GitHub review comment required.
+
+## factory · 2026-11-14 16:11
+Shipped ready/ → done/. Merged into master at a72b391c651c36ba4dd5831d6151e7c75829a26e; master pushed. No tag created or pushed, as explicitly requested by the owner. No linked issues or PRs; branch not deleted (clean not configured).
+
+Manager validation on merged master: gofmt gate, go vet ./... and go test ./... PASS; nsh 0.5.0 check PASS; all 927 Console tests PASS (20m 38s), with absolute throwaway HOME. Initial Console attempt used the default outdated nsh 0.4.0 and produced incompatible-runner failures; discarded and rerun completely with the repository-required existing nsh 0.5.0 installation. No code fixes, conflicts or unpinned installations.
+
+Known nonblocking review note remains: refresh errors retain previous counts alongside the Stale data warning; normal refresh interval is one minute. No fresh real-device, browser, real messaging-account or load checks; remote CI completion not verified.
