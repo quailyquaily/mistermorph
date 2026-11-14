@@ -300,6 +300,10 @@ Headless tests prove behaviour, not the look.
   scroll to 656pt, and 532pt across (the runtime's `nsh-spacer` is sized from the core's content
   size). Put such an image in a View of its size with `overflow-hidden` (`AgentAvatar`). Headless
   tests and GPUI do not show it; read the scroll's `nsh-spacer` in a browser.
+- On the web, what a `ShaderEffect` draws through its shader (`sample_content`) loses the masks
+  inside it: an `Icon` (a tinted mask) comes out as a solid square of its colour. The Contacts
+  panel's avatar resolves through one (`PixelResolve`) with its kind badge kept outside it, over
+  it. Headless tests draw no shaders (`shadersAvailable()` is false there): look in a browser.
 
 ### Android (nsh 0.4.0)
 
