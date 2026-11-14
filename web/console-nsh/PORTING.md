@@ -225,6 +225,12 @@ Headless tests prove behaviour, not the look.
   On the web a line may also break where one span's style ends and the next one's begins, so a
   mark that must stay beside a text's first line (a command's `$`) goes in a column of its own,
   not in the text (`ParamRow` in `components/chat/ChatStatusCard.tsx`).
+- `flex-1` is a share of the row on a wide window but, in a column (the same views stacked on a
+  phone), a share of the column's height: nsh lays out as React Native does, with no
+  `min-height: auto`, so stacked `flex-1` cards each get an equal part of their total height,
+  however tall their content is. A short card gets blank room and a tall one draws past its own
+  bottom edge, over the next card. Give `flex-1` only where the views sit side by side (Settings ›
+  Runtime's model and channels cards).
 - On a touch screen such a drag must not take a swipe from the list's scroll view, so it waits for
   a finger to rest (`pages/chat/topicDrag.ts`: 450ms within 8pt). nsh/base's `Button` takes no
   `onLongPress`, so the hold is timed in JS from the touch events of the view around the button

@@ -1,6 +1,6 @@
 // Settings › Runtime (the Vue console's RuntimeView, mounted as RuntimePanel): the selected agent's
-// health, its model, its channels, process metrics and technical details, refreshed every minute,
-// and Poke, which wakes the agent's awareness loop with a message.
+// health, its model, its channels with the tasks running in each, process metrics and technical
+// details, refreshed every minute, and Poke, which wakes the agent's awareness loop with a message.
 import type { JSX } from "nsh";
 import { batch, cleanup, computed, effect, Image, signal, Text, untracked, View } from "nsh";
 import {
@@ -19,6 +19,7 @@ import { reactiveRecord } from "../../lib/stores/reactive-record.js";
 import { Button, Icon, StatusMark } from "../../components/ui";
 import { Button as BaseButton, Collapsible } from "nsh/base";
 import { isMobile } from "../../lib/shell";
+import { createPartProbe, type PartLayoutListener } from "../../components/shared/partProbe";
 import { SettingsCard } from "../../components/settings-page/parts";
 import { PokeDialog } from "../../components/settings-page/PokeDialog";
 import { CHANNEL_LOGOS } from "./constants";
@@ -28,6 +29,30 @@ const POKE_BODY_LIMIT = 10 * 1024;
 const CHANNELS = ["telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp", "bluesky", "x"];
 // The account channels report their connection status.
 const STATUS_CHANNELS = new Set(["wechat", "whatsapp", "bluesky", "x"]);
+// Where tasks come from besides the channels, in the Console's runtime: its own chat and the chat
+// command (`morph chat`), local or over the API. Neither needs configuring.
+const LOCAL_ENTRIES: { key: string; title: string; icon: "PhDesktop" | "PhTerminalWindow" }[] = [
+  { key: "console", title: "endpoint_channel_console", icon: "PhDesktop" },
+  { key: "cli", title: "runtime_entry_cli", icon: "PhTerminalWindow" },
+];
+
+/**
+ * The tasks running in an entry, as GET /overview's `running_tasks` counts them (tasks in
+ * TaskRunning: not queued, waiting on an approval or finished, and each counted once, under what
+ * started it). null when the count is unknown: the agent did not take it, or could not.
+ */
+export function runningTaskCount(runningTasks: unknown, key: string): number | null {
+  if (!runningTasks || typeof runningTasks !== "object") return null;
+  const value = (runningTasks as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+/** "2 tasks running", "No tasks running", or that the count is unknown, never a guessed 0. */
+export function runningTasksText(count: number | null) {
+  if (count === null) return t("runtime_tasks_running_unknown");
+  if (count === 0) return t("runtime_tasks_running_none");
+  return t(count === 1 ? "runtime_tasks_running_one" : "runtime_tasks_running_many", { count });
+}
 
 function stringValue(value: unknown, fallback = "-") {
   const text = String(value || "").trim();
@@ -78,6 +103,7 @@ function emptyOverview() {
     runtime_heap_sys_bytes: 0,
     runtime_heap_objects: 0,
     runtime_gc_cycles: 0,
+    running_tasks: null,
     ...channels,
   } as Record<string, any>;
 }
@@ -87,9 +113,9 @@ const MARK: Record<Tone, "on" | "pending" | "error" | "off"> = { healthy: "on", 
 
 function StatusLabel(props: { tone: Tone; text: string; testID?: string; small?: boolean }) {
   return (
-    <View class="flex-row items-center gap-2" testID={props.testID}>
+    <View class="min-w-0 flex-row items-center gap-2" testID={props.testID}>
       <StatusMark state={MARK[props.tone]} />
-      <Text class={`${props.small ? "text-xs" : "text-sm"} text-foreground`}>{props.text}</Text>
+      <Text class={`min-w-0 shrink ${props.small ? "text-xs" : "text-sm"} text-foreground`}>{props.text}</Text>
     </View>
   );
 }
@@ -119,19 +145,30 @@ function Ledger(props: { rows: { key: string; label: string; value: string }[]; 
   );
 }
 
-/** A line that folds the rest away (`.runtime-panel summary`): the text, a chevron at the right that turns over. */
-function RuntimeFold(props: { open: boolean; onToggle: () => void; title: string; children?: JSX.Element; testID?: string }) {
+/**
+ * The fold's line: a Tab stop (Enter and Space press it) that shows the keyboard focus with the
+ * hover's tint and a ring, as the browser draws none (nsh web views have no outline). It reaches
+ * past the card's padding by its own, so its text stays in line with the rows above.
+ */
+export const RUNTIME_FOLD_TOGGLE_CLASS =
+  "-mx-2 min-h-11 flex-row items-center justify-between gap-3 rounded-(--radius) px-2 py-[11px] hover:bg-hover focus:bg-hover focus:ring-2 focus:ring-blue";
+
+/**
+ * A line that folds the rest away (`.runtime-panel summary`): the text, a chevron at the right that
+ * turns over. What it opens takes its room in the card's flow, below the line.
+ */
+export function RuntimeFold(props: { open: boolean; onToggle: () => void; title: string; children?: JSX.Element; testID?: string }) {
   return (
-    <Collapsible open={props.open} content={<View class="gap-3 pb-1">{props.children}</View>}>
+    <Collapsible open={props.open} content={<View class="min-w-0 gap-3 pb-1">{props.children}</View>}>
       <View
         role="button"
         accessibilityLabel={props.title}
         accessibilityState={{ expanded: props.open }}
         onPress={() => props.onToggle()}
         testID={props.testID}
-        class="min-h-11 flex-row items-center justify-between gap-3 py-[11px]"
+        class={RUNTIME_FOLD_TOGGLE_CLASS}
       >
-        <Text class="text-sm leading-normal text-subtle">{props.title}</Text>
+        <Text class="min-w-0 shrink text-sm leading-normal text-subtle">{props.title}</Text>
         <View class="transition-transform duration-160" style={{ transform: [{ rotate: props.open ? "180deg" : "0deg" }] }}>
           <Icon name="PhCaretDown" size={16} color="subtle" />
         </View>
@@ -140,7 +177,39 @@ function RuntimeFold(props: { open: boolean; onToggle: () => void; title: string
   );
 }
 
-export function RuntimePanel(): JSX.Element {
+/** One line of the channels card: the entry, how it runs (a channel's status), and its running tasks. */
+function RuntimeEntry(props: {
+  id: string;
+  title: string;
+  logo?: JSX.Element;
+  status?: { tone: Tone; text: string };
+  /** The running tasks' line; none for a channel that does not run. */
+  tasks?: string;
+  probe?: Record<string, unknown>;
+}) {
+  return (
+    <View class="min-w-0 flex-row items-center gap-2.5" testID={`runtime-entry-${props.id}`} {...(props.probe || {})}>
+      <View class="size-5 shrink-0 items-center justify-center">{props.logo}</View>
+      {/* A floor for the name: the status beside it shrinks and wraps before it does. */}
+      <View class="min-w-[88px] flex-1 gap-0.5">
+        <Text class="text-sm leading-normal text-foreground">{props.title}</Text>
+        <If when={props.tasks}>
+          <Text class="text-xs leading-normal tabular-nums text-subtle" testID={`runtime-entry-${props.id}-tasks`}>
+            {props.tasks}
+          </Text>
+        </If>
+      </View>
+      <If when={props.status}>
+        <View class="min-w-0 shrink">
+          <StatusLabel tone={props.status!.tone} text={props.status!.text} />
+        </View>
+      </If>
+    </View>
+  );
+}
+
+export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}): JSX.Element {
+  const parts = createPartProbe(() => props.onPartLayout);
   const notice = useNotice();
   const technicalOpen = signal(false);
   const unconfiguredOpen = signal(false);
@@ -233,6 +302,17 @@ export function RuntimePanel(): JSX.Element {
     if (item.status === "connecting") return t("runtime_channel_connecting");
     return t("runtime_status_running");
   }
+  // The Console's runtime runs its chat and takes the chat command's tasks; another runtime shows
+  // them only when it counts them.
+  const localEntries = computed(() => {
+    const isConsole = String(overview.mode || "").trim().toLowerCase() === "console";
+    return LOCAL_ENTRIES.filter((entry) => isConsole || runningTaskCount(overview.running_tasks, entry.key) !== null).map((entry) => ({
+      key: entry.key,
+      title: t(entry.title),
+      icon: entry.icon,
+      tasks: runningTasksText(runningTaskCount(overview.running_tasks, entry.key)),
+    }));
+  });
   const configuredChannels = computed(() => channelRows().filter((item) => item.configured));
   const unconfiguredChannels = computed(() => channelRows().filter((item) => !item.configured));
   const canPoke = computed(() => hasData() && toBool(overview.poke_enabled, false));
@@ -280,6 +360,7 @@ export function RuntimePanel(): JSX.Element {
         overview.runtime_heap_sys_bytes = toInt(rt.heap_sys_bytes, 0);
         overview.runtime_heap_objects = toInt(rt.heap_objects, 0);
         overview.runtime_gc_cycles = toInt(rt.gc_cycles, 0);
+        overview.running_tasks = data && typeof data.running_tasks === "object" ? data.running_tasks : null;
         loadedEndpointRef.set(endpointRef);
         lastUpdated.set(new Date().toISOString());
         err.set("");
@@ -376,7 +457,7 @@ export function RuntimePanel(): JSX.Element {
   });
 
   return (
-    <View class="gap-[18px] pb-6" testID="runtime-panel">
+    <View class="gap-[18px] pb-6" testID="runtime-panel" {...parts.probe(() => "panel")}>
       <SettingsCard
         title={heroTitle()}
         literal
@@ -416,47 +497,68 @@ export function RuntimePanel(): JSX.Element {
       </SettingsCard>
 
       <If when={hasData()}>
+        {/* Side by side on wide windows, sharing the row's width; stacked on phones, where each
+            card is as tall as what it holds (flex-1 in a column would split the column's height
+            between them, and the channels card would draw past its own bottom edge). */}
         <View class={isMobile() ? "gap-[18px]" : "flex-row items-start gap-[18px]"}>
-          <SettingsCard title={t("runtime_current_model")} class="min-w-0 flex-1" list>
-            <Ledger rows={routeRows()} testID="runtime-model" />
-          </SettingsCard>
-          <SettingsCard title={t("group_channels")} class="min-w-0 flex-1" testID="runtime-channels" bodyClass="gap-3">
-            <Each of={configuredChannels()} key={(item) => item.key}>
-              {(item) => (
-                <View class="flex-row flex-wrap items-center justify-between gap-2">
-                  <View class="flex-row items-center gap-2">
-                    <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />
-                    <Text class="text-sm text-foreground">{item().title}</Text>
+          <View class={isMobile() ? "min-w-0" : "min-w-0 flex-1"} {...parts.probe(() => "model")}>
+            <SettingsCard title={t("runtime_current_model")} list>
+              <Ledger rows={routeRows()} testID="runtime-model" />
+            </SettingsCard>
+          </View>
+          <View class={isMobile() ? "min-w-0" : "min-w-0 flex-1"} {...parts.probe(() => "channels")}>
+            <SettingsCard title={t("group_channels")} testID="runtime-channels" bodyClass="gap-3">
+              <Each of={localEntries()} key={(item) => item.key}>
+                {(item) => (
+                  <RuntimeEntry
+                    id={item().key}
+                    title={item().title}
+                    logo={<Icon name={item().icon} size={18} color="subtle" />}
+                    tasks={item().tasks}
+                    probe={parts.probe(() => `entry-${item().key}`)}
+                  />
+                )}
+              </Each>
+              <Each of={configuredChannels()} key={(item) => item.key}>
+                {(item) => (
+                  <RuntimeEntry
+                    id={item().key}
+                    title={item().title}
+                    logo={<Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />}
+                    status={{ tone: channelTone(item()), text: channelStatusText(item()) }}
+                    tasks={item().running ? runningTasksText(runningTaskCount(overview.running_tasks, item().key)) : ""}
+                    probe={parts.probe(() => `entry-${item().key}`)}
+                  />
+                )}
+              </Each>
+              <If when={unconfiguredChannels().length}>
+                <RuntimeFold
+                  open={unconfiguredOpen()}
+                  onToggle={() => unconfiguredOpen.update((open) => !open)}
+                  title={t(configuredChannels().length ? "runtime_status_not_configured" : "runtime_no_channels")}
+                  testID="runtime-unconfigured"
+                >
+                  <View class="min-w-0 flex-row flex-wrap gap-x-4 gap-y-3" testID="runtime-unconfigured-list">
+                    <Each of={unconfiguredChannels()} key={(item) => item.key}>
+                      {(item) => (
+                        <View class="min-w-0 max-w-full flex-row items-center gap-2" {...parts.probe(() => `unconfigured-${item().key}`)}>
+                          <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />
+                          <Text class="min-w-0 shrink text-sm text-subtle">{item().title}</Text>
+                        </View>
+                      )}
+                    </Each>
                   </View>
-                  <StatusLabel tone={channelTone(item())} text={channelStatusText(item())} />
-                </View>
-              )}
-            </Each>
-            <If when={unconfiguredChannels().length}>
-              <RuntimeFold
-                open={unconfiguredOpen()}
-                onToggle={() => unconfiguredOpen.update((open) => !open)}
-                title={t(configuredChannels().length ? "runtime_status_not_configured" : "runtime_no_channels")}
-                testID="runtime-unconfigured"
-              >
-                <View class="flex-row flex-wrap gap-3">
-                  <Each of={unconfiguredChannels()} key={(item) => item.key}>
-                    {(item) => (
-                      <View class="flex-row items-center gap-2">
-                        <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />
-                        <Text class="text-sm text-subtle">{item().title}</Text>
-                      </View>
-                    )}
-                  </Each>
-                </View>
-              </RuntimeFold>
-            </If>
-          </SettingsCard>
+                </RuntimeFold>
+              </If>
+            </SettingsCard>
+          </View>
         </View>
 
-        <SettingsCard title={t("group_runtime")} list>
-          <Ledger rows={runtimeMetrics()} columns={2} testID="runtime-metrics" />
-        </SettingsCard>
+        <View {...parts.probe(() => "metrics")}>
+          <SettingsCard title={t("group_runtime")} list>
+            <Ledger rows={runtimeMetrics()} columns={2} testID="runtime-metrics" />
+          </SettingsCard>
+        </View>
 
         <SettingsCard
           title={t("runtime_technical_details")}
@@ -465,7 +567,7 @@ export function RuntimePanel(): JSX.Element {
               onPress={() => technicalOpen.update((open) => !open)}
               accessibilityLabel={t("runtime_technical_details")}
               testID="runtime-technical-toggle"
-              class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover"
+              class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover focus:bg-hover focus:ring-2 focus:ring-blue"
             >
               <View class="transition-transform duration-160" style={{ transform: [{ rotate: technicalOpen() ? "180deg" : "0deg" }] }}>
                 <Icon name="PhCaretDown" size={16} color="subtle" />
