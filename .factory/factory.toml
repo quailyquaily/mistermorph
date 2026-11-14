@@ -27,7 +27,7 @@ max_rounds = 3
 # Added to the coder's rules for this repository.
 rules = [
   "Scripted tests get a throwaway HOME, given as an absolute path.",
-  "The Console is web/console-nsh (nsh 0.5.0; the Vue console is gone): when its sources change, run `nsh check` and `nsh test --web-host tests/noHost.js` in web/console-nsh.",
+  "The Console is web/console-nsh (nsh 0.5.0; the Vue console is gone): when its sources change, run `nsh check` in web/console-nsh, and its tests with `web/console-nsh/scripts/test.sh` (one `nsh test` per test file, several at a time; a file that fails runs once more by itself). That script is the Console's required test run: do not also run `nsh test` over the whole suite one file after another, which takes about 18 minutes.",
   "When adding or changing config keys, update assets/config/config.example.yaml.",
   "Write new docs in English only.",
 ]
