@@ -79,3 +79,19 @@ Fixed headless animation-completion scheduling race using fixture hold/release g
 Tests on pushed head: nsh check passed; full nsh test --web-host tests/noHost.js passed, 939/939 (18m25s); configured gofmt/vet/go test gate passed and was independently rerun by manager successfully. Focused drum test passed 15/15 fresh runs, 6 tests each. Earlier stopped-build logs showed 40/40 new-test passes, not rerun as part of that count. No remaining failing gate.
 
 Not checked: real Android Gallery/document pickers, real phone browsers, desktop app window or visual preview rendering this round. Owner should inspect actual mobile picking and preview rendering; headless tests do not establish native behavior. No unpinned installs. New parallel test script was not run; required direct full-suite command was run.
+
+## factory · review · 2026-11-15 01:58
+head: 312954775dbca2378914133f6485abbb3ca628f4
+verdict: pass
+
+Claude Code reviewed all 17 changed files in origin/master...HEAD against the request and plan, including merge resolutions. No introduced P0/P1/P2/P3 findings. Draft preview lifecycle, URL ownership, stale loads, removal/send behavior, rounded pills, sent metadata and Gallery/File dispatch were checked. Moved review/ → ready/ at round 2 of 3.
+
+Before review, merged current master 627af7fe into the branch and pushed 31295477. Resolved host.js by preserving client.platform and the pickFiles(args) wrapper; honored master's intentional drum-test deletion and removed its unused fixture gates. No forbidden paths changed. Branch push initially needed command-local credential.useHttpPath=true; retry succeeded without settings changes.
+
+Validation on reviewed head: configured gofmt check, go vet ./... and go test ./... passed independently by manager and reviewer. nsh 0.5.0 check passed. Required scripts/test.sh passed: 112 files, 0 failures, no solo retries; merge validation counted 983 passing tests. Review worktree remained clean and reviewer made no changes or commits.
+
+Installs: during merge validation nsh fetched unpinned TypeScript 7.0.2 into a throwaway test cache; contact notified. Review reused that cache and installed nothing. Scripted tests used absolute throwaway HOME/TMPDIR.
+
+Not checked: real Android Gallery/document pickers and cancellation/MIME behavior, real phone browsers, desktop app window, visual preview/pill/sheet rendering, viewport containment or touch/screen-reader behavior. Headless tests and code inspection do not establish these native/manual behaviors. Owner should inspect them before shipping.
+
+No linked GitHub issue or PR was named in the item; no GitHub review comment required.
