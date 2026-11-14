@@ -106,8 +106,9 @@ ln -s "$runtime/lib" "$shim/nsh-runtime/android/release/lib"
 # console server is usually plain http:// on the local network, nsh's Android runtime fetches through
 # HttpURLConnection, which enforces it, and `nsh package` declares it only for its development
 # builds), voice input's permission, Application and permission activity, and the task
-# notifications' permissions, activities and job. Nor has it a launcher icon that fits Android's
-# launchers: nsh links one PNG (nsh.json's icon), which they shrink onto a plate, so the link also
+# notifications' permissions, activities and job; and it labels the app with nsh.json's name, which
+# Android's launcher and app settings show as Morph instead. Nor has it a launcher icon that fits
+# Android's launchers: nsh links one PNG (nsh.json's icon), which they shrink onto a plate, so the link also
 # takes android/res (from design/brand/generator/platforms.py): the adaptive icon
 # (mipmap-anydpi-v26/ic_launcher), which every device the app runs on (min SDK 26) takes instead,
 # and the task notifications' icon (drawable-*/ic_stat_morph). So nsh runs with an SDK whose aapt2
@@ -156,6 +157,16 @@ if [[ "$format" == apk ]]; then
       exit 1
     fi
   done
+  # The launcher and the app settings name the app Morph in every locale: each application label
+  # aapt2 reports is Morph, and the launcher activity has it or none of its own (it inherits it).
+  badging=$("$build_tools/aapt2" dump badging "$built")
+  app_labels=$(grep "^application-label" <<<"$badging" || true)
+  launcher=$(grep "^launchable-activity:" <<<"$badging" || true)
+  if [[ "$app_labels" != *"application-label:'Morph'"* ]] || grep -qv ":'Morph'$" <<<"$app_labels" ||
+    [[ -z "$launcher" ]] || grep -qvE " label='(Morph)?' " <<<"$launcher"; then
+    echo "the APK is not labelled Morph ($app_labels; $launcher): did nsh stop linking its manifest with aapt2?" >&2
+    exit 1
+  fi
   resources=$("$build_tools/aapt2" dump resources "$built")
   for wanted in "anydpi-v26/ic_launcher.xml" "drawable-xxxhdpi-v4/ic_stat_morph.png"; do
     if ! grep -q "$wanted" <<<"$resources"; then
