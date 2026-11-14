@@ -81,3 +81,11 @@ notes:
 - Not checked: real Android hardware/emulator, APK install, live artifact downloads/feeds/server, real browser desktop-site and secure-context architecture hints, Safari/Firefox/Windows/iPad, GPUI desktop, rendered intermediate-width layouts and non-HTTP external URL handling.
 - Installs: none reported. Worktree stayed clean; no code changes or code commits. Initially stale local item branch was fast-forwarded to the fetched origin head before review; final review head matches origin. No linked GitHub issue/PR in the request; no GitHub comments required.
 - Round 1 of 3: review/ → ready/. Owner should inspect real-device download selection and mobile layout before shipping. Not merged or deployed.
+
+
+## factory · 2026-11-14 23:52
+Shipped ready/ → done/ at the owner's request. Merge commit: de7461e7848a03319c3c0c222e9fd4afb98c8055, pushed to master (final head efb28a06). No tag created or pushed, per owner instruction. No linked issue or PR to close. Branch retained; clean was not configured.
+
+Validation: configured gofmt/vet/go-test gate passed (163 packages); nsh 0.5.0 check and required Console test script passed (111 files, zero failures). Android manifest Node tests 9/9 and bash syntax check passed. First Go run hit an unrelated wechatlogin random-secret substring assertion failure; package repeated 20 times and full configured gate rerun passed. No code changed for this flake. No installs.
+
+Not checked: real Android device/emulator, live release feeds/downloads, full APK/AAB packaging. Android SDK/aapt2 unavailable in ship environment, so resource compile/link was not repeated.

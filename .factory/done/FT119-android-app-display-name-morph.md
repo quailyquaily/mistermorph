@@ -49,3 +49,11 @@ notes:
 - No installs. Worktree unchanged. No linked GitHub issue or PR.
 - Not verified: full APK/AAB packaging and actual launcher/Settings UI on a device; local nsh Android runtime/nsh.aar unavailable. AAB output has no badging gate. Owner should check an installable build before release.
 - master advanced to 45bf4165 after validation; no merge into base or shipping was performed. Ship must validate integration against current base.
+
+
+## factory · 2026-11-14 23:52
+Shipped ready/ → done/ at the owner's request. Merge commit: efb28a06f0579c95933c975a297c0859a03c277b, pushed to master (final head efb28a06). No tag created or pushed, per owner instruction. No linked issue or PR to close. Branch retained; clean was not configured.
+
+Validation: configured gofmt/vet/go-test gate passed (163 packages); nsh 0.5.0 check and required Console test script passed (111 files, zero failures). Android manifest Node tests 9/9 and bash syntax check passed. First Go run hit an unrelated wechatlogin random-secret substring assertion failure; package repeated 20 times and full configured gate rerun passed. No code changed for this flake. No installs.
+
+Not checked: real Android device/emulator, live release feeds/downloads, full APK/AAB packaging. Android SDK/aapt2 unavailable in ship environment, so resource compile/link was not repeated.
