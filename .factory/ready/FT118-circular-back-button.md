@@ -48,3 +48,13 @@ notes:
 
 ## factory · 2026-11-14 21:09
 Moved new/ → review/ at the owner's explicit request: "move FT112, FT113, FT118 to review/". No code changes or tests run; existing review findings remain recorded. This move is not a passing review or a test-gate waiver.
+
+## factory · review · 2026-11-15 01:07
+head: e0396a27a1f0bd15964083c7dc86d01cddc9d34d
+verdict: pass
+notes:
+- Claude Code reviewed all six changed files in origin/master...HEAD, with origin/master snapshot 627af7fe, and relevant BackButton callers. No P0/P1/P2/P3 findings. Circular styling preserves existing dimensions, icon centering, labels, handlers and theme tokens. No forbidden paths changed; reviewed worktree remains clean.
+- Configured gofmt check, go vet ./... and go test ./... passed (163 packages ok). The coder initially ran the Go gate with its real HOME; manager independently reran the complete gate with an absolute throwaway HOME and it passed. nsh 0.5.0 check passed; required parallel Console test script passed: 107 files, 0 failed, no retries needed. Serial whole-suite command was not run, as required by current factory settings. The old composer drum tests were already removed by merged master, not by this item.
+- Installs: none. No code modified, committed or pushed during this review.
+- Not checked: rendered shape or light/dark/hover/pressed/focus visuals in a browser, native desktop or Android device/emulator. Automated tests confirm geometry and rounded classes, not pixels. Existing 32pt audit and 38pt shared mobile targets are unchanged; physical-device usability remains unchecked. Owner should inspect actual appearance and touch targets.
+- Moved review/ → ready/. No linked GitHub issue or PR was named; no GitHub review comment required.
