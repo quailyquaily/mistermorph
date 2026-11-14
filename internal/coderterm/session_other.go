@@ -25,3 +25,5 @@ func (*session) close()       {}
 func (*session) run(context.Context, Request) (string, error) {
 	return "", fmt.Errorf("coder terminals require Unix")
 }
+
+func (*session) statusLine() []byte { return nil }

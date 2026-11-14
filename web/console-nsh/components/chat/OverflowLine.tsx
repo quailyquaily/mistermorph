@@ -1,16 +1,17 @@
-// A run of progress or coder output laid out without wrapping (a tool's name, a parameter, a
-// nested call, a worker's process): as wide as the run, never wider than the room it is given. A
-// run longer than its room scrolls sideways instead of being cut at the panel's edge or widening
-// the panel; its scroll bar is the platform's (the app's theme on the desktops and the web, the
-// system's on phones), never hidden, with room kept under the run so the bar covers no letters.
+// A run of progress or coder output laid out without wrapping (a tool's name, a worker's process):
+// as wide as the run, never wider than the room it is given. A run longer than its room scrolls
+// sideways instead of being cut at the panel's edge or widening the panel; its scroll bar is the
+// platform's (the app's theme on the desktops and the web, the system's on phones), never hidden,
+// with room kept under the run so the bar covers no letters.
 //
 // A run that fits is a plain row, not a scroller: on the web every nsh 0.4 scroller (even one that
 // cannot scroll) contains its overscroll, so a vertical swipe that starts on it would not scroll
 // the panel around it. Only a run that overflows pays for that. The run is measured at its own
 // width either way (it never shrinks), so the choice cannot feed back on itself.
 //
-// Only for runs that do not wrap: text that wraps (notes, output, errors) goes beside it, not in
-// it, since a sideways scroller gives its content all the width it asks for.
+// Only for runs that do not wrap: text that wraps (parameters, nested calls, notes, output,
+// errors) goes beside it, not in it, since a sideways scroller gives its content all the width it
+// asks for.
 //
 // Under `OverflowWraps` (the workbench, which keeps one scroll area: its own) a run wraps instead,
 // and no line is ever a scroller.

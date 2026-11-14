@@ -50,8 +50,12 @@ type consoleActivityWorker struct {
 	Status string `json:"status,omitempty"`
 	// ActivityID is the spawn or coder call that started the worker.
 	ActivityID string `json:"activity_id,omitempty"`
-	At         string `json:"at,omitempty"`
-	Stream     string `json:"stream,omitempty"`
+	// Task is what that call asked the worker, exactly as the agent sent it (its "task" argument),
+	// kept here as well so the worker's panel still shows it after the call scrolls out of the
+	// history.
+	Task   string `json:"task,omitempty"`
+	At     string `json:"at,omitempty"`
+	Stream string `json:"stream,omitempty"`
 	// Output is the tail of what the worker printed while it ran (coders).
 	Output string `json:"output,omitempty"`
 	// Result is the worker's final answer, from the result its spawn or coder call returned.
@@ -607,6 +611,11 @@ func syncConsoleActivityWorkers(progress *consoleActivityProgress, eventWorker *
 		worker := &progress.Workers[i]
 		if entry.Kind == "tool" && worker.ActivityID == "" {
 			worker.ActivityID = entry.ID
+		}
+		if entry.Kind == "tool" && entry.ID == worker.ActivityID {
+			if task, ok := entry.Args["task"].(string); ok {
+				worker.Task = task
+			}
 		}
 		if entry.Worker != nil {
 			if name := strings.TrimSpace(entry.Worker.Name); name != "" {

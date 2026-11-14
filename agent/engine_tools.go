@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 
+	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -42,6 +43,10 @@ type coderToolDeps struct {
 	PathExtra   []string
 	// BypassApprovals is EngineToolsConfig.CoderBypassApprovals.
 	BypassApprovals map[string]bool
+	// Usage gives the recorder of runs' usage and quotas (usage.db); nil records nothing.
+	Usage func() *coderusage.Recorder
+	// ReadCodexQuota reads Codex's quota after a Codex run; nil reads none.
+	ReadCodexQuota func(ctx context.Context, pathExtra []string) (coderusage.Quota, error)
 }
 
 // registerEngineTools registers the enabled engine tools and returns the prompt blocks that go

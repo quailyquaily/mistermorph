@@ -45,8 +45,8 @@ type backend interface {
 	newID() string
 	// args returns the command-line arguments. resume reopens id's conversation; bypass runs
 	// without approval prompts or sandbox (Codex --dangerously-bypass-approvals-and-sandbox,
-	// Claude --dangerously-skip-permissions).
-	args(id string, resume, bypass bool) []string
+	// Claude --dangerously-skip-permissions). dir is the session's own folder (its logs).
+	args(id string, resume, bypass bool, dir string) []string
 	// transcriptRoot returns the directory holding session files, from the child's environment.
 	transcriptRoot(getenv func(string) string, home, cwd string) string
 	// findTranscript returns the session file for id under root, or "" before it exists.

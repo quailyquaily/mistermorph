@@ -1,9 +1,10 @@
 // Usage (the Vue console's StatsView): the summary sheet (total cost, tokens, requests and their
-// breakdowns), the daily chart, and the usage by API host or by model.
+// breakdowns), the coding agents' quotas, the daily chart, and the usage by API host or by model.
 import { batch, Canvas, effect, pixelRatio, signal, Text, token, untracked, View, windowSize } from "nsh";
 import type { CanvasRenderingContext2D } from "nsh";
 import { endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { RollingNumber } from "../../components/shared/RollingNumber";
+import { CoderQuotaButton } from "../../components/observe/CoderQuotaButton";
 import { DailyUsagePanel } from "../../components/observe/DailyUsagePanel";
 import { ModelLedger } from "../../components/observe/ModelLedger";
 import { hint, ObserveSection, t, wholeNumber } from "../../components/observe/parts";
@@ -86,7 +87,7 @@ export function StatsPage() {
   const heroSize = () => Math.round(Math.min(64, Math.max(40, 32 + windowSize().width * 0.02)));
 
   return (
-    <Page title={t("stats_title")} error={err()} testID="stats-page">
+    <Page title={t("stats_title")} actions={<CoderQuotaButton />} error={err()} testID="stats-page">
       <View style={{ rowGap: pageGap() }} class="pb-6">
         <If when={loading()}>
           <ProgressBar indeterminate label={t("runtime_loading")} />

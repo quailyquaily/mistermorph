@@ -299,26 +299,16 @@ test("an installed store skill with a newer version offers the update", async ()
   await app.waitUntil(() => task.includes("store_id: weather"));
 });
 
-test("the ⋯ menu above the list turns all skills off", async () => {
-  let saved: any = null;
+test("with all skills off, a skill's note says where to turn them on, and the head has no ⋯ menu", async () => {
   const { app } = await openConsole({
     location: "/e/default/skills?skill=weather",
-    api: {
-      ...BASE,
-      "GET /settings/agent/skills": () => ({ body: catalog([skill()], saved ? { enabled: saved.skills.enabled } : {}) }),
-      "PUT /settings/agent": (request) => {
-        saved = request.json;
-        return { body: {} };
-      },
-    },
+    api: { ...BASE, "GET /settings/agent/skills": { body: catalog([skill()], { enabled: false }) } },
   });
-  await app.waitFor("text:Loaded into every task.");
-  await app.press("id:skills-more");
-  await app.waitFor("id:skills-enabled");
-  await app.press("id:skills-enabled");
-  await app.waitUntil(() => saved !== null);
-  expect(saved.skills).toEqual({ enabled: false, load: [] });
-  await app.waitFor("text:All skills are off. Turn them on from the ⋯ menu above the list.");
+  await app.waitFor("text:All skills are off. Turn them on in Settings, under Tools.");
+  // The head keeps the store and add buttons; Load skills is a setting now (Settings › Tools).
+  expect(app.shows("id:skills-store")).toBe(true);
+  expect(app.shows("id:skills-add")).toBe(true);
+  expect(app.shows("id:skills-more")).toBe(false);
 });
 
 test("on a phone the list and a skill take turns, with a back button", async () => {

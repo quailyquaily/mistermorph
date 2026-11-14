@@ -145,6 +145,7 @@ type consoleLocalRuntime struct {
 	managedRuntimeMu        sync.RWMutex
 	topicContextCountMu     sync.Mutex
 	managedRuntimeRunning   map[string]bool
+	managedRuntimeTasks     map[string]daemonruntime.TaskReader
 	mixinConnected          atomic.Bool
 	discordConnected        atomic.Bool
 	accountDMStatus         map[string]string
@@ -1402,6 +1403,8 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			AwaitingAnswer: func(taskID string) bool {
 				return r.runControl.AwaitingAnswer("console", taskID)
 			},
+			// Its questions and approval cards, for a Console that polls rather than streams.
+			LiveResult: r.liveTaskResult,
 			TopicMetadata: func(ctx context.Context, topicID string) (daemonruntime.TopicMetadata, error) {
 				return r.topicMetadataForTopic(ctx, topicID, paths.TopicContextPath, defaultWorkspaceDir)
 			},
@@ -1486,6 +1489,7 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 					"x_status":           r.accountDMStatusOf("x"),
 					"x_connected":        r.accountDMStatusOf("x") == "online",
 				},
+				"running_tasks":    r.runningTaskCounts(),
 				"poke_enabled":     r.canPokeAwareness(),
 				"cron_run_enabled": r.canRunCron(),
 			}, nil
@@ -1509,6 +1513,61 @@ func (r *consoleLocalRuntime) SetManagedRuntimeRunning(kind string, running bool
 		r.managedRuntimeRunning = map[string]bool{}
 	}
 	r.managedRuntimeRunning[kind] = running
+	if !running {
+		delete(r.managedRuntimeTasks, kind)
+	}
+}
+
+// SetManagedRuntimeTasks records the task store of the managed channel `kind` while it runs; a
+// channel that stops forgets it (SetManagedRuntimeRunning).
+func (r *consoleLocalRuntime) SetManagedRuntimeTasks(kind string, tasks daemonruntime.TaskReader) {
+	if r == nil {
+		return
+	}
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == "" {
+		return
+	}
+	r.managedRuntimeMu.Lock()
+	defer r.managedRuntimeMu.Unlock()
+	if r.managedRuntimeTasks == nil {
+		r.managedRuntimeTasks = map[string]daemonruntime.TaskReader{}
+	}
+	if tasks == nil {
+		delete(r.managedRuntimeTasks, kind)
+		return
+	}
+	r.managedRuntimeTasks[kind] = tasks
+}
+
+// runningTaskCounts is the overview's `running_tasks`: the Console's chat and the chat command's
+// tasks from the Console's store, and each running managed channel's from its own store
+// (daemonruntime.RunningTasksConsole). An entry whose count could not be taken is left out.
+func (r *consoleLocalRuntime) runningTaskCounts() map[string]any {
+	out := map[string]any{}
+	if r == nil {
+		return out
+	}
+	if r.store != nil {
+		if counts, ok := daemonruntime.CountRunningTasks(r.store, daemonruntime.ConsoleRunningTaskEntry, daemonruntime.RunningTasksConsole, daemonruntime.RunningTasksCLI); ok {
+			out[daemonruntime.RunningTasksConsole] = counts[daemonruntime.RunningTasksConsole]
+			out[daemonruntime.RunningTasksCLI] = counts[daemonruntime.RunningTasksCLI]
+		}
+	}
+	r.managedRuntimeMu.RLock()
+	stores := make(map[string]daemonruntime.TaskReader, len(r.managedRuntimeTasks))
+	for kind, tasks := range r.managedRuntimeTasks {
+		if r.managedRuntimeRunning[kind] {
+			stores[kind] = tasks
+		}
+	}
+	r.managedRuntimeMu.RUnlock()
+	for kind, tasks := range stores {
+		if counts, ok := daemonruntime.CountRunningTasks(tasks, daemonruntime.ChannelRunningTaskEntry(kind), kind); ok {
+			out[kind] = counts[kind]
+		}
+	}
+	return out
 }
 
 // SetAccountDMStatus records a WeChat or WhatsApp runtime's connection status; "" clears it.

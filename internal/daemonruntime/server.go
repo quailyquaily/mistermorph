@@ -152,6 +152,11 @@ type TaskTopicRoutes struct {
 	// for the tasks' awaiting_answer and the topics' waiting status; nil when the runtime's tasks
 	// ask no questions.
 	AwaitingAnswer func(taskID string) bool
+	// LiveResult gives what a running task shows that its record holds only once the task ends:
+	// the questions and approval cards on its stream (result "questions", "elevations"). GET
+	// /tasks/{id} adds them to the running task's result, so a client that polls rather than
+	// streams can still answer them. nil when the runtime has none.
+	LiveResult func(taskID string) map[string]any
 	// AnswerElevation answers an approval card of a running task; nil when the runtime asks no
 	// client to approve.
 	AnswerElevation AnswerElevationFunc

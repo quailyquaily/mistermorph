@@ -192,6 +192,12 @@ func (routes *routeRegistration) registerSystemRoutes() {
 		if rawVersion, ok := payload["version"].(string); !ok || strings.TrimSpace(rawVersion) == "" {
 			payload["version"] = buildVersion()
 		}
+		if _, ok := payload["running_tasks"]; !ok {
+			// A channel runtime counts its own; one that cannot leaves its count unknown.
+			if counts := channelRunningTasks(mode, opts.TaskTopic.TaskReader); counts != nil {
+				payload["running_tasks"] = counts
+			}
+		}
 		ensureRuntimeMetrics(payload)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(payload)
@@ -303,6 +309,10 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			"poked_at": pokedAt,
 		})
 	})
+
+	registerCoderQuotaRoutes(mux, authToken, func(ctx context.Context) (*llmstats.UsageStore, error) {
+		return openUsageStats(ctx, capturedPaths.UsageDBPath, settingsReader, pricingConfigPath)
+	}, settingsReader)
 
 	mux.HandleFunc("/stats/llm/usage", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -1,14 +1,13 @@
-// Progress and coder output in the detail panel: what is drawn without wrapping (a tool's name, its
-// parameters, nested calls, a coder's processes) stays inside the panel at every width and scrolls
-// sideways once it is longer than its room; what fits is no scroller. Output, notes and errors keep
-// wrapping (they are never in such a line), multiline values keep their lines, and the empty states
-// are as they were.
+// Progress and coder output in the detail panel: what is drawn without wrapping (a tool's name, a
+// coder's processes) stays inside the panel at every width and scrolls sideways once it is longer
+// than its room; what fits is no scroller. Parameters, nested calls, output, notes and errors wrap
+// (they are never in such a line: tests/chat-activity-params.test.tsx), and the empty states are as
+// they were.
 import { expect, open, test, type App } from "nsh/test";
 
 type Line = { line: number; testID: string; viewport: number; content: number; offset: number; scrolls: boolean };
 type Report = { panel: number; lines: Line[] };
 
-const PATH = "/home/user/projects/very/long/path/to/some/deeply/nested/module/that/never/ends/file_name.go:1234:56";
 // `text:/…/` selectors match part of a text (the output is one text of several lines).
 const PROSE = "/This sentence of prose keeps wrapping inside the panel/";
 
@@ -31,7 +30,7 @@ async function settle(app: App, ids: string[]) {
 async function openPanel(width: number, kind: "activity" | "worker") {
   const app = await open("./fixtures/output-overflow-app.tsx", { width, height: 800, platform: "linux", locale: "en-US" });
   if (kind === "worker") await app.press("id:show-worker");
-  await settle(app, kind === "worker" ? ["chat-worker-process"] : ["chat-activity-title", "chat-activity-param", "chat-activity-call"]);
+  await settle(app, kind === "worker" ? ["chat-worker-process"] : ["chat-activity-title"]);
   return app;
 }
 
@@ -47,13 +46,11 @@ function expectContained(app: App) {
   }
 }
 
-// How many lines of each kind scroll: on a phone the long command, the multiline script, the long
-// tool name and the call with a path; at 760pt the name fits; at 1400pt everything does (a
-// parameter is cut at 120 characters), and nothing scrolls.
+// How many titles scroll: on a phone the long tool name; from 760pt on none.
 const SCROLLING = [
-  { width: 360, param: 2, title: 1, call: 1 },
-  { width: 760, param: 2, title: 0, call: 1 },
-  { width: 1400, param: 0, title: 0, call: 0 },
+  { width: 360, title: 1 },
+  { width: 760, title: 0 },
+  { width: 1400, title: 0 },
 ];
 
 for (const item of SCROLLING) {
@@ -61,16 +58,11 @@ for (const item of SCROLLING) {
     const app = await openPanel(item.width, "activity");
     expectContained(app);
     const scrolling = (id: string) => linesOf(app, id).filter((line) => line.scrolls).length;
-    expect(linesOf(app, "chat-activity-param").length).toBe(3);
-    expect(scrolling("chat-activity-param")).toBe(item.param);
+    expect(linesOf(app, "chat-activity-title").length).toBe(7);
     expect(scrolling("chat-activity-title")).toBe(item.title);
-    expect(scrolling("chat-activity-call")).toBe(item.call);
-    // The short command always fits and is no scroller.
-    expect(linesOf(app, "chat-activity-param").some((line) => !line.scrolls)).toBe(true);
-    // The whole values are there, not cut short, the multiline one with its line break.
-    expect(app.texts()).toContain(`ls -la ${PATH}`);
-    expect(app.texts()).toContain(`line one\nline two ${PATH}`);
-    expect(app.texts()).toContain(PATH);
+    // Parameters and nested calls are in no such line.
+    expect(linesOf(app, "chat-activity-param").length).toBe(0);
+    expect(linesOf(app, "chat-activity-call").length).toBe(0);
   });
 }
 
@@ -87,13 +79,13 @@ for (const width of [360, 760, 1400]) {
 
 test("a long run scrolls sideways in its own line, and back", async () => {
   const app = await openPanel(360, "activity");
-  const call = () => linesOf(app, "chat-activity-call").find((line) => line.scrolls)!;
-  expect(call().offset).toBe(0);
-  await app.scroll("id:chat-activity-call >> nth=0", 120);
-  await app.waitUntil(() => call().offset > 0);
-  expect(call().offset).toBeLessThan(call().content - call().viewport + 0.5);
-  await app.scroll("id:chat-activity-call >> nth=0", -400);
-  await app.waitUntil(() => call().offset === 0);
+  const title = () => linesOf(app, "chat-activity-title").find((line) => line.scrolls)!;
+  expect(title().offset).toBe(0);
+  await app.scroll("id:chat-activity-title >> nth=2", 120);
+  await app.waitUntil(() => title().offset > 0);
+  expect(title().offset).toBeLessThan(title().content - title().viewport + 0.5);
+  await app.scroll("id:chat-activity-title >> nth=2", -400);
+  await app.waitUntil(() => title().offset === 0);
 });
 
 test("a line becomes a scroller as the window narrows and goes back to a row as it widens", async () => {

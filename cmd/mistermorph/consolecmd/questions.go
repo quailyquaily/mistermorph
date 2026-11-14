@@ -134,3 +134,24 @@ func (r *consoleLocalRuntime) answerQuestion(_ context.Context, req daemonruntim
 	label, ok := r.runControl.Choose("console", req.QuestionID, req.Option)
 	return daemonruntime.AnswerQuestionResponse{Answered: ok, Answer: label}, nil
 }
+
+// liveTaskResult is what a running task's stream shows that its record holds only once the task
+// ends: its questions and approval cards. GET /tasks/{id} adds them to the task, so a Console
+// without the stream (it dropped, or never opened) still shows the question the run waits on.
+func (r *consoleLocalRuntime) liveTaskResult(taskID string) map[string]any {
+	if r == nil || r.streamHub == nil {
+		return nil
+	}
+	frame, ok := r.streamHub.Latest(taskID)
+	if !ok {
+		return nil
+	}
+	live := map[string]any{}
+	if len(frame.Questions) > 0 {
+		live["questions"] = cloneConsoleQuestions(frame.Questions)
+	}
+	if len(frame.Elevations) > 0 {
+		live["elevations"] = cloneConsoleElevations(frame.Elevations)
+	}
+	return live
+}

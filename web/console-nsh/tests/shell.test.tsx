@@ -218,10 +218,11 @@ test("on a phone the bottom navigation opens More and the agents", async () => {
   // On a page kept under More, the More slot says where you are.
   await app.waitFor("label:Memories · More");
 
-  // The agent slot opens the agents' bubble above it.
+  // The agent slot opens the agents' sheet, as More does (no bubble, no tail).
   await app.press("id:mobile-nav-agent");
   await app.waitFor("id:mobile-agents-list");
-  expect(app.shows("id:mobile-agents-tail")).toBe(true);
+  expect(app.shows("id:mobile-agents-sheet")).toBe(true);
+  expect(app.shows("id:mobile-agents-tail")).toBe(false);
   expect(app.shows("id:mobile-more")).toBe(false);
   await app.keyboard.press("escape");
   await app.waitFor("id:mobile-agents-list", { state: "gone" });

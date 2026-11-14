@@ -467,14 +467,15 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
 }
 
 /**
- * The standard round icon button: `icon` in the middle (14pt, `iconColor`), or a glyph of its own
- * as `children`; `title` is its tooltip and its accessible name. `class` adds to the look (a
- * selected fill, a busy box).
+ * The standard round icon button: `icon` in the middle (14pt, `iconColor`; `iconSize` for another,
+ * as a column head's BAR_ICON_SIZE), or a glyph of its own as `children`; `title` is its tooltip
+ * and its accessible name. `class` adds to the look (a selected fill, a busy box).
  */
 export function CircleButton(props: {
   title: string;
   icon?: IconName;
   iconColor?: TokenName;
+  iconSize?: number;
   size?: CircleButtonSize;
   variant?: CircleButtonVariant;
   selected?: boolean;
@@ -496,7 +497,7 @@ export function CircleButton(props: {
       testID={props.testID}
       class={`${circleButtonClass({ size: props.size, variant: props.variant })} ${props.class ?? ""}`}
     >
-      <If when={props.children} else={<Icon name={props.icon ?? "PhPlus"} size={14} color={props.iconColor ?? "subtle"} />}>
+      <If when={props.children} else={<Icon name={props.icon ?? "PhPlus"} size={props.iconSize ?? 14} color={props.iconColor ?? "subtle"} />}>
         {props.children}
       </If>
     </TipButton>
@@ -2058,14 +2059,14 @@ export function PageTitle(props: { text: string; class?: string }) {
 }
 
 /**
- * The size of a phone bar's icon buttons: Todo's calendar toggle and every back arrow. The
- * Button's default, a 38pt square with a 16pt icon.
+ * The size of a phone bar's icon buttons: every back arrow. The Button's default, a 38pt square
+ * with a 16pt icon.
  */
 export const BAR_BUTTON_SIZE: ButtonSize = "sm";
 
 /**
- * The icon of a BAR_BUTTON_SIZE button (16pt), for bar buttons drawn without Button (the Topics
- * head's view toggles and New) so their icons match the regular icon buttons'.
+ * The icon of a BAR_BUTTON_SIZE button (16pt), for bar buttons drawn without Button (the index
+ * column heads' round buttons: Topics, TODO, Skills) so their icons match the regular icon buttons'.
  */
 export const BAR_ICON_SIZE = BUTTON_SIZES[BAR_BUTTON_SIZE].icon;
 

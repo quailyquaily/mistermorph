@@ -219,6 +219,18 @@ Headless tests prove behaviour, not the look.
   on a sideways scroller inside a vertical one does not scroll the outer one (chat code blocks do
   this). Progress and coder runs that do not wrap are a plain row while they fit and a sideways
   scroller only while they overflow (`components/chat/OverflowLine.tsx`).
+- A `Text` in a flex row is at least as wide as its longest word (its min-content), so one long
+  word (a path, a token) widens the row and everything around it. With `min-w-0` (and `flex-1`)
+  it takes the room left instead, and nsh breaks a word longer than a line between characters.
+  On the web a line may also break where one span's style ends and the next one's begins, so a
+  mark that must stay beside a text's first line (a command's `$`) goes in a column of its own,
+  not in the text (`ParamRow` in `components/chat/ChatStatusCard.tsx`).
+- `flex-1` is a share of the row on a wide window but, in a column (the same views stacked on a
+  phone), a share of the column's height: nsh lays out as React Native does, with no
+  `min-height: auto`, so stacked `flex-1` cards each get an equal part of their total height,
+  however tall their content is. A short card gets blank room and a tall one draws past its own
+  bottom edge, over the next card. Give `flex-1` only where the views sit side by side (Settings ›
+  Runtime's model and channels cards).
 - On a touch screen such a drag must not take a swipe from the list's scroll view, so it waits for
   a finger to rest (`pages/chat/topicDrag.ts`: 450ms within 8pt). nsh/base's `Button` takes no
   `onLongPress`, so the hold is timed in JS from the touch events of the view around the button
@@ -261,11 +273,14 @@ Headless tests prove behaviour, not the look.
   (`focusComposerOnEntry`). Headless runs render at once and pass either way; check in Chrome.
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
   then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
-  blurs it and lowers the keyboard as it closes, and focuses it as it opens
-  (`components/shared/dialogFieldFocus.ts`). A one-line `Input` blurs itself on Enter
-  (`blurAndSubmit`): a dialog that stays open when its Enter fails passes `submitBehavior="submit"`.
+  blurs it and lowers the keyboard as it closes, and focuses it as it opens, selecting its text
+  when asked to (`selectOnOpen`; `components/shared/dialogFieldFocus.ts`). A one-line `Input`
+  blurs itself on Enter (`blurAndSubmit`): a dialog that stays open when its Enter fails passes
+  `submitBehavior="submit"`.
   Headless runs settle the closing motion before the next step, so none of this shows there; test
-  it on the helper.
+  it on the helper. Headless inputs also ignore `setSelection` (typing lands at the end), and
+  `app.type` presses the field first, collapsing a selection on every target: see one under
+  `nsh test --target web` with `app.paste` into the focused field, which replaces it.
 - The phone's bottom navigation floats over the foot of every page that shows it
   (`mobileBottomNavVisible`), so nothing there is laid out above it by itself: a page's list ends
   with `MobileBarSpacer`, and so does a column with a fixed control at its foot (the chat's composer
@@ -280,6 +295,11 @@ Headless tests prove behaviour, not the look.
   a list and items needs that call too. In `nsh test` the app's modules are another realm (a test's
   import of `lib/shell` is not the app's state): the frame's bottom padding is readable as the
   `app-frame.bottom-<pt>` testID.
+- On the web, an `Image` inside a `Scroll` adds its own pixels to the scroll's content size, not
+  its styled size: a 512px avatar drawn at 24pt made the agent picker's list (177pt of rows)
+  scroll to 656pt, and 532pt across (the runtime's `nsh-spacer` is sized from the core's content
+  size). Put such an image in a View of its size with `overflow-hidden` (`AgentAvatar`). Headless
+  tests and GPUI do not show it; read the scroll's `nsh-spacer` in a browser.
 
 ### Android (nsh 0.4.0)
 

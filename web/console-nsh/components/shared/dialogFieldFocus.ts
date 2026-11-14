@@ -10,6 +10,13 @@
 // going out keeps the field it had, blurred: the opening focuses it again, a turn later (a tap's
 // own focus change on the web comes after its press, PORTING.md), and only if that opening is
 // still the one on screen.
+//
+// A dialog may also ask for the field's text to be selected as it opens (`selectOnOpen`: the
+// rename dialog's current name, so typing replaces it). Each opening then focuses and selects its
+// field once, a turn after both the opening and its field are there: a field mounted after the
+// opening (the dialog drawn anew, or mounted with its opening already on screen) waits for its own
+// turn. Only openings select: an edit, a generated name put in the field or a failed save never
+// select again, and a turn of an opening already gone touches nothing.
 import { cleanup, effect, Keyboard, platform, untracked, type InputRef } from "nsh";
 
 export interface DialogFieldFocusOptions {
@@ -19,6 +26,11 @@ export interface DialogFieldFocusOptions {
   dismissKeyboard?: () => void;
   /** Runs `fn` a turn later (default `setTimeout(fn, 0)`). */
   defer?: (fn: () => void) => void;
+  /**
+   * The field's text as an opening comes in: given, each opening selects all of it (UTF-16 units,
+   * as `InputRef.setSelection` counts) once it focuses the field; empty text selects nothing.
+   */
+  selectOnOpen?: () => string;
 }
 
 function defaultDismissKeyboard() {
@@ -29,12 +41,24 @@ function defaultDismissKeyboard() {
 export function createDialogFieldFocus(options: DialogFieldFocusOptions) {
   const dismissKeyboard = options.dismissKeyboard ?? defaultDismissKeyboard;
   const defer = options.defer ?? ((fn: () => void) => void setTimeout(fn, 0));
+  const selectText = options.selectOnOpen;
   let field: InputRef | null = null;
   let shown: unknown = untracked(options.session) ?? null;
+  // The opening whose field is still to be focused (and selected), null once it was.
+  let pending: unknown = selectText ? shown : null;
 
   function release() {
     field?.blur();
     dismissKeyboard();
+  }
+
+  function settle(opening: unknown) {
+    defer(() => {
+      if (shown !== opening || pending !== opening || !field) return;
+      pending = null;
+      field.focus();
+      if (selectText) field.setSelection(0, String(untracked(selectText) ?? "").length);
+    });
   }
 
   effect(() => {
@@ -43,11 +67,10 @@ export function createDialogFieldFocus(options: DialogFieldFocusOptions) {
       const previous = shown;
       if (next === previous) return;
       shown = next;
+      pending = next;
       if (previous !== null) release();
       if (next === null) return;
-      defer(() => {
-        if (shown === next) field?.focus();
-      });
+      settle(next);
     });
   });
 
@@ -55,12 +78,15 @@ export function createDialogFieldFocus(options: DialogFieldFocusOptions) {
   cleanup(() => {
     if (shown !== null) release();
     shown = null;
+    pending = null;
     field = null;
   });
 
   return {
     ref(node: InputRef) {
+      if (node === field) return;
       field = node;
+      if (pending !== null && pending === shown) settle(pending);
     },
   };
 }

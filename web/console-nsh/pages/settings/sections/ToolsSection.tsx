@@ -168,6 +168,30 @@ export function ToolsSection(props: { s: SettingsStore }) {
             <AgentNameSetSetting s={s} disabled={busy() || s.agentSettingsReadOnly()} />
           </If>
 
+          {/* Load skills (skills.enabled): which skills load is the Skills page's; whether any do
+              is a setting of the agent's, saved with the tools. */}
+          <If when={s.skillsEnabledSupported()}>
+            <View class="gap-2">
+              <GroupTitle text={t("settings_tool_group_skills")} />
+              <View class="border-t border-line-soft">
+                <SettingToggleRow
+                  first
+                  title={t("skills_enabled")}
+                  note={t("skills_enabled_note")}
+                  leading={
+                    <View class="mt-0.5">
+                      <Icon name="PhMagicWand" size={16} color="subtle" />
+                    </View>
+                  }
+                  checked={s.skillsEnabled()}
+                  disabled={busy() || s.agentSettingsReadOnly()}
+                  onChange={(checked) => s.setSkillsEnabled(checked)}
+                  testID="settings-skills-enabled"
+                />
+              </View>
+            </View>
+          </If>
+
           <View class="gap-2">
             <View class="gap-0.5">
               <GroupTitle text={t("settings_tool_group_channels")} />

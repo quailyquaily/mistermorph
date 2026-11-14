@@ -439,6 +439,10 @@ export function createSettingsStore() {
   const agentNameSet = signal(DEFAULT_WORKER_NAME_SET);
   // False for a runtime too old to report the set: it would ignore one sent to it.
   const agentNameSetSupported = signal(true);
+  // The Tools page's Load skills switch (skills.enabled): off, no skill loads unless a task names it.
+  // Saved with the tool switches; only sent to a runtime that reported it.
+  const skillsEnabled = signal(true);
+  const skillsEnabledSupported = signal(false);
   type ChannelKind = "telegram" | "slack" | "line" | "lark" | "mixin" | "discord" | "wechat" | "whatsapp" | "bluesky" | "x" | "guard";
   const channelState = (kind: string) => (state as any)[kind] as Record<string, any> | undefined;
 
@@ -684,6 +688,7 @@ export function createSettingsStore() {
     return JSON.stringify({
       tools: Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, !!state.tools[id]])),
       agent_name_set: agentNameSet(),
+      skills_enabled: skillsEnabled(),
     });
   }
 
@@ -1533,6 +1538,8 @@ export function createSettingsStore() {
       Object.assign(state.tools, DEFAULT_TOOLS);
       agentNameSet.set(DEFAULT_WORKER_NAME_SET);
       agentNameSetSupported.set(true);
+      skillsEnabled.set(true);
+      skillsEnabledSupported.set(false);
       state.mcp.servers = [];
       llmEnvManaged.set({});
       llmSecretFields.set({});
@@ -1637,6 +1644,8 @@ export function createSettingsStore() {
       for (const id of Object.keys(DEFAULT_TOOLS)) state.tools[id] = toolEnabledValue(tools[id]);
       agentNameSet.set(normalizeWorkerNameSet(tools.agent_name_set));
       agentNameSetSupported.set(typeof tools.agent_name_set === "string");
+      skillsEnabledSupported.set(typeof data?.skills?.enabled === "boolean");
+      skillsEnabled.set(data?.skills?.enabled !== false);
       applyMCPPayload(data?.mcp);
       llmEnvManaged.set(obj(envManagedPayload.llm));
       llmSecretFields.set(obj(secretFieldsPayload.llm));
@@ -2063,11 +2072,13 @@ export function createSettingsStore() {
   function buildSavePayload(target = "all") {
     const tools: Record<string, unknown> = Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, { enabled: !!state.tools[id] }]));
     if (agentNameSetSupported()) tools.agent_name_set = agentNameSet();
+    // Only `enabled`: the skills to load are the Skills page's, and stay as they are.
+    const skills = skillsEnabledSupported() ? { skills: { enabled: skillsEnabled() } } : {};
     if (target === "llm") return { llm: buildLLMSettingsPayload() };
-    if (target === "tools") return { tools };
+    if (target === "tools") return { tools, ...skills };
     const mcp = { servers: state.mcp.servers.map(serializeMCPServer) };
     if (target === "mcp") return { mcp };
-    return { llm: buildLLMSettingsPayload(), tools, mcp };
+    return { llm: buildLLMSettingsPayload(), tools, ...skills, mcp };
   }
 
   function buildProfileTestPayload(profile: any) {
@@ -2413,6 +2424,10 @@ export function createSettingsStore() {
     if (untracked(agentSettingsReadOnly)) return;
     if (!Object.prototype.hasOwnProperty.call(state.tools, id)) return;
     state.tools[id] = !!value;
+  }
+  function setSkillsEnabled(value: boolean) {
+    if (untracked(agentSettingsReadOnly)) return;
+    skillsEnabled.set(!!value);
   }
   function setAgentNameSet(value: string) {
     if (untracked(agentSettingsReadOnly)) return;
@@ -3055,6 +3070,7 @@ export function createSettingsStore() {
           const preservedProfiles = state.llm.profiles;
           const preservedTools = { ...state.tools };
           const preservedNameSet = agentNameSet();
+          const preservedSkillsEnabled = skillsEnabled();
           const previousToolsSnapshot = loadedToolsSnapshot();
           batch(() => {
             applyPayload(payload, { snapshotScope: normalizedTarget === "llm" ? "llm" : "all" });
@@ -3062,6 +3078,7 @@ export function createSettingsStore() {
             if (normalizedTarget === "llm") {
               Object.assign(state.tools, preservedTools);
               agentNameSet.set(preservedNameSet);
+              skillsEnabled.set(preservedSkillsEnabled);
               loadedToolsSnapshot.set(previousToolsSnapshot);
             }
           });
@@ -3470,6 +3487,9 @@ export function createSettingsStore() {
     agentNameSet,
     agentNameSetSupported,
     setAgentNameSet,
+    skillsEnabled,
+    skillsEnabledSupported,
+    setSkillsEnabled,
     // console
     consoleLoading,
     consoleSaving,

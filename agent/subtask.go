@@ -48,6 +48,8 @@ type SubtaskResult struct {
 	OutputSchema string          `json:"output_schema"`
 	Output       any             `json:"output"`
 	Error        string          `json:"error"`
+	// Usage is what a coder run used and its coder's remaining quota, in a line.
+	Usage string `json:"usage,omitempty"`
 }
 
 type SubtaskRunner interface {

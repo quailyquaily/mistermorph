@@ -439,3 +439,58 @@ func TestTopicActivityAndTasksShowAWaitingAnswer(t *testing.T) {
 		t.Fatalf("plain body = %s", body)
 	}
 }
+
+// A running task's questions and approval cards, which its record holds only once it ends, come
+// with GET /tasks/{id}, so a client that polls can answer them; what the record holds wins, and a
+// task that is not running gets nothing.
+func TestTaskDetailAddsTheRunningTasksLiveResult(t *testing.T) {
+	store := NewMemoryStore(100)
+	now := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	for _, task := range []TaskInfo{
+		{ID: "ask", Status: TaskRunning, CreatedAt: now},
+		{ID: "kept", Status: TaskRunning, CreatedAt: now, Result: map[string]any{"questions": "record", "final": "x"}},
+		{ID: "done", Status: TaskDone, CreatedAt: now},
+	} {
+		if err := store.Upsert(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	live := map[string]any{"questions": []any{map[string]any{"id": "q1", "status": "open"}}, "elevations": []any{"e1"}}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{AuthToken: "token", TaskTopic: TaskTopicRoutes{
+		TaskReader: store,
+		LiveResult: func(string) map[string]any { return live },
+	}})
+	get := func(id string) map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/tasks/"+id, nil)
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /tasks/%s: status %d", id, rec.Code)
+		}
+		var task struct {
+			Result map[string]any `json:"result"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &task); err != nil {
+			t.Fatal(err)
+		}
+		return task.Result
+	}
+	if result := get("ask"); len(result) != 2 || result["elevations"] == nil {
+		t.Fatalf("running task result = %+v", result)
+	} else if questions, _ := result["questions"].([]any); len(questions) != 1 {
+		t.Fatalf("running task questions = %+v", result["questions"])
+	}
+	if result := get("kept"); result["questions"] != "record" || result["final"] != "x" || result["elevations"] == nil {
+		t.Fatalf("record's result = %+v", result)
+	}
+	if result := get("done"); result != nil {
+		t.Fatalf("done task result = %+v", result)
+	}
+	// The record itself is unchanged.
+	if info, _ := store.Get("ask"); info.Result != nil {
+		t.Fatalf("stored result = %+v", info.Result)
+	}
+}

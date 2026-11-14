@@ -43,6 +43,8 @@ import { t } from "./i18n";
 import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
 import type { KeyedState } from "./rowState";
+import { BUBBLE_CLASS, FILES_CLASS, fileRowCornerClass } from "./userBubble";
+import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../shared/partProbe";
 import { CHECK_CORNER_AT, CHECK_DRAW_MS, CHECK_SIZE, checkAction, checkDash, checkDashOffset, checkStroke } from "./copyCheck";
 
 export type HistoryItem = Record<string, any> & { id: string; role: string; text: string };
@@ -101,9 +103,10 @@ const playedArrivals = new Set<string>();
 const HOVER = platform.desktop;
 
 /** A sent message's bubble: white paper and a hairline edge, its corners 14pt round but the top
- * right, which stays 2pt where the tail was (design/ui-refresh.html §3); files hang beneath it,
- * taking its bottom corners. A system message's: a dashed box. */
-function Bubble(props: { system?: boolean; files?: boolean; children?: JSX.Element }) {
+ * right, which stays 2pt where the tail was (design/ui-refresh.html §3). It is one frame around the
+ * text and the files the message carried (userBubble.ts), so its edge and corners stay whole. A system
+ * message's: a dashed box. */
+function Bubble(props: { system?: boolean; probe?: Record<string, unknown>; children?: JSX.Element }) {
   return (
     <If
       when={!props.system}
@@ -113,9 +116,7 @@ function Bubble(props: { system?: boolean; files?: boolean; children?: JSX.Eleme
         </View>
       }
     >
-      <View
-        class={`rounded-[14px] rounded-tr-[2px] border border-line-soft bg-card px-3.5 pb-[11px] pt-2.5 ${props.files ? "rounded-b-none border-b-0" : ""}`}
-      >
+      <View class={BUBBLE_CLASS} testID="chat-user-bubble" {...props.probe}>
         {props.children}
       </View>
     </If>
@@ -221,6 +222,8 @@ export function ChatHistoryItem(props: {
   arriving?: (id: string) => boolean;
   /** The row's view, once (ChatHistoryList's `onRowRef`). */
   rowRef?: (ref: ViewRef) => void;
+  /** Tests: where a sent message's parts lie (`bubble`, `text`, `files`, `file-<n>`). */
+  onPartLayout?: PartLayoutListener;
 }) {
   const item = () => props.item;
   const ctx = props.ctx;
@@ -243,6 +246,9 @@ export function ChatHistoryItem(props: {
       }
     });
   });
+  const parts = createPartProbe(() => props.onPartLayout);
+  let filesNode: ViewRef | undefined;
+  const fileFrames = new Map<number, PartFrame>();
   const role = () => roleOf(item());
   const isAgent = () => role() === "agent";
   const contextCompact = () => String(item()?.presentation || "").trim().toLowerCase() === "context-compact";
@@ -272,6 +278,8 @@ export function ChatHistoryItem(props: {
     return history.length > 0 ? { history, current: current && current.kind !== "retry" ? current : history[history.length - 1] } : null;
   };
   const userFiles = (): any[] => (role() === "user" && Array.isArray(item()?.files) ? item().files : []);
+  // The bubble's text block: always, but for a message of files alone.
+  const textBlockVisible = () => String(item()?.text ?? "") !== "" || userFiles().length === 0;
 
   const approvalStatus = () => {
     const value = String(item()?.approval?.status || "").trim().toLowerCase();
@@ -507,36 +515,62 @@ export function ChatHistoryItem(props: {
   );
 
   // A sent message (the Vue console's `.chat-history-user`): its time above the bubble at the
-  // right, the bubble with its tail, the files it carried hung beneath it, and copy.
+  // right, the bubble with its tail around its text and the files it carried, and copy.
   const messageBody = () => (
     <View class={`gap-[7px] ${role() === "system" ? "items-center" : "items-end"}`}>
       <If when={statusText()}>{statusMark()}</If>
-      <View class={role() === "system" ? "w-full" : "mr-2 max-w-[557px]"}>
-        <Bubble system={role() === "system"} files={userFiles().length > 0}>
-          <View selectable>
-            <Text class="text-base leading-[28.5px] text-foreground">{String(item()?.text ?? "")}</Text>
-          </View>
+      <View class={role() === "system" ? "w-full" : "mr-2"}>
+        <Bubble system={role() === "system"} probe={parts.probe(() => "bubble")}>
+          {/* A message of files alone has no text block: no blank slab above them. */}
+          <If when={textBlockVisible()}>
+            <View selectable class={role() === "system" ? "" : "px-3.5 pb-[11px] pt-2.5"} testID="chat-message-text" {...parts.probe(() => "text")}>
+              <Text class="text-base leading-[28.5px] text-foreground">{String(item()?.text ?? "")}</Text>
+            </View>
+          </If>
+          <If when={userFiles().length}>
+            <View
+              class={FILES_CLASS}
+              testID="chat-user-files"
+              ref={(node: ViewRef) => {
+                // A new block (the cell shows another message): the old rows' frames go.
+                filesNode = node;
+                fileFrames.clear();
+              }}
+              onLayout={() => {
+                parts.report("files", filesNode);
+                for (const [index, frame] of fileFrames) parts.report(`file-${index}`, filesNode, () => frame);
+              }}
+            >
+              <Each of={userFiles()} key={(file) => file.id}>
+                {(file) => (
+                  <TipButton
+                    onPress={() => previewUserFile(file())}
+                    accessibilityLabel={`${t("chat_composer_file_preview")}: ${file().name}`}
+                    tooltip={<Tip text={`${t("chat_composer_file_preview")}: ${file().name}`} />}
+                    testID="chat-user-file"
+                    onLayout={(event: LayoutBounds) => {
+                      if (!props.onPartLayout) return;
+                      const index = userFiles().indexOf(file());
+                      fileFrames.set(index, boundsFrame(event));
+                      parts.report(`file-${index}`, filesNode, () => fileFrames.get(index));
+                    }}
+                    class={`group/file flex-row items-center gap-2 py-[5px] pl-[9px] pr-2 hover:bg-hover-soft ${fileRowCornerClass(
+                      userFiles().indexOf(file()),
+                      userFiles().length,
+                      textBlockVisible(),
+                    )}`}
+                  >
+                    <Icon name="PhPaperclip" size={13} color="muted-foreground" />
+                    <Text class="flex-1 font-mono text-xs text-subtle line-clamp-1 group-hover/file:text-blue">{file().name}</Text>
+                    <If when={fileKind(file())}>
+                      <Text class="font-mono text-[11px] font-medium tracking-[0.1em] text-muted-foreground">{fileKind(file())}</Text>
+                    </If>
+                  </TipButton>
+                )}
+              </Each>
+            </View>
+          </If>
         </Bubble>
-        <If when={userFiles().length}>
-          <View class="rounded-b-[14px] border border-t-0 border-line-soft bg-card py-[3px]">
-            <Each of={userFiles()} key={(file) => file.id}>
-              {(file) => (
-                <TipButton
-                  onPress={() => previewUserFile(file())}
-                  accessibilityLabel={`${t("chat_composer_file_preview")}: ${file().name}`}
-                  tooltip={<Tip text={`${t("chat_composer_file_preview")}: ${file().name}`} />}
-                  class="group/file flex-row items-center gap-2 py-[5px] pl-[13px] pr-3 hover:bg-hover-soft"
-                >
-                  <Icon name="PhPaperclip" size={13} color="muted-foreground" />
-                  <Text class="flex-1 font-mono text-xs text-subtle line-clamp-1 group-hover/file:text-blue">{file().name}</Text>
-                  <If when={fileKind(file())}>
-                    <Text class="font-mono text-[11px] font-medium tracking-[0.1em] text-muted-foreground">{fileKind(file())}</Text>
-                  </If>
-                </TipButton>
-              )}
-            </Each>
-          </View>
-        </If>
       </View>
       <If when={role() === "user" && item()?.reaction}>
         <Text class="mr-2 text-base" accessibilityLabel="Agent reaction">

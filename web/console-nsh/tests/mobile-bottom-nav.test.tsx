@@ -1,9 +1,10 @@
 // The phone's bottom navigation: its five slots (Chat, Contacts, TODO, More, the agent) sit side by
 // side, none reaching under another, each wide enough to press, on the narrowest phones, in
 // landscape and with larger text; the active pill covers its own slot and no other; and More and
-// the agent still open their sheets.
+// the agent open the same sheet: as wide as the window less the bar's margins, above the bar, and
+// no taller than its rows.
 import { expect, open, test } from "nsh/test";
-import { mobileNavSlots, NAV_SLOT_MAX } from "../components/frame/mobileBar";
+import { mobileNavSlots, mobileSheetFrame, NAV_SLOT_MAX } from "../components/frame/mobileBar";
 
 type Frame = { x: number; y: number; w: number; h: number };
 
@@ -102,4 +103,81 @@ test("rotating the phone refits the slots", async () => {
   await app.setViewport(320, 640);
   await app.waitUntil(() => frames()["mobile-nav-chat"].w === 57);
   expectSeparateSlots(frames(), 320);
+});
+
+test("a sheet floats above the bar, inset as the bar is, and leaves room above it", () => {
+  // A 780pt page whose bar takes 90pt (58 + 8 below + 12 clear + 12 of system bar).
+  expect(mobileSheetFrame(780, 90)).toEqual({ side: 12, bottom: 90, maxHeight: 780 * 0.62 });
+  // In landscape the room above it holds it: 360 - 90 - 48.
+  expect(mobileSheetFrame(360, 90).maxHeight).toBe(222);
+  // Without the bar it keeps the side inset from the foot too.
+  expect(mobileSheetFrame(780, 0).bottom).toBe(12);
+  // Never shorter than a few rows.
+  expect(mobileSheetFrame(200, 90).maxHeight).toBe(120);
+});
+
+/** A sheet's frame: the window's width less the bar's side margins (12pt each), its foot off the
+ * page's (the fixture has no route, so no bar room: the side inset). */
+function expectFloatingSheet(frames: Record<string, Frame>, name: string, width: number, height: number) {
+  const sheet = frames[name];
+  expect(sheet).toBeDefined();
+  expect(Math.abs(sheet.x - 12)).toBeLessThan(0.5);
+  expect(Math.abs(sheet.w - (width - 24))).toBeLessThan(0.5);
+  expect(sheet.y).toBeGreaterThan(0);
+  expect(Math.abs(sheet.y + sheet.h - (height - mobileSheetFrame(height, 0).bottom))).toBeLessThan(0.5);
+}
+
+for (const [label, width, height] of [
+  ["a 360pt phone", 360, 780],
+  ["a phone in landscape", 780, 360],
+] as const) {
+  test(`on ${label} More and the agents open the same floating sheet`, async () => {
+    const { app, frames } = await openNav(width, height, { host: { params: { agents: 3 } } });
+    await app.press("id:mobile-nav-more");
+    await app.waitFor("id:mobile-more-sheet");
+    await app.waitUntil(() => Boolean(frames()["mobile-more"]));
+    expectFloatingSheet(frames(), "mobile-more", width, height);
+
+    await app.press("id:mobile-nav-agent");
+    await app.waitFor("id:mobile-agents-list");
+    await app.waitFor("id:mobile-more", { state: "gone" });
+    await app.waitUntil(() => Boolean(frames()["mobile-agents"]));
+    expectFloatingSheet(frames(), "mobile-agents", width, height);
+    expect(app.count("role:option")).toBe(4);
+    await app.keyboard.press("escape");
+    await app.waitFor("id:mobile-agents", { state: "gone" });
+  });
+}
+
+test("the agents' sheet is as tall as its rows, with no empty stretch to scroll", async () => {
+  const heights: number[] = [];
+  for (const agents of [1, 3]) {
+    const { app, frames } = await openNav(390, 844, { host: { params: { agents } } });
+    await app.press("id:mobile-nav-agent");
+    await app.waitFor("id:mobile-agents-list");
+    await app.waitUntil(() => Boolean(frames()["mobile-agents"]));
+    await app.wait(400);
+    heights.push(frames()["mobile-agents"].h);
+    await app.dispose();
+  }
+  // Two more rows, two rows taller (44pt a row and the gap between rows): the list follows its rows.
+  const perRow = (heights[1] - heights[0]) / 2;
+  expect(perRow).toBeGreaterThan(40);
+  expect(perRow).toBeLessThan(50);
+  // One agent: the title, one row, the overview row and the padding, nothing else.
+  expect(heights[0]).toBeLessThan(39 + 2 * 50 + 30);
+});
+
+test("a long list of agents is held under the window's top, and scrolls", async () => {
+  const { app, frames } = await openNav(360, 640, { host: { params: { agents: 30 } } });
+  await app.press("id:mobile-nav-agent");
+  await app.waitFor("id:mobile-agents-list");
+  await app.waitUntil(() => Boolean(frames()["mobile-agents"]));
+  const sheet = frames()["mobile-agents"];
+  expect(sheet.h).toBeLessThanOrEqual(640 * 0.62 + 0.5);
+  expect(sheet.y).toBeGreaterThan(0);
+  // More than eight agents: the filter heads the list.
+  expect(app.shows("id:mobile-agents-filter")).toBe(true);
+  await app.press("id:mobile-agent-option-ep_29");
+  await app.waitFor("id:mobile-agents", { state: "gone" });
 });

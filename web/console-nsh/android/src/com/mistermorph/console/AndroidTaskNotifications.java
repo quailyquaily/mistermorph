@@ -112,6 +112,16 @@ final class AndroidTaskNotifications implements TaskNotifier.Platform {
         return allowed(context);
     }
 
+    /** The logo's line colour (design/brand), which tints the small icon in the shade. */
+    private static final int LINE = 0xFF2463AE;
+
+    /** The logo's lines (android/res/drawable-<density>/ic_stat_morph.png, which scripts/build-android.sh
+     *  links in after compiling this, so there is no R class to name it by); Android's chat icon without them. */
+    private int smallIcon() {
+        int id = context.getResources().getIdentifier("ic_stat_morph", "drawable", context.getPackageName());
+        return id != 0 ? id : android.R.drawable.stat_notify_chat;
+    }
+
     @Override
     public void post(String tag, String title, String body, String topicID) {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
@@ -125,7 +135,8 @@ final class AndroidTaskNotifications implements TaskNotifier.Platform {
         PendingIntent pressed = PendingIntent.getActivity(context, tag.hashCode(), open,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification notification = new Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(smallIcon())
+            .setColor(LINE)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(pressed)

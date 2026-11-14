@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/platformutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimeclock"
@@ -303,9 +304,11 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			Runner:     e.subtaskRunner,
 		},
 		coderToolDeps{
-			Runner:      e.subtaskRunner,
-			RunCLI:      runCoderCLI,
-			RunTerminal: e.coderTerminal,
+			Runner:         e.subtaskRunner,
+			RunCLI:         runCoderCLI,
+			RunTerminal:    e.coderTerminal,
+			Usage:          coderusage.Default,
+			ReadCodexQuota: readCodexQuota,
 		},
 		e.modelProfiles,
 	)

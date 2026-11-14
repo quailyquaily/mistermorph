@@ -1,6 +1,7 @@
 package coderterm
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,20 +19,54 @@ func (claudeBackend) label() string { return "Claude" }
 // Claude takes the session ID on the command line, so the transcript can be found by name.
 func (claudeBackend) newID() string { return uuid.NewString() }
 
-func (claudeBackend) args(id string, resume, bypass bool) []string {
+// StatusLineFile is where a Claude terminal's status line command keeps the status JSON Claude
+// Code gives it (its subscription's rate limits among it), in the session's folder.
+const StatusLineFile = "statusline.json"
+
+func (claudeBackend) args(id string, resume, bypass bool, dir string) []string {
 	// --resume keeps the session ID and appends to the same JSONL.
 	flag := "--session-id"
 	if resume {
 		flag = "--resume"
 	}
+	// --settings applies to this process only and leaves the user's files alone.
+	settings := map[string]any{}
+	if dir != "" {
+		// Claude Code hands its status line command the session's status as JSON, the
+		// subscription's 5-hour and weekly limits included; the command keeps it and prints
+		// nothing, so the screen this reader parses is unchanged.
+		settings["statusLine"] = map[string]any{
+			"type":    "command",
+			"command": "cat > " + shellQuote(filepath.Join(dir, StatusLineFile)),
+			"padding": 0,
+		}
+	}
 	if bypass {
 		// Every tool runs without a permission prompt. The user opted in through config, so
 		// skip Claude's one-time Bypass Permissions warning, which this screen reader does not
-		// answer; --settings applies to this process only and leaves the user's files alone.
-		return []string{flag, id, "--ax-screen-reader", "--dangerously-skip-permissions",
-			"--settings", `{"skipDangerousModePermissionPrompt":true}`}
+		// answer.
+		settings["skipDangerousModePermissionPrompt"] = true
 	}
-	return []string{flag, id, "--ax-screen-reader", "--permission-mode", "default"}
+	args := []string{flag, id, "--ax-screen-reader"}
+	if bypass {
+		args = append(args, "--dangerously-skip-permissions")
+	} else {
+		args = append(args, "--permission-mode", "default")
+	}
+	if len(settings) > 0 {
+		// Unescaped, so the command reads as written in ps and the logs.
+		var data strings.Builder
+		enc := json.NewEncoder(&data)
+		enc.SetEscapeHTML(false)
+		_ = enc.Encode(settings)
+		args = append(args, "--settings", strings.TrimSpace(data.String()))
+	}
+	return args
+}
+
+// shellQuote quotes s for a POSIX shell.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func (claudeBackend) transcriptRoot(getenv func(string) string, home, cwd string) string {

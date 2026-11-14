@@ -375,10 +375,116 @@ test("a worker's panel is its conversation: what the agent asked, the calls it m
   expect(app.texts()).toContain(TASK);
   expect(app.shows("id:chat-worker-ask >> text:bash, read_file")).toBe(true);
   expect(app.shows("id:chat-worker-ask >> text:fast")).toBe(true);
-  // The calls it made on its own.
-  expect(app.shows("id:chat-worker-calls >> text:bash")).toBe(true);
+  // The calls it made on its own: each one text, the call and its first value.
+  expect(app.shows("id:chat-worker-calls >> text:bash du -sh /var/cache/*")).toBe(true);
   // What it answered.
   expect(app.shows("id:chat-worker-answer >> text:apt 1.2G, pip 800M")).toBe(true);
+});
+
+// Past the activity's old 240- and 8000-character caps, with the lines, Unicode and the whitespace
+// around it as the agent sent them, and a last line no cut would keep.
+const LONG_SPAWN_TASK = "\n  Собери отчёт 📊 по логам.\n" + "Проверь каждую строку — 每一行 ✓ ".repeat(320) + "\n  END-SPAWN-✅ \n";
+const LONG_CODER_TASK = "\t修复解析器 🦀\n" + "Keep the tests green — Grün ✓ ".repeat(320) + "\nEND-CODER-🧪\n\n";
+
+/** The worker panel shows `task` whole and exact: one text, every character. */
+function showsTask(app: App, task: string) {
+  return app.shows("id:chat-worker-task") && app.texts().includes(task);
+}
+
+test("a worker's panel shows the whole task the agent sent, exactly, live and restored", async () => {
+  expect(LONG_SPAWN_TASK.length > 8000 && LONG_CODER_TASK.length > 8000).toBe(true);
+  let status = "running";
+  const workers = () => [
+    { id: "w1", name: "Curie", name_index: 1, avatar_index: 0, kind: "coder", status, activity_id: "c1", task: LONG_CODER_TASK, output: "working" },
+    { id: "w2", name: "Noether", name_index: 4, avatar_index: 1, kind: "subagent", status, activity_id: "s1", task: LONG_SPAWN_TASK },
+  ];
+  const current = () =>
+    task("t1", {
+      status,
+      ...(status === "done" ? { finished_at: NOW } : {}),
+      result: {
+        ...(status === "done" ? { final: { output: "ok" } } : {}),
+        activity: {
+          history: [
+            { id: "c1", kind: "tool", name: "coder", status, args: { task: LONG_CODER_TASK, coder: "codex" } },
+            // The spawn call scrolled out of the history once the task was done: its worker keeps the task.
+            ...(status === "done" ? [] : [{ id: "s1", kind: "tool", name: "spawn", status, args: { task: LONG_SPAWN_TASK, tools: ["bash"] } }]),
+          ],
+          workers: workers(),
+        },
+      },
+    });
+  const { app } = await openChat({
+    api: {
+      "GET /proxy:/tasks": (request: ApiRequest) => listOf(current())(request),
+      "GET /proxy:/tasks/t1": () => ({ body: current() }),
+    },
+  });
+  // Live, while the workers run.
+  await app.press("label:Curie · Coder · Running");
+  await app.waitFor("id:chat-worker-task");
+  expect(showsTask(app, LONG_CODER_TASK)).toBe(true);
+  expect(app.shows("id:chat-worker-ask >> text:codex")).toBe(true);
+  await app.press("label:Noether · Subagent · Running");
+  await app.waitUntil(() => showsTask(app, LONG_SPAWN_TASK), { timeout: 8000 });
+  expect(app.shows("id:chat-worker-ask >> text:bash")).toBe(true);
+  await app.press("id:chat-detail-close");
+  await app.waitFor("id:chat-detail-panel", { state: "gone" });
+  app.dispose();
+
+  // Restored from the stored task, the spawn call gone from the history.
+  status = "done";
+  const restored = await openChat({ api: { "GET /proxy:/tasks": listOf(current()) } });
+  await restored.app.press("label:Noether · Subagent · Done");
+  await restored.app.waitFor("id:chat-worker-task");
+  expect(showsTask(restored.app, LONG_SPAWN_TASK)).toBe(true);
+  await restored.app.press("label:Curie · Coder · Done");
+  await restored.app.waitUntil(() => showsTask(restored.app, LONG_CODER_TASK), { timeout: 8000 });
+});
+
+test("on a phone a worker's panel shows the whole task too", async () => {
+  const DONE_CODER = task("t1", {
+    status: "done",
+    finished_at: NOW,
+    result: {
+      final: { output: "ok" },
+      activity: {
+        history: [{ id: "c1", kind: "tool", name: "coder", status: "done", args: { task: LONG_CODER_TASK, coder: "claude" } }],
+        workers: [{ id: "w1", name: "Curie", name_index: 1, avatar_index: 0, kind: "coder", status: "done", activity_id: "c1", task: LONG_CODER_TASK, output: "done" }],
+      },
+    },
+  });
+  const { app } = await openConsole({ platform: "android", location: CHAT, api: { ...API, "GET /proxy:/tasks": listOf(DONE_CODER) } });
+  await app.waitFor("id:chat-status-card");
+  await app.press("label:Curie · Coder · Done");
+  await app.waitFor("id:workbench >> id:chat-worker-task");
+  expect(showsTask(app, LONG_CODER_TASK)).toBe(true);
+});
+
+test("a worker asked nothing shows no task", async () => {
+  const BLANK = task("t1", {
+    status: "done",
+    finished_at: NOW,
+    result: {
+      final: { output: "ok" },
+      activity: {
+        history: [{ id: "c1", kind: "tool", name: "coder", status: "done", args: { task: " \n\t ", coder: "codex" } }],
+        workers: [
+          { id: "w1", name: "Curie", name_index: 1, avatar_index: 0, kind: "coder", status: "done", activity_id: "c1", task: " \n\t ", output: "done" },
+          { id: "w2", name: "Noether", name_index: 4, avatar_index: 1, kind: "subagent", status: "done", activity_id: "gone", result: "found" },
+        ],
+      },
+    },
+  });
+  const { app } = await openChat({ api: { "GET /proxy:/tasks": listOf(BLANK) } });
+  await app.press("label:Curie · Coder · Done");
+  await app.waitFor("id:chat-worker-ask");
+  expect(app.shows("id:chat-worker-task")).toBe(false);
+  expect(app.shows("id:chat-worker-ask >> text:codex")).toBe(true);
+  // Its call gone and no task kept: no ask at all, the answer still shows.
+  await app.press("label:Noether · Subagent · Done");
+  await app.waitFor("id:chat-worker-answer >> text:found");
+  expect(app.shows("id:chat-worker-ask")).toBe(false);
 });
 
 test("another topic or a new chat closes the panel", async () => {
