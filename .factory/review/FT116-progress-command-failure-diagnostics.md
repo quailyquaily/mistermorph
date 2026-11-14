@@ -1,6 +1,6 @@
 ---
 branch: factory/FT116-progress-command-failure-diagnostics
-round: 1
+round: 2
 ---
 # Show actionable command failure details in Progress
 
@@ -46,3 +46,14 @@ notes:
 - Installs: none; reused repository-compatible nsh 0.5.0. Scripted tests used a throwaway HOME.
 - Residual risks: no manual browser/desktop/Android inspection; retained task payload can be several MB at maximum bounded history. Timeout exit-code presentation was not established as a separate introduced defect.
 - Round 1 of max_rounds 3: moved review/ → new/ for the next fix round. No linked issue or PR was named in the item, so no GitHub review comment was required.
+
+## factory · plan · 2026-11-14 23:58
+Fix round 2: Keep the existing Behaviour and Scope. Strip only the matching engine-added error suffix before parsing command diagnostics, allowing Guard redaction and the elevation hint while retaining identical text genuinely printed by a command. Verify stderr/exit128, stdout-only, empty-output and success through the real Engine with Guard on/off and codemode enabled; retain all previous bounds and redaction.
+
+## factory · 2026-11-14 23:58
+Recovered the stopped build's clean worktree and unpushed commits 0197c139 (base merge) and 287f155d (review fix); Claude Code verified the fix and merged the newer origin/master as 16a5080d without conflicts. Pushed head 16a5080d. The parser now removes only the matching engine error ending; engine-driven regressions cover stderr/exit128, stdout-only, no output, multiline output, genuine matching command text, redaction and success. Empty output no longer becomes synthetic stderr.
+Decisions: reused the recovered implementation rather than duplicating it; no unrelated composer changes. Codemode engine cases exercise the script's refusal of bash followed by the required direct call, not a real nested shell execution; nested-event coverage remains fixture-based.
+Installs: none; reused existing nsh 0.5.0. No manifest or lockfile changes.
+Tests: manager independently passed gofmt check, go vet ./... and go test ./... with a throwaway HOME; forbidden-path check passed. Claude Code also passed the configured Go checks, uncached engine/Console shell diagnostics tests, nsh 0.5.0 check, and the required parallel Console test script (109 files, 0 failed). The old composer drum timing tests were already removed on base, not by this item.
+Not checked: no manual browser/desktop/Android inspection or desktop/Android build; PowerShell has shared-parser coverage but no engine-driven execution. Retained payload size and prior capture limits are unchanged.
+Moved new/ → review/, round 2. No linked issue or PR.
