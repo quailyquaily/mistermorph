@@ -69,3 +69,10 @@ notes:
 - Engine acceptance checks passed for stderr/exit128, stdout-only, empty output, success, genuine matching suffix text, limits, redaction, retention, timeout and subtask envelopes. Codemode tests fall back to direct bash; nested events remain fixture-based.
 - Residual risks: no manual browser/desktop/Android inspection or platform builds; no engine-driven PowerShell or elevated-command checks. Whitespace-only output displays as no output. Bounded retained payload size and Guard-off unredacted command behavior remain as recorded previously.
 - Round 2 of max_rounds 3: moved review/ → ready/. Only P0/P1 block factory progression. No linked issue or PR, so no GitHub review comment required.
+
+
+## factory · 2026-11-15 08:42
+Shipped with Claude Code at the owner's request. Moved ready/ → done/. Merge commit: e90788f649d1e921c12c9d9f9fc1bb262476e437; pushed master head: 58f0ea3b78dd1610b4d6934d089e4b9112d7493b. No tags created or pushed.
+
+Final validation: gofmt check, go vet ./..., go test ./..., nsh 0.5.0 check and required parallel Console script passed (118 files, 1026 tests). chat-attachments.test.tsx failed during parallel execution and passed the required solo retry; timing versus a genuine transient overlay remains unconfirmed. No unpinned installs. No real browser/device visual inspection or platform builds performed. Existing review risks remain unchanged.
+No linked GitHub issue/PR in the item; none closed. Branch retained (clean action not configured).

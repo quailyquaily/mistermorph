@@ -57,3 +57,11 @@ notes:
 - No new installs. Worktree clean; no code commits or code pushes made during review.
 - Not checked: physical Android device/emulator, GPUI rendering, screen reader or dark scheme. Owner should visually check compact Android names/handles before shipping.
 - Moved from `review/` to `ready/`; no base branch or tag pushed.
+
+
+## factory · 2026-11-15 08:42
+Shipped with Claude Code at the owner's request. Moved ready/ → done/. Merge commit: 377200b31d072f704498f9307a1a84ade1ef74c1; pushed master head: 58f0ea3b78dd1610b4d6934d089e4b9112d7493b. No tags created or pushed.
+
+Final validation: gofmt check, go vet ./..., go test ./..., nsh 0.5.0 check and required parallel Console script passed (118 files, 1026 tests). chat-attachments.test.tsx failed during parallel execution and passed the required solo retry; timing versus a genuine transient overlay remains unconfirmed. No unpinned installs. No real browser/device visual inspection or platform builds performed. Existing review risks remain unchanged.
+Integration fix: 58f0ea3b78dd1610b4d6934d089e4b9112d7493b updates mobile-grid tests for separate Humans/Agents tabs; import conflict retained both intents.
+No linked GitHub issue/PR in the item; none closed. Branch retained (clean action not configured).

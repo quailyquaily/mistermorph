@@ -58,3 +58,10 @@ notes:
 - Installs: none. No code modified, committed or pushed during this review.
 - Not checked: rendered shape or light/dark/hover/pressed/focus visuals in a browser, native desktop or Android device/emulator. Automated tests confirm geometry and rounded classes, not pixels. Existing 32pt audit and 38pt shared mobile targets are unchanged; physical-device usability remains unchecked. Owner should inspect actual appearance and touch targets.
 - Moved review/ → ready/. No linked GitHub issue or PR was named; no GitHub review comment required.
+
+
+## factory · 2026-11-15 08:42
+Shipped with Claude Code at the owner's request. Moved ready/ → done/. Merge commit: 0249c2de2a69a62a35d1ba5b792910f2058439c4; pushed master head: 58f0ea3b78dd1610b4d6934d089e4b9112d7493b. No tags created or pushed.
+
+Final validation: gofmt check, go vet ./..., go test ./..., nsh 0.5.0 check and required parallel Console script passed (118 files, 1026 tests). chat-attachments.test.tsx failed during parallel execution and passed the required solo retry; timing versus a genuine transient overlay remains unconfirmed. No unpinned installs. No real browser/device visual inspection or platform builds performed. Existing review risks remain unchanged.
+No linked GitHub issue/PR in the item; none closed. Branch retained (clean action not configured).

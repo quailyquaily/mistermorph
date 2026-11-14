@@ -85,3 +85,10 @@ notes:
 - Validation: configured gofmt/vet/go-test gate passed, 163 packages ok; pinned nsh 0.5.0 check passed; required parallel Console script passed, 111 files, 0 failed in 171s. chat-voice.test.tsx initially failed 9/10 during parallel execution then passed 10/10 on the script's required solo retry; that test and chat implementation are unchanged against master. Contacts and TODO tests passed first run. Scripted tests used absolute throwaway HOME directories. Serial full-suite nsh test was deliberately not run.
 - Installs: none. No browser visual inspection, real Android/iOS or GPUI desktop inspection this round; real-device focus, tint, tooltip and circular-toggle appearance remain unchecked. Headless test probes do not establish actual browser/device appearance.
 - Round 2/3: review/ → ready/. Owner should inspect the retained-scroll behavior and real-device UI before ship. No linked GitHub issue/PR in the request, so no GitHub comments required.
+
+
+## factory · 2026-11-15 08:42
+Shipped with Claude Code at the owner's request. Moved ready/ → done/. Merge commit: 84f5a38b44b8090f1a4d1cb95d147b3c3dc1ffa2; pushed master head: 58f0ea3b78dd1610b4d6934d089e4b9112d7493b. No tags created or pushed.
+
+Final validation: gofmt check, go vet ./..., go test ./..., nsh 0.5.0 check and required parallel Console script passed (118 files, 1026 tests). chat-attachments.test.tsx failed during parallel execution and passed the required solo retry; timing versus a genuine transient overlay remains unconfirmed. No unpinned installs. No real browser/device visual inspection or platform builds performed. Existing review risks remain unchanged.
+No linked GitHub issue/PR in the item; none closed. Branch retained (clean action not configured).

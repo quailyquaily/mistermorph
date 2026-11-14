@@ -95,3 +95,10 @@ Installs: during merge validation nsh fetched unpinned TypeScript 7.0.2 into a t
 Not checked: real Android Gallery/document pickers and cancellation/MIME behavior, real phone browsers, desktop app window, visual preview/pill/sheet rendering, viewport containment or touch/screen-reader behavior. Headless tests and code inspection do not establish these native/manual behaviors. Owner should inspect them before shipping.
 
 No linked GitHub issue or PR was named in the item; no GitHub review comment required.
+
+
+## factory · 2026-11-15 08:42
+Shipped with Claude Code at the owner's request. Moved ready/ → done/. Merge commit: 7181080a48bc5a1363e653b9e3f8b9504062adc6; pushed master head: 58f0ea3b78dd1610b4d6934d089e4b9112d7493b. No tags created or pushed.
+
+Final validation: gofmt check, go vet ./..., go test ./..., nsh 0.5.0 check and required parallel Console script passed (118 files, 1026 tests). chat-attachments.test.tsx failed during parallel execution and passed the required solo retry; timing versus a genuine transient overlay remains unconfirmed. No unpinned installs. No real browser/device visual inspection or platform builds performed. Existing review risks remain unchanged.
+No linked GitHub issue/PR in the item; none closed. Branch retained (clean action not configured).
