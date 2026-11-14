@@ -45,3 +45,17 @@ Moved Load skills to SKILLs & MCP, preserved /settings/mcp, separated skill/MCP 
 Tests: manager independently passed the configured gofmt + go vet ./... + go test ./... gate and nsh check. Claude validation and the recovered same-head test log confirm nsh test --web-host tests/noHost.js: 932 passed, 0 failed, exit 0. A redundant manager full UI rerun exceeded the foreground command time limit; the completed same-head suite is the recorded result.
 
 Not checked: actual browser/device rendering, manual mobile overflow and interactive persistence across a real reload. Review should inspect those UI cases. Initial branch push needed credential.useHttpPath=true; retry succeeded without changing stored git settings.
+
+
+## factory · review · 2026-11-14 14:42
+head: 2abdf31546766e60fc05eaec5bf28c72d4d04621
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/chat-composer-drum.test.tsx:43: Required UI suite fails on both linux and android: typing turns the drum to Send expects 1 but gets 0. Reproduce and establish whether the failure exists on master; fix an introduced regression, or document a verified base failure without changing unrelated composer behavior. Review cannot certify the required gate while it fails without a verified baseline.
+notes:
+- No verified introduced functional defects found in the settings regrouping. Independent skill/MCP save payloads, guards, retained route, localized labels and Tools removal were reviewed; the 41 affected settings/skills test results passed.
+- Configured gofmt, go vet ./... and go test ./... gate passed. nsh 0.5.0 check passed; nsh test --web-host tests/noHost.js completed with 930 passed and 2 failed (exit 1). This disagrees with the build report's same-head 932/0 result. An earlier nsh 0.4.0 run was stopped and is not a valid suite result. Current repository instructions pin nsh 0.5.0.
+- The coder's initial claim that both failures also occur on base was not backed by a surviving test result. Baseline attribution remains unverified; the P1 above is a factory validation blocker, not a confirmed introduced composer defect.
+- No code files changed and no code commits were made. Pinned nsh 0.5.0 was restored; nsh additionally downloaded TypeScript 7.0.2 for validation. The coder created temporary tooling/logs outside the run directory despite the directory constraint; these were not committed or copied into the repository. Future runs must keep temporary artifacts within their run directory.
+- Actual desktop/mobile browser rendering, label overflow and persistence after a real reload were not manually checked.
+- Round 1 of 3: moved back to new/ for validation/fix round. No linked issue or PR was present.
