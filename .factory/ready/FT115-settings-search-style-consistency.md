@@ -43,3 +43,17 @@ Installs: none.
 Checks: manager independently ran gofmt check, go vet ./..., go test ./... and nsh check; all passed. Coder ran the full nsh web-host suite: 919/921 passed. Two pre-existing chat-composer-drum failures (linux/android): `tests/chat-composer-drum.test.tsx:43: expected 0 to be 1`. Coder reproduced the failures on unchanged base in five isolated runs, so unrelated drum behavior was not modified. Review must account for this existing failure.
 
 Coder visually inspected Chrome screenshots and measured matching shared appearance at 1280px and 390px, including focus and no horizontal overflow. Mobile comparison used touch emulation off to keep Topics/Contacts searches visible. Native desktop/Android runtime, dark mode, hover and screen-reader output were not checked.
+
+## factory · review · 2026-11-14 16:13
+head: 1150f8964b58047ffd967323988f5337c27af679
+verdict: pass
+
+No findings. Claude Code reviewed all five changed files against origin/master, the item request and plan. Shared styling, responsive dimensions, filtering, Enter, Escape, clear/focus and accessible names were checked. No P0/P1 or lower-priority introduced defects were found. The branch merges cleanly with the fetched base.
+
+Validation: configured gofmt/vet/Go-test gate passed; nsh check passed; full nsh web-host suite passed 920/921, including all 30 index-search/settings-page-sections tests and all four new Settings tests. Existing Android drum failure: `tests/chat-composer-drum.test.tsx:43:29: expected 0 to be 1`. The unchanged-base reproduction is documented in the build report; the failing ChatComposer path does not use the changed search components, and the Linux variant passed this review run. This unrelated baseline failure is not an introduced finding.
+
+Installs: none. Review used an existing nsh 0.5.0 executable to match AGENTS.md (factory rules name 0.4.0). Worktree is clean and HEAD unchanged after review.
+
+Residual risks: no new visual inspection; prior build screenshots remain the visual evidence. Native desktop/Android, dark mode, hover and real screen-reader output were not checked. Shared size regression tests use a fixture rather than measuring the Settings page itself. Settings search intentionally remains always visible on mobile.
+
+Moved review/ → ready/; awaiting ship approval or scheduled ship.
