@@ -3,10 +3,12 @@ package builtin
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -271,4 +273,182 @@ func formatShellObservation(payload shellExecutionPayload) string {
 	out.WriteString("\n\nstderr:\n")
 	out.WriteString(payload.Stderr)
 	return out.String()
+}
+
+// ShellResult is how a bash or powershell call ended and what it printed, read back from its
+// observation (ParseShellObservation). Stdout and Stderr are as captured: StdoutTruncated and
+// StderrTruncated report that the tool's output limit (max_output_bytes) cut the stream there.
+type ShellResult struct {
+	ExitCode        int
+	Stdout          string
+	Stderr          string
+	StdoutTruncated bool
+	StderrTruncated bool
+}
+
+// IsShellTool reports whether a tool is one whose observation ParseShellObservation reads.
+func IsShellTool(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "bash", "powershell":
+		return true
+	}
+	return false
+}
+
+// ParseShellObservation reads a bash or powershell call's observation: the text
+// formatShellObservation writes (and the elevation hint bash may add after it), or the result
+// envelope of a command bash ran as a subtask. It reports false for anything else, such as a call
+// refused before it ran or output a guard blocked.
+//
+// toolError is the error the call failed with ("" for none). The engine ends a failed call's
+// observation with "error: <that error>" for the model; that framing is not something the command
+// printed, so it is left out of the result. Only that ending is removed: the same words printed by
+// the command stay.
+func ParseShellObservation(observation, toolError string) (ShellResult, bool) {
+	if payload, ok := parseShellSubtaskObservation(observation); ok {
+		return shellResultFromPayload(payload), true
+	}
+	text := trimEngineToolError(observation, toolError)
+	text = strings.TrimSuffix(text, "\n\n"+sudoElevationHint)
+	var payload shellExecutionPayload
+	rest, ok := cutShellObservationLine(text, "exit_code: ", func(v string) (err error) {
+		_, err = fmt.Sscanf(v, "%d", &payload.ExitCode)
+		return err
+	})
+	if ok {
+		rest, ok = cutShellObservationLine(rest, "stdout_truncated: ", func(v string) error {
+			payload.StdoutTruncated = v == "true"
+			return nil
+		})
+	}
+	if ok {
+		rest, ok = cutShellObservationLine(rest, "stderr_truncated: ", func(v string) error {
+			payload.StderrTruncated = v == "true"
+			return nil
+		})
+	}
+	if !ok {
+		return ShellResult{}, false
+	}
+	rest, ok = strings.CutPrefix(rest, "stdout:\n")
+	if !ok {
+		return ShellResult{}, false
+	}
+	// The stderr heading is the last one: what the command printed to stdout may hold the same
+	// text, and stderr is the part people read for the cause.
+	cut := strings.LastIndex(rest, "\n\nstderr:\n")
+	if cut < 0 {
+		return ShellResult{}, false
+	}
+	payload.Stdout = rest[:cut]
+	payload.Stderr = rest[cut+len("\n\nstderr:\n"):]
+	return shellResultFromPayload(payload), true
+}
+
+// engineToolErrorHeading starts what the engine adds to a failed call's observation
+// (agent.Engine.executeFoundTool).
+const engineToolErrorHeading = "\n\nerror: "
+
+// redactionMarker matches what Guard writes in place of a secret ("[redacted]", "[redacted_jwt]").
+var redactionMarker = regexp.MustCompile(`\[redacted[a-z_]*\]`)
+
+// trimEngineToolError removes the engine's "error: <toolError>" ending from a failed call's
+// observation. Guard may have redacted the observation after the engine wrote it, so an ending
+// that is toolError with secrets replaced by redaction markers counts too. Any other text, and an
+// observation with no such ending, is returned whole.
+func trimEngineToolError(observation, toolError string) string {
+	whole := observation
+	// Events carry the error trimmed; the engine wrote it as it was.
+	toolError = strings.TrimSpace(toolError)
+	if toolError == "" {
+		return observation
+	}
+	observation = strings.TrimRight(observation, " \t\r\n")
+	if text, ok := strings.CutSuffix(observation, engineToolErrorHeading+toolError); ok {
+		return text
+	}
+	if !redactionMarker.MatchString(observation) {
+		return whole
+	}
+	// The ending starts at one of the headings; the command's own output may hold the heading too,
+	// so take the first (longest) ending that reads as the error.
+	for from := 0; ; {
+		at := strings.Index(observation[from:], engineToolErrorHeading)
+		if at < 0 {
+			return whole
+		}
+		at += from
+		if isRedactionOf(observation[at+len(engineToolErrorHeading):], toolError) {
+			return observation[:at]
+		}
+		from = at + 1
+	}
+}
+
+// isRedactionOf reports whether redacted is original with some parts replaced by redaction
+// markers: at least one marker, and the text around the markers is original's, in order, from its
+// first character to its last.
+func isRedactionOf(redacted, original string) bool {
+	parts := redactionMarker.Split(redacted, -1)
+	if len(parts) < 2 {
+		return false
+	}
+	last := len(parts) - 1
+	rest, ok := strings.CutPrefix(original, parts[0])
+	if !ok {
+		return false
+	}
+	for _, part := range parts[1:last] {
+		at := strings.Index(rest, part)
+		if at < 0 {
+			return false
+		}
+		rest = rest[at+len(part):]
+	}
+	return strings.HasSuffix(rest, parts[last])
+}
+
+func cutShellObservationLine(text, prefix string, read func(string) error) (string, bool) {
+	rest, ok := strings.CutPrefix(text, prefix)
+	if !ok {
+		return "", false
+	}
+	line, rest, ok := strings.Cut(rest, "\n")
+	if !ok || read(strings.TrimSpace(line)) != nil {
+		return "", false
+	}
+	return rest, true
+}
+
+func parseShellSubtaskObservation(observation string) (shellExecutionPayload, bool) {
+	text := strings.TrimSpace(observation)
+	if !strings.HasPrefix(text, "{") {
+		return shellExecutionPayload{}, false
+	}
+	var envelope struct {
+		OutputSchema string          `json:"output_schema"`
+		Output       json.RawMessage `json:"output"`
+	}
+	if json.Unmarshal([]byte(text), &envelope) != nil || envelope.OutputSchema != "subtask.bash.result.v1" {
+		return shellExecutionPayload{}, false
+	}
+	var payload struct {
+		shellExecutionPayload
+		ExitCode *int `json:"exit_code"`
+	}
+	if json.Unmarshal(envelope.Output, &payload) != nil || payload.ExitCode == nil {
+		return shellExecutionPayload{}, false
+	}
+	payload.shellExecutionPayload.ExitCode = *payload.ExitCode
+	return payload.shellExecutionPayload, true
+}
+
+func shellResultFromPayload(payload shellExecutionPayload) ShellResult {
+	return ShellResult{
+		ExitCode:        payload.ExitCode,
+		Stdout:          payload.Stdout,
+		Stderr:          payload.Stderr,
+		StdoutTruncated: payload.StdoutTruncated,
+		StderrTruncated: payload.StderrTruncated,
+	}
 }

@@ -29,6 +29,25 @@ test("normalizeActivity retains separate retry notices with their reasons", () =
   assert.equal(activity.current.summary, "HTTP 504 · retry 2/5");
 });
 
+test("normalizeActivity keeps a failed shell call's exit code and output, empty streams included", () => {
+  const activity = normalizeActivity({ history: [
+    {
+      id: "c1", kind: "tool", name: "bash", status: "failed", error: "bash exited with code 128",
+      shell: { exit_code: 128, stdout: "", stderr: "fatal: bad\n", stderr_omitted: 12, stdout_truncated: true },
+    },
+    { id: "c2", kind: "tool", name: "bash", status: "failed", shell: { exit_code: 0, stdout: "", stderr: "", reason: " timed out " } },
+    { id: "c3", kind: "tool", name: "bash", status: "done", shell: { stdout: "no exit code" } },
+    { id: "c4", kind: "tool", name: "codemode", status: "failed", children: [{ id: "c4.0", kind: "tool", name: "bash", shell: { exit_code: 2 } }] },
+  ] });
+  assert.deepEqual(activity.history[0].shell, {
+    exitCode: 128, stdout: "", stderr: "fatal: bad\n", stdoutTruncated: true, stderrTruncated: false, stdoutOmitted: 0, stderrOmitted: 12, reason: "",
+  });
+  assert.equal(activity.history[1].shell.reason, "timed out");
+  assert.equal(activity.history[2].shell, null);
+  assert.equal(activity.history[3].children[0].shell.exitCode, 2);
+  assert.equal(activity.history[3].children[0].shell.stdout, "");
+});
+
 function t(key, vars = {}) {
   const messages = {
     chat_approval_waiting_text: "Waiting for approval.",

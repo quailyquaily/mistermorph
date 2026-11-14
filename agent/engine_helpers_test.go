@@ -113,6 +113,31 @@ func TestToolDisplayArgsSummary_BashIncludesCommand(t *testing.T) {
 	}
 }
 
+func TestToolDisplayArgsSummary_ShellCommandWholeAndBounded(t *testing.T) {
+	opts := DefaultLogOptions()
+	// A multi-line command longer than the log summary's 500 characters shows whole, its line
+	// breaks kept, for both shells.
+	long := "set -e\ncd /srv/app\n" + strings.Repeat("git log --oneline --decorate -n 5 origin/main\n", 30) + "git push origin HEAD"
+	for _, tool := range []string{"bash", "powershell"} {
+		got := toolDisplayArgsSummary(tool, map[string]any{"cmd": long + "\n"}, opts)
+		if got["cmd"] != long {
+			t.Fatalf("%s cmd = %q, want the whole command", tool, got["cmd"])
+		}
+	}
+	// Past the display bound it is cut at a character, with how much more there was.
+	huge := strings.Repeat("é", toolDisplayCommandMaxChars+7)
+	got, _ := toolDisplayArgsSummary("bash", map[string]any{"cmd": huge}, opts)["cmd"].(string)
+	want := strings.Repeat("é", toolDisplayCommandMaxChars) + "\n…(7 more characters not shown)"
+	if got != want {
+		t.Fatalf("cmd ends %q, want %q", got[len(got)-40:], want[len(want)-40:])
+	}
+	// Logs keep their shorter summary.
+	logged := toolArgsSummary("bash", map[string]any{"cmd": long}, LogOptions{IncludeToolParams: true}, false)
+	if s, _ := logged["cmd"].(string); !strings.HasSuffix(s, "...(truncated)") {
+		t.Fatalf("logged cmd = %q, want the log summary's cut", s)
+	}
+}
+
 func TestToolDisplayArgsSummary_FallbackSanitizesUnknownTool(t *testing.T) {
 	opts := DefaultLogOptions()
 	got := toolDisplayArgsSummary("custom_tool", map[string]any{

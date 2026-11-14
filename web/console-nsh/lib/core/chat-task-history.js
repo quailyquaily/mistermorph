@@ -365,6 +365,27 @@ function normalizeActivityEntry(raw) {
     children: Array.isArray(raw?.children) ? raw.children.map((child) => normalizeActivityEntry(child)).filter(Boolean) : [],
     childrenOmitted: Math.max(0, Number(raw?.children_omitted) || 0),
     messages: normalizeActivityMessages(raw?.messages),
+    shell: normalizeShellResult(raw?.shell),
+  };
+}
+
+// How a failed bash or powershell call ended: its exit code and what it printed to each stream,
+// as the server kept them (each stream's end; `*Omitted` counts the characters before it not
+// kept, `*Truncated` that the tool's output limit cut the stream). Empty streams stay "".
+function normalizeShellResult(raw) {
+  if (!raw || typeof raw !== "object" || !Number.isInteger(raw.exit_code)) {
+    return null;
+  }
+  const count = (value) => Math.max(0, Number(value) || 0);
+  return {
+    exitCode: raw.exit_code,
+    stdout: String(raw.stdout ?? ""),
+    stderr: String(raw.stderr ?? ""),
+    stdoutTruncated: raw.stdout_truncated === true,
+    stderrTruncated: raw.stderr_truncated === true,
+    stdoutOmitted: count(raw.stdout_omitted),
+    stderrOmitted: count(raw.stderr_omitted),
+    reason: String(raw.reason || "").trim(),
   };
 }
 
