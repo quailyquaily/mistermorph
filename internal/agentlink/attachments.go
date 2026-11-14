@@ -221,6 +221,70 @@ func OpenAttachmentFile(path, filename string, size int64, digest string) (Attac
 	}, nil
 }
 
+// copyAttachmentFile copies the regular file at path to dst, a new private file, as an attachment
+// named filename whose Source is dst. The file must still have size bytes with SHA-256 digest, as
+// the caller checked it before; on any error dst is removed.
+func copyAttachmentFile(path, dst, filename string, size int64, digest string) (_ Attachment, err error) {
+	name := CleanAttachmentName(filename)
+	switch {
+	case name == "":
+		return Attachment{}, fmt.Errorf("attachment filename %q is not usable", filename)
+	case size < 0 || !validSHA256(strings.ToLower(digest)):
+		return Attachment{}, fmt.Errorf("attachment %q: the size and sha256 it was checked with are required", filename)
+	case size > MaxStreamAttachmentBytes:
+		return Attachment{}, fmt.Errorf("%w (%d bytes; at most %d per file on a route that streams files): %s", ErrFileTooLarge, size, MaxStreamAttachmentBytes, path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("read file: %w", err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return Attachment{}, fmt.Errorf("read file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return Attachment{}, fmt.Errorf("path is not a regular file: %s", path)
+	}
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("copy file: %w", err)
+	}
+	defer func() {
+		if closeErr := out.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("copy file: %w", closeErr)
+		}
+		if err != nil {
+			_ = os.Remove(dst)
+		}
+	}()
+	h := sha256.New()
+	head := make([]byte, 512)
+	headLen, _ := io.ReadFull(f, head)
+	head = head[:headLen]
+	w := io.MultiWriter(out, h)
+	if _, err := w.Write(head); err != nil {
+		return Attachment{}, fmt.Errorf("copy file: %w", err)
+	}
+	rest, err := io.Copy(w, io.LimitReader(f, max(size+1-int64(headLen), 0)))
+	if err != nil {
+		return Attachment{}, fmt.Errorf("copy file: %w", err)
+	}
+	if int64(headLen)+rest != size || hex.EncodeToString(h.Sum(nil)) != strings.ToLower(digest) {
+		return Attachment{}, fmt.Errorf("file changed after it was checked: %s", path)
+	}
+	if err := out.Sync(); err != nil {
+		return Attachment{}, fmt.Errorf("copy file: %w", err)
+	}
+	return Attachment{
+		Filename:  name,
+		MediaType: DetectMediaType(name, head),
+		Size:      size,
+		SHA256:    strings.ToLower(digest),
+		Source:    dst,
+	}, nil
+}
+
 // ReadAttachmentFile reads the regular file at path as an attachment named filename, with its
 // bytes in Data, at most MaxAttachmentBytes. When size or digest are set, the file must still match
 // them, as the caller checked it before.

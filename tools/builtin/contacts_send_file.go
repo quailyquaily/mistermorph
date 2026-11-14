@@ -282,12 +282,10 @@ func attachToAgentLinkReply(ctx context.Context, params map[string]any, contactI
 	if name == "" {
 		name = file.Filename
 	}
-	// The file is checked again and copied into the queue when the answer is sent.
-	attachment, err := agentlink.OpenAttachmentFile(file.Path, name, file.Size, file.SHA256)
+	// The answer carries the file as it is now: it is copied privately (and checked against what
+	// was checked above) when it is attached, not read again when the answer is sent.
+	attachment, err := replyFiles.AddFile(file.Path, name, file.Size, file.SHA256, limit.PerMessage)
 	if err != nil {
-		return "", true, err
-	}
-	if err := replyFiles.Add(attachment, limit.PerMessage); err != nil {
 		return "", true, err
 	}
 	result := map[string]any{

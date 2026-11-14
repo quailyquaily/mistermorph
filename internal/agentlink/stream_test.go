@@ -877,23 +877,77 @@ func TestStreamLegacyQueueEntry(t *testing.T) {
 }
 
 func TestReplyFilesLimit(t *testing.T) {
-	small := Attachment{Filename: "a.bin", Size: 10}
-	large := Attachment{Filename: "b.bin", Size: MaxAttachmentBytes}
-	inline := NewReplyFiles("inst_x")
-	if err := inline.Add(small, inlineFileLimit.PerMessage); err != nil {
+	file := func(name string, size int64) (string, int64, string) {
+		data := make([]byte, size)
+		sum := sha256.Sum256(data)
+		return writeFile(t, name, data), size, hex.EncodeToString(sum[:])
+	}
+	smallPath, smallSize, smallSum := file("a.bin", 10)
+	largePath, largeSize, largeSum := file("b.bin", MaxAttachmentBytes)
+	inline := NewReplyFiles("inst_x", t.TempDir())
+	defer inline.Close()
+	if _, err := inline.AddFile(smallPath, "a.bin", smallSize, smallSum, inlineFileLimit.PerMessage); err != nil {
 		t.Fatal(err)
 	}
-	if err := inline.Add(large, inlineFileLimit.PerMessage); err == nil || !strings.Contains(err.Error(), "would pass") {
+	if _, err := inline.AddFile(largePath, "b.bin", largeSize, largeSum, inlineFileLimit.PerMessage); err == nil || !strings.Contains(err.Error(), "would pass") {
 		t.Fatalf("over the inline limit: error = %v", err)
 	}
-	streamedFiles := NewReplyFiles("inst_x")
+	streamedFiles := NewReplyFiles("inst_x", t.TempDir())
+	defer streamedFiles.Close()
 	for i := 0; i < MaxAttachments; i++ {
-		if err := streamedFiles.Add(large, streamFileLimit.PerMessage); err != nil {
+		if _, err := streamedFiles.AddFile(largePath, "b.bin", largeSize, largeSum, streamFileLimit.PerMessage); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := streamedFiles.Add(small, streamFileLimit.PerMessage); err == nil {
+	if _, err := streamedFiles.AddFile(smallPath, "a.bin", smallSize, smallSum, streamFileLimit.PerMessage); err == nil {
 		t.Fatal("a fifth file was attached")
+	}
+}
+
+// TestReplyFilesSnapshot: an answer carries its files as they were when they were attached, from
+// private copies that Close removes.
+func TestReplyFilesSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	v1 := []byte("v1,1\n")
+	sum := sha256.Sum256(v1)
+	digest := hex.EncodeToString(sum[:])
+	source := writeFile(t, "report.csv", v1)
+	files := NewReplyFiles("inst_x", dir)
+	a, err := files.AddFile(source, "report.csv", int64(len(v1)), digest, streamFileLimit.PerMessage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Source == source || a.Size != int64(len(v1)) || a.SHA256 != digest || a.MediaType == "" {
+		t.Fatalf("attachment = %+v", a)
+	}
+	if info, err := os.Stat(a.Source); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("copy: %v, %v", info, err)
+	}
+	if err := os.WriteFile(source, []byte("v2,22\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(files.Attachments()[0].Source); !bytes.Equal(got, v1) {
+		t.Fatalf("the copy changed with its source: %q", got)
+	}
+	// The source changed after it was checked: refused, and nothing is left behind.
+	if _, err := files.AddFile(source, "report.csv", int64(len(v1)), digest, streamFileLimit.PerMessage); err == nil || !strings.Contains(err.Error(), "changed after it was checked") {
+		t.Fatalf("a changed file: error = %v", err)
+	}
+	if len(files.Attachments()) != 1 {
+		t.Fatal("a changed file was attached")
+	}
+	if entries, _ := os.ReadDir(filepath.Dir(a.Source)); len(entries) != 1 {
+		t.Fatalf("copies = %v", entries)
+	}
+	files.Close()
+	if _, err := os.Stat(a.Source); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the copy stays after Close: %v", err)
+	}
+	if _, err := files.AddFile(writeFile(t, "x.csv", v1), "x.csv", int64(len(v1)), digest, streamFileLimit.PerMessage); err == nil {
+		t.Fatal("attached after Close")
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("left in the folder: %v", entries)
 	}
 }
 

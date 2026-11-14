@@ -226,6 +226,8 @@ func NewNode(opts Options) (*Node, error) {
 	if err := n.loadOutbox(); err != nil {
 		return nil, err
 	}
+	// Copies of answers' files wait there only while their task runs in this process.
+	_ = os.RemoveAll(n.ReplyFilesDir())
 	if err := n.loadSeen(); err != nil {
 		return nil, err
 	}

@@ -444,7 +444,8 @@ func TestAgentSendAttachesFileToReply(t *testing.T) {
 	askerContact := agentlink.ContactID(asker.node.InstanceID())
 	data := []byte("report body")
 	f.write(t, f.cache, "report.txt", data)
-	replyFiles := agentlink.NewReplyFiles(asker.node.InstanceID())
+	replyFiles := agentlink.NewReplyFiles(asker.node.InstanceID(), t.TempDir())
+	defer replyFiles.Close()
 	ctx := agentlink.WithReplyFiles(agentlink.WithIncomingHop(f.ctx, 1), replyFiles)
 
 	result, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact, "path": "file_cache_dir/report.txt", "message_text": "here"})
@@ -458,8 +459,8 @@ func TestAgentSendAttachesFileToReply(t *testing.T) {
 	if len(files) != 1 || files[0].Filename != "report.txt" || files[0].Size != int64(len(data)) {
 		t.Fatalf("reply files = %+v", files)
 	}
-	// The answer names the file; its bytes are read when the answer is queued.
-	if source, err := os.ReadFile(files[0].Source); err != nil || !bytes.Equal(source, data) {
+	// The answer carries a private copy of the file, made when it was attached.
+	if source, err := os.ReadFile(files[0].Source); err != nil || !bytes.Equal(source, data) || files[0].Source == filepath.Join(f.cache, "report.txt") {
 		t.Fatalf("reply file source %q: %q, %v", files[0].Source, source, err)
 	}
 	if len(asker.messages()) != 0 {
@@ -481,5 +482,62 @@ func TestAgentSendAttachesFileToReply(t *testing.T) {
 	}
 	if len(replyFiles.Attachments()) != agentlink.MaxAttachments {
 		t.Fatal("a refused file was attached")
+	}
+}
+
+// TestAgentSendReplyFileIsSnapshot: a file attached to an answer goes as it was when it was
+// attached, even when its source changes or goes before the answer is sent.
+func TestAgentSendReplyFileIsSnapshot(t *testing.T) {
+	f := newFileSendFixture(t)
+	relay := f.relay(t)
+	asker := f.peer(t, relay, "Asker", true)
+	askerContact := agentlink.ContactID(asker.node.InstanceID())
+	v1 := []byte("v1,1\n")
+	source := f.write(t, f.cache, "report.csv", v1)
+	replyFiles := agentlink.NewReplyFiles(asker.node.InstanceID(), f.node.ReplyFilesDir())
+	ctx := agentlink.WithReplyFiles(agentlink.WithIncomingHop(f.ctx, 1), replyFiles)
+	result, err := execAgentSend(t, ctx, f.opts, map[string]any{"contact_id": askerContact, "path": "file_cache_dir/report.csv"})
+	if err != nil || result["status"] != "attached_to_reply" {
+		t.Fatalf("attach = %v, %v", result, err)
+	}
+
+	for name, change := range map[string]func(){
+		"overwritten": func() {
+			if err := os.WriteFile(source, []byte("v2,22\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"removed": func() {
+			if err := os.Remove(source); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		change()
+		files := replyFiles.Attachments()
+		res, err := f.node.SendWithAttachments(f.ctx, asker.node.InstanceID(), busruntime.MessageEnvelope{Text: "answer " + name, ReplyTo: "msg_question"}, files, 2, 10*time.Second)
+		if err != nil || res.Status != agentlink.StatusDelivered {
+			t.Fatalf("%s: answer = %+v, %v", name, res, err)
+		}
+		msgs := asker.messages()
+		got := msgs[len(msgs)-1]
+		if len(got.Attachments) != 1 {
+			t.Fatalf("%s: asker got %+v", name, got)
+		}
+		if saved, err := os.ReadFile(got.Attachments[0].Path); err != nil || !bytes.Equal(saved, v1) {
+			t.Fatalf("%s: asker saved %q, %v; want the attached bytes %q", name, saved, err, v1)
+		}
+	}
+	snapshot := replyFiles.Attachments()[0].Source
+	replyFiles.Close()
+	if _, err := os.Stat(snapshot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the answer's copy stays after Close: %v", err)
+	}
+	// A file that changed between the check and the attach is refused.
+	f.write(t, f.cache, "report.csv", v1)
+	again := agentlink.NewReplyFiles(asker.node.InstanceID(), f.node.ReplyFilesDir())
+	defer again.Close()
+	if _, err := again.AddFile(source, "report.csv", int64(len(v1)), strings.Repeat("0", 64), agentlink.MaxStreamMessageBytes); err == nil || !strings.Contains(err.Error(), "changed after it was checked") {
+		t.Fatalf("a changed file: error = %v", err)
 	}
 }

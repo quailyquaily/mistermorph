@@ -3,6 +3,8 @@ package agentlink
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"strings"
@@ -336,5 +338,31 @@ func TestStreamRoomAfterAuthorization(t *testing.T) {
 	}
 	if !transfers["parked"] || !transfers["connected"] || transfers["too-big"] || len(partFiles(t, b2Cache)) != 5 {
 		t.Fatalf("transfers %v, partial files %v", transfers, partFiles(t, b2Cache))
+	}
+}
+
+// TestReplyFilesOrphansRemoved: copies of answers' files a process left behind go when the node
+// opens again.
+func TestReplyFilesOrphansRemoved(t *testing.T) {
+	dir := t.TempDir()
+	node, err := NewNode(Options{StateDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := NewReplyFiles("inst_x", node.ReplyFilesDir())
+	data := []byte("left behind")
+	sum := sha256.Sum256(data)
+	a, err := files.AddFile(writeFile(t, "a.txt", data), "a.txt", int64(len(data)), hex.EncodeToString(sum[:]), MaxStreamMessageBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.Close()
+	reopened, err := NewNode(Options{StateDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if _, err := os.Stat(a.Source); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the orphaned copy stays: %v", err)
 	}
 }
