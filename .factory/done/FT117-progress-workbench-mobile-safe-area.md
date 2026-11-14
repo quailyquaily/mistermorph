@@ -66,3 +66,8 @@ notes:
 - Console suite on this head: web/console-nsh/scripts/test.sh, which master now has (one `nsh test` per file, several at a time; a file that failed runs once more alone): 109 files, 0 failed. The serial `nsh test --web-host tests/noHost.js` run was still going when this was written, with no failure so far.
 - The round 1 P1: chat-composer-drum counts the drum in the frame right after a keypress and misses it on a busy machine. It fails the same way on master and passes alone; this item does not touch it. The avatar-preview failure did not recur.
 - Still unchecked: a real Android device's system bars, real phone browsers, keyboard-up visuals, dark theme, and the open and close animation on a device.
+
+## factory · 2026-11-14 23:13
+Shipped with explicit owner approval of ready/ items using Claude Code. Merged into master in 134e0dad501282ff0053ec661aa0a0580725c581; pushed master at 134e0dad501282ff0053ec661aa0a0580725c581. No tag created or pushed, as requested. Branch retained (clean not configured). No linked issues or PRs identified.
+
+All merges were conflict-free; no follow-up fix commits or installs. Final merged-head checks passed: gofmt clean, go vet ./..., go test ./..., nsh 0.5.0 check, Console scripts/test.sh (108 files, zero failures) and serial nsh test --web-host tests/noHost.js (937 passed, zero failed). Tests used an absolute throwaway HOME. No new device or visual checks.

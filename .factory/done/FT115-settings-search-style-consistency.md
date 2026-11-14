@@ -57,3 +57,8 @@ Installs: none. Review used an existing nsh 0.5.0 executable to match AGENTS.md 
 Residual risks: no new visual inspection; prior build screenshots remain the visual evidence. Native desktop/Android, dark mode, hover and real screen-reader output were not checked. Shared size regression tests use a fixture rather than measuring the Settings page itself. Settings search intentionally remains always visible on mobile.
 
 Moved review/ → ready/; awaiting ship approval or scheduled ship.
+
+## factory · 2026-11-14 23:13
+Shipped with explicit owner approval of ready/ items using Claude Code. Merged into master in a58c5d09b371f4bfd50a0d2f92eb62c5f2f6c72c; pushed master at 134e0dad501282ff0053ec661aa0a0580725c581. No tag created or pushed, as requested. Branch retained (clean not configured). No linked issues or PRs identified.
+
+All merges were conflict-free; no follow-up fix commits or installs. Final merged-head checks passed: gofmt clean, go vet ./..., go test ./..., nsh 0.5.0 check, Console scripts/test.sh (108 files, zero failures) and serial nsh test --web-host tests/noHost.js (937 passed, zero failed). Tests used an absolute throwaway HOME. No new device or visual checks.

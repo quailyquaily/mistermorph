@@ -110,3 +110,10 @@ Validation: Claude Code reviewed all 27 files in origin/master...HEAD (base/merg
 Residual risks: no real multi-machine networks, Android, separate-process mixed versions or receiver restart exercised; receiver resume remains intentionally in-memory. Sanitized message-ID snapshot-directory collisions and finish/remove racing an immediate ID reuse were not reproduced and current callers generate unique IDs. A concurrent duplicate send can return queued before the first enqueue later fails. Multiple processes sharing a state directory were not exercised. No linked issue or PR identified in this thread.
 
 Under factory review policy no P0/P1 blocks readiness: moved review/ → ready/. The reproduced P3 above remains for owner attention; this review does not ship or override conditional shipping approval.
+
+## factory · 2026-11-14 23:13
+Shipped with explicit owner approval of ready/ items using Claude Code. Merged into master in 248f55c1d45197a3746b632343aed6bbf0b5634c; pushed master at 134e0dad501282ff0053ec661aa0a0580725c581. No tag created or pushed, as requested. Branch retained (clean not configured). No linked issues or PRs identified.
+
+All merges were conflict-free; no follow-up fix commits or installs. Final merged-head checks passed: gofmt clean, go vet ./..., go test ./..., nsh 0.5.0 check, Console scripts/test.sh (108 files, zero failures) and serial nsh test --web-host tests/noHost.js (937 passed, zero failed). Tests used an absolute throwaway HOME. No new device or visual checks.
+
+Known P3 retained under owner approval: queue expiry or file-read failure can release sender window slots before relay accounting, causing a concurrent transfer to fail invalid_message and delete partial files. Receiver resume remains in-memory; real multi-machine, Android and separate-process mixed-version checks remain unperformed.
