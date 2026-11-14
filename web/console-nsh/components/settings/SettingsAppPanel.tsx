@@ -1,18 +1,20 @@
 // Settings' App section (the Vue console's SettingsAppPanel: install this agent as an app) and the
 // Updates card of the System section (the Vue SettingsView's auto-update card: the version, the
 // release channel, automatic updates, and the update check with the release it finds).
-import type { JSX } from "nsh";
+import type { JSX, ViewRef } from "nsh";
 import { cleanup, computed, effect, Image, signal, Text, untracked, View } from "nsh";
 import appLogo from "../../assets/images/app_logo_current.svg";
 import { endpointApiFetch, endpointState, localeState, runtimeEndpointByRef } from "../../lib/core/context.js";
 import { canCheckDesktopUpdate, desktopRuntimeVersion, isDesktopRuntime } from "../../lib/core/desktop-runtime.js";
 import { CONSOLE_LOCAL_ENDPOINT_REF, endpointDisplayItem } from "../../lib/core/endpoints.js";
 import { pushNotice } from "../../lib/core/notices.js";
-import { checkDesktopUpdate, copyText, openExternal, origin } from "../../lib/platform";
+import { checkDesktopUpdate, copyText, downloadTarget, openExternal, origin } from "../../lib/platform";
+import { type DownloadFile, type DownloadTarget, downloadChoice, downloadQuery, systemName, UNKNOWN_TARGET } from "../../lib/downloadTarget";
 import { Button, Icon, Markdown } from "../ui";
 import { isMobile } from "../../lib/shell";
 import { SettingRow, SettingsCard, SettingSwitch } from "../settings-page/parts";
 import { SettingSelect } from "./SettingFields";
+import { boundsFrame, createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { t } from "./DialogShell";
 
 const UPDATE_RELEASES_URL = "https://mistermorph.com/releases/";
@@ -86,6 +88,8 @@ export interface SettingsUpdatePanelProps {
   configRevision?: string;
   /** A change saved: the config file's new revision, for the page's other saves. */
   onConfigRevision?: (revision: string) => void;
+  /** Layout probe for tests: the release box (`release`), its downloads column (`downloads`) and each download button (`button:<testID>`) on the page. */
+  onPartLayout?: PartLayoutListener;
 }
 
 interface UpdateResult {
@@ -99,6 +103,10 @@ interface UpdateResult {
   release_notes?: string;
   checksum?: string;
   asset_url?: string;
+  /** The server's own platform (`linux-amd64`), which `asset_url` and `checksum` are for. */
+  platform?: string;
+  /** The file for the machine the Console runs on (`download_os` in the check). */
+  download?: unknown;
 }
 
 const trim = (value: unknown) => String(value ?? "").trim();
@@ -139,6 +147,11 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
   const revision = signal("");
   const saving = signal(false);
   const checksumCopied = signal(false);
+  // What the last check was for: the desktop app's own check, or this device's system.
+  const checkedNative = signal(false);
+  const checkedDevice = signal<DownloadTarget>(UNKNOWN_TARGET);
+  const parts = createPartProbe(() => props.onPartLayout);
+  let downloadsNode: ViewRef | undefined;
   let seq = 0;
   let copiedTimer: ReturnType<typeof setTimeout> | null = null;
   cleanup(() => {
@@ -225,14 +238,22 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
     const requestSeq = seq;
     const target = endpointRef();
     const selected = trim(untracked(channel)) || null;
-    const path = selected === null ? "/settings/auto-update/check" : `/settings/auto-update/check?channel=${encodeURIComponent(selected)}`;
+    // The desktop app checks for itself; otherwise the server is asked for its release with the
+    // download for this device, which is not the server's own (a phone, another computer).
+    const native = canCheckDesktopUpdate() && target === CONSOLE_LOCAL_ENDPOINT_REF;
     try {
-      const answer = (
-        canCheckDesktopUpdate() && target === CONSOLE_LOCAL_ENDPOINT_REF
-          ? await checkDesktopUpdate(selected)
-          : await endpointApiFetch(target, path, { method: "POST" })
-      ) as UpdateResult;
+      let device = UNKNOWN_TARGET;
+      let answer: UpdateResult;
+      if (native) {
+        answer = (await checkDesktopUpdate(selected)) as UpdateResult;
+      } else {
+        device = await downloadTarget();
+        const query = [selected === null ? "" : `channel=${encodeURIComponent(selected)}`, downloadQuery(device)].filter(Boolean).join("&");
+        answer = (await endpointApiFetch(target, `/settings/auto-update/check?${query}`, { method: "POST" })) as UpdateResult;
+      }
       if (!isCurrent(requestSeq, target)) return;
+      checkedNative.set(native);
+      checkedDevice.set(device);
       result.set(answer);
       currentVersion.set(trim(answer?.current_version) || untracked(currentVersion));
     } catch (e) {
@@ -297,12 +318,44 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
     }
   };
   const notes = () => releaseNotesSource(result()?.release_notes);
-  const checksum = () => trim(result()?.checksum);
+  const choice = computed(() => downloadChoice(result(), checkedDevice(), checkedNative()));
+  const singleFile = () => {
+    const current = choice();
+    return current.kind === "file" ? current.file : null;
+  };
+  const choiceFiles = () => {
+    const current = choice();
+    return current.kind === "choose" ? current.files : [];
+  };
+  const fileSystem = (file: DownloadFile) => systemName(file.os, file.arch, t("settings_update_arch_apple_silicon"));
+  const fileLabel = (file: DownloadFile) => {
+    const system = fileSystem(file);
+    return system ? t("settings_update_download_for", { system }) : t("settings_desktop_update_download_action");
+  };
+  // Why there is no file to download, and what to do instead.
+  const downloadNote = () => {
+    const current = choice();
+    if (current.kind === "choose") return t("settings_update_download_choose");
+    if (current.kind !== "none") return "";
+    const device = checkedDevice();
+    const system = systemName(device.os, device.arch, t("settings_update_arch_apple_silicon"));
+    switch (current.reason) {
+      case "unknown_platform":
+        return t("settings_update_download_unknown");
+      case "unreachable":
+        return t("settings_update_download_unreachable");
+      case "not_published":
+        return system ? t("settings_update_download_missing", { system }) : t("settings_update_download_pick");
+      default:
+        return t("settings_update_download_pick");
+    }
+  };
+  // The checksum of the one file offered: never the server's own when the download is another's.
+  const checksum = () => trim(singleFile()?.checksum);
   const checksumShort = () => {
     const value = checksum().replace(/^sha256:/i, "");
     return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value;
   };
-  const assetURL = () => trim(result()?.asset_url);
 
   async function copyChecksum() {
     const value = untracked(checksum);
@@ -324,6 +377,42 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
   function openReleases() {
     const name = trim(untracked(result)?.channel);
     openExternal(name ? `${UPDATE_RELEASES_URL}?channel=${encodeURIComponent(name)}` : UPDATE_RELEASES_URL);
+  }
+
+  const probeButton = (testID: string) =>
+    props.onPartLayout
+      ? (event: Parameters<typeof boundsFrame>[0]) => parts.report(`button:${testID}`, downloadsNode, () => boundsFrame(event))
+      : undefined;
+
+  // On phones the downloads take the card's width, and a long label wraps rather than overflows.
+  function downloadButton(file: DownloadFile | null) {
+    if (!file) {
+      return (
+        <Button
+          variant="outlined"
+          icon="PhArrowUpRight"
+          label={t("settings_update_open_releases")}
+          block={isMobile()}
+          wrap={isMobile()}
+          onPress={openReleases}
+          onLayout={probeButton("settings-update-open-releases")}
+          testID="settings-update-open-releases"
+        />
+      );
+    }
+    const testID = choice().kind === "choose" ? `settings-update-download-${file.os}-${file.arch}` : "settings-update-download";
+    return (
+      <Button
+        variant="outlined"
+        icon="PhCloudArrowDown"
+        label={fileLabel(file)}
+        block={isMobile()}
+        wrap={isMobile()}
+        onPress={() => openExternal(file.url)}
+        onLayout={probeButton(testID)}
+        testID={testID}
+      />
+    );
   }
 
   // Loads when shown and when the endpoint changes.
@@ -381,7 +470,7 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
           />
         </Row>
         <If when={hasRelease()}>
-          <View class="flex-row flex-wrap items-start gap-3 border-t border-line-soft py-3" testID="settings-update-release">
+          <View class="flex-row flex-wrap items-start gap-3 border-t border-line-soft py-3" {...parts.probe(() => "release")} testID="settings-update-release">
             <View class="min-w-60 flex-1 gap-1.5">
               <Text class="text-sm font-medium text-foreground">{releaseTitle()}</Text>
               <View class="flex-row flex-wrap items-center gap-2">
@@ -410,14 +499,30 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
                 </Button>
               </If>
             </View>
-            <Button
-              variant="outlined"
-              icon="PhCloudArrowDown"
-              label={t("settings_desktop_update_download_action")}
-              disabled={!assetURL()}
-              onPress={() => assetURL() && openExternal(assetURL())}
-              testID="settings-update-download"
-            />
+            <View
+              class={isMobile() ? "w-full gap-2" : "gap-2"}
+              ref={(node: ViewRef) => (downloadsNode = node)}
+              onLayout={() => parts.report("downloads", downloadsNode)}
+              testID="settings-update-downloads"
+            >
+              <If when={downloadNote()}>
+                <Text class={`text-xs text-muted-foreground ${isMobile() ? "" : "max-w-60"}`} testID="settings-update-download-note">
+                  {downloadNote()}
+                </Text>
+              </If>
+              <If
+                when={choice().kind === "file"}
+                else={
+                  <If when={choice().kind === "choose"} else={downloadButton(null)}>
+                    <Each of={choiceFiles()} key={(file) => file.url}>
+                      {(file) => downloadButton(file())}
+                    </Each>
+                  </If>
+                }
+              >
+                {downloadButton(singleFile())}
+              </If>
+            </View>
           </View>
         </If>
       </View>

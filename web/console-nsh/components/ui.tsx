@@ -390,6 +390,8 @@ export interface ButtonProps {
   loading?: boolean;
   /** Full width. */
   block?: boolean;
+  /** A long label wraps onto more lines, centred, and the button grows taller (at least its size's height) instead of cutting the label off. */
+  wrap?: boolean;
   /** On (a toggled tool, the open panel's button): ink on a soft blue fill, as the ui-kit's `toggle-on`. */
   selected?: boolean;
   /** How it sits across its parent's axis (default `start`; `block` stretches). `center` centres it in a column without a wrapper. */
@@ -404,6 +406,9 @@ export interface ButtonProps {
   /** Anything after the label (a count, a caret). */
   children?: JSX.Element;
 }
+
+/** A size's box for a wrapping label: its height as a minimum, with room above and below the lines. */
+const wrapBox = (box: string) => `${box.replace(/(^|\s)h-/, "$1min-h-")} py-2`;
 
 const ALIGN_SELF = { start: "self-start", center: "self-center", end: "self-end", stretch: "self-stretch", auto: "self-auto" } as const;
 
@@ -546,7 +551,7 @@ export function Button(props: ButtonProps) {
       testID={props.testID}
       tooltip={props.title ? <Tip text={props.title} /> : undefined}
       class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
-        props.iconOnly ? `${size().square} px-0` : size().box
+        props.iconOnly ? `${size().square} px-0` : props.wrap ? wrapBox(size().box) : size().box
       } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
       onLayout={props.onLayout}
       style={{
@@ -574,8 +579,8 @@ export function Button(props: ButtonProps) {
       </If>
       <If when={props.label && !props.iconOnly}>
         <Text
-          class={`${size().text} font-medium tracking-[0.01em] transition-colors duration-180 ${textClass()}`}
-          style={{ numberOfLines: 1 }}
+          class={`${size().text} font-medium tracking-[0.01em] transition-colors duration-180 ${textClass()} ${props.wrap ? "min-w-0 shrink text-center" : ""}`}
+          style={props.wrap ? undefined : { numberOfLines: 1 }}
         >
           {props.label}
         </Text>
