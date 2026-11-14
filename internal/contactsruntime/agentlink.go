@@ -108,10 +108,11 @@ func (s *RoutingSender) sendAgentLinkEnvelope(ctx context.Context, node *agentli
 	}
 }
 
-// readAgentLinkAttachment reads the decision's file, checked again as it is read, as the bytes an
-// Agent Link message carries. The display name is the one the tool resolved, before sanitizing.
+// readAgentLinkAttachment checks the decision's file again and returns it as an attachment that
+// names it; the node copies it into its queue, checking its size and SHA-256 once more, and the
+// route's limit applies there. The display name is the one the tool resolved, before sanitizing.
 func readAgentLinkAttachment(decision contacts.ShareDecision) (agentlink.Attachment, error) {
-	file, _, err := prepareFileSend(decision, agentlink.MaxAttachmentBytes)
+	file, _, err := prepareFileSend(decision, agentlink.MaxStreamAttachmentBytes)
 	if err != nil {
 		return agentlink.Attachment{}, err
 	}
@@ -119,5 +120,5 @@ func readAgentLinkAttachment(decision contacts.ShareDecision) (agentlink.Attachm
 	if name == "" {
 		name = file.Filename
 	}
-	return agentlink.ReadAttachmentFile(file.Path, name, file.Size, file.SHA256)
+	return agentlink.OpenAttachmentFile(file.Path, name, file.Size, file.SHA256)
 }

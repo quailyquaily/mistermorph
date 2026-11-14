@@ -13,6 +13,16 @@ import (
 )
 
 func BuildTaskHistory(tasks []taskdomain.TaskInfo, job taskdomain.TaskInfo, limit int) []ChatHistoryItem {
+	return buildTaskHistory(tasks, job, limit, false)
+}
+
+// BuildTaskHistoryWithToolRecords is BuildTaskHistory with, before each finished turn's messages
+// from the agent, a record of the tool calls it made in that turn (TaskToolRecord).
+func BuildTaskHistoryWithToolRecords(tasks []taskdomain.TaskInfo, job taskdomain.TaskInfo, limit int) []ChatHistoryItem {
+	return buildTaskHistory(tasks, job, limit, true)
+}
+
+func buildTaskHistory(tasks []taskdomain.TaskInfo, job taskdomain.TaskInfo, limit int, toolRecords bool) []ChatHistoryItem {
 	if limit <= 0 || len(tasks) == 0 {
 		return nil
 	}
@@ -47,8 +57,13 @@ func BuildTaskHistory(tasks []taskdomain.TaskInfo, job taskdomain.TaskInfo, limi
 			history = append(history, inbound)
 		}
 		if strings.TrimSpace(task.SteerTargetTaskID) == "" {
-			// What the agent told the user while working comes before the reply; items with the same
-			// time keep this order when sorted below.
+			// What the agent did and told the user while working comes before the reply; items with
+			// the same time keep this order when sorted below.
+			if toolRecords {
+				if record, ok := TaskToolRecord(task); ok {
+					history = append(history, record)
+				}
+			}
 			history = append(history, TaskStepMessages(task)...)
 			if outbound, ok := TaskOutbound(task); ok {
 				history = append(history, outbound)

@@ -2,7 +2,7 @@
 // over the foot of the page, so each page's main list ends with MobileBarSpacer to scroll its last
 // row clear of it.
 import { safeArea, View } from "nsh";
-import { mobileBottomNavVisible, systemInsets } from "../../lib/shell";
+import { mobileBottomNavVisible, phoneWorkbenchOpen, systemInsets } from "../../lib/shell";
 
 /** The capsule's height: 44pt slots inset 4pt all round. */
 export const MOBILE_NAV_HEIGHT = 58;
@@ -48,7 +48,8 @@ export function mobileSheetFrame(pageHeight: number, barRoom: number) {
 /** The room the floating bar takes at the foot of the window, clearance included (0 while it is not shown). */
 export function mobileBarRoom() {
   if (!mobileBottomNavVisible()) return 0;
-  const below = systemInsets() ? systemInsets()!.bottomNav : safeArea().bottom;
+  // The bottom inset under the bar, unless the open workbench below the page takes it.
+  const below = systemInsets() ? systemInsets()!.bottomNav : phoneWorkbenchOpen() ? 0 : safeArea().bottom;
   return MOBILE_NAV_HEIGHT + BAR_BELOW + below + BAR_CLEARANCE;
 }
 

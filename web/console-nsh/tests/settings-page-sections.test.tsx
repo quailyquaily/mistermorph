@@ -191,6 +191,71 @@ test("search lists matching settings and opens the one chosen", async () => {
   await app.waitFor("No settings match.");
 });
 
+// Settings' search is Topics' and Contacts' field (IndexSearch; its look and metrics are in
+// tests/index-search.test.tsx), keeping its own keys: Enter opens the first result, Escape and the
+// clear button empty it, and the clear button gives the focus back to the field.
+for (const viewport of [
+  { name: "desktop", width: 1280, height: 800 },
+  { name: "phone", width: 390, height: 844 },
+] as const) {
+  test(`on a ${viewport.name} the search is the shared index search and keeps Enter, Escape and clear`, async () => {
+    const { app } = await openConsole({
+      location: "/e/default/settings",
+      width: viewport.width,
+      height: viewport.height,
+      api: { ...PERSONA, "GET /settings/console": { body: consoleSettings() } },
+    });
+    await app.waitFor("id:settings-search-box");
+    await app.waitFor("id:settings-section-security");
+    // One field, named by its placeholder, in the shared box, with no clear button while empty.
+    expect(app.count("id:settings-search")).toBe(1);
+    expect(app.shows("id:settings-search-box >> id:settings-search")).toBe(true);
+    expect(app.shows("text:Search settings")).toBe(true);
+    expect(app.shows("label:Search settings")).toBe(true);
+    expect(app.shows("id:settings-search-clear")).toBe(false);
+
+    // Spaces alone are no search: the sections stay.
+    await app.type("id:settings-search", "   ");
+    expect(app.shows("id:settings-search-results")).toBe(false);
+    expect(app.shows("id:settings-section-security")).toBe(true);
+    await app.clear("id:settings-search");
+
+    // Escape empties it while it has the focus and holds text.
+    await app.type("id:settings-search", "private ip");
+    await app.waitFor("id:settings-search-results");
+    expect(app.shows("id:settings-section-security")).toBe(false);
+    await app.keyboard.press("escape");
+    await app.waitUntil(() => app.value("id:settings-search") === "");
+    await app.waitFor("id:settings-section-security");
+
+    // Enter with no match opens nothing (and, as a one-line field does, lets go of the focus).
+    await app.type("id:settings-search", "zzzz no such setting");
+    await app.waitFor("No settings match.");
+    await app.keyboard.press("enter");
+    expect(app.shows("id:settings-security")).toBe(false);
+    expect(app.shows("No settings match.")).toBe(true);
+    await app.keyboard.press("q");
+    expect(app.value("id:settings-search")).toBe("zzzz no such setting");
+
+    // The clear button (named as before) empties the field and gives it the focus back.
+    expect(app.shows("label:Clear filter")).toBe(true);
+    await app.press("id:settings-search-clear");
+    await app.waitUntil(() => app.value("id:settings-search") === "");
+    await app.waitFor("id:settings-search-results", { state: "gone" });
+    await app.waitFor("id:settings-section-security");
+    await app.keyboard.press("p");
+    await app.waitUntil(() => app.value("id:settings-search") === "p");
+
+    // Enter opens the first result.
+    await app.clear("id:settings-search");
+    await app.type("id:settings-search", "private ip");
+    await app.waitFor("role:option[Deny Private IPs]");
+    await app.keyboard.press("enter");
+    await app.waitFor("id:settings-security");
+    await app.waitFor("id:settings-guard-deny_private_ips");
+  });
+}
+
 test("a save that needs a restart shows the banner, and Restart now restarts", async () => {
   let restarted = false;
   const { app } = await openConsole({

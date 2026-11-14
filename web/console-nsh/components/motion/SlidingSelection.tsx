@@ -31,8 +31,10 @@ export interface Box {
 export interface SlidingSelection {
   /** `onLayout` of the item `id`: `<Row onLayout={sel.track(id)} />`. */
   track(id: string): (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
-  /** Reports the item's box yourself (in the highlight's parent), e.g. a virtualized row by index. */
-  place(id: string, box: Box): void;
+  /** Reports the item's box yourself (in the highlight's parent), e.g. a virtualized row by index.
+   *  `glide`: the item itself is moving there (a grid making room), so the highlight glides along
+   *  with it, over `glide` ms, instead of following at once. */
+  place(id: string, box: Box, glide?: number): void;
   /** Forgets an item that is gone. */
   forget(id: string): void;
   /** The highlight: the first child of the items' parent; style its fill and corners with `class`. */
@@ -96,7 +98,7 @@ export function createSlidingSelection(
     sy.set(1);
   };
 
-  const update = () => {
+  const update = (follow = 0) => {
     if (disposed) return;
     const id = untracked(selected) || null;
     const box = id ? boxes.get(id) || null : null;
@@ -110,8 +112,8 @@ export function createSlidingSelection(
     if (id === shownId && sameBox(restBox, box)) return;
     const now = performance.now();
     const from = visibleBox(now);
-    const duration = motionMs(options.duration ?? MOTION_SLOW);
-    const glides = !!from && duration > 0 && (id !== shownId || glide !== null);
+    const duration = motionMs(follow || (options.duration ?? MOTION_SLOW));
+    const glides = !!from && duration > 0 && (id !== shownId || glide !== null || follow > 0);
     restBox = box;
     shownId = id;
     if (!glides || !from) {
@@ -136,17 +138,17 @@ export function createSlidingSelection(
 
   effect(() => {
     void selected();
-    untracked(update);
+    untracked(() => update());
   });
   cleanup(() => {
     disposed = true;
   });
 
-  const place = (id: string, box: Box) => {
+  const place = (id: string, box: Box, follow = 0) => {
     const known = boxes.get(id);
     if (sameBox(known || null, box)) return;
     boxes.set(id, box);
-    if (id === (untracked(selected) || null)) update();
+    if (id === (untracked(selected) || null)) update(follow);
   };
 
   return {

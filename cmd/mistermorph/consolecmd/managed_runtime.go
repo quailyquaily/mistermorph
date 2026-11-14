@@ -82,6 +82,8 @@ type managedPreparedRuntime struct {
 	kind    string
 	run     func(context.Context) error
 	cleanup func()
+	// tasks is the channel's task store, which the Console's overview counts running tasks in.
+	tasks daemonruntime.TaskReader
 }
 
 func normalizeManagedRuntimeKinds(raw []string) ([]string, error) {
@@ -178,7 +180,7 @@ func (s *managedRuntimeSupervisor) prepareReloadLocked(reader *viper.Viper) (*ma
 			s.logger().Warn("managed_runtime_channel_disabled", "channel", kind, "missing", field, "hint", hint)
 			continue
 		}
-		run, cleanup, err := s.buildRuntime(kind, reader)
+		run, cleanup, tasks, err := s.buildRuntime(kind, reader)
 		if err != nil {
 			prepared.cleanup()
 			return nil, err
@@ -194,6 +196,7 @@ func (s *managedRuntimeSupervisor) prepareReloadLocked(reader *viper.Viper) (*ma
 			kind:    kind,
 			run:     run,
 			cleanup: cleanup,
+			tasks:   tasks,
 		})
 	}
 	return prepared, nil
@@ -269,6 +272,7 @@ func (s *managedRuntimeSupervisor) applyPrepared(prepared *managedRuntimePrepare
 	s.mu.Unlock()
 	for _, child := range children {
 		if localRuntime != nil {
+			localRuntime.SetManagedRuntimeTasks(child.kind, child.tasks)
 			localRuntime.SetManagedRuntimeRunning(child.kind, true)
 		}
 		go func(child managedPreparedRuntime) {
@@ -332,20 +336,20 @@ func stopManagedRuntimeExecution(active *managedRuntimeExecution, localRuntime *
 	}
 }
 
-func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper) (func(context.Context) error, func(), error) {
+func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper) (func(context.Context) error, func(), daemonruntime.TaskReader, error) {
 	if reader == nil {
-		return nil, nil, fmt.Errorf("managed runtime config reader is required")
+		return nil, nil, nil, fmt.Errorf("managed runtime config reader is required")
 	}
 	runtimeValues, err := llmutil.RuntimeValuesFromReader(reader)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	switch kind {
 	case managedRuntimeTelegram:
 		botToken := strings.TrimSpace(reader.GetString("telegram.bot_token"))
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		cfg := channelopts.TelegramConfigFromReader(reader)
 		runOpts, err := channelopts.BuildTelegramRunOptions(cfg, channelopts.TelegramInput{
@@ -355,7 +359,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		})
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runOpts.Server.Listen = ""
 		runOpts.Server.AuthToken = ""
@@ -363,7 +367,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.Server.MaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := telegramruntime.Dependencies{
 			CommonDependencies: deps,
@@ -376,13 +380,13 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		}
 		return func(ctx context.Context) error {
 			return telegramruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeSlack:
 		botToken := strings.TrimSpace(reader.GetString("slack.bot_token"))
 		appToken := strings.TrimSpace(reader.GetString("slack.app_token"))
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		cfg := channelopts.SlackConfigFromReader(reader)
 		runOpts := channelopts.BuildSlackRunOptions(cfg, channelopts.SlackInput{
@@ -397,7 +401,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		taskStore, err := newManagedRuntimeTaskStore(kind, runOpts.Server.MaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runOpts.TaskStore = taskStore
 		runtimeDeps := slackruntime.Dependencies{
@@ -411,13 +415,13 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		}
 		return func(ctx context.Context) error {
 			return slackruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeLark:
 		appID := strings.TrimSpace(reader.GetString("lark.app_id"))
 		appSecret := strings.TrimSpace(reader.GetString("lark.app_secret"))
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		cfg := channelopts.LarkConfigFromReader(reader)
 		runOpts := channelopts.BuildLarkRunOptions(cfg, channelopts.LarkInput{
@@ -431,7 +435,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := larkruntime.Dependencies{
 			CommonDependencies: deps,
@@ -444,12 +448,12 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		}
 		return func(ctx context.Context) error {
 			return larkruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeMixin:
 		keystoreFile := pathutil.ResolveConfigRelativePath(reader.GetString("mixin.keystore_file"), reader.GetString("config"))
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		cfg := channelopts.MixinConfigFromReader(reader)
 		runOpts := channelopts.BuildMixinRunOptions(cfg, channelopts.MixinInput{
@@ -466,7 +470,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := mixinruntime.Dependencies{
 			CommonDependencies: deps,
@@ -479,11 +483,11 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		}
 		return func(ctx context.Context) error {
 			return mixinruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeDiscord:
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		cfg := channelopts.DiscordConfigFromReader(reader)
 		runOpts := channelopts.BuildDiscordRunOptions(cfg, channelopts.DiscordInput{
@@ -500,7 +504,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := discordruntime.Dependencies{
 			CommonDependencies: deps,
@@ -513,11 +517,11 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		}
 		return func(ctx context.Context) error {
 			return discordruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeWeChat:
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runOpts := channelopts.BuildWeChatRunOptions(channelopts.WeChatConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
 		runOpts.ServerListen = ""
@@ -526,17 +530,17 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
 		return func(ctx context.Context) error {
 			s.accountDMStatusFunc(kind)(wechatruntime.StatusConnecting)
 			return wechatruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeWhatsApp:
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runOpts := channelopts.BuildWhatsAppRunOptions(channelopts.WhatsAppConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
 		runOpts.ServerListen = ""
@@ -545,17 +549,17 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
 		return func(ctx context.Context) error {
 			s.accountDMStatusFunc(kind)(whatsappruntime.StatusConnecting)
 			return whatsappruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeBluesky:
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runOpts := channelopts.BuildBlueskyRunOptions(channelopts.BlueskyConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
 		runOpts.ServerListen = ""
@@ -564,17 +568,17 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
 		return func(ctx context.Context) error {
 			s.accountDMStatusFunc(kind)(blueskyruntime.StatusConnecting)
 			return blueskyruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	case managedRuntimeX:
 		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runOpts := channelopts.BuildXRunOptions(channelopts.XConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
 		runOpts.ServerListen = ""
@@ -583,15 +587,15 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
 		if err != nil {
 			cleanup()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
 		return func(ctx context.Context) error {
 			s.accountDMStatusFunc(kind)(xruntime.StatusConnecting)
 			return xruntime.Run(ctx, runtimeDeps, runOpts)
-		}, cleanup, nil
+		}, cleanup, runOpts.TaskStore, nil
 	default:
-		return nil, nil, fmt.Errorf("unsupported managed runtime %q", kind)
+		return nil, nil, nil, fmt.Errorf("unsupported managed runtime %q", kind)
 	}
 }
 

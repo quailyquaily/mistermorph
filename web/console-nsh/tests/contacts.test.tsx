@@ -21,7 +21,7 @@ function list(items: unknown[]) {
   return { "GET /proxy:/contacts/list": () => ({ body: { items } }) };
 }
 
-test("the index lists contacts by name, filters them, and a pick shows the card with its connections", async () => {
+test("the library shows a card per contact, filters them, and a pick opens the contact with its connections", async () => {
   const { app, calls } = await openConsole({
     location: "/e/default/contacts",
     api: {
@@ -31,11 +31,15 @@ test("the index lists contacts by name, filters them, and a pick shows the card 
     },
   });
   await app.waitFor("id:contact-row:tg:1001");
-  expect(app.shows("text:Telegram · @alice")).toBe(true);
-  // Without a name, the handle is the title and "Unnamed User" moves to the meta line.
-  expect(app.shows("text:U99")).toBe(true);
-  expect(app.shows("text:Slack · Unnamed User")).toBe(true);
-  expect(app.shows("text:No contact selected")).toBe(true);
+  // A card: the name, the kind, and the handle under the channel's logo.
+  expect(app.shows("id:contact-row:tg:1001 >> text:Alice")).toBe(true);
+  expect(app.shows("id:contact-row:tg:1001 >> text:HUMAN")).toBe(true);
+  expect(app.shows("id:contact-row:tg:1001 >> text:@alice")).toBe(true);
+  // Without a name, the handle is the title and "Unnamed User" takes the handle's place.
+  expect(app.shows("id:contact-row:slack:T1:U99 >> text:U99")).toBe(true);
+  expect(app.shows("id:contact-row:slack:T1:U99 >> text:Unnamed User")).toBe(true);
+  // Nothing picked: no panel, the library takes the page.
+  expect(app.shows("id:contact-detail")).toBe(false);
   await app.waitUntil(() => calls.some((call) => call.uri === "/contacts/avatar?contact_id=tg:1001"));
 
   await app.type("id:contacts-filter", "helper");
@@ -46,7 +50,7 @@ test("the index lists contacts by name, filters them, and a pick shows the card 
 
   await app.press("id:contact-row:tg:1001");
   await app.waitFor("id:contact-detail");
-  expect(app.shows("text:Human · Telegram")).toBe(true);
+  expect(app.shows("text:HUMAN · TELEGRAM")).toBe(true);
   expect(app.shows("text:@alice")).toBe(true);
   // "2 hours ago" where Intl.RelativeTimeFormat exists (browsers); the full time on QuickJS.
   expect(app.shows("text:No interactions yet")).toBe(false);
@@ -66,7 +70,7 @@ test("an Agent Link contact shows its agent's avatar and no owner switch", async
   });
   await app.press("id:contact-row:" + BOT.contact_id);
   await app.waitFor("id:contact-detail");
-  expect(app.shows("text:Agent · Console")).toBe(true);
+  expect(app.shows("text:AGENT · CONSOLE")).toBe(true);
   expect(app.shows("id:contact-owner")).toBe(false);
   expect(app.shows("text:Primary channel")).toBe(true);
   await app.waitFor("text:The agent has no memories about this contact.");
@@ -179,7 +183,7 @@ test("a contact is deleted through its menu; a failed delete is reported", async
   await app.press("id:dialog-action-delete");
   await app.waitUntil(() => deleted === "tg:1001");
   await app.waitFor("text:No contacts");
-  expect(app.shows("text:No contact selected")).toBe(true);
+  await app.waitFor("id:contact-detail", { state: "gone" });
 });
 
 test("Open in Memories goes to the contact's memories", async () => {
@@ -210,11 +214,92 @@ test("on a phone the index and the card take turns", async () => {
     api: { ...list([{ ...ALICE, avatar_url: "" }]), "GET /proxy:/memories": { body: { items: [] } } },
   });
   await app.waitFor("id:contact-row:tg:1001");
-  expect(app.shows("text:No contact selected")).toBe(false);
   await app.press("id:contact-row:tg:1001");
   await app.waitFor("id:contact-detail");
   // The card slides in over the index, which goes once the slide has ended.
   await app.waitFor("id:contacts-index", { state: "gone" });
   await app.press("id:mobile-back");
   await app.waitFor("id:contacts-index");
+});
+
+test("on a desktop the panel opens beside the library and closes with its close button and Escape", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/contacts",
+    api: { ...list([{ ...ALICE, avatar_url: "" }, BOT]), "GET /proxy:/memories": { body: { items: [] } } },
+  });
+  await app.press("id:contact-row:tg:1001");
+  await app.waitFor("id:contact-detail");
+  // The library stays beside it, the picked card selected.
+  expect(app.shows("id:contacts-list")).toBe(true);
+  expect(app.shows("id:contact-row:" + BOT.contact_id)).toBe(true);
+  await app.press("id:contact-close");
+  await app.waitFor("id:contact-detail", { state: "gone" });
+
+  await app.press("id:contact-row:" + BOT.contact_id);
+  await app.waitFor("text:AGENT · CONSOLE");
+  // Another card while it is open: the panel shows that contact.
+  await app.press("id:contact-row:tg:1001");
+  await app.waitFor("text:HUMAN · TELEGRAM");
+  await app.keyboard.press("escape");
+  await app.waitFor("id:contact-detail", { state: "gone" });
+});
+
+test("on a desktop the arrows walk the cards and Enter opens one; with the panel open they open the next", async () => {
+  const CAROL = { ...ALICE, contact_id: "tg:1003", nickname: "Carol", tg_username: "carol", avatar_url: "" };
+  const { app } = await openConsole({
+    location: "/e/default/contacts",
+    api: { ...list([{ ...ALICE, avatar_url: "" }, BOT, CAROL]), "GET /proxy:/memories": { body: { items: [] } } },
+  });
+  await app.waitFor("id:contact-row:tg:1003");
+  // The first arrow stands on the first card; Enter opens it.
+  await app.keyboard.press("right");
+  expect(app.shows("id:contact-detail")).toBe(false);
+  await app.keyboard.press("enter");
+  await app.waitFor("text:HUMAN · TELEGRAM");
+  await app.waitFor("text:@alice");
+  // Open, the arrows open the card they move to.
+  await app.keyboard.press("right");
+  await app.waitFor("text:AGENT · CONSOLE");
+  await app.keyboard.press("right");
+  await app.waitFor("text:@carol");
+  // Past the last card it stays there.
+  await app.keyboard.press("right");
+  await app.wait(100);
+  expect(app.shows("text:@carol")).toBe(true);
+  await app.keyboard.press("left");
+  await app.waitFor("text:AGENT · CONSOLE");
+});
+
+test("Send message hands the message to the agent as a task and opens its topic; a refusal stays in the dialog", async () => {
+  let task = "";
+  let refuse = true;
+  const { app } = await openConsole({
+    location: "/e/default/contacts",
+    api: {
+      ...list([{ ...ALICE, avatar_url: "" }]),
+      "GET /proxy:/memories": { body: { items: [] } },
+      "POST /proxy:/tasks": (request) => {
+        task = request.json.task;
+        return refuse ? { status: 500, body: { error: "queue full" } } : { body: { topic_id: "topic-send" } };
+      },
+    },
+  });
+  await app.press("id:contact-row:tg:1001");
+  await app.press("id:contact-send");
+  await app.waitFor("id:contact-send-text");
+  // Nothing to send yet.
+  expect(app.enabled("id:contact-send-submit")).toBe(false);
+  await app.type("id:contact-send-text", "See you at 6");
+  await app.press("id:contact-send-submit");
+  await app.waitFor("text:queue full");
+  // The task names the contact and carries the message word for word, for contacts_send.
+  expect(task).toContain("contact_id: tg:1001");
+  expect(task).toContain("$contacts_send");
+  expect(task.endsWith("\n\nSee you at 6")).toBe(true);
+  expect(app.shows("id:contact-send-text")).toBe(true);
+
+  refuse = false;
+  await app.press("id:contact-send-submit");
+  await app.waitFor("id:contact-send-text", { state: "gone" });
+  await app.waitFor("id:contacts-page", { state: "gone" });
 });

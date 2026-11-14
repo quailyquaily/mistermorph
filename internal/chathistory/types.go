@@ -15,6 +15,8 @@ const (
 	KindOutboundAgent    = "outbound_agent"
 	KindOutboundReaction = "outbound_reaction"
 	KindSystem           = "system"
+	// KindToolRecord is a trimmed record of the tool calls the agent made in a finished turn.
+	KindToolRecord = "tool_record"
 )
 
 type ChatHistoryItem struct {

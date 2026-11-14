@@ -17,6 +17,16 @@ export const MOTION_HIGHLIGHT = 1600;
 export const MOTION_EASE: [number, number, number, number] = [0.2, 0, 0, 1];
 /** The same curve as a CSS timing function, for `transitionTimingFunction`. */
 export const MOTION_EASE_CSS = "cubic-bezier(0.2, 0, 0, 1)" as const;
+/** cubic-bezier(0.4, 0, 1, 1): slow start, leaving fast, for something going away (a dialog
+ *  closing, a sheet sliding out): it gets out of the way instead of lingering at the end. */
+export const MOTION_EXIT_EASE: [number, number, number, number] = [0.4, 0, 1, 1];
+/** A dialog going out: quicker than its MOTION_NORMAL settle in. */
+export const MOTION_EXIT = 140;
+/** A sheet sliding up from the screen's bottom edge (the Vue console's 280ms): the phone's More
+ *  and agent sheets, and dialogs on phones. */
+export const MOTION_SHEET_IN = 280;
+/** The same sheet sliding back down, on MOTION_EXIT_EASE (the Vue console's 200ms). */
+export const MOTION_SHEET_OUT = 200;
 
 /** `ms`, or 0 when the user asks for less motion. */
 export function motionMs(ms: number) {

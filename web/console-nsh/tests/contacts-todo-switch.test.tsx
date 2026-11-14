@@ -4,15 +4,15 @@
 // out. The phone's contact index once passed its List a function `empty` slot that read the
 // store: nsh 0.4.0 never disposes that slot's scope, so every page that went away left one behind,
 // re-rendering into the dead list on each load, and the 10th round trip hung the app for good (here,
-// headless; 14 in the report). Both pages must stay usable through 50 round trips: with rows, with
-// nothing, slow and failing.
+// headless; 14 in the report). Both pages must stay usable through 15 round trips, past both
+// counts: with rows, with nothing, slow and failing. tests/list-empty-slot.test.tsx holds the leak itself.
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import { type ApiHandler, MOBILE_LOCATION_KEY, openConsole } from "./harness";
 
-const CYCLES = 50;
-/** 50 round trips take about a minute headless, over nsh's 30 s default. */
-const TIMEOUT = 240_000;
+const CYCLES = 15;
+/** 15 round trips with a task and a contact opened in each take about 45 s headless, over nsh's 30 s default. */
+const TIMEOUT = 120_000;
 const NOW = new Date().toISOString();
 
 const CONTACTS = Array.from({ length: 12 }, (_, i) => ({

@@ -55,12 +55,29 @@ func (c *wsConn) ReadFrame(ctx context.Context) (Frame, error) {
 		return Frame{}, err
 	}
 	_ = c.conn.SetReadDeadline(time.Now().Add(idleTimeout))
-	var frame Frame
-	if err := c.conn.ReadJSON(&frame); err != nil {
+	kind, data, err := c.conn.ReadMessage()
+	if err != nil {
 		if ctx.Err() != nil {
 			return Frame{}, ctx.Err()
 		}
 		return Frame{}, err
+	}
+	if kind == websocket.BinaryMessage {
+		// A binary frame is a file chunk; one that does not parse has no Chunk and is refused by
+		// whoever reads it.
+		chunk, err := decodeChunk(data)
+		if err != nil {
+			return Frame{Type: FrameChunk, Reason: err.Error()}, nil
+		}
+		return Frame{Type: FrameChunk, Chunk: chunk}, nil
+	}
+	var frame Frame
+	if err := json.Unmarshal(data, &frame); err != nil {
+		return Frame{}, err
+	}
+	if frame.Type == FrameChunk {
+		// Chunks travel only as binary frames.
+		frame.Chunk = nil
 	}
 	return frame, nil
 }
@@ -69,19 +86,31 @@ func (c *wsConn) WriteFrame(ctx context.Context, frame Frame) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	data, err := json.Marshal(frame)
+	kind := websocket.TextMessage
+	var data []byte
+	var err error
+	if frame.Type == FrameChunk {
+		if frame.Chunk == nil {
+			return fmt.Errorf("agentlink: chunk frame without a chunk")
+		}
+		kind = websocket.BinaryMessage
+		data, err = encodeChunk(frame.Chunk)
+	} else {
+		data, err = json.Marshal(frame)
+	}
 	if err != nil {
 		return err
 	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	// A frame with a file may take longer than writeTimeout to cross a slow link.
+	// An inline file may take longer than writeTimeout to cross a slow link; a chunk is small
+	// enough for the fixed deadline.
 	deadline := time.Now().Add(writeTimeout + time.Duration(len(data)/slowLinkBytesPerSecond)*time.Second)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
 	_ = c.conn.SetWriteDeadline(deadline)
-	return c.conn.WriteMessage(websocket.TextMessage, data)
+	return c.conn.WriteMessage(kind, data)
 }
 
 func (c *wsConn) Close() error {
@@ -128,7 +157,8 @@ func Dial(ctx context.Context, baseURL, authToken string) (Conn, error) {
 	return nil, fmt.Errorf("agent link http %d: %s", resp.StatusCode, message)
 }
 
-// pipeConn is one end of an in-process connection.
+// pipeConn is one end of an in-process connection. A chunk frame passes as it is; its data is not
+// copied, so a writer must not change it afterwards.
 type pipeConn struct {
 	in    <-chan Frame
 	out   chan<- Frame

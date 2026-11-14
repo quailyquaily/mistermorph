@@ -330,6 +330,10 @@ test("the workbench's height: its share of the room, at least its head and a few
   expect(workbenchHeight(500, 0.9)).toBe(300);
   // A short room keeps the sheet's least over the room above.
   expect(workbenchHeight(300, 0.5)).toBe(140);
+  // On a phone the system's bottom inset inside the sheet adds to its least, never to its share.
+  expect(workbenchHeight(800, 0.5, 34)).toBe(400);
+  expect(workbenchHeight(800, 0.05, 34)).toBe(174);
+  expect(workbenchHeight(300, 0.5, 48)).toBe(188);
   // What is kept stays between a fifth and four fifths; anything unreadable is half.
   expect(clampWorkbenchShare(0.05)).toBe(0.2);
   expect(clampWorkbenchShare(0.95)).toBe(0.8);

@@ -1,6 +1,6 @@
-// The search under the head of Topics and Contacts is one field (IndexSearch in
+// The search under the head of Topics, Contacts and Settings is one field (IndexSearch in
 // components/knowledge/parts.tsx): the same type, magnifier, clear button, size, gutters and place
-// under the 57pt head on both pages, on a desktop and on a phone, whatever the list shows.
+// under the 57pt head on all three pages, on a desktop and on a phone, whatever the list shows.
 import { expect, open, test } from "nsh/test";
 import { openConsole } from "./harness";
 
@@ -30,6 +30,18 @@ const PAGES = [
     search: "contacts-filter",
     placeholder: "Quick filter",
     api: { "GET /proxy:/contacts/list": { body: { items: [ALICE] } } },
+  },
+  {
+    name: "Settings",
+    location: "/e/default/settings",
+    search: "settings-search",
+    placeholder: "Search settings",
+    api: {
+      "GET /proxy:/persona/identity": {
+        body: { exists: true, identity: { name: "Morph", name_alts: [], creature: "", vibe: "", emoji: "", soul: "# Soul", extra: {} } },
+      },
+      "GET /proxy/download:/persona/avatar": { status: 404, body: { error: "not found" } },
+    },
   },
 ] as const;
 
