@@ -53,3 +53,15 @@ Installs: none; no dependency manifests, lockfiles or configuration keys changed
 Tests: configured `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed independently. `nsh check` passed. Full `nsh test --web-host tests/noHost.js`: 927 passed, 1 failed out of 928. Failing test: `chat-composer-drum.test.tsx:53: android typing turns the drum to Send — expected 0 to be 1`. Focused retry reproduced it once, then passed all 6 tests twice. The unchanged base 6fc9d38c reproduced the same linux/android assertion in 1 of 6 focused runs; this is a pre-existing intermittent failure, deliberately not fixed on this branch. Review must see the non-green full suite.
 
 UI checking: coder inspected headless Chrome screenshots/computed radii, containment and interactions at 390 and 1280px. Real Android hardware/emulator, actual native Gallery/document selection, real phone browser and desktop app window were NOT checked. The preview dialog/images were exercised in headless tests, not visually inspected in Chrome. Owner should check real phone pickers and preview rendering.
+
+## factory · review · 2026-11-14 09:12
+head: dcd7ad9f6bc006d6ded1b2a36da2b8d0331614c0
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/chat-composer-drum.test.tsx:53: required full nsh suite fails intermittently after clearing the composer (expected drum count 1, actual 0). Obtain a green required suite and address the timing-sensitive test independently of attachment behavior; do not change unrelated production behavior to mask it. This is a pre-existing test-gate failure, not an introduced FT110 code defect.
+
+Validation: Claude Code reviewed origin/master...HEAD (master snapshot 75eec416bc30834943e2297cb4d6cfe83299bfce); no introduced P0/P1/P2/P3 code defects found. Configured gofmt/vet/go test gate passed (exit 0). nsh 0.5.0 check passed. Full nsh test --web-host tests/noHost.js failed: 927 passed, 1 failed of 928; linux drum assertion at line 53 expected 0 to be 1. Focused reruns failed 2/8 on HEAD (android/linux) and 3/8 on unchanged base 6fc9d38c (android), confirming pre-existing intermittency. All 11 new attachment tests passed. Per factory policy a failing required test is P1 even when pre-existing.
+
+Installs: none. No worktree changes or commits by reviewers. Real Android Gallery/document pickers, real mobile browsers and desktop app window were not checked; preview rendering was not visually inspected. Headless tests do not prove native picker behavior or real-device rendering.
+
+Moved review/ → new/ at round 1 of 3 for the next fix round. No linked GitHub issue or PR in the owner request; no GitHub review comment required.
