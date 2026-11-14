@@ -275,9 +275,9 @@ Headless tests prove behaviour, not the look.
 - Headless on the system clock, a step returns once its native animations ended and no batch came
   for 100 ms, without waiting for what the animation's promise does next: whether the render that
   follows (a view that shows only while the animation runs) came before the next `count` was a race
-  (the drum test failed about one run in three). Test such a view by holding the promise
-  (`hold-turns` in `tests/fixtures/voice-control-app.tsx`), not by counting after the step; on a
-  manual clock, steps finish the animation and its follow-up both, so the view is never seen.
+  (the composer drum tests failed about one run in three, and were removed). Test such a view by
+  holding the animation's promise in the fixture, not by counting after the step; on a manual
+  clock, steps finish the animation and its follow-up both, so the view is never seen.
 - A dialog stays drawn while it goes out, and its text field keeps the focus that long: keys typed
   then landed in the closed dialog's field, and a phone's keyboard stayed up. A dialog with a field
   blurs it and lowers the keyboard as it closes, and focuses it as it opens, selecting its text

@@ -362,6 +362,33 @@ models:
 
   # Gemini
   - provider: gemini
+    model: gemini-4-carbon
+    aliases:
+      - google/gemini-4-carbon
+      - models/gemini-4-carbon
+    context_window_tokens: 1048576
+    sources:
+      - url: https://aistudio.google.com/docs/models/gemini-4-carbon
+        checked_at: "2026-11-15"
+  - provider: gemini
+    model: gemini-4-argon
+    aliases:
+      - google/gemini-4-argon
+      - models/gemini-4-argon
+    context_window_tokens: 1048576
+    sources:
+      - url: https://aistudio.google.com/docs/models/gemini-4-argon
+        checked_at: "2026-11-15"
+  - provider: gemini
+    model: gemini-4-hydrogen
+    aliases:
+      - google/gemini-4-hydrogen
+      - models/gemini-4-hydrogen
+    context_window_tokens: 1048576
+    sources:
+      - url: https://aistudio.google.com/docs/models/gemini-4-hydrogen
+        checked_at: "2026-11-15"
+  - provider: gemini
     model: gemini-3.8-flash
     aliases:
       - google/gemini-3.8-flash

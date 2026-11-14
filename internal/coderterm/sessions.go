@@ -36,6 +36,9 @@ type Request struct {
 	BypassApprovals bool
 	Ask             func(context.Context, Question) (Answer, error)
 	Progress        func(string)
+	// Note hears what the CLI says while it works: the messages it writes between its tool calls,
+	// before its reply. A long wait then shows what it waits for.
+	Note func(string)
 	// Process reports the terminal PID, including when reusing a session.
 	Process func(int)
 	// Status hears, after each task, the status JSON the CLI last gave its status line (Claude

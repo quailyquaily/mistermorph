@@ -304,8 +304,8 @@ test("with all skills off, a skill's note says where to turn them on, and the he
     location: "/e/default/skills?skill=weather",
     api: { ...BASE, "GET /settings/agent/skills": { body: catalog([skill()], { enabled: false }) } },
   });
-  await app.waitFor("text:All skills are off. Turn them on in Settings, under Tools.");
-  // The head keeps the store and add buttons; Load skills is a setting now (Settings › Tools).
+  await app.waitFor("text:All skills are off. Turn them on in Settings, under SKILLs & MCP.");
+  // The head keeps the store and add buttons; Load skills is a setting now (Settings › SKILLs & MCP).
   expect(app.shows("id:skills-store")).toBe(true);
   expect(app.shows("id:skills-add")).toBe(true);
   expect(app.shows("id:skills-more")).toBe(false);

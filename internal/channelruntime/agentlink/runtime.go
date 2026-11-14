@@ -231,8 +231,11 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 		taskCtx := audience.NewContext(lease.Context, audience.Contact(j.contactID()))
 		if !j.isReply() {
 			// agent_send to the asking agent with a file attaches it to the answer.
-			replyFiles = link.NewReplyFiles(j.Message.From)
+			replyFiles = link.NewReplyFiles(j.Message.From, node.ReplyFilesDir())
 			taskCtx = link.WithReplyFiles(taskCtx, replyFiles)
+			// The copies of the answer's files go once the answer is queued (with copies of its
+			// own) or the task ends without one.
+			defer replyFiles.Close()
 		}
 		result, runErr := runTask(taskCtx, bundle.TaskRuntime, logger, j, prior, lease.SteerQueue)
 		lease.Finish()

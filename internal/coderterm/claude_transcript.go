@@ -13,8 +13,18 @@ import (
 
 var pastedContentOpen = regexp.MustCompile(`<pasted_content id="([^"]*)">`)
 
-// taskNotificationToolUse finds, in a <task-notification>, the tool call whose background work ended.
-var taskNotificationToolUse = regexp.MustCompile(`<task-notification>[\s\S]*?<tool-use-id>([^<]+)</tool-use-id>`)
+// A <task-notification> reports background work by its task ID: an agent's ID, a command's
+// background task ID. A later report of the same agent carries no tool call's ID, so the task ID
+// is the one to go by.
+var (
+	taskNotification   = regexp.MustCompile(`<task-notification>[\s\S]*?</task-notification>`)
+	taskNotificationID = regexp.MustCompile(`<task-id>([^<]+)</task-id>`)
+)
+
+// An agent that stops while work it put in the background still runs reports at once, with an
+// interim result, and reports again when it has finished. Claude Code marks the first report only
+// in its wording.
+var taskNotificationInterim = []string{"is waiting on its own background work", "background work of its own still running"}
 
 // unwrapPastedContent undoes the wrapper newer Claude Code versions record around pasted
 // input: "\n\n<pasted_content id=\"x\">\n…\n</pasted_content id=\"x\">\n".
@@ -50,17 +60,35 @@ type claudeTranscript struct {
 	messageID       string
 	complete        bool
 	failure         string
-	// background holds, by tool call, the work this turn left running that Claude Code wakes up
+	// background holds, by task ID, the work this turn left running that Claude Code wakes up
 	// for when it ends: agents it launched, and commands it moved to the background after they ran
 	// past their timeout. Claude ends its turn while they run and takes a new one when each reports,
 	// so the task is not done until they have. ended holds the reports seen before their launch.
 	background, ended map[string]bool
+	// notes holds what Claude said while working, until it is taken: the text beside a tool call,
+	// and a reply that turned out not to be the last (its turn ended and another followed).
+	notes []string
+	// lastEnd is the text of the message a turn last ended on, while it is the latest message.
+	lastEnd string
+}
+
+func (r *claudeTranscript) takeNotes() []string {
+	notes := r.notes
+	r.notes = nil
+	return notes
+}
+
+func (r *claudeTranscript) note(text string) {
+	if text = trimNote(text); text != "" {
+		r.notes = append(r.notes, text)
+	}
 }
 
 // backgroundLaunch is what a tool result records when its work goes on in the background.
 type backgroundLaunch struct {
 	IsAsync          bool   `json:"isAsync"`          // an agent: status "async_launched"
-	BackgroundTaskID string `json:"backgroundTaskId"` // a command
+	AgentID          string `json:"agentId"`          // its task ID
+	BackgroundTaskID string `json:"backgroundTaskId"` // a command, and its task ID
 	TimedOutAfterMs  int64  `json:"timedOutAfterMs"`  // moved there after its timeout
 }
 
@@ -70,15 +98,33 @@ func (b backgroundLaunch) waitsFor() bool {
 	return b.IsAsync || (b.BackgroundTaskID != "" && b.TimedOutAfterMs > 0)
 }
 
+// taskID is the ID its task notifications carry.
+func (b backgroundLaunch) taskID() string {
+	if b.IsAsync {
+		return b.AgentID
+	}
+	return b.BackgroundTaskID
+}
+
 // noteEnded takes the background work a task notification reports as ended.
 func (r *claudeTranscript) noteEnded(text string) {
-	for _, m := range taskNotificationToolUse.FindAllStringSubmatch(text, -1) {
+	for _, note := range taskNotification.FindAllString(text, -1) {
+		m := taskNotificationID.FindStringSubmatch(note)
+		if m == nil {
+			continue
+		}
 		id := strings.TrimSpace(m[1])
+		interim := false
+		for _, mark := range taskNotificationInterim {
+			interim = interim || strings.Contains(note, mark)
+		}
 		if r.background[id] {
-			delete(r.background, id)
+			if !interim {
+				delete(r.background, id)
+			}
 			// Claude takes a turn for the report, so a turn that ended before it is not the last.
 			r.complete = false
-		} else if r.user != "" {
+		} else if r.user != "" && !interim {
 			if r.ended == nil {
 				r.ended = map[string]bool{}
 			}
@@ -87,12 +133,16 @@ func (r *claudeTranscript) noteEnded(text string) {
 	}
 }
 
-func (r *claudeTranscript) noteLaunched(id string, result json.RawMessage) {
-	if id == "" || len(result) == 0 || result[0] != '{' {
+func (r *claudeTranscript) noteLaunched(result json.RawMessage) {
+	if len(result) == 0 || result[0] != '{' {
 		return
 	}
 	var launch backgroundLaunch
-	if json.Unmarshal(result, &launch) != nil || !launch.waitsFor() || r.ended[id] {
+	if json.Unmarshal(result, &launch) != nil || !launch.waitsFor() {
+		return
+	}
+	id := launch.taskID()
+	if id == "" || r.ended[id] {
 		return
 	}
 	if r.background == nil {
@@ -164,9 +214,8 @@ func (r *claudeTranscript) read() error {
 			}
 		} else {
 			var blocks []struct {
-				Type      string `json:"type"`
-				Text      string `json:"text"`
-				ToolUseID string `json:"tool_use_id"`
+				Type string `json:"type"`
+				Text string `json:"text"`
 			}
 			if err := json.Unmarshal(entry.Message.Content, &blocks); err != nil {
 				return err
@@ -177,7 +226,7 @@ func (r *claudeTranscript) read() error {
 					parts = append(parts, block.Text)
 				}
 				if block.Type == "tool_result" && r.user != "" {
-					r.noteLaunched(block.ToolUseID, entry.ToolUse)
+					r.noteLaunched(entry.ToolUse)
 				}
 			}
 			text = strings.Join(parts, "\n")
@@ -205,16 +254,28 @@ func (r *claudeTranscript) read() error {
 			continue
 		}
 		if entry.Message.ID == "" || entry.Message.ID != r.messageID {
+			if r.lastEnd != "" {
+				// A turn ended on this, and Claude went on (its background work reported).
+				r.note(r.lastEnd)
+			}
 			r.messageID = entry.Message.ID
 			r.assistant = ""
 			r.complete = false
 		}
+		r.lastEnd = ""
 		if text != "" {
 			if r.assistant != "" {
 				r.assistant += "\n\n"
 			}
 			r.assistant += text
+			if entry.Message.StopReason == "tool_use" {
+				// Said on the way to a tool call: never the reply.
+				r.note(text)
+			}
 		}
 		r.complete = entry.Message.StopReason == "end_turn" || entry.Message.StopReason == "stop_sequence"
+		if r.complete {
+			r.lastEnd = r.assistant
+		}
 	}
 }

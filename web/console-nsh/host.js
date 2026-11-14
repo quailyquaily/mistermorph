@@ -508,6 +508,33 @@ export function createFavicon({
   };
 }
 
+/**
+ * What the browser says about the machine, for the Updates card's download (lib/downloadTarget.ts
+ * reads it): the user agent, `navigator.platform`, and where the browser has client hints, its
+ * platform and processor. Nothing is guessed here.
+ */
+export async function clientPlatform(nav = globalThis.navigator) {
+  const hints = nav?.userAgentData;
+  const info = {
+    userAgent: String(nav?.userAgent || ""),
+    platform: String(nav?.platform || ""),
+    uaPlatform: String(hints?.platform || ""),
+    maxTouchPoints: Number(nav?.maxTouchPoints || 0),
+    architecture: "",
+    bitness: "",
+  };
+  if (typeof hints?.getHighEntropyValues === "function") {
+    try {
+      const values = await hints.getHighEntropyValues(["architecture", "bitness"]);
+      info.architecture = String(values?.architecture || "");
+      info.bitness = String(values?.bitness || "");
+    } catch {
+      // The browser keeps them to itself: the architecture stays unknown.
+    }
+  }
+  return info;
+}
+
 export function createHost(player) {
   const notifications = new Map();
   const voice = createVoiceRecorder(player);
@@ -587,6 +614,7 @@ export function createHost(player) {
         return true;
       },
     ],
+    ["morph.client.platform", () => clientPlatform()],
     ["morph.file.pick", (args) => pickFiles(args)],
     ["morph.file.upload", (args) => uploadFile(player, args)],
     ["morph.file.release", ({ id }) => releasePickedFile(id)],

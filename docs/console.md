@@ -201,7 +201,7 @@ Console settings:
 - `PUT /settings/console`
 - `GET /settings/auto-update`
 - `PUT /settings/auto-update`
-- `POST /settings/auto-update/check`
+- `POST /settings/auto-update/check`: the release channel's latest version against this server's. Query: `channel` (an unsaved choice; empty means the build channel). With `download_os` (`android`, `ios`, `darwin`/`macos`, `linux`, `windows`; empty when the client cannot tell) and optionally `download_arch` (a GOARCH name), the answer also has `download`: the release's file for the client's machine, which is not necessarily the server's (a phone, a browser on another computer). Its `status` is `available` (`url`, `name`, `size`, `checksum`, `platform`), `choose` (the OS is known but not the architecture: one file per architecture in `options`) or `unavailable` (`reason`: `unknown_platform`, `not_published`, or `unreachable` when the release's file list could not be read). Android takes `MrMorph-android.apk` from the release's `release.json` (one APK for arm64-v8a and armeabi-v7a); the desktop systems take the update manifest's files. Another platform's file is never offered. The top-level `platform`, `asset_url` and `checksum` stay this server's own; when a `download` was asked for, a server platform missing from the manifest leaves them empty instead of failing the check.
 - `GET /settings/tools/schemas`: built-in tools' descriptions and parameter schemas, with channel tools per channel, for the Tools page.
 - `POST /system/restart` (`{"force": false}`): restarts this Console process; see [Restart](#restart).
 

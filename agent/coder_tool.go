@@ -151,7 +151,8 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 			req.Command, req.Env = command, env
 			output, err := t.deps.RunTerminal(ctx, req)
 			if output != "" {
-				emit(output)
+				// A line of its own: the usage line that may follow starts on the next.
+				emit(strings.TrimRight(output, "\n") + "\n")
 			}
 			return output, err
 		}

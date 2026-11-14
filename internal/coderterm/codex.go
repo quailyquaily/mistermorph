@@ -220,6 +220,7 @@ type codexTurn struct {
 	// woke is the latest turn the parent took by itself after ours; woken is that it has ended.
 	woke     string
 	woken    bool
+	notes    []string  // what Codex said while working, until it is taken
 	answer   string    // the reply of the last turn that gave one: ours, or a later one of the parent's
 	answered time.Time // when the rollout recorded it
 }
@@ -256,6 +257,12 @@ func (r *codexTurn) clock() time.Time {
 		return r.now()
 	}
 	return time.Now()
+}
+
+func (r *codexTurn) takeNotes() []string {
+	notes := r.notes
+	r.notes = nil
+	return notes
 }
 
 func (r *codexTurn) state() (string, bool, error) {
@@ -304,11 +311,39 @@ type codexEntry struct {
 		Error *struct {
 			Message string `json:"message"`
 		} `json:"error"`
-		// sub_agent_activity
-		Kind   string `json:"kind"`
-		Agent  string `json:"agent_thread_id"`
-		AgPath string `json:"agent_path"`
+		codexAgentActivity // sub_agent_activity
+		// item_completed: newer Codex records the activity as an item of type SubAgentActivity.
+		Item struct {
+			Type string `json:"type"`
+			codexAgentActivity
+			// AgentMessage: what Codex says, "commentary" while it works and "final_answer" at the end.
+			Phase   string `json:"phase"`
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"item"`
 	} `json:"payload"`
+}
+
+// codexAgentActivity is what the parent's rollout records as a sub-agent is started, messaged or done.
+type codexAgentActivity struct {
+	Kind   string `json:"kind"`
+	Agent  string `json:"agent_thread_id"`
+	AgPath string `json:"agent_path"`
+}
+
+// agentActivity is the sub-agent activity the line records, in either form Codex writes it:
+// a sub_agent_activity event (0.144), or an item_completed event whose item is one (0.169).
+func (e codexEntry) agentActivity() (codexAgentActivity, bool) {
+	p := e.Payload
+	switch {
+	case e.Type != "event_msg":
+	case p.Type == "sub_agent_activity":
+		return p.codexAgentActivity, true
+	case p.Type == "item_completed" && p.Item.Type == "SubAgentActivity":
+		return p.Item.codexAgentActivity, true
+	}
+	return codexAgentActivity{}, false
 }
 
 func (e codexEntry) at() time.Time {
@@ -349,12 +384,12 @@ func readLines(path string, offset *int64, fn func(codexEntry) error) error {
 	}
 }
 
-// noteAgent takes a sub_agent_activity: "started" and "interacted" (a message or follow-up sent
+// noteAgent takes a sub-agent activity: "started" and "interacted" (a message or follow-up sent
 // to it) mean it may take a turn; "completed" is sent only on a best effort, so the agent's own
 // rollout decides when it is idle.
 func (r *codexTurn) noteAgent(entry codexEntry) {
-	p := entry.Payload
-	if entry.Type != "event_msg" || p.Type != "sub_agent_activity" || p.Agent == "" || p.Agent == r.thread {
+	p, ok := entry.agentActivity()
+	if !ok || p.Agent == "" || p.Agent == r.thread {
 		return
 	}
 	if p.Kind != "started" && p.Kind != "interacted" {
@@ -396,8 +431,18 @@ func (r *codexTurn) read() error {
 				r.turnID = r.started
 			}
 		case r.turnID == "":
-		case entry.Type == "event_msg" && p.Type == "sub_agent_activity":
+		case isAgentActivity(entry):
 			r.noteAgent(entry)
+		case entry.Type == "event_msg" && p.Type == "item_completed" && p.Item.Type == "AgentMessage" && p.Item.Phase == "commentary" &&
+			(p.TurnID == r.turnID || p.TurnID == r.woke):
+			// Said while working, in our turn or one the parent took after it: never the reply.
+			var parts []string
+			for _, block := range p.Item.Content {
+				parts = append(parts, block.Text)
+			}
+			if note := trimNote(strings.Join(parts, "\n")); note != "" {
+				r.notes = append(r.notes, note)
+			}
 		case r.woke != "" && p.TurnID == r.woke && entry.Type == "event_msg" &&
 			(p.Type == "task_complete" || p.Type == "turn_aborted"):
 			// The parent's own turn after ours, woken by its sub-agents: its reply is the newer one.
@@ -468,9 +513,14 @@ func (r *codexTurn) readAgent(a *codexAgent) error {
 				(at.IsZero() || r.answered.IsZero() || at.After(r.answered)) {
 				a.late, a.lateAt = p.Last, at
 			}
-		case "sub_agent_activity":
+		default:
 			r.noteAgent(entry)
 		}
 		return nil
 	})
+}
+
+func isAgentActivity(entry codexEntry) bool {
+	_, ok := entry.agentActivity()
+	return ok
 }

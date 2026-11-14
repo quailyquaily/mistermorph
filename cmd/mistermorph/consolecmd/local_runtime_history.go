@@ -15,7 +15,20 @@ const (
 	consoleHistoryRestoreScanLimit = 200
 )
 
+// loadConsoleTopicHistory is what was said in the topic before job: for the short requests beside
+// a run (the lightweight decision, a steer's reply), which go by the conversation alone.
 func (r *consoleLocalRuntime) loadConsoleTopicHistory(job consoleLocalTaskJob) []chathistory.ChatHistoryItem {
+	return r.consoleTopicHistory(job, false)
+}
+
+// loadConsoleRunHistory is the history a run starts from: the conversation, and with each
+// finished turn a record of the tool calls the agent made in it (chathistory.TaskToolRecord), so
+// it can answer from what its tools returned and does not take an earlier turn for one without calls.
+func (r *consoleLocalRuntime) loadConsoleRunHistory(job consoleLocalTaskJob) []chathistory.ChatHistoryItem {
+	return r.consoleTopicHistory(job, true)
+}
+
+func (r *consoleLocalRuntime) consoleTopicHistory(job consoleLocalTaskJob, toolRecords bool) []chathistory.ChatHistoryItem {
 	if r == nil || r.store == nil {
 		return nil
 	}
@@ -27,7 +40,11 @@ func (r *consoleLocalRuntime) loadConsoleTopicHistory(job consoleLocalTaskJob) [
 		TopicID: topicID,
 		Limit:   consoleHistoryRestoreScanLimit,
 	})
-	return buildConsoleTopicHistory(tasks, job, consoleHistoryRestoreTaskLimit)
+	current := daemonruntime.TaskInfo{ID: job.TaskID, CreatedAt: job.CreatedAt}
+	if toolRecords {
+		return chathistory.BuildTaskHistoryWithToolRecords(tasks, current, consoleHistoryRestoreTaskLimit)
+	}
+	return chathistory.BuildTaskHistory(tasks, current, consoleHistoryRestoreTaskLimit)
 }
 
 func renderConsolePromptMessages(history []chathistory.ChatHistoryItem, job consoleLocalTaskJob, model string, supportsImageParts *bool, imagePaths []string, logger *slog.Logger) ([]llm.Message, *llm.Message, error) {
