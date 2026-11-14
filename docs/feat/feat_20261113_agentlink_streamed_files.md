@@ -45,15 +45,26 @@ frames of 64 KiB, which a relay forwards as they arrive.
 
 | Frame | Direction | Content |
 |---|---|---|
-| `send` / `deliver` | sender → relay → receiver | The message, its `attachments` with `filename`, `media_type`, `size`, `sha256` and `transfer_id`, and no `data`. |
-| `chunk_ack` | receiver → relay → sender | `message_id`, `transfer_id`, `offset`: the bytes of the file the receiver holds. The relay adds the sender's `lease_id`. |
-| binary | sender → relay → receiver | One chunk of one file (layout below). |
-| `transfer_abort` | relay → receiver | `message_id`, `status`, `reason`: the relay dropped the delivery. `rejected`: the receiver removes its partial files; `unreachable`: it keeps them for a resume. |
-| `deliver_result` / `send_result` | receiver → relay → sender | As before; the end of the delivery. |
+| `send` / `deliver` | sender → relay → receiver | The message, its `attachments` with `filename`, `media_type`, `size`, `sha256` and `transfer_id`, and no `data`; and the `attempt`. |
+| `chunk_ack` | receiver → relay → sender | `message_id`, `attempt`, `transfer_id`, `offset`: the bytes of the file the receiver holds. The relay adds the sender's `lease_id`. |
+| binary | sender → relay → receiver | One chunk of one file in one attempt (layout below). |
+| `transfer_abort` | relay → receiver | `message_id`, `attempt`, `status`, `reason`: the relay dropped that attempt. `rejected`: the receiver removes its partial files; `unreachable`: it keeps them for a resume. |
+| `deliver_result` / `send_result` | receiver → relay → sender | As before; the end of the delivery. A streamed delivery's `deliver_result` carries its `attempt`. |
 
 `transfer_id` is 32 lowercase hex characters, random per file, chosen when the message is queued and
 kept with it, so every delivery of the message (after a reconnect or a restart) uses the same IDs.
 A message's files are all inline or all streamed.
+
+`attempt` is 32 lowercase hex characters, random per delivery attempt: the sender picks a new one
+each time it sends (leases) a streamed message, and every frame of that attempt carries it (the
+`deliver`, each chunk, each `chunk_ack`, a `transfer_abort`, the `deliver_result`). A streamed `send`
+or `deliver` without one is refused (`invalid_message`). The relay and the receiver act only on the
+frames of the attempt they currently carry; a chunk, acknowledgement, abort or result of an earlier
+attempt of the same message is dropped silently. This matters when the sender reconnects or its
+lease runs out while frames of the attempt it gave up are still in flight: a slow receiver may still
+be writing and acknowledging chunks the relay forwarded before. Without the attempt, such a stale
+acknowledgement could be taken for the new attempt's starting offset, and the next chunk would then
+be out of order and fail the transfer, removing the partial files the resume was meant to keep.
 
 ### Binary frame layout
 
@@ -64,8 +75,9 @@ All integers big-endian.
 | 0 | 1 | version, `1` |
 | 1 | 1 | kind, `1` = file data |
 | 2 | 16 | transfer ID (the 32 hex characters of `transfer_id` as bytes) |
-| 18 | 8 | offset of the data in the file |
-| 26 | 1..65536 | data |
+| 18 | 16 | attempt ID (the 32 hex characters of `attempt` as bytes) |
+| 34 | 8 | offset of the data in the file |
+| 42 | 1..65536 | data |
 
 Every chunk but a file's last is exactly 64 KiB, so a chunk's length follows from the file's size and
 the offset. A binary frame that does not parse (short, too long, another version or kind) is logged
@@ -75,8 +87,10 @@ and dropped; it is never forwarded.
 
 1. The sender sends `send` with the metadata. Nothing else goes until the receiver answers.
 2. The relay checks the message (below) and forwards `deliver`.
-3. The receiver checks it, reserves room, creates one partial file per attachment and sends one
-   `chunk_ack` per file with the bytes it holds: 0 for a new delivery, more for a resumed one.
+3. The receiver checks it and authorizes the sender, then reserves room, creates one partial file
+   per attachment and sends one `chunk_ack` per file, in the attempt, with the bytes it holds: 0
+   for a new delivery, more for a resumed one. The relay takes the first acknowledgement of each
+   file in the attempt as where that attempt starts.
 4. The sender sends each file in order from that offset, at most 4 unacknowledged chunks per
    connection. The receiver writes each chunk and acknowledges it.
 5. When every file is complete and verified, the receiver publishes the files, hands the message to
@@ -102,8 +116,8 @@ A file of 0 bytes needs no chunk; a message of only empty files completes at ste
 |---|---|
 | Sending tool | As before (recipient, allowed roots after resolving symlinks, regular file), with the limit of the route: 64 MiB per file when it streams or when the peer is not reachable now, 2 MiB otherwise. The error names the limit. |
 | Sending runtime | The file is copied into the queue (`state_dir/agentlink/outbox-files/<message>/<n>`, 0600), checked as it is copied: regular file, size and SHA-256 as the tool saw them. Count, per-file, per-message, route and queue limits before that. |
-| Console relay | The sender is the connected runtime (`from` is overwritten). The metadata is checked before anything is forwarded: count, sizes against the streamed limits, `transfer_id` format and uniqueness, clean filename, normalized media type, SHA-256 format. The target must have announced `files_stream`. Then each chunk: the receiver acknowledged the transfer, the offset is the next one, the length is the expected one (not short, not longer, not past the size), and the sender has at most 4 chunks unacknowledged. A failed check drops the delivery: `send_result` `rejected` `invalid_message` to the sender, `transfer_abort` `rejected` to the receiver. |
-| Receiving runtime | The same metadata checks; addressed to it; a repeat is accepted without taking bytes; the sender authorized (as before; an answer to a message it sent is always taken); room reserved. All before the first acknowledgement. Then each chunk as the relay checks it, the SHA-256 of each file when its last byte arrives. |
+| Console relay | The sender is the connected runtime (`from` is overwritten). The metadata is checked before anything is forwarded: count, sizes against the streamed limits, `transfer_id` format and uniqueness, `attempt` format, clean filename, normalized media type, SHA-256 format. The target must have announced `files_stream`. Chunks and acknowledgements of another attempt are dropped without a check. Then each chunk: the receiver acknowledged the transfer in the attempt, the offset is the next one, the length is the expected one (not short, not longer, not past the size), and the sender has at most 4 chunks unacknowledged. A failed check drops the delivery: `send_result` `rejected` `invalid_message` to the sender, `transfer_abort` `rejected` to the receiver. |
+| Receiving runtime | The same metadata checks; addressed to it; a repeat is accepted without taking bytes; the sender authorized (as before; an answer to a message it sent is always taken); then, and only then, room reserved. All before the first acknowledgement. A delivery refused for any reason never drops another one: a sender that may not send files is refused before room is made, so it cannot make the receiver drop an authorized delivery waiting for a resume. Then each chunk as the relay checks it, the SHA-256 of each file when its last byte arrives. |
 
 ## Receiving
 
@@ -119,8 +133,10 @@ A file of 0 bytes needs no chunk; a message of only empty files completes at ste
 - Room: a streamed delivery reserves its total size before its first byte. At most 4 unfinished
   streamed deliveries (connected or waiting for a resume) and 256 MiB reserved at once; the inbox
   cleanup keeps the reserved room free (it evicts the oldest received files, never a partial file of
-  an unfinished delivery). Over that, the oldest delivery waiting for a resume is dropped; if none
-  waits, the new one is answered `unreachable` and the sender retries.
+  an unfinished delivery). Over that, the oldest deliveries waiting for a resume are dropped, but
+  only for a delivery that passed every other check (authorization included), and only when
+  dropping them makes enough room; otherwise none is dropped, the new one is answered `unreachable`
+  and the sender retries.
 
 ## Resume
 
@@ -129,10 +145,14 @@ A file of 0 bytes needs no chunk; a message of only empty files completes at ste
 - When the sender delivers the message again (its lease ends, or the relay reports the target
   unreachable, and it retries through any Console), the receiver recognizes it by sender and message
   ID, checks that the files' metadata and transfer IDs are the same, moves the delivery to the new
-  connection and acknowledges what it holds. The sender continues from there. The offset comes
-  from the receiver's own count of written bytes; a different file list for the same message is
-  refused (`invalid_message`).
-- Chunks still arriving on the old connection are ignored.
+  connection and attempt and acknowledges what it holds, in the new attempt. The sender continues
+  from there. The offset comes from the receiver's own count of written bytes; a different file list
+  for the same message is refused (`invalid_message`).
+- Chunks still arriving on the old connection, or in the old attempt on the same connection, are
+  ignored, as is a `transfer_abort` of the old attempt; the relay drops the receiver's
+  acknowledgements of the old attempt, so only the new attempt's acknowledgement sets where it
+  starts. A sender may reconnect at once while a slow receiver still works through the old
+  attempt's chunks.
 - Lifetime: an unfinished delivery lives in the receiving runtime's memory. It is dropped (and its
   partial files removed) after 1 hour without progress, when its room is needed for another one, or
   when the runtime stops. After a restart of the receiver the transfer starts again from 0, and the
@@ -185,9 +205,13 @@ carries it) for a future Console view; there is no UI for it yet.
 Files in answers (`ReplyFiles`, `attached_to_reply`), the task note with saved paths,
 untrusted-file handling, `unauthorized` / `files_unsupported` semantics, `queue_ttl` expiry, and the
 tool interface of `agent_send` and `contacts_send`, except the larger limit on streamed routes. A
-file attached to an answer is now named by its path and copied into the queue when the answer is
-sent; it is checked again then, and an answer whose file changed goes without it, with the note
-that says why (as when its files cannot go for another reason).
+file attached to an answer is still taken as it is when it is attached: its bytes are copied then
+(checked against the size and SHA-256 the tool saw, after the allowed-roots and regular-file checks)
+into a private folder of the answer (`state_dir/agentlink/reply-files/reply-<random>/<n>`, `0700`
+and `0600`), not held in memory as before; later changes to the source, or its removal, do not
+change what the answer carries. The answer is queued from that copy (the queue makes its own), and
+the folder is removed once the answer is queued or the task ends without one; a folder a process
+left behind is removed when the node opens again.
 
 ## Benchmark
 
@@ -236,14 +260,23 @@ How to read it:
   (partial files removed, both ends told); a sender past its window; malformed binary frames;
   fallback for a new runtime to an old one, an old runtime to a new one, new runtimes through an
   old Console (no binary frame reaches an old peer), a queued large file finding only a route that
-  does not stream; the queue's own copy against a changed source; limits; the inbound delivery and
+  does not stream; the queue's own copy against a changed source; sends of one message ID at once
+  queued once with their copies intact; limits; the inbound delivery and
   reservation bounds; checks before any byte (unauthorized, no handler, handler rejection); a queue
   entry written by an older version.
+- `internal/agentlink/stream_regression_test.go`: a sender that reconnects at once while a slow
+  receiver (40 ms per chunk) works through the chunks of the attempt it gave up, in process and
+  over real WebSockets, resuming with each byte written once; the relay and the receiver dropping
+  chunks, acknowledgements, aborts and results of an earlier attempt; streamed frames without an
+  attempt refused; an unauthorized sender (and a delivery there is no room for) never dropping a
+  delivery that waits for a resume; answers' file copies against a changed or removed source, and
+  their removal.
 - `internal/agentlink/attachments_test.go`: the inline path as before, with the inline relay bound
   through a peer that does not stream.
 - `tools/builtin/agent_send_files_test.go`, `contacts_send_file_test.go`: a file over the inline
   limit streamed end to end through the tools, the inline limit on a route that does not stream,
-  the chat channels' 20 MiB limit, files attached to an answer.
+  the chat channels' 20 MiB limit, files attached to an answer, sent as attached after their source
+  is overwritten or removed.
 
 Not covered by automated tests: Agent Link between separate machines over a real network (latency,
 real disconnects), Consoles of mixed versions as separate processes (simulated in process by a relay
@@ -251,7 +284,7 @@ and runtimes that act as older ones), and Android.
 
 ## Implementation notes
 
-- `internal/agentlink/stream.go`: constants, binary layout, transfer IDs.
+- `internal/agentlink/stream.go`: constants, binary layout, transfer and attempt IDs.
 - `internal/agentlink/stream_send.go`: route limits (`FileLimit`), the queue's file copies, the
   sending stream and its window.
 - `internal/agentlink/stream_recv.go`: the receiving side: checks, reservation, partial files,
