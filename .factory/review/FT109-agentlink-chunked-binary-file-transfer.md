@@ -1,6 +1,6 @@
 ---
 branch: factory/FT109-agentlink-chunked-binary-file-transfer
-round: 1
+round: 2
 ---
 # Agent Link: stream files as chunked binary frames
 
@@ -83,3 +83,15 @@ Residual risks: simultaneous sends sharing a message ID may collide in queue sna
 
 ## factory · 2026-11-14 16:11
 Not shipped under the owner's conditional approval (ship only if fine); remains in ready/. Reviewed head is unchanged, but the latest review contains reproduced reconnect/acknowledgement failures that delete resumable parts, pre-authorization capacity eviction, and reply attachments losing attach-time snapshot semantics. Although previously graded P2/P3, these reliability/data-integrity regressions are not acceptable for this conditional ship. No code changes, master merge or tag for this item.
+
+## factory · plan · 2026-11-14 18:17
+Owner requested: "FT109, can you fix it using Claude code?" Fix the three reproduced findings before shipping: bind stream frames to delivery attempts across reconnects; authorize/validate before capacity eviction; restore immutable attach-time reply file snapshots with cleanup. Add regression tests for each, run repeated/race tests and the required gate. Preserve streaming limits, legacy fallback and bounded relay buffers.
+
+## factory · 2026-11-14 18:17
+Claude Code completed fix round 2. Merged origin/master without conflicts (1dde5c33), then committed 6b08c907, ea26c30a, d4b57f53, 3f0a2bc9 and f1758d75 (head f1758d75). Code branch pushed.
+
+Fixed stale acknowledgements/chunks/aborts/results by binding them to a random delivery attempt ID; binary header is now 42 bytes (unshipped protocol). Authorized/validated before capacity changes; insufficient capacity no longer evicts paused transfers unnecessarily. Reply files now snapshot into private storage when attached, with lifecycle cleanup. Also reserved message IDs during queue snapshots to prevent concurrent sends deleting each other's data. Protocol docs updated.
+
+Checks: manager independently passed gofmt cleanliness, go vet ./..., go test ./... and git diff --check. Claude reports slow-receiver reconnect regressions over real WebSocket and pipe, stale-attempt/capacity/authorization/snapshot-mutation/deletion tests; focused race -count=10, agentlink suite -count=5 and race tests of agentlink/tools/builtin/channelruntime all passed. Scripted tests used an absolute throwaway HOME. No unpinned installs.
+
+Not checked: multi-machine networks, Android, separate-process mixed versions or receiver restart. Receiver resume remains intentionally in-memory. Concurrent same-ID regression is timing-based. No Console sources changed; visual/nsh checks not applicable. Moved ready/ → review/ because the previous review covers the old head; requires a fresh review. No master merge, deployment or tag.
