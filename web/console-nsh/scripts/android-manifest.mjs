@@ -11,6 +11,10 @@
 //   transparent activity that asks for the permission and the one a pressed notification starts,
 //   and the network-state permission the job's network constraint needs (Android 14+ refuses to
 //   schedule a job with a network constraint without it for apps targeting API 34+).
+// - the display name: the launcher and the system's app settings show "Morph" (LABEL), while nsh
+//   labels the app with nsh.json's name, which the desktop app and the web Console keep. It is a
+//   literal, not a string resource, so no locale's resources can name the app otherwise; a launcher
+//   activity, alias or intent filter that labels itself takes it too, other components keep theirs.
 //
 //   node scripts/android-manifest.mjs AndroidManifest.xml     patches the file in place
 import { readFileSync, writeFileSync } from "node:fs";
@@ -21,6 +25,9 @@ export const PERMISSION_ACTIVITY = "com.mistermorph.console.VoicePermissionActiv
 export const NOTIFICATION_PERMISSION_ACTIVITY = "com.mistermorph.console.NotificationPermissionActivity";
 export const NOTIFICATION_OPEN_ACTIVITY = "com.mistermorph.console.NotificationOpenActivity";
 export const NOTIFIER_JOB = "com.mistermorph.console.TaskNotifierJob";
+export const LABEL = "Morph";
+const LABEL_ATTRIBUTE = /(\sandroid:label\s*=\s*)("[^"]*"|'[^']*')/;
+const LAUNCHER = "android.intent.category.LAUNCHER";
 // The configuration changes nsh's own activity handles, so a rotation does not restart the question.
 const CONFIG_CHANGES =
   "orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection";
@@ -89,7 +96,28 @@ export function patchManifest(xml) {
         `            android:permission="android.permission.BIND_JOB_SERVICE" />\n    </application>`,
     );
   }
+  // The app's label, as a literal (a string resource or another name gives way to it)...
+  out = out.replace(/<application\b[^>]*>/, (tag) => labelled(tag, true));
+  // ...and the launcher's, where an activity, alias or launcher intent filter labels itself.
+  out = out.replace(/<(activity-alias|activity)\b[^>]*(?<!\/)>[\s\S]*?<\/\1\s*>/g, (component) => {
+    if (!component.includes(LAUNCHER)) {
+      return component;
+    }
+    return component
+      .replace(/^<[^>]*>/, (tag) => labelled(tag, false))
+      .replace(/<intent-filter\b[^>]*(?<!\/)>[\s\S]*?<\/intent-filter\s*>/g, (filter) =>
+        filter.includes(LAUNCHER) ? filter.replace(/^<[^>]*>/, (tag) => labelled(tag, false)) : filter,
+      );
+  });
   return out;
+}
+
+/** A start tag labelled LABEL: its own label replaced, or (if `add`) one added after the name. */
+function labelled(tag, add) {
+  if (LABEL_ATTRIBUTE.test(tag)) {
+    return tag.replace(LABEL_ATTRIBUTE, (_, attribute) => `${attribute}"${LABEL}"`);
+  }
+  return add ? tag.replace(/^<[\w-]+/, (name) => `${name} android:label="${LABEL}"`) : tag;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

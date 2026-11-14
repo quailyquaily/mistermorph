@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   APPLICATION,
+  LABEL,
   NOTIFICATION_OPEN_ACTIVITY,
   NOTIFICATION_PERMISSION_ACTIVITY,
   NOTIFIER_JOB,
@@ -92,6 +93,81 @@ test("is idempotent and keeps what nsh already declares", () => {
   assert.equal(patchManifest(once), once);
   const dev = NSH_MANIFEST.replace("<application ", '<application android:usesCleartextTraffic="true" ');
   assert.equal(patchManifest(dev).split("usesCleartextTraffic").length, 2);
+});
+
+// Every android:label in the manifest, in order.
+const labels = (xml) => [...xml.matchAll(/android:label="([^"]*)"/g)].map((m) => m[1]);
+
+test("names the app Morph in place of nsh.json's name, and nothing else changes", () => {
+  assert.equal(LABEL, "Morph");
+  const out = patchManifest(NSH_MANIFEST);
+  // The application's label is the only one: the launcher activity inherits it.
+  assert.deepEqual(labels(out), ["Morph"]);
+  assert.ok(!out.includes("Mister Morph"));
+  assert.match(out, /<application [^>]*android:label="Morph" android:icon="@mipmap\/ic_launcher"\n/);
+  // The package, the icon, the theme and the launcher stay nsh's.
+  assert.match(out, /<manifest [^>]*package="com\.mistermorph\.console">/);
+  assert.equal(out.split('package="').length, 2);
+  assert.match(out, /android:theme="@android:style\/Theme\.Material\.Light\.NoActionBar">/);
+  assert.match(out, /<activity android:name="com\.longbridge\.nsh\.AppActivity" android:exported="true"\n/);
+  assert.equal(patchManifest(out), out);
+});
+
+test("takes the place of a string resource label, and adds one where there is none", () => {
+  for (const manifest of [
+    NSH_MANIFEST.replace('android:label="Mister Morph"', 'android:label="@string/app_name"'),
+    NSH_MANIFEST.replace('android:label="Mister Morph"', "android:label='@string/app_name'"),
+    NSH_MANIFEST.replace(' android:label="Mister Morph"', ""),
+  ]) {
+    const out = patchManifest(manifest);
+    assert.deepEqual(labels(out), ["Morph"]);
+    assert.ok(!out.includes("app_name"));
+    assert.match(out, /android:icon="@mipmap\/ic_launcher"/);
+    assert.equal(patchManifest(out), out);
+  }
+});
+
+test("relabels a launcher that labels itself, and keeps the other components' labels", () => {
+  const manifest = NSH_MANIFEST.replace(
+    '<activity android:name="com.longbridge.nsh.AppActivity"',
+    '<activity android:label="@string/launcher" android:name="com.longbridge.nsh.AppActivity"',
+  )
+    .replace("<intent-filter>", '<intent-filter android:label="Mister Morph">')
+    .replace(
+      "</application>",
+      '    <activity-alias android:name=".Alias" android:targetActivity="com.longbridge.nsh.AppActivity"\n' +
+        '            android:label="Mister Morph Alias" android:exported="true">\n' +
+        '            <intent-filter>\n' +
+        '                <action android:name="android.intent.action.MAIN" />\n' +
+        '                <category android:name="android.intent.category.LAUNCHER" />\n' +
+        "            </intent-filter>\n" +
+        "        </activity-alias>\n" +
+        '        <activity android:name=".Share" android:label="Share to Mister Morph" android:exported="true">\n' +
+        '            <intent-filter android:label="Send to Mister Morph">\n' +
+        '                <action android:name="android.intent.action.SEND" />\n' +
+        "            </intent-filter>\n" +
+        "        </activity>\n" +
+        '        <activity-alias android:name=".Other" android:targetActivity=".Share" android:label="Other" />\n' +
+        '        <activity android:name=".Settings" android:label="@string/settings" />\n' +
+        "    </application>",
+    );
+  const out = patchManifest(manifest);
+  // The application, nsh's activity, its launcher filter and the launcher alias are Morph; the
+  // share activity, its filter, the other alias and the settings activity keep their labels.
+  assert.deepEqual(labels(out), [
+    "Morph",
+    "Morph",
+    "Morph",
+    "Morph",
+    "Share to Mister Morph",
+    "Send to Mister Morph",
+    "Other",
+    "@string/settings",
+  ]);
+  assert.match(out, /<activity android:label="Morph" android:name="com\.longbridge\.nsh\.AppActivity"/);
+  assert.match(out, /android:label="Morph" android:exported="true">\n {12}<intent-filter>/);
+  assert.equal(out.split("android.intent.category.LAUNCHER").length, 3);
+  assert.equal(patchManifest(out), out);
 });
 
 test("refuses a manifest it cannot place its parts in", () => {
