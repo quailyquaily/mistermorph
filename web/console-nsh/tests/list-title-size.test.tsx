@@ -59,14 +59,15 @@ for (const viewport of VIEWPORTS) {
     expect(app.spanStyle(`id:chat-topic-${CRON_ID} >> text:gpt-5.2`).fontSize).toBe(12);
   });
 
-  // Contacts is a library of cards, not a list: a 15pt name on every window, over its kind (10pt
-  // mono) and its handle (11.5pt mono).
-  test(`Contacts on a ${viewport.name}: a card's 15pt name over a 10pt kind and an 11.5pt handle`, async () => {
+  // Contacts is a library of cards, not a list: a 15pt name over its kind (10pt mono) and its
+  // handle (11.5pt mono); a phone's compact cards, three a row, are 13pt over 9pt and 10pt.
+  const card = viewport.title === 15 ? { name: 13, kind: 9, handle: 10 } : { name: 15, kind: 10, handle: 11.5 };
+  test(`Contacts on a ${viewport.name}: a card's ${card.name}pt name over a ${card.kind}pt kind and a ${card.handle}pt handle`, async () => {
     const { app } = await openConsole({ location: "/e/default/contacts", ...size, api: { "GET /proxy:/contacts/list": { body: { items: [ALICE] } } } });
     await app.waitFor("id:contact-row:tg:1001");
-    expect(app.spanStyle("id:contact-row:tg:1001 >> text:Alice").fontSize).toBe(15);
-    expect(app.spanStyle("id:contact-row:tg:1001 >> text:HUMAN").fontSize).toBe(10);
-    expect(app.spanStyle("id:contact-row:tg:1001 >> text:@alice").fontSize).toBe(11.5);
+    expect(app.spanStyle("id:contact-row:tg:1001 >> text:Alice").fontSize).toBe(card.name);
+    expect(app.spanStyle("id:contact-row:tg:1001 >> text:HUMAN").fontSize).toBe(card.kind);
+    expect(app.spanStyle("id:contact-row:tg:1001 >> text:@alice").fontSize).toBe(card.handle);
   });
 
   test(`Memories, Skills and TODO on a ${viewport.name}: ${viewport.title}pt titles over 12pt metas`, async () => {
