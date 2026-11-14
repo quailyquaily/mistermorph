@@ -44,7 +44,7 @@ import {
 import { AuditBadge, hint, ObserveSection, t } from "../../components/observe/parts";
 import { createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { gutterX } from "../../components/frame/metrics";
-import { Button, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, TextField, TipButton } from "../../components/ui";
+import { BAR_ICON_SIZE, Button, CircleButton, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, TextField, TipButton } from "../../components/ui";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const AUDIT_ITEMS_PER_PAGE = 50;
@@ -1058,7 +1058,15 @@ export function AuditPage() {
               }
               lead={
                 <If when={ledgerShowsBack()}>
-                  <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("audit_title")} onPress={() => mobileLedgerVisible.set(false)} />
+                  <CircleButton
+                    size="sm"
+                    variant="plain"
+                    icon="PhArrowLeft"
+                    iconSize={BAR_ICON_SIZE}
+                    title={t("audit_title")}
+                    testID="audit-ledger-back"
+                    onPress={() => mobileLedgerVisible.set(false)}
+                  />
                 </If>
               }
               actions={

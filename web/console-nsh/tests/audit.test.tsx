@@ -162,3 +162,27 @@ test("an empty task feed offers to open Chat", async () => {
   await app.press("role:button[Open Chat]");
   await app.waitFor("id:nav-chat");
 });
+
+for (const platform of ["android", undefined] as const) {
+  test(`on a phone (${platform ?? "web"}) the ledger's back arrow (a round button) goes back to the files, named as before`, async () => {
+    const { app } = await openConsole({
+      location: "/e/default/audit",
+      platform,
+      width: 390,
+      height: 844,
+      api: {
+        "GET /proxy:/audit/files": { body: files },
+        "GET /proxy:/audit/logs": { body: { exists: true, items: [event()] } },
+      },
+    });
+    await app.waitFor("id:audit-file-guard_audit.deny.jsonl");
+    expect(app.shows("id:audit-ledger-back")).toBe(false);
+    await app.press("id:audit-file-guard_audit.deny.jsonl");
+    await app.waitFor("id:audit-ledger-back");
+    // Named and tipped by the page's title, as the square arrow was.
+    expect(app.count("label:Audit")).toBeGreaterThan(0);
+    await app.press("id:audit-ledger-back");
+    await app.waitUntil(() => !app.shows("id:audit-ledger-back"));
+    await app.waitFor("id:audit-file-guard_audit.deny.jsonl");
+  });
+}

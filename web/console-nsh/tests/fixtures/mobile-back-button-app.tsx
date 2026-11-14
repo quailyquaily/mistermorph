@@ -3,8 +3,8 @@
 // head (TodoIndex on a phone, its calendar toggle last). The bars: MobileBar (Contacts, Memories,
 // Skills while an item is open), a PageBar whose leading row starts with BackButton (Chat, TODO,
 // Settings, the skill store), and the same with a desktop size (Context, which keeps its 32pt arrow
-// on wide windows). Each bar and each back arrow reports its frame on the page; they are read out
-// as JSON beside them, and presses on the arrows are counted.
+// on wide windows). Each bar, each back arrow and its arrow glyph report their frames on the page;
+// they are read out as JSON beside them, and presses on the arrows are counted.
 import { mount, signal, Text, View, type JSX, type ViewRef } from "nsh";
 import { BackButton, PageBar, PageTitle } from "../../components/ui";
 import { MobileBar } from "../../components/knowledge/parts";
@@ -69,13 +69,13 @@ function Page() {
       <Text class="text-[6px]">{JSON.stringify(frames())}</Text>
       <Text class="text-[6px]">{`presses:${presses().join(",")}`}</Text>
       <Probe name="mobile-bar">
-        <MobileBar title="An open contact" backLabel="Contacts" onBack={pressed("mobile-bar")} onPartLayout={(_, frame) => report("mobile-bar.back", frame)} />
+        <MobileBar title="An open contact" backLabel="Contacts" onBack={pressed("mobile-bar")} onPartLayout={(part, frame) => report(`mobile-bar.${part}`, frame)} />
       </Probe>
       <Probe name="page-bar">
         <PageBar
           leading={
             <View class="flex-1 flex-row items-center gap-2">
-              <BackButton title="Topics" testID="page-back" onPress={pressed("page-bar")} onPartLayout={(_, frame) => report("page-bar.back", frame)} />
+              <BackButton title="Topics" testID="page-back" onPress={pressed("page-bar")} onPartLayout={(part, frame) => report(`page-bar.${part}`, frame)} />
               <PageTitle text="An open topic" />
             </View>
           }
@@ -90,7 +90,7 @@ function Page() {
                 testID="desktop-back"
                 desktopSize="xs"
                 onPress={pressed("desktop-bar")}
-                onPartLayout={(_, frame) => report("desktop-bar.back", frame)}
+                onPartLayout={(part, frame) => report(`desktop-bar.${part}`, frame)}
               />
               <PageTitle text="Context" />
             </View>

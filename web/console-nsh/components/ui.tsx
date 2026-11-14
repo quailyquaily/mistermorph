@@ -3,7 +3,7 @@
 //
 // The look follows the Vue console's ui-kit: square-ish corners (2px), hairlines, a dark blue
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
-import type { Bounds, InputRef, JSX, Motion } from "nsh";
+import type { Bounds, InputRef, JSX, Motion, ViewRef } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
 import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
@@ -43,7 +43,7 @@ import {
   motionMs,
 } from "./motion/tokens";
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
-import { createPartProbe, type PartLayoutListener } from "./shared/partProbe";
+import { boundsFrame, createPartProbe, type PartFrame, type PartLayoutListener } from "./shared/partProbe";
 import { isMobile } from "../lib/shell";
 
 export type { IconName };
@@ -2101,10 +2101,10 @@ export function PageTitle(props: { text: string; class?: string }) {
 }
 
 /**
- * The size of a phone bar's icon buttons: every back arrow. The Button's default, a 38pt square
- * with a 16pt icon.
+ * The size of a phone bar's icon buttons: every back arrow. The Button's default, a 38pt side with
+ * a 16pt icon.
  */
-export const BAR_BUTTON_SIZE: ButtonSize = "sm";
+export const BAR_BUTTON_SIZE = "sm" satisfies ButtonSize;
 
 /**
  * The icon of a BAR_BUTTON_SIZE button (16pt), for bar buttons drawn without Button (the index
@@ -2113,31 +2113,65 @@ export const BAR_BUTTON_SIZE: ButtonSize = "sm";
 export const BAR_ICON_SIZE = BUTTON_SIZES[BAR_BUTTON_SIZE].icon;
 
 /**
- * A page bar's back arrow: a plain icon-only Button. On a phone it is the size of the bar's other
- * icon buttons (BAR_BUTTON_SIZE, as Todo's calendar toggle); a bar that also shows on wide windows
- * keeps its `desktopSize` there. Like the calendar toggle it sits in a wrapper that the bar's row
- * centres. `title` is its tooltip and accessible name.
+ * A back arrow's sizes, named as the Button's (`sm` 38pt, `xs` 32pt), and the circle button of
+ * that side each one is drawn as.
+ */
+const BACK_BUTTON_CIRCLES = { sm: "md", xs: "sm" } as const satisfies Partial<Record<ButtonSize, CircleButtonSize>>;
+export type BackButtonSize = keyof typeof BACK_BUTTON_CIRCLES;
+
+/** The circle button a back arrow is: BAR_BUTTON_SIZE on a phone, else its `desktopSize` (if any). */
+export function backButtonCircle(mobile: boolean, desktopSize?: BackButtonSize): CircleButtonSize {
+  return BACK_BUTTON_CIRCLES[mobile ? BAR_BUTTON_SIZE : (desktopSize ?? BAR_BUTTON_SIZE)];
+}
+
+/**
+ * A page bar's back arrow: the standard round icon button (CircleButton, plain) with a regular icon
+ * button's 16pt arrow (BAR_ICON_SIZE), as the index heads' buttons are. On a phone it is as big as
+ * the bar's other icon buttons (BAR_BUTTON_SIZE, 38pt, as Todo's calendar toggle); a bar that also
+ * shows on wide windows keeps its `desktopSize` there (Context's 32pt). Like the calendar toggle it
+ * sits in a wrapper that the bar's row centres. `title` is its tooltip and accessible name.
  */
 export function BackButton(props: {
   title: string;
   onPress: () => void;
   testID?: string;
-  desktopSize?: ButtonSize;
-  /** Hears its frame on the page as `back` (tests). */
+  desktopSize?: BackButtonSize;
+  /** Hears its frame on the page as `back`, and its arrow's as `back-icon` (tests). */
   onPartLayout?: PartLayoutListener;
 }) {
   const parts = createPartProbe(() => props.onPartLayout);
+  let box: ViewRef | undefined;
+  let arrow: PartFrame | undefined;
+  // The arrow lies in the button, which fills the wrapper from its corner: its frame there is its
+  // frame in the wrapper.
+  const report = () => {
+    parts.report("back", box);
+    parts.report("back-icon", box, () => arrow);
+  };
   return (
-    <View {...parts.probe(() => "back")}>
-      <Button
+    <View
+      ref={(node: ViewRef) => {
+        box = node;
+      }}
+      onLayout={report}
+    >
+      <CircleButton
+        size={backButtonCircle(isMobile(), props.desktopSize)}
         variant="plain"
-        size={isMobile() ? BAR_BUTTON_SIZE : (props.desktopSize ?? BAR_BUTTON_SIZE)}
-        iconOnly
-        icon="PhArrowLeft"
         title={props.title}
         testID={props.testID}
         onPress={() => props.onPress()}
-      />
+      >
+        <Icon
+          name="PhArrowLeft"
+          size={BAR_ICON_SIZE}
+          color="subtle"
+          onLayout={(event) => {
+            arrow = boundsFrame(event);
+            report();
+          }}
+        />
+      </CircleButton>
     </View>
   );
 }
