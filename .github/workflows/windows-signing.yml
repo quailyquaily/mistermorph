@@ -393,7 +393,7 @@ jobs:
         run: ./scripts/release-publish-metadata.sh
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-release-${{ inputs.tag }}
           path: |
