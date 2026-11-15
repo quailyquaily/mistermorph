@@ -243,7 +243,7 @@ func TestInstalledCodex(t *testing.T) {
 	// A prompt that interrupts /status leaves the typed "/" in the input, with the command popup
 	// open. Typing "/status" over it picks the popup's first command (issue #88).
 	leftover := func(erase bool) (string, error) {
-		s, err := start(codexBackend{}, req, "")
+		s, err := start(codexBackend{}, req, resumePoint{})
 		if err != nil {
 			t.Fatal(err)
 		}

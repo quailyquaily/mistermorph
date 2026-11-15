@@ -22,6 +22,17 @@ const (
 	operationTranscribe    = "transcribe"
 )
 
+// OperationCoder is the operation of a coder run's rows (the Codex and Claude Code CLIs the coder
+// tool runs): what tells them from the agent's own calls.
+const OperationCoder = "coder"
+
+// catalogPriced reports whether rows of the operation that report no cost are priced from the
+// pricing catalog: the agent's chat calls, and coder runs (a terminal run's session files carry
+// tokens and no cost).
+func catalogPriced(operation string) bool {
+	return operation == operationChat || operation == OperationCoder
+}
+
 type Offset struct {
 	File string `json:"file,omitempty"`
 	Line int64  `json:"line,omitempty"`

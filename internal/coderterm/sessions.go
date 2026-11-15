@@ -44,6 +44,10 @@ type Request struct {
 	// Status hears, after each task, the status JSON the CLI last gave its status line (Claude
 	// Code: StatusLineFile); not called when there is none.
 	Status func([]byte)
+	// Usage hears, once when the task ends (done, failed, cancelled or timed out), what the CLI's
+	// session files record it used since the session's task before; not called when they record
+	// nothing.
+	Usage func(Usage)
 }
 
 // Sessions belongs to one runtime. Its zero value is ready to use.
@@ -58,7 +62,11 @@ type Sessions struct {
 // sessionKey separates each CLI's session within one conversation.
 type sessionKey struct{ scope, backend string }
 
-type resumePoint struct{ id, cwd string }
+// usage is how far the session's files were counted, so the reopened session counts on from there.
+type resumePoint struct {
+	id, cwd string
+	usage   usageReader
+}
 
 func (m *Sessions) Run(ctx context.Context, scope string, req Request) (string, error) {
 	b, err := backendFor(req.Backend)
@@ -96,13 +104,13 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (string, 
 		s = nil
 	}
 	if s == nil {
-		var resumeID string
+		var resume resumePoint
 		if point, ok := m.resume[key]; ok && point.cwd == req.CWD {
-			resumeID = point.id
+			resume = point
 		}
 		// A changed cwd starts fresh; a failed reopen is remembered again only if it gets far enough.
 		delete(m.resume, key)
-		s, err = start(b, req, resumeID)
+		s, err = start(b, req, resume)
 		if err != nil {
 			m.mu.Unlock()
 			return "", err
@@ -119,6 +127,15 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (string, 
 		req.Process(s.pid)
 	}
 	output, err := s.run(ctx, req)
+	if err != nil {
+		// The CLI is stopped first, so the files hold all it wrote of this task.
+		s.close()
+	}
+	if req.Usage != nil {
+		if usage := s.takeUsage(); len(usage.Models) > 0 {
+			req.Usage(usage)
+		}
+	}
 	if req.Status != nil {
 		if data := s.statusLine(); len(data) > 0 {
 			req.Status(data)
@@ -149,7 +166,7 @@ func (m *Sessions) remember(key sessionKey, s *session, err error) {
 	if m.resume == nil {
 		m.resume = make(map[sessionKey]resumePoint)
 	}
-	m.resume[key] = resumePoint{id: s.id, cwd: s.cwd}
+	m.resume[key] = resumePoint{id: s.id, cwd: s.cwd, usage: s.usageState()}
 }
 
 // Reset releases a conversation's terminals when it is reset or deleted. The next task starts fresh.

@@ -94,7 +94,7 @@ var defaultPricingSource PricingSource = func() (*uniaiapi.PricingCatalog, strin
 
 // UsageStoreOptions change how a usage store behaves.
 type UsageStoreOptions struct {
-	// Pricing prices chat calls that report no cost. DefaultPricing when nil.
+	// Pricing prices chat calls and coder runs that report no cost. DefaultPricing when nil.
 	Pricing PricingSource
 	// RetentionDays deletes rows older than that, once a day; 0 keeps everything.
 	RetentionDays int
@@ -176,7 +176,7 @@ func (s *UsageStore) Close() error {
 func (s *UsageStore) DB() *sql.DB { return s.db }
 
 // SetPricing makes catalog the one new rows are priced with. When its digest differs from the
-// one the rows were priced with, the catalog-priced rows, and chat rows no catalog priced yet,
+// one the rows were priced with, the catalog-priced rows, and chat and coder rows no catalog priced yet,
 // are priced again in batches before the digest is saved.
 func (s *UsageStore) SetPricing(ctx context.Context, catalog *uniaiapi.PricingCatalog, digest string) error {
 	if s == nil {
@@ -224,9 +224,9 @@ func (s *UsageStore) repriceBatch(ctx context.Context, catalog *uniaiapi.Pricing
 		return 0, after, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT id, model, input_tokens, output_tokens, total_tokens, cached_input_tokens,
+	rows, err := tx.QueryContext(ctx, `SELECT id, operation, model, input_tokens, output_tokens, total_tokens, cached_input_tokens,
 		cache_creation_input_tokens, cache_details FROM llm_requests
-		WHERE id > ? AND operation = 'chat' AND cost_source IN ('catalog', '') ORDER BY id LIMIT ?`, after, repriceBatch)
+		WHERE id > ? AND operation IN ('chat', 'coder') AND cost_source IN ('catalog', '') ORDER BY id LIMIT ?`, after, repriceBatch)
 	if err != nil {
 		return 0, after, err
 	}
@@ -238,8 +238,7 @@ func (s *UsageStore) repriceBatch(ctx context.Context, catalog *uniaiapi.Pricing
 	for rows.Next() {
 		var p pending
 		var details string
-		p.rec.Operation = operationChat
-		if err := rows.Scan(&p.id, &p.rec.Model, &p.rec.InputTokens, &p.rec.OutputTokens, &p.rec.TotalTokens,
+		if err := rows.Scan(&p.id, &p.rec.Operation, &p.rec.Model, &p.rec.InputTokens, &p.rec.OutputTokens, &p.rec.TotalTokens,
 			&p.rec.CachedInputTokens, &p.rec.CacheCreationInputTokens, &details); err != nil {
 			_ = rows.Close()
 			return 0, after, err
@@ -266,7 +265,7 @@ func (s *UsageStore) repriceBatch(ctx context.Context, catalog *uniaiapi.Pricing
 	return len(batch), after, nil
 }
 
-// priceRecord prices a chat record that reports no cost from the catalog. It returns the record
+// priceRecord prices a chat or coder record that reports no cost from the catalog. It returns the record
 // and its cost_source.
 func priceRecord(rec RequestRecord, catalog *uniaiapi.PricingCatalog) (RequestRecord, string) {
 	if requestRecordHasCost(rec) {
@@ -281,7 +280,8 @@ func priceRecord(rec RequestRecord, catalog *uniaiapi.PricingCatalog) (RequestRe
 	return rec, ""
 }
 
-// Append records one call. A chat call that reports no cost is priced from the store's catalog.
+// Append records one call. A chat call or a coder run that reports no cost is priced from the
+// store's catalog; a model the catalog does not know stays without a cost.
 func (s *UsageStore) Append(rec RequestRecord) error {
 	return s.AppendContext(context.Background(), rec)
 }
@@ -303,7 +303,7 @@ func (s *UsageStore) AppendContext(ctx context.Context, rec RequestRecord) error
 	catalog := s.pricing
 	s.mu.Unlock()
 	var source string
-	if rec.Operation == operationChat {
+	if catalogPriced(rec.Operation) {
 		rec, source = priceRecord(rec, catalog)
 	} else if requestRecordHasCost(rec) {
 		source = costSourceProvider

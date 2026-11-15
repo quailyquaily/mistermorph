@@ -210,7 +210,9 @@ func (t *Totals) addTotals(o Totals) {
 	}
 }
 
-// Daily totals the last days calendar days in loc, today included, overall and per model. Each
+// Daily totals the last days calendar days in loc, today included, overall and per model, and the
+// same apart for the agent's own calls and for coder runs (operation 'coder'); the combined
+// totals are the sum of the two. Each
 // local day's start and end are computed in loc, so days across a DST change are 23 or 25 hours
 // long and half-hour offsets fall where they should; one query joins those ranges to the rows.
 func (s *UsageStore) Daily(ctx context.Context, days int, loc *time.Location) (DailyUsage, error) {
@@ -248,49 +250,79 @@ func (s *UsageStore) Daily(ctx context.Context, days int, loc *time.Location) (D
 	// The days table's columns do not clash with llm_requests', so the aggregates need no prefix.
 	join := ` FROM days JOIN llm_requests r ON r.ts >= days.start_ms AND r.ts < days.end_ms `
 
-	dayModels := make([]map[string]*Totals, days)
-	rangeModels := map[string]*Totals{}
+	// Rows by day, source (0 the agent, 1 a coder run) and model.
+	const agent, coder = 0, 1
+	var dayModels [2][]map[string]*Totals
+	for source := range dayModels {
+		dayModels[source] = make([]map[string]*Totals, days)
+	}
+	group := func(k []string) map[string]*Totals {
+		i, source := atoiSafe(k[0]), atoiSafe(k[1])
+		if i < 0 || i >= days || source < agent || source > coder {
+			return nil
+		}
+		if dayModels[source][i] == nil {
+			dayModels[source][i] = map[string]*Totals{}
+		}
+		return dayModels[source][i]
+	}
 	if err := s.readSnapshot(ctx, func(tx *sql.Tx) error {
-		if err := queryTotals(ctx, tx, with+`SELECT days.i, r.model, `+totalsColumns+join+`GROUP BY days.i, r.model`, 2, args, func(k []string, t Totals) {
-			i := atoiSafe(k[0])
-			if i < 0 || i >= days {
-				return
+		if err := queryTotals(ctx, tx, with+`SELECT days.i, (r.operation = 'coder'), r.model, `+totalsColumns+join+
+			`GROUP BY days.i, (r.operation = 'coder'), r.model`, 3, args, func(k []string, t Totals) {
+			if models := group(k); models != nil {
+				copyT := t
+				models[k[2]] = &copyT
 			}
-			if dayModels[i] == nil {
-				dayModels[i] = map[string]*Totals{}
-			}
-			copyT := t
-			dayModels[i][k[1]] = &copyT
 		}); err != nil {
 			return err
 		}
-		return queryCacheDetails(ctx, tx, with+`SELECT days.i, r.model, j.key, SUM(j.value)`+join+`, json_each(r.cache_details) j
-			WHERE r.cache_details != '{}' GROUP BY days.i, r.model, j.key`, 2, args, func(k []string, name string, sum int64) {
-			i := atoiSafe(k[0])
-			if i < 0 || i >= days || dayModels[i] == nil {
-				return
-			}
-			if t := dayModels[i][k[1]]; t != nil {
-				addDetail(t, name, sum)
+		return queryCacheDetails(ctx, tx, with+`SELECT days.i, (r.operation = 'coder'), r.model, j.key, SUM(j.value)`+join+`, json_each(r.cache_details) j
+			WHERE r.cache_details != '{}' GROUP BY days.i, (r.operation = 'coder'), r.model, j.key`, 3, args, func(k []string, name string, sum int64) {
+			if models := group(k); models != nil {
+				if t := models[k[2]]; t != nil {
+					addDetail(t, name, sum)
+				}
 			}
 		})
 	}); err != nil {
 		return DailyUsage{}, err
 	}
-	for i, models := range dayModels {
-		for model, t := range models {
-			out.Days[i].Totals.addTotals(*t)
-			out.Summary.addTotals(*t)
-			total := rangeModels[model]
-			if total == nil {
-				total = &Totals{}
-				rangeModels[model] = total
-			}
-			total.addTotals(*t)
+	rangeModels := map[string]*Totals{}
+	var sourceRangeModels [2]map[string]*Totals
+	addModel := func(byModel map[string]*Totals, model string, t Totals) {
+		total := byModel[model]
+		if total == nil {
+			total = &Totals{}
+			byModel[model] = total
 		}
-		out.Days[i].Models = modelSummaries(models)
+		total.addTotals(t)
+	}
+	for i := range days {
+		combined := map[string]*Totals{}
+		for source := range dayModels {
+			daySource, rangeSource := &out.Days[i].Sources.Agent, &out.Sources.Agent
+			if source == coder {
+				daySource, rangeSource = &out.Days[i].Sources.Coder, &out.Sources.Coder
+			}
+			if sourceRangeModels[source] == nil {
+				sourceRangeModels[source] = map[string]*Totals{}
+			}
+			for model, t := range dayModels[source][i] {
+				daySource.Totals.addTotals(*t)
+				rangeSource.Summary.addTotals(*t)
+				out.Days[i].Totals.addTotals(*t)
+				out.Summary.addTotals(*t)
+				addModel(combined, model, *t)
+				addModel(rangeModels, model, *t)
+				addModel(sourceRangeModels[source], model, *t)
+			}
+			daySource.Models = sourceModelSummaries(dayModels[source][i])
+		}
+		out.Days[i].Models = modelSummaries(combined)
 	}
 	out.Models = modelSummaries(rangeModels)
+	out.Sources.Agent.Models = sourceModelSummaries(sourceRangeModels[agent])
+	out.Sources.Coder.Models = sourceModelSummaries(sourceRangeModels[coder])
 	return out, nil
 }
 

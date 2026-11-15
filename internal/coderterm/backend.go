@@ -57,6 +57,8 @@ type backend interface {
 	sessionID(screen string) string
 	// newTurn reads the turn that submits expected, from offset onward.
 	newTurn(path string, offset int64, expected string) turnReader
+	// newUsage counts the usage a session's files record, from their start.
+	newUsage() usageReader
 	// declined reports whether answer a declines a permission. stopNow ends the call at once,
 	// for a CLI that does not record the end of a declined turn.
 	declined(view screenView, a Answer) (declined, stopNow bool)

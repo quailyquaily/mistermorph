@@ -150,7 +150,7 @@ func TestRecordsAndQuotasInUsageDB(t *testing.T) {
 		t.Fatalf("records = %+v, %v", records, err)
 	}
 	rec := records[0]
-	if rec.APIHost != "claude-code" || rec.Model != "claude-opus-5-5" || rec.Operation != OperationCoder || rec.RunID != "run-1" ||
+	if rec.APIHost != "claude-code" || rec.Model != "claude-opus-5-5" || rec.Operation != llmstats.OperationCoder || rec.RunID != "run-1" ||
 		rec.TotalCost != 0.09425 || !rec.CostEstimated || rec.InputTokens != 22858 || rec.DurationMs != 1200 {
 		t.Fatalf("record = %+v", rec)
 	}

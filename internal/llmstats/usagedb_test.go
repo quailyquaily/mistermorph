@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -536,5 +538,163 @@ func TestUsageTwoProcessesWriting(t *testing.T) {
 	}
 	if err := sqlitedb.IntegrityCheck(context.Background(), path); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUsagePricesCoderRowsFromTheCatalog(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, filepath.Join(t.TempDir(), "usage.db"), testPricing(t, "1"))
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, rec := range []RequestRecord{
+		// A terminal run of a model the catalog knows: priced, and marked estimated.
+		{TS: now, Provider: "claude-code", APIHost: "claude-code", Model: "test-model", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000},
+		// A model the catalog does not know, and Codex: no cost.
+		{TS: now, Provider: "claude-code", APIHost: "claude-code", Model: "other-model", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000},
+		{TS: now, Provider: "codex-cli", APIHost: "codex-cli", Model: "codex", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000},
+		// A headless run carries the CLI's own cost: left alone.
+		{TS: now, Provider: "claude-code", APIHost: "claude-code", Model: "test-model", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000, CostCurrency: "USD", CostEstimated: true, TotalCost: 5},
+		// Other operations are not priced.
+		{TS: now, Provider: "openai", Model: "test-model", Operation: "transcribe", InputTokens: 1_000_000},
+	} {
+		if err := store.Append(rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type row struct {
+		cost      float64
+		source    string
+		estimated bool
+		currency  string
+	}
+	read := func() []row {
+		t.Helper()
+		rows, err := store.DB().QueryContext(ctx, `SELECT total_cost, cost_source, cost_estimated, cost_currency FROM llm_requests ORDER BY id`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = rows.Close() }()
+		var out []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.cost, &r.source, &r.estimated, &r.currency); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, r)
+		}
+		return out
+	}
+	want := []row{
+		{1, "catalog", true, "USD"},
+		{0, "", false, ""},
+		{0, "", false, ""},
+		{5, "provider", true, "USD"},
+		{0, "", false, ""},
+	}
+	if got := read(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("rows = %+v\nwant   %+v", got, want)
+	}
+	// A new catalog prices the catalog-priced coder row again and leaves the CLI's cost alone.
+	catalog, digest, _ := testPricing(t, "9")()
+	if err := store.SetPricing(ctx, catalog, digest); err != nil {
+		t.Fatal(err)
+	}
+	want[0].cost = 9
+	if got := read(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("rows after reprice = %+v\nwant                 %+v", got, want)
+	}
+}
+
+func TestUsageDailySplitsAgentAndCoder(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, filepath.Join(t.TempDir(), "usage.db"), testPricing(t, "1"))
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+	at := func(daysAgo int) string { return now.AddDate(0, 0, -daysAgo).Format(time.RFC3339) }
+	for _, rec := range []RequestRecord{
+		// Today: the agent and a coder use the same model, and each has cache details.
+		{TS: at(0), Provider: "openai", Model: "test-model", Operation: "chat", InputTokens: 1_000_000, OutputTokens: 10, TotalTokens: 1_000_010},
+		{TS: at(0), Provider: "openai", Model: "other-model", Operation: "chat", InputTokens: 400, TotalTokens: 400,
+			CachedInputTokens: 300, CacheDetails: map[string]int64{"ephemeral_5m_input_tokens": 7}},
+		{TS: at(0), Provider: "claude-code", APIHost: "claude-code", Model: "test-model", Operation: OperationCoder, Scene: OperationCoder,
+			InputTokens: 2_000_000, OutputTokens: 20, TotalTokens: 2_000_020},
+		{TS: at(0), Provider: "codex-cli", APIHost: "codex-cli", Model: "codex", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 50, OutputTokens: 5, TotalTokens: 55,
+			CachedInputTokens: 500, CacheDetails: map[string]int64{"ephemeral_5m_input_tokens": 11}},
+		// Yesterday: the agent only. Two days ago: a coder only.
+		{TS: at(1), Provider: "openai", Model: "other-model", Operation: "chat", InputTokens: 40, OutputTokens: 4, TotalTokens: 44},
+		{TS: at(2), Provider: "codex-cli", APIHost: "codex-cli", Model: "codex", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 60, OutputTokens: 6, TotalTokens: 66},
+	} {
+		if err := store.Append(rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.Daily(ctx, 4, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := func(list []ModelSummary) string {
+		var parts []string
+		for _, m := range list {
+			parts = append(parts, fmt.Sprintf("%s=%d", m.Model, m.TotalTokens))
+		}
+		sort.Strings(parts)
+		return strings.Join(parts, ",")
+	}
+	today, yesterday, before, empty := got.Days[3], got.Days[2], got.Days[1], got.Days[0]
+
+	// Both sources of a day, each with its own models, costs and cache details.
+	if a := today.Sources.Agent; a.Totals.Requests != 2 || a.Totals.TotalTokens != 1_000_410 || a.Totals.TotalCost != 1 ||
+		a.Totals.CachedInputTokens != 300 || a.Totals.CacheDetails["ephemeral_5m_input_tokens"] != 7 || models(a.Models) != "other-model=400,test-model=1000010" {
+		t.Fatalf("today's agent = %+v", a)
+	}
+	if c := today.Sources.Coder; c.Totals.Requests != 2 || c.Totals.TotalTokens != 2_000_075 || c.Totals.TotalCost != 2 || !c.Totals.CostEstimated ||
+		c.Totals.CachedInputTokens != 500 || c.Totals.CacheDetails["ephemeral_5m_input_tokens"] != 11 || models(c.Models) != "codex=55,test-model=2000020" {
+		t.Fatalf("today's coder = %+v", c)
+	}
+	for _, m := range today.Sources.Coder.Models {
+		if m.Model == "codex" && m.CacheDetails["ephemeral_5m_input_tokens"] != 11 {
+			t.Fatalf("coder model cache details = %+v", m)
+		}
+	}
+	// The combined fields are the sum of the two.
+	if today.Requests != 4 || today.TotalTokens != 3_000_485 || today.TotalCost != 3 || today.CachedInputTokens != 800 ||
+		today.CacheDetails["ephemeral_5m_input_tokens"] != 18 || models(today.Models) != "codex=55,other-model=400,test-model=3000030" {
+		t.Fatalf("today combined = %+v", today)
+	}
+	// A day with one source has the other present and zero.
+	if yesterday.Sources.Agent.Totals.TotalTokens != 44 || yesterday.Sources.Coder.Totals.Requests != 0 ||
+		yesterday.Sources.Coder.Models == nil || len(yesterday.Sources.Coder.Models) != 0 || yesterday.TotalTokens != 44 {
+		t.Fatalf("yesterday = %+v", yesterday)
+	}
+	if before.Sources.Coder.Totals.TotalTokens != 66 || before.Sources.Agent.Totals.Requests != 0 ||
+		before.Sources.Agent.Models == nil || before.TotalTokens != 66 {
+		t.Fatalf("two days ago = %+v", before)
+	}
+	if empty.Requests != 0 || empty.Sources.Agent.Models == nil || empty.Sources.Coder.Models == nil {
+		t.Fatalf("empty day = %+v", empty)
+	}
+	// The range, by source and combined.
+	if a := got.Sources.Agent; a.Summary.Requests != 3 || a.Summary.TotalTokens != 1_000_454 || models(a.Models) != "other-model=444,test-model=1000010" {
+		t.Fatalf("range agent = %+v", a)
+	}
+	if c := got.Sources.Coder; c.Summary.Requests != 3 || c.Summary.TotalTokens != 2_000_141 || c.Summary.TotalCost != 2 || models(c.Models) != "codex=121,test-model=2000020" {
+		t.Fatalf("range coder = %+v", c)
+	}
+	if got.Summary.Requests != 6 || got.Summary.TotalTokens != 3_000_595 || got.Summary.TotalCost != 3 ||
+		got.Summary.CacheDetails["ephemeral_5m_input_tokens"] != 18 || models(got.Models) != "codex=121,other-model=444,test-model=3000030" {
+		t.Fatalf("range combined = %+v / %s", got.Summary, models(got.Models))
+	}
+
+	// A range without coder rows still has the coder source, zero.
+	onlyAgent := openTestStore(t, filepath.Join(t.TempDir(), "usage.db"), testPricing(t, "1"))
+	onlyAgent.now = store.now
+	if err := onlyAgent.Append(RequestRecord{TS: at(0), Provider: "openai", Model: "test-model", Operation: "chat", InputTokens: 10, TotalTokens: 10}); err != nil {
+		t.Fatal(err)
+	}
+	daily, err := onlyAgent.Daily(ctx, 2, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if daily.Sources.Coder.Summary.Requests != 0 || daily.Sources.Coder.Models == nil || daily.Sources.Agent.Summary.TotalTokens != 10 {
+		t.Fatalf("agent-only sources = %+v", daily.Sources)
 	}
 }

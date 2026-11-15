@@ -165,6 +165,19 @@ func TestLLMDailyStatsRoute(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Append() error = %v", err)
 	}
+	// A coder run of the same day.
+	if err := journal.Append(llmstats.RequestRecord{
+		TS:           time.Now().UTC().Format(time.RFC3339),
+		Provider:     "codex-cli",
+		APIHost:      "codex-cli",
+		Model:        "codex",
+		Operation:    llmstats.OperationCoder,
+		Scene:        llmstats.OperationCoder,
+		InputTokens:  30,
+		OutputTokens: 5,
+	}); err != nil {
+		t.Fatalf("Append() error = %v", err)
+	}
 
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, RoutesOptions{Mode: "serve", AuthToken: "token", RuntimePaths: paths})
@@ -198,12 +211,72 @@ func TestLLMDailyStatsRoute(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("Unmarshal() error = %v", err)
 		}
-		if payload.TimeZone != "UTC" || len(payload.Days) != 7 || payload.Summary.Requests != 1 || payload.Summary.TotalCost != 0.5 {
+		// The old fields stay combined.
+		if payload.TimeZone != "UTC" || len(payload.Days) != 7 || payload.Summary.Requests != 2 || payload.Summary.TotalCost != 0.5 {
 			t.Fatalf("payload = %+v", payload)
 		}
 		last := payload.Days[len(payload.Days)-1]
-		if last.Date != payload.To || last.Requests != 1 || last.TotalTokens != 12 {
-			t.Fatalf("today = %+v, want 1 request / 12 tokens on %s", last, payload.To)
+		if last.Date != payload.To || last.Requests != 2 || last.TotalTokens != 47 {
+			t.Fatalf("today = %+v, want 2 requests / 47 tokens on %s", last, payload.To)
+		}
+	})
+
+	t.Run("sources", func(t *testing.T) {
+		rec := get("/stats/llm/daily?days=7&tz=UTC")
+		type totals struct {
+			Requests    int64   `json:"requests"`
+			TotalTokens int64   `json:"total_tokens"`
+			TotalCost   float64 `json:"total_cost"`
+		}
+		type model struct {
+			Model string `json:"model"`
+			totals
+		}
+		var payload struct {
+			Models  []model `json:"models"`
+			Sources map[string]struct {
+				Summary *totals  `json:"summary"`
+				Models  *[]model `json:"models"`
+			} `json:"sources"`
+			Days []struct {
+				Models  []model `json:"models"`
+				Sources map[string]struct {
+					Totals *totals  `json:"totals"`
+					Models *[]model `json:"models"`
+				} `json:"sources"`
+			} `json:"days"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("Unmarshal() error = %v", err)
+		}
+		agent, coder := payload.Sources["agent"], payload.Sources["coder"]
+		if len(payload.Sources) != 2 || agent.Summary == nil || coder.Summary == nil || agent.Models == nil || coder.Models == nil {
+			t.Fatalf("sources = %s", rec.Body.String())
+		}
+		if agent.Summary.Requests != 1 || agent.Summary.TotalTokens != 12 || agent.Summary.TotalCost != 0.5 ||
+			len(*agent.Models) != 1 || (*agent.Models)[0].Model != "gpt-5.2" {
+			t.Fatalf("agent = %+v %+v", agent.Summary, agent.Models)
+		}
+		if coder.Summary.Requests != 1 || coder.Summary.TotalTokens != 35 || coder.Summary.TotalCost != 0 ||
+			len(*coder.Models) != 1 || (*coder.Models)[0].Model != "codex" {
+			t.Fatalf("coder = %+v %+v", coder.Summary, coder.Models)
+		}
+		if len(payload.Models) != 2 {
+			t.Fatalf("combined models = %+v", payload.Models)
+		}
+		// Every day has both sources; a day without rows has them zero and its model lists empty.
+		for i, day := range payload.Days {
+			a, c := day.Sources["agent"], day.Sources["coder"]
+			if a.Totals == nil || c.Totals == nil || a.Models == nil || c.Models == nil {
+				t.Fatalf("day %d sources = %+v", i, day.Sources)
+			}
+			today := i == len(payload.Days)-1
+			if want := map[bool]int64{true: 12, false: 0}[today]; a.Totals.TotalTokens != want {
+				t.Fatalf("day %d agent tokens = %d, want %d", i, a.Totals.TotalTokens, want)
+			}
+			if want := map[bool]int64{true: 35, false: 0}[today]; c.Totals.TotalTokens != want {
+				t.Fatalf("day %d coder tokens = %d, want %d", i, c.Totals.TotalTokens, want)
+			}
 		}
 	})
 

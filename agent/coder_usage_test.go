@@ -134,3 +134,83 @@ func TestCoderToolWithoutUsageRecorderStillReports(t *testing.T) {
 		t.Fatalf("usage = %q", result.Usage)
 	}
 }
+
+// A terminal run (a Console chat) reports what its session files record and Claude Code's quota
+// in one call: both are saved, and the rows are priced from the catalog, as the files carry no cost.
+func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+	binDir := t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "claude", "exit 0\n")
+	usagePath := filepath.Join(t.TempDir(), "usage.db")
+	recorder := coderusage.NewRecorder(usagePath, nil)
+	var progress []string
+	reports := 0
+	tool := newCoderTool(coderToolDeps{
+		Runner:    &execDirectSubtaskRunner{},
+		PathExtra: []string{binDir},
+		Usage:     func() *coderusage.Recorder { return recorder },
+		RunTerminal: func(_ context.Context, req CoderRequest) (string, error) {
+			used := 61.0
+			reports++
+			req.Report(coderusage.Run{Turns: 2, Models: []coderusage.ModelUsage{
+				{Model: "claude-opus-5-5", InputTokens: 1_000_000, CachedInputTokens: 400_000, CacheCreationInputTokens: 100_000, OutputTokens: 20_000},
+				{Model: "claude-not-in-the-catalog", InputTokens: 500, OutputTokens: 5},
+			}}, &coderusage.Quota{Backend: "claude", Status: coderusage.StatusAllowed, ObservedAt: "2026-11-15T09:00:00Z",
+				Windows: []coderusage.Window{{Kind: "five_hour", WindowMinutes: 300, UsedPercent: &used, Status: coderusage.StatusAllowed}}})
+			return "fixed in the terminal", nil
+		},
+	})
+	ctx := WithEventSinkContext(llmstats.WithRunID(context.Background(), "run-9"), EventSinkFunc(func(_ context.Context, event Event) {
+		if event.Summary != "" {
+			progress = append(progress, event.Summary)
+		}
+	}))
+	raw, err := tool.Execute(ctx, map[string]any{"coder": "claude", "task": "fix it", "cwd": t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result SubtaskResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatal(err)
+	}
+	if reports != 1 || result.Status != SubtaskStatusDone || result.Output != "fixed in the terminal" {
+		t.Fatalf("reports = %d, result = %+v", reports, result)
+	}
+	for _, want := range []string{"claude run: 1.0M in (400.0k cached) · 20.0k out · 2 turns", "claude quota: 5h 61% used"} {
+		if !strings.Contains(result.Usage, want) {
+			t.Fatalf("usage = %q, want %q", result.Usage, want)
+		}
+	}
+	if last := progress[len(progress)-1]; !strings.HasPrefix(last, "[claude] usage: claude run:") {
+		t.Fatalf("last progress = %q (all: %q)", last, progress)
+	}
+
+	store, err := llmstats.OpenUsageStore(ctx, usagePath, llmstats.UsageStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	records, err := store.Records(ctx, 10)
+	if err != nil || len(records) != 2 {
+		t.Fatalf("records = %+v, %v", records, err)
+	}
+	known, unknown := records[0], records[1]
+	if known.APIHost != "claude-code" || known.Operation != llmstats.OperationCoder || known.Scene != llmstats.OperationCoder ||
+		known.Model != "claude-opus-5-5" || known.RunID != "run-9" || known.InputTokens != 1_000_000 || known.CachedInputTokens != 400_000 ||
+		known.CacheCreationInputTokens != 100_000 || known.OutputTokens != 20_000 {
+		t.Fatalf("record = %+v", known)
+	}
+	// The catalog's list price, split by kind and marked estimated.
+	if known.TotalCost <= 0 || !known.CostEstimated || known.CostCurrency != "USD" || known.OutputCost <= 0 || known.CachedInputCost <= 0 {
+		t.Fatalf("record cost = %+v", known)
+	}
+	if unknown.Model != "claude-not-in-the-catalog" || unknown.TotalCost != 0 || unknown.CostCurrency != "" || unknown.CostEstimated {
+		t.Fatalf("unknown model record = %+v", unknown)
+	}
+	quotas, err := coderusage.LoadQuotas(ctx, store)
+	if err != nil || len(quotas) != 1 || quotas[0].Backend != "claude" || len(quotas[0].Windows) != 1 {
+		t.Fatalf("quotas = %+v, %v", quotas, err)
+	}
+}

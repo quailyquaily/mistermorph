@@ -8,7 +8,7 @@ import (
 
 func backfillRequestCost(rec RequestRecord, pricing *uniaiapi.PricingCatalog) RequestRecord {
 	rec = normalizeRequestRecord(rec)
-	if pricing == nil || requestRecordHasCost(rec) || rec.Operation != operationChat {
+	if pricing == nil || requestRecordHasCost(rec) || !catalogPriced(rec.Operation) {
 		return rec
 	}
 	usage := uniaiapi.Usage{
@@ -26,7 +26,8 @@ func backfillRequestCost(rec RequestRecord, pricing *uniaiapi.PricingCatalog) Re
 		return rec
 	}
 	rec.CostCurrency = cost.Currency
-	rec.CostEstimated = cost.Estimated
+	// A coder's cost is a list price on a subscription, never what is billed.
+	rec.CostEstimated = cost.Estimated || rec.Operation == OperationCoder
 	rec.InputCost = cost.Input
 	rec.CachedInputCost = cost.CachedInput
 	rec.CacheCreationInputCost = cost.CacheCreationInput

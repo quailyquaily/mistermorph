@@ -13,12 +13,11 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 )
 
-// The usage.db rows of a coder run: their host (one per CLI, apart from the LLM providers'), their
-// operation and scene.
+// The usage.db rows of a coder run: their host (one per CLI, apart from the LLM providers'). Their
+// operation and scene are llmstats.OperationCoder.
 const (
-	OperationCoder = "coder"
-	hostCodex      = "codex-cli"
-	hostClaude     = "claude-code"
+	hostCodex  = "codex-cli"
+	hostClaude = "claude-code"
 )
 
 // Host is the usage host a coder's runs are recorded under.
@@ -44,8 +43,8 @@ func (r Run) Records(ctx context.Context, ts time.Time) []llmstats.RequestRecord
 			Provider:                 host,
 			APIHost:                  host,
 			Model:                    firstNonEmpty(m.Model, r.Backend),
-			Operation:                OperationCoder,
-			Scene:                    OperationCoder,
+			Operation:                llmstats.OperationCoder,
+			Scene:                    llmstats.OperationCoder,
 			InputTokens:              m.InputTokens,
 			OutputTokens:             m.OutputTokens,
 			TotalTokens:              m.InputTokens + m.OutputTokens,
