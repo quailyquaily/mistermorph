@@ -1,4 +1,8 @@
 ---
+branch: factory/FT133-coder-claude-stream-sessions
+round: 1
+---
+---
 ---
 # Coder: Claude Code on `claude -p` sessions, and no terminal
 
@@ -65,3 +69,32 @@ Sessions kept per Telegram or Slack chat and approvals there; checking the backe
 - `internal/llmstats`: rows with pricing parts already in a file are still repriced after a catalog change.
 - An opt-in test against the installed CLI (as `MISTERMORPH_TEST_CLAUDE=1` is today): a task in a bypassed session, and a second task that needs the first one's context.
 - Say in the report what was not checked against a real CLI.
+
+
+## factory · plan · 2026-11-16 01:37
+
+## Behaviour
+Merge the already fetched origin/feat/coder-sessions into the item branch first; run go test ./... immediately and correct regressions introduced by that branch. All coder requests then use RunSessions: Claude starts claude -p with streaming JSON stdin/stdout, reuses a scope's process across tasks, resets task answer/progress/usage collectors on each user message, and completes only at result. Empty answers must not retain a previous task's content. Permission denial responds deny and continues; AskUserQuestion uses cards with answers in updatedInput; an unaskable question fails the task and closes the process. Cancellation, protocol/process errors and approval-setting changes close/reopen with resume. Only model_usage_since_last_result is task usage; quota is read from stream events. Existing pricing_parts rows retain repricing behavior.
+
+## Scope
+Includes all prerequisite branch commits, a Claude session backend, removal of PTY and one-shot paths, migration of shared types and Codex rollout accounting out of coderterm, dependency cleanup, regression tests and the requested documentation/config comments. Preserves quota refresh, Codex rollout accounting and legacy pricing_parts. Excludes chat-wide sessions outside Console, Windows validation, usage.db migration and stream interrupts.
+
+## Decisions
+Use the existing session manager and lifecycle conventions rather than a parallel runner. Stream events are the sole source of Claude answers/progress; never read screens, credentials or services. Persist a UUID for resume; failures do not silently retry user actions. Handle approvals only when the runtime explicitly allows asking; other runtimes bypass permissions but cannot synthesize answers to CLI questions. Use recorded protocol fixtures/stand-ins for deterministic coverage; keep real-CLI tests opt-in without spending live quota by default.
+
+## Checking
+Add stand-in coverage for two tasks/one process with independent answers and usage, allow/deny permissions, question answers and unaskable questions, bypass flags, cancellation, process death/resume, quota and approval changes. Exercise combined Claude usage/quota through agent session reporting and usage.db; retain/add legacy pricing-parts repricing coverage. Add opt-in real Claude contextual second-turn test. Run required gofmt, go vet ./..., go test ./... with scripted tests using an absolute throwaway HOME, preserving explicit toolchain/module caches. If Console sources change run nsh check and scripts/test.sh. Report any real CLI or UI behavior not exercised.
+
+## factory · 2026-11-16 01:37
+
+Built Claude Code streaming sessions and routed all three coders through RunSessions. Removed the terminal/one-shot paths and internal/coderterm; retained Codex rollout accounting, Claude quota refresh, and legacy pricing_parts repricing. Updated docs, config comments and approval settings notes. Includes prerequisite origin/feat/coder-sessions and its usage/chart prerequisite commit, as required by the item. Final head: acc8d33a.
+
+Decisions: task usage comes exclusively from model_usage_since_last_result; when missing, no usage is recorded (the first implementation's running-total delta fallback was removed before pushing). Failed/cancelled sessions reopen with resume; sessions with no valid CLI reply may start with a fresh id. No live quota-spending tests were run.
+
+Installs/dependencies: no unpinned tools installed. Removed creack/pty, charmbracelet/x/vt and indirect charmbracelet/x/exp/ordered from go.mod; go.sum removes six lines. Pinned dependency restoration only.
+
+Tests: prerequisite go test ./... passed before further work. Manager independently verified clean gofmt, go vet ./... and go test ./... on final committed head using an absolute throwaway HOME. Coder additionally reports codersessions race tests (-count=8), Windows cross-build, darwin/arm64 package build, nsh check, Console test script (125 files, one concurrent failure passed isolated rerun), and 268 core node tests passing. New stand-in and agent/storage regression tests cover session reuse, task isolation, approvals/questions, cancellation/failure/resume, quota, running-total exclusion and legacy pricing-parts repricing.
+
+Not checked: real Claude/Codex/agy task runs or approvals; real bypassed Claude questions, sub-agent usage and num_turns semantics. Opt-in contextual real-Claude test added but not run. UI changed (agy approval-toggle notes/settings); permission/question cards and settings were NOT looked at in a browser. Windows execution not tested (cross-build only).
+
+Recovery/process notes: numbering push initially failed because credential.useHttpPath was absent; retry with repository path succeeded. No base branch or tags pushed. Next: review the full prerequisite and implementation diff, especially protocol lifecycle and usage reporting.
