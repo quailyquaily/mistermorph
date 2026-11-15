@@ -50,3 +50,19 @@ Built in commits b7b3fb3a and 668f2709; head: 668f2709.
 - Push initially failed because the credential helper lacked the repository path; the single retry with command-local credential.useHttpPath=true succeeded.
 
 Moved new/ → review/ for independent review; not merged into master.
+
+
+## factory · review · 2026-11-15 11:28
+head: 668f27097446d3435e655eb8b535989c2dbdca2b
+verdict: pass
+notes:
+- [P2] agent/file_intent.go:105: Dotted prose still becomes a mandatory file, and the new hard-error guard makes false positives terminate the run. Verified example: `Write to john@example.com about the delay.` extracts `john@example.com`; with an empty tool registry the engine returns FileWriteUnsatisfiedError naming that address. Reject email/prose destinations and tighten the verb boundary without excluding legitimate filenames. Extraction itself predates this change; the terminal failure is newly reachable.
+- [P3] agent/file_intent.go:83: Non-ASCII sentence punctuation silently drops file enforcement. Verified example: `Please save it to report.md。` extracts no destination; strip appropriate sentence punctuation so report.md remains required.
+
+Validation: Claude Code independently reviewed all eight changed files on origin/master...HEAD. Required gate `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (exit 0), using an absolute throwaway HOME. Probe tests confirmed parser examples and compared selected behavior with base through Go overlays. No installs, repository edits or commits by reviewer; manager confirmed clean worktree and unchanged head. No P0/P1 findings.
+
+Manager assessment: The reviewer's proposed fallback when no writing tool exists conflicts with this item's explicit missing-output enforcement and planned actionable errors, so it is not retained as a defect. Quoted extensionless names are deliberately supported by the plan; existing apostrophe parsing behavior is not a new regression, so those suggestions are not retained as findings.
+
+Residual risks: No live-model, real builtin writer, or Windows execution. Stat-only checks can inspect task-supplied paths; newly expanded home paths and checked absolute locations in diagnostics were not traced through chat error presentation. Pre-existing file satisfaction and max-step forced conclusions remain unchanged.
+
+Moved review/ → ready/. P2/P3 notes remain for owner consideration; not merged into master.
