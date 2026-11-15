@@ -69,3 +69,16 @@ Manager verification: gofmt check, go vet ./..., go test ./... PASS with throwaw
 Coder browser inspection: 7/30/90 days at desktop 1280 and phone 390 widths; mixed, agent-only, coder-only and legacy data, desktop tooltip, legend isolation and Tokens/Cache views. Bar ordering and phone figures overflow found and fixed.
 
 Not checked: live Codex/Claude terminal end-to-end; phone tooltip (probe did not open it); GPUI desktop, Android device and zh/ja UI. Fixtures cover readers and runtime reporting. No linked GitHub issue/PR. Moved new/ to review/, round 1.
+
+## factory · review · 2026-11-15 20:32
+head: 92edfa110af6c635393825a8fbaa9f9e33871c26
+verdict: pass
+notes:
+- [P2] internal/llmstats/usagedb.go:306 (internal/coderterm/usage.go:247): terminal Claude usage is summed per model before catalog pricing, so per-request token thresholds are incorrectly applied to task totals. Verified catalog example: three claude-haiku-5-5 responses with 50,000 input / 48,000 cached / 1,000 output each cost $0.003540 separately, but the aggregated row costs $0.017700. Preserve per-response or pricing-tier granularity through insertion and repricing.
+- [P3] internal/coderterm/usage.go:203-208: Claude cache_creation TTL details are discarded, so 1-hour cache writes use the 5-minute default price. Verified catalog example: 1,000,000 claude-sonnet-5-5 cache-write tokens cost $2.50 without details versus $4.00 with ephemeral_1h_input_tokens. Carry the cache detail split through coderterm, coderusage and RequestRecord.CacheDetails.
+
+Claude Code reviewed all 31 changed files against origin/master...HEAD. No P0/P1 findings; moved review/ to ready/ under factory policy. P2/P3 pricing issues above remain for the owner to consider before shipping.
+
+Validation reported by reviewer: configured gofmt check, go vet ./..., go test ./... PASS; nsh check PASS; Console scripts/test.sh PASS (125 files, 0 failed; one unrelated attachment test passed on isolated retry); daily-usage Node tests 11/11 PASS. Tests used an absolute throwaway HOME. Manager verified unchanged head and clean worktree after review. No unpinned installs or manifest/lock changes.
+
+Not checked: live terminal CLI end-to-end, browser chart inspection in this review, GPUI desktop or Android. Codex child rollouts containing copied parent token events remain unverified; no sampled rollout had sub-agent activity. Catalog-unknown Claude models remain unpriced by design; Codex-only cost view can show $0 list price. No linked GitHub issue/PR to comment on.
