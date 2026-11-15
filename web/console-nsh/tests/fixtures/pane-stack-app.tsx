@@ -47,7 +47,7 @@ function Stack() {
   const pane = (at: number, wanted: () => boolean, body: () => any) => (
     <If when={panes.shown(at, wanted())}>
       <View
-        class="flex-1"
+        class={`flex-1 ${panes.paper(at)}`}
         style={panes.style(at)}
         accessibilityElementsHidden={panes.hidden(at) || undefined}
         testID={`pane.${at}${panes.hidden(at) ? ".out" : ""}`}
@@ -88,6 +88,8 @@ function Stack() {
       <Text testID="mounts">{`mounts=${mounts().join(",")}`}</Text>
       {/* Each level's zIndex ("-" with no style: side by side). */}
       <Text testID="z">{`z=${[0, 1, 2].map((at) => String(panes.style(at)?.zIndex ?? "-")).join(",")}`}</Text>
+      {/* Each level's fill ("-" with none: side by side). */}
+      <Text testID="paper">{`paper=${[0, 1, 2].map((at) => panes.paper(at) || "-").join(",")}`}</Text>
       <View class="flex-1 flex-row">
         {pane(0, () => level() === 0 || level() === null, () => <Text>list</Text>)}
         {pane(1, () => level() === 1 || level() === null, () => <Text>{`item=${shownItem()}`}</Text>)}

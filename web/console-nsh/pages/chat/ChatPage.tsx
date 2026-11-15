@@ -300,6 +300,11 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
   );
 }
 
+/** The conversation pane's test id: `.paper` where it draws the page's paper (the phone's pane over the topic list). */
+export function conversationPaneTestID(paper: string) {
+  return paper ? "chat-conversation-pane.paper" : "chat-conversation-pane";
+}
+
 export function ChatPage() {
   const c = createChatController();
   // On phones the topic list (0) and a conversation (1) are levels of the page: opening a topic
@@ -393,12 +398,15 @@ export function ChatPage() {
             />
           </If>
           <If when={panes.shown(1, c.showChatPane())}>
+            {/* The phone's conversation is a page over the topic list: on the page's paper, so the
+                list does not show through it as it slides in or out (a new topic is mostly empty).
+                The test id says so (`chat-conversation-pane.paper`). */}
             <View
-              class="flex-1"
+              class={`flex-1 ${panes.paper(1)}`}
               style={panes.style(1)}
               accessibilityElementsHidden={panes.hidden(1) || undefined}
               importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
-              testID="chat-conversation-pane"
+              testID={conversationPaneTestID(panes.paper(1))}
             >
               <If when={c.mobileMode() && c.mobileTopicSplitEnabled()}>
                 <PageBar leading={mobileLeading()} glass />

@@ -279,6 +279,12 @@ Headless tests prove behaviour, not the look.
   phone detail view does the same. Headless steps do not wait for a slide on the system clock: a
   test that checks a page or pane has gone waits for it (`{ state: "gone" }`), and a press on
   the list during the slide's last frame can be lost headless (not in a browser).
+- A view has no fill unless it is given one: a pane that slides over another is see-through
+  between its parts (the topic list showed through a new topic's empty page as it slid in). The
+  item's pane takes the page's paper from the stack (`panes.paper(1)` in its root's class:
+  `bg-background` on phones, nothing where the panes stand side by side). A glass bar's tint is
+  not a page fill. Headless has no style query: the chat's pane says it in its test id
+  (`chat-conversation-pane.paper`).
 - nsh orders sibling views by `zIndex` by moving their native views (a DOM `insertBefore` on the
   web, a remove and add on Android): changing the `zIndex` of a view holding a focused field takes
   the focus off it (Android keeps the keyboard up, with nothing to type in). PaneStack restacks
