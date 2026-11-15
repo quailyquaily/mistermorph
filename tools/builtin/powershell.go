@@ -147,63 +147,16 @@ func (t *PowerShellTool) runnerSpec() shellRunnerSpec {
 	}
 }
 
+// powershellToolEnv is the PowerShell tool's environment, built in shellenv (the coder tool's on
+// Windows is built from it).
 func powershellToolEnv(injected []shellenv.InjectedEnvVar) []string {
-	env := bashToolEnvWithPathExtra(injected, nil)
-	seen := make(map[string]bool, len(env))
-	for _, e := range env {
-		if i := strings.Index(e, "="); i > 0 {
-			seen[strings.ToUpper(e[:i])] = true
-		}
-	}
-	for _, key := range []string{
-		"ALLUSERSPROFILE",
-		"APPDATA",
-		"COMMONPROGRAMFILES",
-		"COMMONPROGRAMFILES(X86)",
-		"COMMONPROGRAMW6432",
-		"COMPUTERNAME",
-		"COMSPEC",
-		"DriverData",
-		"HOMEDRIVE",
-		"HOMEPATH",
-		"LOCALAPPDATA",
-		"LOGONSERVER",
-		"NUMBER_OF_PROCESSORS",
-		"OS",
-		"PATHEXT",
-		"PROCESSOR_ARCHITECTURE",
-		"PROCESSOR_IDENTIFIER",
-		"PROCESSOR_LEVEL",
-		"PROCESSOR_REVISION",
-		"PROGRAMDATA",
-		"PROGRAMFILES",
-		"PROGRAMFILES(X86)",
-		"PROGRAMW6432",
-		"PSModulePath",
-		"PUBLIC",
-		"SESSIONNAME",
-		"SYSTEMDRIVE",
-		"SYSTEMROOT",
-		"TEMP",
-		"TMP",
-		"USERDNSDOMAIN",
-		"USERDOMAIN",
-		"USERDOMAIN_ROAMINGPROFILE",
-		"USERNAME",
-		"USERPROFILE",
-		"WINDIR",
-	} {
-		if seen[strings.ToUpper(key)] {
-			continue
-		}
-		value, ok := os.LookupEnv(key)
-		if !ok || strings.TrimSpace(value) == "" {
-			continue
-		}
-		seen[strings.ToUpper(key)] = true
-		env = append(env, key+"="+value)
-	}
-	return env
+	return shellenv.PowerShellEnv(injected, nil)
+}
+
+// ShellInjectedEnvVars are the variables the tool injects into a command now
+// (shellenv.InjectedEnvSource).
+func (t *PowerShellTool) ShellInjectedEnvVars() []shellenv.InjectedEnvVar {
+	return shellenv.CloneInjectedEnvVars(t.InjectedEnvVars)
 }
 
 func powershellCommandDenied(cmdStr string, denyPaths []string) (string, bool) {

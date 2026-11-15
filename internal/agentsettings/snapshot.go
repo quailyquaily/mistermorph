@@ -12,6 +12,7 @@ import (
 // HTTP routes. Implementations are treated as immutable after construction.
 type Reader interface {
 	llmutil.ConfigReader
+	Get(string) any
 	GetBool(string) bool
 	GetDuration(string) time.Duration
 	GetInt(string) int
@@ -45,6 +46,10 @@ func NewReaderSnapshot(source Reader) *ReaderSnapshot {
 
 func (s *ReaderSnapshot) GetString(key string) string {
 	return s.reader.GetString(key)
+}
+
+func (s *ReaderSnapshot) Get(key string) any {
+	return s.reader.Get(key)
 }
 
 func (s *ReaderSnapshot) GetBool(key string) bool {

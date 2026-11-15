@@ -329,65 +329,16 @@ func exitCodeFromError(err error) int {
 	return -1
 }
 
+// bashToolEnvWithPathExtra is the bash tool's environment. It is built in shellenv, which the
+// coder tool builds its own from.
 func bashToolEnvWithPathExtra(injected []shellenv.InjectedEnvVar, pathExtra []string) []string {
-	pathValue := strings.TrimSpace(os.Getenv("PATH"))
-	if pathValue == "" {
-		pathValue = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-	}
-	if extra := cleanPathExtra(pathExtra); len(extra) > 0 {
-		pathValue = strings.Join(append(extra, pathValue), string(os.PathListSeparator))
-	}
-	env := []string{"PATH=" + pathValue}
-	seen := map[string]bool{"PATH": true}
-	for _, key := range []string{
-		"HOME",
-		"LANG",
-		"LC_ALL",
-		"LC_CTYPE",
-		"TERM",
-		"TZ",
-		"TMPDIR",
-		"USER",
-		"LOGNAME",
-		"SHELL",
-		"XDG_CONFIG_HOME",
-		"XDG_CACHE_HOME",
-		"XDG_DATA_HOME",
-		"XDG_RUNTIME_DIR",
-		"SSL_CERT_FILE",
-		"SSL_CERT_DIR",
-	} {
-		seen[key] = true
-		value, ok := os.LookupEnv(key)
-		if !ok || strings.TrimSpace(value) == "" {
-			continue
-		}
-		env = append(env, key+"="+value)
-	}
-	for _, item := range injected {
-		key := shellenv.NormalizeName(item.Name)
-		if key == "" || seen[key] {
-			continue
-		}
-		seen[key] = true
-		env = append(env, key+"="+item.Value)
-	}
-	return env
+	return shellenv.BashEnv(injected, pathExtra)
 }
 
-func cleanPathExtra(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(in))
-	for _, item := range in {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		out = append(out, item)
-	}
-	return out
+// ShellInjectedEnvVars are the variables the tool injects into a command now
+// (shellenv.InjectedEnvSource): the coder tool gives its CLIs the same.
+func (t *BashTool) ShellInjectedEnvVars() []shellenv.InjectedEnvVar {
+	return shellenv.CloneInjectedEnvVars(t.InjectedEnvVars)
 }
 
 func replaceAliasTokenInCommand(cmd, alias, baseDir string, isBoundary func(byte) bool) (string, error) {

@@ -30,6 +30,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/processsignal"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -509,11 +510,11 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 		},
 	}
 	engineToolsConfig := agent.EngineToolsConfig{
-		SpawnEnabled:   viper.GetBool("tools.spawn.enabled"),
-		CoderEnabled:   viper.GetBool("tools.coder.enabled"),
-		PathRoots:      pathroots.New("", fileCacheDir, fileStateDir),
-		CoderPathExtra: append([]string(nil), viper.GetStringSlice("tools.coder.path_extra")...),
-		WorkerNameSet:  agent.NormalizeWorkerNameSet(viper.GetString("tools.agent_name_set")),
+		SpawnEnabled:  viper.GetBool("tools.spawn.enabled"),
+		CoderEnabled:  viper.GetBool("tools.coder.enabled"),
+		PathRoots:     pathroots.New("", fileCacheDir, fileStateDir),
+		CoderEnv:      shellenv.CoderEnvFromConfig(viper.GetViper()),
+		WorkerNameSet: agent.NormalizeWorkerNameSet(viper.GetString("tools.agent_name_set")),
 	}
 	taskRuntime, err := taskruntime.NewRunPreparer(common, taskruntime.BootstrapOptions{
 		AgentConfig: agent.Config{

@@ -11,6 +11,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
 // A Claude Code run as 2.1.323 streams it: the quota during the run, the cost and tokens per model
@@ -30,10 +31,10 @@ func TestCoderToolRecordsClaudeUsageAndQuota(t *testing.T) {
 	recorder := coderusage.NewRecorder(usagePath, nil)
 	var progress []string
 	tool := newCoderTool(coderToolDeps{
-		Runner:    &execDirectSubtaskRunner{},
-		RunCLI:    runCoderCLI,
-		PathExtra: []string{binDir},
-		Usage:     func() *coderusage.Recorder { return recorder },
+		Runner: &execDirectSubtaskRunner{},
+		RunCLI: runCoderCLI,
+		Env:    shellenv.CoderEnv{PathExtra: []string{binDir}},
+		Usage:  func() *coderusage.Recorder { return recorder },
 	})
 	ctx := WithEventSinkContext(llmstats.WithRunID(context.Background(), "run-7"), EventSinkFunc(func(_ context.Context, event Event) {
 		if event.Summary != "" {
@@ -90,12 +91,12 @@ func TestCoderToolReadsCodexQuotaAfterACodexRun(t *testing.T) {
 	recorder := coderusage.NewRecorder(usagePath, nil)
 	var readWith []string
 	tool := newCoderTool(coderToolDeps{
-		Runner:    &execDirectSubtaskRunner{},
-		RunCLI:    runCoderCLI,
-		PathExtra: []string{binDir},
-		Usage:     func() *coderusage.Recorder { return recorder },
-		ReadCodexQuota: func(_ context.Context, pathExtra []string) (coderusage.Quota, error) {
-			readWith = pathExtra
+		Runner: &execDirectSubtaskRunner{},
+		RunCLI: runCoderCLI,
+		Env:    shellenv.CoderEnv{PathExtra: []string{binDir}},
+		Usage:  func() *coderusage.Recorder { return recorder },
+		ReadCodexQuota: func(_ context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error) {
+			readWith = coderEnv.PathExtra
 			used := 100.0
 			return coderusage.Quota{Backend: "codex", Plan: "pro", Status: coderusage.StatusRejected, ObservedAt: "2026-11-13T09:00:00Z",
 				Windows: []coderusage.Window{{Kind: "primary", WindowMinutes: 10080, UsedPercent: &used, Status: coderusage.StatusRejected}}}, nil

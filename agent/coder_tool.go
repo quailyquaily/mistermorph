@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
 const (
@@ -42,11 +42,12 @@ type coderTool struct {
 
 // CoderRequest describes one coding task. Command and Env are resolved for an injected terminal runner.
 type CoderRequest struct {
-	Backend   string
-	Task      string
-	CWD       string
-	PathExtra []string
-	LogRoot   string
+	Backend string
+	Task    string
+	CWD     string
+	// CoderEnv builds the CLI's environment and finds the CLI in it.
+	CoderEnv shellenv.CoderEnv
+	LogRoot  string
 	// BypassApprovals asks a terminal session to run without approval prompts or sandbox.
 	BypassApprovals bool
 	Command         string
@@ -124,12 +125,27 @@ func (t *coderTool) ParameterSchema() string {
 	return string(b)
 }
 
+// coderEnv is the environment builder of a run: the configured one, with the variables the
+// registered shell tool injects into a command now (a task can add its own to the bash tool).
+func (t *coderTool) coderEnv() shellenv.CoderEnv {
+	env := t.deps.Env
+	if t.deps.LookupTool == nil {
+		return env
+	}
+	if tool, ok := t.deps.LookupTool(shellenv.CoderShellToolName()); ok {
+		if source, ok := tool.(shellenv.InjectedEnvSource); ok {
+			env = env.WithInjectedFrom(source)
+		}
+	}
+	return env
+}
+
 func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	req, err := coderRequestFromParams(ctx, params, t.deps.Roots)
 	if err != nil {
 		return "", err
 	}
-	req.PathExtra = append([]string(nil), t.deps.PathExtra...)
+	req.CoderEnv = t.coderEnv()
 	req.BypassApprovals = t.deps.BypassApprovals[req.Backend]
 	req.LogRoot = pathroots.Resolve(ctx, t.deps.Roots).FileCacheDir
 
@@ -144,7 +160,7 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 	if t.deps.RunTerminal != nil {
 		runCLI = func(ctx context.Context, req CoderRequest, emit func(string)) (string, error) {
 			// The backend name is also the CLI's command name.
-			command, env, err := prepareCoderCommand(req.Backend, req.PathExtra)
+			command, env, err := req.CoderEnv.Command(req.Backend)
 			if err != nil {
 				return "", err
 			}
@@ -226,7 +242,7 @@ func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coder
 	run.Backend = req.Backend
 	recorder.RecordRun(ctx, run)
 	if quota == nil && req.Backend == coderBackendCodex && t.deps.ReadCodexQuota != nil {
-		if read, err := t.deps.ReadCodexQuota(context.WithoutCancel(ctx), req.PathExtra); err == nil {
+		if read, err := t.deps.ReadCodexQuota(context.WithoutCancel(ctx), req.CoderEnv); err == nil {
 			quota = &read
 		}
 	}
@@ -251,8 +267,8 @@ func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coder
 }
 
 // readCodexQuota reads Codex's quota from its app server, finding codex as the coder tool does.
-func readCodexQuota(ctx context.Context, pathExtra []string) (coderusage.Quota, error) {
-	command, env, err := prepareCoderCommand(coderBackendCodex, pathExtra)
+func readCodexQuota(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error) {
+	command, env, err := coderEnv.Command(coderBackendCodex)
 	if err != nil {
 		return coderusage.Quota{}, err
 	}
@@ -433,7 +449,7 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	if strings.TrimSpace(spec.Command) == "" {
 		return "", fmt.Errorf("unsupported coder: %s", req.Backend)
 	}
-	commandPath, env, err := prepareCoderCommand(spec.Command, req.PathExtra)
+	commandPath, env, err := req.CoderEnv.Command(spec.Command)
 	if err != nil {
 		return "", err
 	}
@@ -553,120 +569,6 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 		return output, fmt.Errorf("%s failed: %s", req.Backend, errText)
 	}
 	return output, nil
-}
-
-func prepareCoderCommand(command string, pathExtra []string) (string, []string, error) {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return "", nil, fmt.Errorf("coder command is empty")
-	}
-	extra := cleanCoderPathExtra(pathExtra)
-	if len(extra) == 0 {
-		return command, nil, nil
-	}
-	pathValue := coderPathWithExtra(os.Getenv("PATH"), extra)
-	commandPath := command
-	if !strings.ContainsAny(command, `/\`) {
-		resolved, err := lookupCoderCommand(command, pathValue)
-		if err != nil {
-			return "", nil, err
-		}
-		commandPath = resolved
-	}
-	return commandPath, coderEnvWithPath(os.Environ(), pathValue), nil
-}
-
-func coderPathWithExtra(parentPath string, extra []string) string {
-	parts := append([]string(nil), extra...)
-	parentPath = strings.TrimSpace(parentPath)
-	if parentPath != "" {
-		parts = append(parts, parentPath)
-	}
-	return strings.Join(parts, string(os.PathListSeparator))
-}
-
-func lookupCoderCommand(command string, pathValue string) (string, error) {
-	for _, dir := range filepath.SplitList(pathValue) {
-		// Like exec.LookPath, never resolve to a binary in the current directory.
-		if !filepath.IsAbs(strings.TrimSpace(dir)) {
-			continue
-		}
-		for _, name := range coderExecutableNames(command) {
-			candidate := filepath.Join(dir, name)
-			if isCoderExecutable(candidate) {
-				return candidate, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("%s executable not found in PATH", command)
-}
-
-func coderExecutableNames(command string) []string {
-	if runtime.GOOS != "windows" || strings.Contains(filepath.Base(command), ".") {
-		return []string{command}
-	}
-	rawExts := strings.TrimSpace(os.Getenv("PATHEXT"))
-	if rawExts == "" {
-		rawExts = ".COM;.EXE;.BAT;.CMD"
-	}
-	exts := strings.Split(rawExts, ";")
-	out := []string{command}
-	for _, ext := range exts {
-		ext = strings.TrimSpace(ext)
-		if ext == "" {
-			continue
-		}
-		if !strings.HasPrefix(ext, ".") {
-			ext = "." + ext
-		}
-		out = append(out, command+ext)
-	}
-	return out
-}
-
-func isCoderExecutable(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		return true
-	}
-	return info.Mode().Perm()&0o111 != 0
-}
-
-func coderEnvWithPath(base []string, pathValue string) []string {
-	out := make([]string, 0, len(base)+1)
-	seenPath := false
-	for _, item := range base {
-		key, _, ok := strings.Cut(item, "=")
-		if ok && strings.EqualFold(key, "PATH") {
-			if !seenPath {
-				out = append(out, "PATH="+pathValue)
-				seenPath = true
-			}
-			continue
-		}
-		out = append(out, item)
-	}
-	if !seenPath {
-		out = append([]string{"PATH=" + pathValue}, out...)
-	}
-	return out
-}
-
-func cleanCoderPathExtra(in []string) []string {
-	out := make([]string, 0, len(in))
-	seen := map[string]bool{}
-	for _, item := range in {
-		item = strings.TrimSpace(item)
-		if item == "" || seen[item] {
-			continue
-		}
-		seen[item] = true
-		out = append(out, item)
-	}
-	return out
 }
 
 // coderLineWriter hands each complete line to handle. A line longer than coderLineMaxBytes

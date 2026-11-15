@@ -30,6 +30,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/processsignal"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -396,8 +397,8 @@ func New(deps Dependencies) *cobra.Command {
 						strings.TrimSpace(viper.GetString("file_cache_dir")),
 						strings.TrimSpace(viper.GetString("file_state_dir")),
 					),
-					CoderPathExtra: append([]string(nil), viper.GetStringSlice("tools.coder.path_extra")...),
-					WorkerNameSet:  agent.NormalizeWorkerNameSet(viper.GetString("tools.agent_name_set")),
+					CoderEnv:      shellenv.CoderEnvFromConfig(viper.GetViper()),
+					WorkerNameSet: agent.NormalizeWorkerNameSet(viper.GetString("tools.agent_name_set")),
 				},
 				clientDecorator:   clientDecorator,
 				createLLMClient:   createLLMClient,

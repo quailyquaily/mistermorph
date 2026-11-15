@@ -12,10 +12,12 @@ import (
 	mixinruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/mixin"
 	slackruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/slack"
 	telegramruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/telegram"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/spf13/viper"
 )
 
 type ConfigReader interface {
+	Get(string) any
 	GetStringSlice(string) []string
 	GetString(string) string
 	GetFloat64(string) float64
@@ -43,10 +45,10 @@ func agentLimitsFromReader(r ConfigReader) agent.Limits {
 
 func engineToolsConfigFromReader(r ConfigReader) agent.EngineToolsConfig {
 	return agent.EngineToolsConfig{
-		SpawnEnabled:   r.GetBool("tools.spawn.enabled"),
-		CoderEnabled:   r.GetBool("tools.coder.enabled"),
-		CoderPathExtra: append([]string(nil), r.GetStringSlice("tools.coder.path_extra")...),
-		WorkerNameSet:  agent.NormalizeWorkerNameSet(r.GetString("tools.agent_name_set")),
+		SpawnEnabled:  r.GetBool("tools.spawn.enabled"),
+		CoderEnabled:  r.GetBool("tools.coder.enabled"),
+		CoderEnv:      shellenv.CoderEnvFromConfig(r),
+		WorkerNameSet: agent.NormalizeWorkerNameSet(r.GetString("tools.agent_name_set")),
 	}
 }
 

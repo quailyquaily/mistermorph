@@ -203,7 +203,7 @@ func TestRuntimeSnapshotLoadsCoderPathExtra(t *testing.T) {
 	cfg.Set("tools.coder.path_extra", []string{"/opt/coder/bin", " /custom/coder/bin "})
 
 	rt := New(cfg)
-	got := rt.snap.Registry.ToolsCoderPathExtra
+	got := rt.snap.Registry.ToolsCoderEnv.PathExtra
 	want := []string{"/opt/coder/bin", " /custom/coder/bin "}
 	if len(got) != len(want) {
 		t.Fatalf("ToolsCoderPathExtra = %#v, want %#v", got, want)

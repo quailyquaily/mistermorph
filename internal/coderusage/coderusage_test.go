@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
 // The events below are as Claude Code 2.1.323 and Codex 0.169.0 wrote them (2026-11-13).
@@ -247,27 +248,6 @@ func TestReadCodexQuotaFromAppServer(t *testing.T) {
 	}
 }
 
-func TestFindCommand(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unix permissions")
-	}
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", "")
-	path, env, err := FindCommand("codex", []string{dir})
-	if err != nil || path != filepath.Join(dir, "codex") {
-		t.Fatalf("path = %q, %v", path, err)
-	}
-	if !strings.Contains(strings.Join(env, "\n"), "PATH="+string(os.PathListSeparator)+dir) {
-		t.Fatalf("env lacks the extra path: %v", env)
-	}
-	if _, _, err := FindCommand("codex", []string{"relative/dir"}); err == nil {
-		t.Fatal("found in a relative directory")
-	}
-}
-
 // Claude Code's status line JSON, as a terminal session keeps it: the 5-hour and weekly windows
 // become the quota; a gateway's spend limit, other fields and a status without windows do not.
 func TestParseClaudeStatusLine(t *testing.T) {
@@ -358,7 +338,7 @@ func TestInstalledClaudeUsage(t *testing.T) {
 	if os.Getenv("MISTERMORPH_TEST_CLAUDE") != "1" {
 		t.Skip("set MISTERMORPH_TEST_CLAUDE=1 to read the installed CLI's usage")
 	}
-	command, env, err := FindCommand(BackendClaude, nil)
+	command, env, err := shellenv.CoderEnv{}.Command(BackendClaude)
 	if err != nil {
 		t.Fatal(err)
 	}

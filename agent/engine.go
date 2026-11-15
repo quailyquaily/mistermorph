@@ -306,6 +306,7 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			Runner:         e.subtaskRunner,
 			RunCLI:         runCoderCLI,
 			RunTerminal:    e.coderTerminal,
+			LookupTool:     e.registry.Get,
 			Usage:          coderusage.Default,
 			ReadCodexQuota: readCodexQuota,
 		},

@@ -135,6 +135,7 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 	}, r.engine.spec, append(subOpts, WithEngineToolsConfig(EngineToolsConfig{
 		SpawnEnabled:  canSpawn,
 		CoderEnabled:  false,
+		CoderEnv:      r.engine.engineToolsConfig.CoderEnv,
 		WorkerNameSet: r.engine.engineToolsConfig.WorkerNameSet,
 	}))...)
 

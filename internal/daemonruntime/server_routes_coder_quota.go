@@ -10,17 +10,22 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
-// coderQuotaPathExtraKey is where the coder tool looks for the CLIs beyond PATH.
-const coderQuotaPathExtraKey = "tools.coder.path_extra"
-
 // findCoderCommand and readCoderQuota are the CLI lookups the quota routes use (tests replace
-// them): Codex's app server, Claude Code's /usage; neither uses quota.
+// them): Codex's app server, Claude Code's /usage; neither uses quota. The CLIs are found and
+// started as the coder tool does it: in the bash tool's environment, with the coder's PATH.
 var (
-	findCoderCommand = coderusage.FindCommand
-	readCoderQuota   = func(ctx context.Context, backend string, pathExtra []string) (coderusage.Quota, error) {
-		command, env, err := coderusage.FindCommand(backend, pathExtra)
+	// coderEnvFromSettings reads the coder's environment settings for a request.
+	coderEnvFromSettings = func(settings agentsettings.Reader) shellenv.CoderEnv {
+		return shellenv.CoderEnvFromConfig(settings)
+	}
+	findCoderCommand = func(backend string, coderEnv shellenv.CoderEnv) (string, []string, error) {
+		return coderEnv.Command(backend)
+	}
+	readCoderQuota = func(ctx context.Context, backend string, coderEnv shellenv.CoderEnv) (coderusage.Quota, error) {
+		command, env, err := findCoderCommand(backend, coderEnv)
 		if err != nil {
 			return coderusage.Quota{}, err
 		}
@@ -49,10 +54,10 @@ func registerCoderQuotaRoutes(mux *http.ServeMux, authToken string, openStore fu
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		pathExtra := settings.GetStringSlice(coderQuotaPathExtraKey)
+		coderEnv := coderEnvFromSettings(settings)
 		payload := coderQuotaPayload{Available: map[string]bool{}}
 		for _, backend := range []string{coderusage.BackendCodex, coderusage.BackendClaude} {
-			_, _, err := findCoderCommand(backend, pathExtra)
+			_, _, err := findCoderCommand(backend, coderEnv)
 			payload.Available[backend] = err == nil
 		}
 		store, err := openStore(r.Context())
@@ -71,7 +76,7 @@ func registerCoderQuotaRoutes(mux *http.ServeMux, authToken string, openStore fu
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					quota, err := readCoderQuota(r.Context(), backend, pathExtra)
+					quota, err := readCoderQuota(r.Context(), backend, coderEnv)
 					mu.Lock()
 					defer mu.Unlock()
 					if err == nil {
