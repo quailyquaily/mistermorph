@@ -1,6 +1,6 @@
 ---
 branch: factory/FT130-coder-usage-console-and-chart
-round: 1
+round: 2
 ---
 # Coder usage from Console runs, and agent and coder apart in the daily chart
 
@@ -90,3 +90,29 @@ FT130 there are 2 P2 need to fix, move it to new/
 Sent back from ready/ to new/ on the owner's word above, for a fix round on the same branch. The latest review (head 92edfa11) lists two notes, one P2 and one P3, and no others; the owner's "2 P2" is taken as both of them:
 - [P2] internal/llmstats/usagedb.go:306 (internal/coderterm/usage.go:247): terminal Claude usage is summed per model before catalog pricing; keep per-response or pricing-tier granularity through insertion and repricing.
 - [P3] internal/coderterm/usage.go:203-208: Claude cache_creation TTL details are discarded; carry the cache detail split through coderterm, coderusage and RequestRecord.CacheDetails.
+
+## factory · plan · 2026-11-15 21:30
+
+Fix round 2, additional plan:
+
+Behaviour
+- Price terminal Claude responses individually rather than applying catalog thresholds to model totals. Preserve per-response pricing inputs for initial insertion and future repricing; task totals, deduplication and offsets remain correct.
+- Preserve Claude cache_creation ephemeral_5m_input_tokens and ephemeral_1h_input_tokens through terminal reading, coderusage and RequestRecord.CacheDetails, including duplicate/corrected messages and child files.
+Scope
+- Fix both pricing notes from the latest FT130 review; Go reader/report/persistence integration and regression tests, plus implementation documentation where needed. No Console redesign or historical backfill.
+Decisions
+- Keep aggregate model totals for display compatibility, but carry independent per-response pricing records or an equally correct minimal representation for persistence. Do not estimate threshold prices from task totals. Keep CLI-provided costs untouched and unknown models unpriced.
+- Merge current origin/master first if necessary, retaining both sides' intent; never rebase.
+Checking
+- Reproduce the three 50k input/48k cached/1k output Haiku responses and verify inserted and repriced costs equal individually priced sum; distinguish 1h from 5m cache creation.
+- Cover transport end to end, duplicate IDs, corrections, child files and offsets; run configured gofmt/vet/all Go tests with throwaway HOME. Console tests only if Console sources change. No UI change intended; live CLI verification may remain unperformed.
+
+## factory · 2026-11-15 21:30
+
+Fix round 2 completed at dc254467, with origin/master merged at 29ae1e71 (no conflicts). Both owner-requested pricing notes addressed: per-response pricing inputs retained in pricing_parts JSON while task/model token totals and request counts remain compatible; cache_creation 5-minute/1-hour details survive terminal reading, coderusage transport, database insertion and catalog repricing. CLI-provided costs remain untouched, unknown models unpriced. Feature documentation updated.
+
+Duplicate lines count nothing; within-task corrections replace earlier inputs; cross-task corrections carry negative old plus positive new pricing parts. Limitation: a task consisting only of a negative correction for a model is omitted to avoid negative token rows, retaining a possible small overcount. Older rows are not backfilled because their per-response inputs were not retained. A missing pricing_parts column is added on open, preserving old-build database access.
+
+Verification: manager independently ran configured gofmt check, go vet ./..., go test ./... with an absolute throwaway HOME: PASS. Reader/session, report transport, recorder and llmstats regression tests cover per-response threshold prices, 5m/1h splits, duplicates/corrections, child files, insertion, catalog change, database reopen and legacy column addition. Reviewed commit scope: only item changes plus merge of base; forbidden workflow changes are inherited solely from base, with no differences against origin/master. Worktree clean. Console sources unchanged this round, so Console tests not repeated; round 1 Console verification remains recorded above.
+
+Installs: none; no manifest or lock changes. Not checked: live Claude Code/Codex terminal end-to-end; no new browser/device inspection (no UI changes in this round). Transport is tested in overlapping reader-to-callback and report-to-database tests rather than one cross-package test. No linked issue or PR. Branch push initially failed for missing credential repository path; retry with per-command credential.useHttpPath=true succeeded. Pushed branch, moved new/ to review/, round 2; review required before shipping.
