@@ -163,3 +163,147 @@ test("an isolated model's cache rate covers only that model", () => {
   assert.equal(summarizeDailyUsage(payload, "cost", { slots, isolate: "a" }).cacheRate, 1);
   assert.equal(summarizeDailyUsage(payload, "cost", { slots, isolate: OTHER_KEY }).cacheRate, 0.25);
 });
+
+function sourcedPayload() {
+  const totals = (requests, cost, tokens, extra = {}) => ({ requests, total_cost: cost, total_tokens: tokens, input_tokens: tokens, ...extra });
+  const model = (name, requests, cost, tokens) => ({ model: name, ...totals(requests, cost, tokens) });
+  const none = { totals: totals(0, 0, 0), models: [] };
+  return {
+    to: "2026-11-15",
+    summary: { requests: 9, total_cost: 11, total_tokens: 1100, input_tokens: 1100, cost_currency: "USD", cost_estimated: true },
+    models: [model("claude-opus-5-5", 6, 9, 900), model("gpt-5.2", 2, 2, 150), model("codex", 1, 0, 50)],
+    sources: {
+      agent: { summary: totals(4, 4, 350), models: [model("claude-opus-5-5", 2, 2, 200), model("gpt-5.2", 2, 2, 150)] },
+      coder: { summary: totals(5, 7, 750, { cost_estimated: true }), models: [model("claude-opus-5-5", 4, 7, 700), model("codex", 1, 0, 50)] },
+    },
+    days: [
+      // The agent only.
+      {
+        date: "2026-11-13",
+        ...totals(2, 2, 150),
+        models: [model("gpt-5.2", 2, 2, 150)],
+        sources: { agent: { totals: totals(2, 2, 150), models: [model("gpt-5.2", 2, 2, 150)] }, coder: none },
+      },
+      // A coder only.
+      {
+        date: "2026-11-14",
+        ...totals(1, 0, 50),
+        models: [model("codex", 1, 0, 50)],
+        sources: { agent: none, coder: { totals: totals(1, 0, 50), models: [model("codex", 1, 0, 50)] } },
+      },
+      // Both, with the same model on both sides.
+      {
+        date: "2026-11-15",
+        ...totals(6, 9, 900, { cached_input_tokens: 300 }),
+        models: [model("claude-opus-5-5", 6, 9, 900)],
+        sources: {
+          agent: { totals: totals(2, 2, 200, { cached_input_tokens: 100 }), models: [model("claude-opus-5-5", 2, 2, 200)] },
+          coder: { totals: totals(4, 7, 700, { cached_input_tokens: 200 }), models: [model("claude-opus-5-5", 4, 7, 700)] },
+        },
+      },
+    ],
+  };
+}
+
+test("summarizeDailyUsage draws agent and coder apart when the range has coder runs", () => {
+  const payload = sourcedPayload();
+  const slots = assignModelSlots(null, payload.models);
+  const cost = summarizeDailyUsage(payload, "cost", { slots });
+  assert.equal(cost.split, true);
+  // Each day has both halves; a model keeps its slot (its colour) on both sides.
+  assert.deepEqual(cost.days.map((day) => [day.sources.agent.value, day.sources.coder.value]), [
+    [2, 0],
+    [0, 0],
+    [2, 7],
+  ]);
+  assert.deepEqual(cost.days[2].sources.agent.segments, [{ key: "claude-opus-5-5", slot: 0, value: 2 }]);
+  assert.deepEqual(cost.days[2].sources.coder.segments, [{ key: "claude-opus-5-5", slot: 0, value: 7 }]);
+  assert.equal(cost.days[2].sources.coder.models[0].requests, 4);
+  // One scale for both halves, mirrored below the base line.
+  assert.equal(cost.scaleMax, 10);
+  assert.deepEqual(cost.ticks, [10, 5, 0, -5, -10]);
+  // A total, an average, a peak and a today per source.
+  assert.equal(cost.sources.agent.total, 4);
+  assert.equal(cost.sources.agent.average, 4 / 3);
+  assert.deepEqual(cost.sources.agent.peak, { date: "2026-11-13", value: 2 });
+  assert.equal(cost.sources.agent.today, 2);
+  assert.equal(cost.sources.agent.estimated, false);
+  assert.equal(cost.sources.coder.total, 7);
+  assert.equal(cost.sources.coder.average, 7 / 3);
+  assert.deepEqual(cost.sources.coder.peak, { date: "2026-11-15", value: 7 });
+  assert.equal(cost.sources.coder.estimated, true);
+  // The combined figures and the one legend stay.
+  assert.equal(cost.total, 11);
+  assert.deepEqual(cost.days.map((day) => day.value), [2, 0, 9]);
+  assert.deepEqual(cost.legend.map((item) => item.key), ["claude-opus-5-5", "gpt-5.2"]);
+  assert.equal(cost.activeDays, 3);
+
+  const tokens = summarizeDailyUsage(payload, "tokens", { slots });
+  assert.deepEqual(tokens.days.map((day) => [day.sources.agent.value, day.sources.coder.value]), [
+    [150, 0],
+    [0, 50],
+    [200, 700],
+  ]);
+  assert.equal(tokens.scaleMax, 1000);
+  assert.equal(tokens.sources.coder.total, 750);
+
+  // The cache view splits each half by how the cache served it.
+  const cache = summarizeDailyUsage(payload, "cache", { slots });
+  assert.deepEqual(cache.days[2].sources.agent.segments, [
+    { key: "hits", slot: null, value: 100 },
+    { key: "uncached", slot: null, value: 100 },
+  ]);
+  assert.deepEqual(cache.days[2].sources.coder.segments, [
+    { key: "hits", slot: null, value: 200 },
+    { key: "uncached", slot: null, value: 500 },
+  ]);
+  assert.equal(cache.scaleMax, 1000);
+});
+
+test("isolating a model applies to both halves", () => {
+  const payload = sourcedPayload();
+  const slots = assignModelSlots(null, payload.models);
+  const only = summarizeDailyUsage(payload, "cost", { slots, isolate: "claude-opus-5-5" });
+  assert.deepEqual(only.days.map((day) => [day.sources.agent.value, day.sources.coder.value]), [
+    [0, 0],
+    [0, 0],
+    [2, 7],
+  ]);
+  assert.equal(only.sources.agent.total, 2);
+  assert.equal(only.sources.coder.total, 7);
+  assert.equal(only.activeDays, 1);
+  const gpt = summarizeDailyUsage(payload, "cost", { slots, isolate: "gpt-5.2" });
+  assert.equal(gpt.sources.agent.total, 2);
+  assert.equal(gpt.sources.coder.total, 0);
+  assert.equal(gpt.scaleMax, 2);
+});
+
+test("a range without coder runs, and a payload without sources, draw as the single stack", () => {
+  const payload = sourcedPayload();
+  const slots = assignModelSlots(null, payload.models);
+  const split = summarizeDailyUsage(payload, "cost", { slots });
+
+  // An older agent: the same days without `sources`.
+  const legacy = { ...payload, days: payload.days.map(({ sources, ...day }) => day) };
+  delete legacy.sources;
+  const single = summarizeDailyUsage(legacy, "cost", { slots });
+  assert.equal(single.split, false);
+  assert.equal(single.sources, null);
+  assert.deepEqual(single.ticks, [10, 5, 0]);
+  assert.deepEqual(single.days.map((day) => day.sources), [null, null, null]);
+  // The combined stack is the one the split payload still carries.
+  assert.deepEqual(single.days.map((day) => day.segments), split.days.map((day) => day.segments));
+  assert.equal(single.total, 11);
+
+  // Sources present, the coder's zero.
+  const zero = { totals: { requests: 0 }, models: [] };
+  const agentOnly = {
+    ...payload,
+    sources: { agent: payload.sources.agent, coder: { summary: { requests: 0 }, models: [] } },
+    days: payload.days.map((day) => ({ ...day, sources: { agent: day.sources.agent, coder: zero } })),
+  };
+  const drawn = summarizeDailyUsage(agentOnly, "cost", { slots });
+  assert.equal(drawn.split, false);
+  assert.equal(drawn.sources, null);
+  assert.deepEqual(drawn.ticks, [10, 5, 0]);
+});

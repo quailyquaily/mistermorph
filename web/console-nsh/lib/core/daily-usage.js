@@ -1,5 +1,7 @@
 // Shapes a /stats/llm/daily response into what the Stats page's daily chart draws: one stacked
-// bar per day for the chosen metric, a rounded axis, a legend and the range figures.
+// bar per day for the chosen metric, a rounded axis, a legend and the range figures. When the
+// response splits the usage by source (`sources`) and the range has coder runs, each day also has
+// its two halves: the agent's own calls, drawn above the base line, and the coder's, below it.
 import { cacheCostDelta, cacheRate } from "./cache-cost.js";
 
 export const DAILY_RANGES = [7, 30, 90];
@@ -9,6 +11,7 @@ export const DAILY_METRICS = ["cost", "tokens", "cache"];
 export const MODEL_SLOTS = 4;
 export const OTHER_KEY = "__other__";
 export const CACHE_PARTS = ["hits", "writes", "uncached"];
+export const DAILY_SOURCES = ["agent", "coder"];
 
 function finite(value) {
   const n = Number(value);
@@ -121,6 +124,83 @@ function modelSegments(row, metric, slots) {
   return segments.filter((segment) => segment.value > 0);
 }
 
+function object(value) {
+  return value && typeof value === "object" ? value : {};
+}
+
+// The segments of one totals row for the metric: its models (one of them when isolated), or its
+// cache split.
+function rowSegments(row, key, slots, isolate) {
+  if (key === "cache") {
+    const cache = cacheParts(row);
+    return CACHE_PARTS.map((part) => ({ key: part, slot: null, value: cache[part] })).filter((s) => s.value > 0);
+  }
+  const segments = modelSegments(row, key, slots);
+  return isolate ? segments.filter((segment) => segment.key === isolate) : segments;
+}
+
+function rowModels(row, key, slots) {
+  return (Array.isArray(row?.models) ? row.models : [])
+    .map((item) => {
+      const model = String(item?.model || "");
+      return {
+        model,
+        slot: slots.has(model) ? slots.get(model) : null,
+        cost: finite(item?.total_cost),
+        tokens: tokensOf(item),
+        requests: finite(item?.requests),
+      };
+    })
+    .sort((a, b) => (key === "tokens" ? b.tokens - a.tokens : b.cost - a.cost || b.tokens - a.tokens));
+}
+
+function sumValues(segments) {
+  return segments.reduce((sum, segment) => sum + segment.value, 0);
+}
+
+// The range figures of one run of day values.
+function rangeFigures(days, valueOf) {
+  let total = 0;
+  let peak = null;
+  let today = 0;
+  for (const day of days) {
+    const value = valueOf(day);
+    total += value;
+    if (value > 0 && (!peak || value > peak.value)) {
+      peak = { date: day.date, value };
+    }
+    if (day.isToday) {
+      today = value;
+    }
+  }
+  return { total, average: days.length > 0 ? total / days.length : 0, peak, today };
+}
+
+// One source's half of a day: its totals row with its models.
+function sourceHalf(day, source, key, slots, isolate) {
+  const entry = object(object(day?.sources)[source]);
+  const row = { ...object(entry.totals), models: Array.isArray(entry.models) ? entry.models : [] };
+  const segments = rowSegments(row, key, slots, isolate);
+  const cache = cacheFigures(row);
+  return {
+    requests: finite(row.requests),
+    cost: finite(row.total_cost),
+    tokens: tokensOf(row),
+    cache,
+    models: rowModels(row, key, slots),
+    segments,
+    value: sumValues(segments),
+  };
+}
+
+// Whether the response has the usage by source and the range has coder runs: only then are the
+// two drawn apart. An older agent sends no `sources`, and a range without coder runs draws as the
+// single stack it always was.
+export function dailyUsageIsSplit(payload) {
+  const coder = object(object(payload?.sources).coder);
+  return finite(object(coder.summary).requests) > 0;
+}
+
 export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
   const key = DAILY_METRICS.includes(metric) ? metric : "cost";
   const slots = options.slots instanceof Map ? options.slots : new Map();
@@ -129,32 +209,13 @@ export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
   const summary = payload?.summary && typeof payload.summary === "object" ? payload.summary : {};
   const to = typeof payload?.to === "string" ? payload.to : "";
   const every = dayLabelEvery(rawDays.length);
+  const split = dailyUsageIsSplit(payload);
 
   const days = rawDays.map((day, index) => {
     const date = String(day?.date || "");
     const cache = cacheFigures(day);
-    let segments;
-    if (key === "cache") {
-      segments = CACHE_PARTS.map((part) => ({ key: part, slot: null, value: cache[part] })).filter((s) => s.value > 0);
-    } else {
-      segments = modelSegments(day, key, slots);
-      if (isolate) {
-        segments = segments.filter((segment) => segment.key === isolate);
-      }
-    }
-    const models = (Array.isArray(day?.models) ? day.models : [])
-      .map((item) => {
-        const model = String(item?.model || "");
-        return {
-          model,
-          slot: slots.has(model) ? slots.get(model) : null,
-          cost: finite(item?.total_cost),
-          tokens: tokensOf(item),
-          requests: finite(item?.requests),
-        };
-      })
-      .sort((a, b) => (key === "tokens" ? b.tokens - a.tokens : b.cost - a.cost || b.tokens - a.tokens));
-    return {
+    const segments = rowSegments(day, key, slots, isolate);
+    const out = {
       date,
       label: date.slice(5),
       showLabel: (rawDays.length - 1 - index) % every === 0,
@@ -166,21 +227,38 @@ export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
       cost: finite(day?.total_cost),
       cache,
       cacheRate: cache.rate,
-      models,
+      models: rowModels(day, key, slots),
       segments,
-      value: segments.reduce((sum, segment) => sum + segment.value, 0),
+      value: sumValues(segments),
+      sources: null,
     };
+    if (split) {
+      out.sources = {
+        agent: sourceHalf(day, "agent", key, slots, isolate),
+        coder: sourceHalf(day, "coder", key, slots, isolate),
+      };
+    }
+    return out;
   });
 
-  const total = days.reduce((sum, day) => sum + day.value, 0);
-  let peak = null;
-  for (const day of days) {
-    if (day.value > 0 && (!peak || day.value > peak.value)) {
-      peak = day;
-    }
+  const { total, average, peak, today } = rangeFigures(days, (day) => day.value);
+  // Both halves are on one scale, so a day's coder use reads against its agent use.
+  let sources = null;
+  let highest = peak ? peak.value : 0;
+  if (split) {
+    const figuresOf = (source) => {
+      const rangeSummary = object(object(object(payload?.sources)[source]).summary);
+      return {
+        ...rangeFigures(days, (day) => day.sources[source].value),
+        requests: finite(rangeSummary.requests),
+        // A coder's cost is a list price on a subscription, not what is billed.
+        estimated: Boolean(rangeSummary.cost_estimated),
+      };
+    };
+    sources = { agent: figuresOf("agent"), coder: figuresOf("coder") };
+    highest = Math.max(sources.agent.peak ? sources.agent.peak.value : 0, sources.coder.peak ? sources.coder.peak.value : 0);
   }
-  const scaleMax = niceCeil(peak ? peak.value : 0);
-  const today = days.find((day) => day.isToday) || null;
+  const scaleMax = niceCeil(highest);
   const rangeCache = cacheFigures(summary);
   // While one model (or Other) is isolated, the range cache rate covers only its requests.
   let isolatedCacheRate = rangeCache.rate;
@@ -194,11 +272,18 @@ export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
     });
   }
 
+  // One legend for both halves: a model is one colour above and below the base line.
   let legend;
   if (key === "cache") {
     legend = CACHE_PARTS.map((part) => ({ key: part, slot: null, value: rangeCache[part] }));
   } else {
     legend = modelSegments({ ...summary, models: payload?.models }, key, slots);
+  }
+
+  let ticks = scaleMax > 0 ? [scaleMax, scaleMax / 2, 0] : [0];
+  if (split && scaleMax > 0) {
+    // The coder's half mirrors the agent's below the base line.
+    ticks = [scaleMax, scaleMax / 2, 0, -scaleMax / 2, -scaleMax];
   }
 
   return {
@@ -207,13 +292,17 @@ export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
     currency: String(summary.cost_currency || "USD").toUpperCase(),
     days,
     legend,
+    split,
+    sources,
     scaleMax,
-    ticks: scaleMax > 0 ? [scaleMax, scaleMax / 2, 0] : [0],
+    ticks,
     total,
-    average: days.length > 0 ? total / days.length : 0,
-    activeDays: days.filter((day) => (isolate ? day.segments.length > 0 : day.requests > 0)).length,
-    peak: peak ? { date: peak.date, value: peak.value } : null,
-    today: today ? today.value : 0,
+    average,
+    activeDays: days.filter((day) =>
+      isolate ? day.segments.length > 0 || (day.sources ? day.sources.agent.segments.length + day.sources.coder.segments.length > 0 : false) : day.requests > 0,
+    ).length,
+    peak,
+    today,
     cacheRate: isolatedCacheRate,
     cache: rangeCache,
   };

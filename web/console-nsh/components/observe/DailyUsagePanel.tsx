@@ -3,6 +3,12 @@
 // served them. Drawn with nsh/base/plot: a Bar per segment in one stack, a grid at the axis ticks,
 // a dashed average line. Hovering a day shows its readout and tooltip; pressing the plot pins the
 // hovered day; pressing a legend entry shows only that model.
+//
+// When the range has coder runs (Codex, Claude Code) and the agent reports the usage by source,
+// the agent's own calls are drawn above the base line and the coder's below it, on one scale and
+// in the same colours: a day stays one column at every range. The plot piles a stack's signed
+// values on one running end, so an unpainted bar between the two halves takes it back to the base
+// (PORTING.md).
 import { batch, cleanup, computed, effect, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Bar, Grid, Plot, PlotAxis } from "nsh/base/plot";
 import { endpointState, runtimeApiFetch } from "../../lib/core/context.js";
@@ -52,6 +58,12 @@ const STACK_FIELDS = ["s0", "s1", "s2", "s3", "other", "hits", "writes", "uncach
 // value (the series itself then has none that day), stacked right after it, whose bar is painted
 // by its background part: the ring as four 1px edge gradients, then the stripes.
 const TODAY_SUFFIX = ":today";
+// The coder's half of a day: the same fields, drawn below the base line.
+const CODER_PREFIX = "coder:";
+// The unpainted bar that takes the stack from the top of the agent's half back to the base.
+const RETURN_FIELD = "return";
+type Source = "agent" | "coder";
+const SOURCE_KEYS: Record<Source, string> = { agent: "stats_daily_source_agent", coder: "stats_daily_source_coder" };
 const todayHatch = (field: string) => {
   const [name, share] = SERIES[field].tone;
   const c = share === 100 ? String(token(name)) : `color-mix(in srgb, ${token(name)} ${share}%, transparent)`;
@@ -102,6 +114,7 @@ export function DailyUsagePanel() {
 
   const series = computed(() => summarizeDailyUsage(payload(), metric(), { slots: slots(), isolate: isolate() }));
   const isCache = () => series().metric === "cache";
+  const split = () => series().split;
   const hasRequests = () => Number(payload()?.summary?.requests || 0) > 0;
   const emptyMessage = () => {
     if (unsupported()) return t("stats_daily_unsupported");
@@ -121,7 +134,9 @@ export function DailyUsagePanel() {
   const exactCost = (value: unknown) => exactCostText(value, series().currency);
   const metricValue = (value: unknown) => (series().metric === "cost" ? cost(value) : compactNumber(value));
   const metricExact = (value: unknown) => (series().metric === "cost" ? exactCost(value) : exactNumber(value));
-  const axisValue = (value: number) => {
+  const axisValue = (signed: number) => {
+    // The coder's half reads as the agent's does: no minus signs.
+    const value = Math.abs(signed);
     if (series().metric !== "cost") return compactNumber(value);
     if (value === 0) return "0";
     const currency = series().currency === "MIXED" ? "USD" : series().currency;
@@ -147,7 +162,17 @@ export function DailyUsagePanel() {
         row[field + TODAY_SUFFIX] = null;
       }
       const suffix = day.isToday ? TODAY_SUFFIX : "";
-      for (const segment of day.segments as Segment[]) row[seriesField(segment) + suffix] = segment.value;
+      if (!day.sources) {
+        for (const segment of day.segments as Segment[]) row[seriesField(segment) + suffix] = segment.value;
+        return row;
+      }
+      for (const field of STACK_FIELDS) {
+        row[CODER_PREFIX + field] = null;
+        row[CODER_PREFIX + field + TODAY_SUFFIX] = null;
+      }
+      for (const segment of day.sources.agent.segments as Segment[]) row[seriesField(segment) + suffix] = segment.value;
+      row[RETURN_FIELD] = day.sources.agent.value > 0 ? -day.sources.agent.value : null;
+      for (const segment of day.sources.coder.segments as Segment[]) row[CODER_PREFIX + seriesField(segment) + suffix] = -segment.value;
       return row;
     }),
   );
@@ -158,9 +183,20 @@ export function DailyUsagePanel() {
   const scaleMax = () => series().scaleMax || 1;
   const averageLine = () => {
     const { average, scaleMax: max } = series();
-    if (isCache() || !hasRequests() || average <= 0 || max <= 0) return null;
+    if (split() || isCache() || !hasRequests() || average <= 0 || max <= 0) return null;
     return average;
   };
+  // Each half has its own average line, the average of its own source.
+  const sourceAverageLines = () => {
+    const { scaleMax: max } = series();
+    const sources = series().sources as Record<Source, { average: number }> | null;
+    if (!sources || isCache() || max <= 0) return [];
+    const lines: number[] = [];
+    if (sources.agent.average > 0) lines.push(sources.agent.average);
+    if (sources.coder.average > 0) lines.push(-sources.coder.average);
+    return lines;
+  };
+  const sourceName = (source: Source) => t(SOURCE_KEYS[source]);
 
   // Figures roll to their new values when the range or metric changes.
   const figureTargets = computed(() => {
@@ -176,6 +212,10 @@ export function DailyUsagePanel() {
       writes: s.cache.writes,
       uncached: s.cache.uncached,
       savings: s.cache.delta === null ? null : -s.cache.delta,
+      agentTotal: s.sources?.agent.total ?? 0,
+      agentAverage: s.sources?.agent.average ?? 0,
+      coderTotal: s.sources?.coder.total ?? 0,
+      coderAverage: s.sources?.coder.average ?? 0,
     } as Record<string, number | null>;
   });
   const rolled = signal<Record<string, number | null>>({});
@@ -203,6 +243,8 @@ export function DailyUsagePanel() {
   });
   const shown = (key: string) => (key in rolled() ? rolled()[key] : figureTargets()[key]);
 
+  // Vue's breakpoints are the window's.
+  const figureColumns = () => (windowSize().width <= 860 ? 3 : 6);
   const figures = computed(() => {
     const s = series();
     const active = { key: "active", label: t("stats_daily_active"), value: `${s.activeDays}/${s.days.length}`, title: "", note: "" };
@@ -222,6 +264,44 @@ export function DailyUsagePanel() {
         active,
       ];
     }
+    const bySource = s.sources as Record<Source, { total: number; average: number }> | null;
+    if (bySource) {
+      // The two sources apart, in place of the one total and average: their costs are different
+      // kinds of money (the agent's is billed, the coder's is a list price on a subscription).
+      const listPrice = s.metric === "cost";
+      const narrow = figureColumns() === 3;
+      const sourceFigures = (source: Source) => {
+        const name = sourceName(source);
+        const marked = source === "coder" && listPrice;
+        return [
+          {
+            key: `${source}-total`,
+            label: t("stats_daily_source_total", { source: name }),
+            value: metricValue(shown(`${source}Total`)),
+            title: marked ? `${metricExact(bySource[source].total)} · ${t("stats_daily_list_price_hint")}` : metricExact(bySource[source].total),
+            note: marked ? t("stats_daily_list_price") : "",
+          },
+          {
+            key: `${source}-avg`,
+            // "Agent avg / day" does not fit a phone's column beside the average line's mark.
+            label: t(narrow ? "stats_daily_source_avg_short" : "stats_daily_source_avg", { source: name }),
+            value: metricValue(shown(`${source}Average`)),
+            title: metricExact(bySource[source].average),
+            note: "",
+          },
+        ];
+      };
+      const [agentTotal, agentAvg] = sourceFigures("agent");
+      const [coderTotal, coderAvg] = sourceFigures("coder");
+      return [
+        agentTotal,
+        coderTotal,
+        agentAvg,
+        coderAvg,
+        active,
+        { key: "cache", label: t("stats_cache_rate"), value: percentWhole(shown("cacheRate")), title: "", note: "" },
+      ];
+    }
     return [
       { key: "avg", label: t("stats_daily_avg"), value: metricValue(shown("average")), title: metricExact(s.average), note: "" },
       {
@@ -238,29 +318,34 @@ export function DailyUsagePanel() {
     ];
   });
 
-  // Tooltip rows for the focused day: its models, or its cache split.
+  // Tooltip rows for the focused day: its models, or its cache split; a group per source, each
+  // under its subtotal, when the two are drawn apart.
+  type TipRow = { key: string; name: string; swatch: string; value: string; title?: string; note?: string; head?: boolean };
   const tooltip = computed(() => {
     const day = focusedDay();
     if (!selecting() || !day || day.requests <= 0) return null;
-    let list: { key: string; name: string; swatch: string; value: string; title?: string; note?: string }[];
-    if (isCache()) {
-      list = (day.segments as Segment[]).map((segment) => ({
-        key: segment.key,
-        name: segmentName(segment.key),
-        swatch: swatchClass(segment),
-        value: compactNumber(segment.value),
-        title: exactNumber(segment.value),
-      }));
-      list.push({ key: "rate", name: t("stats_daily_cache_rate"), swatch: "", value: percentWhole(day.cache.rate) });
-      list.push({ key: "savings", name: t("stats_cache_delta"), swatch: "", value: savings(day.cache.delta) });
-    } else {
+    const rowsOf = (half: { segments: Segment[]; models: any[]; cache: any }, prefix: string, cacheFigures: boolean): TipRow[] => {
+      if (isCache()) {
+        const list: TipRow[] = half.segments.map((segment) => ({
+          key: prefix + segment.key,
+          name: segmentName(segment.key),
+          swatch: swatchClass(segment),
+          value: compactNumber(segment.value),
+          title: exactNumber(segment.value),
+        }));
+        if (cacheFigures) {
+          list.push({ key: prefix + "rate", name: t("stats_daily_cache_rate"), swatch: "", value: percentWhole(half.cache.rate) });
+          list.push({ key: prefix + "savings", name: t("stats_cache_delta"), swatch: "", value: savings(half.cache.delta) });
+        }
+        return list;
+      }
       const only = isolate();
-      list = day.models
+      return half.models
         .filter((item: any) => !only || item.model === only || (only === OTHER_KEY && item.slot === null))
         .map((item: any) => {
           const value = series().metric === "tokens" ? item.tokens : item.cost;
           return {
-            key: item.model,
+            key: prefix + item.model,
             name: item.model,
             swatch: swatchClass({ key: item.model, slot: item.slot }),
             value: metricValue(value),
@@ -268,9 +353,29 @@ export function DailyUsagePanel() {
             note: `${exactNumber(item.requests)} ${t("stats_daily_req")}`,
           };
         });
+    };
+    let list: TipRow[] = [];
+    if (day.sources) {
+      for (const source of ["agent", "coder"] as Source[]) {
+        const half = day.sources[source];
+        const group = rowsOf(half, `${source}:`, false);
+        if (half.requests <= 0 || group.length === 0) continue;
+        list.push({
+          key: `${source}:head`,
+          name: sourceName(source),
+          swatch: "",
+          value: isCache() ? percentWhole(half.cache.rate) : metricValue(half.value),
+          note: source === "coder" && series().metric === "cost" ? t("stats_daily_list_price") : "",
+          head: true,
+        });
+        list = list.concat(group);
+      }
+    } else {
+      list = rowsOf(day, "", true);
     }
     if (list.length === 0) return null;
-    return { date: day.date as string, total: isCache() ? null : metricValue(day.value), rows: list };
+    // Two kinds of money are not added up: the groups carry their own subtotals.
+    return { date: day.date as string, total: isCache() || day.sources ? null : metricValue(day.value), rows: list };
   });
 
   const barLabel = (day: any) =>
@@ -352,7 +457,6 @@ export function DailyUsagePanel() {
 
   // Vue's breakpoints are the window's.
   const phone = () => windowSize().width <= 560;
-  const figureColumns = () => (windowSize().width <= 860 ? 3 : 6);
   const sectionPad = () => Math.round(Math.min(22, Math.max(16, windowSize().width * 0.02)));
 
   return (
@@ -408,7 +512,13 @@ export function DailyUsagePanel() {
               when={phone()}
               else={
                 <>
-                  <ReadoutItem label={t("stats_daily_metric_cost")} value={cost(day().cost)} title={exactCost(day().cost)} />
+                  <If
+                    when={day().sources}
+                    else={<ReadoutItem label={t("stats_daily_metric_cost")} value={cost(day().cost)} title={exactCost(day().cost)} />}
+                  >
+                    <ReadoutItem label={sourceName("agent")} value={cost(day().sources.agent.cost)} title={exactCost(day().sources.agent.cost)} />
+                    <ReadoutItem label={sourceName("coder")} value={cost(day().sources.coder.cost)} title={`${exactCost(day().sources.coder.cost)} · ${t("stats_daily_list_price_hint")}`} />
+                  </If>
                   <ReadoutItem label={t("stats_requests")} value={exactNumber(day().requests)} />
                   <ReadoutItem label={t("stats_tokens")} value={compactNumber(day().tokens)} title={exactNumber(day().tokens)} />
                   <ReadoutItem
@@ -420,14 +530,30 @@ export function DailyUsagePanel() {
               }
             >
               {/* Phones: two columns, the in/out pair across both. */}
-              <View class="flex-row gap-3">
-                <ReadoutItem spread label={t("stats_daily_metric_cost")} value={cost(day().cost)} title={exactCost(day().cost)} />
-                <ReadoutItem spread label={t("stats_requests")} value={exactNumber(day().requests)} />
-              </View>
-              <View class="flex-row gap-3">
-                <ReadoutItem spread label={t("stats_tokens")} value={compactNumber(day().tokens)} title={exactNumber(day().tokens)} />
-                <View class="flex-1" />
-              </View>
+              <If
+                when={day().sources}
+                else={
+                  <>
+                    <View class="flex-row gap-3">
+                      <ReadoutItem spread label={t("stats_daily_metric_cost")} value={cost(day().cost)} title={exactCost(day().cost)} />
+                      <ReadoutItem spread label={t("stats_requests")} value={exactNumber(day().requests)} />
+                    </View>
+                    <View class="flex-row gap-3">
+                      <ReadoutItem spread label={t("stats_tokens")} value={compactNumber(day().tokens)} title={exactNumber(day().tokens)} />
+                      <View class="flex-1" />
+                    </View>
+                  </>
+                }
+              >
+                <View class="flex-row gap-3">
+                  <ReadoutItem spread label={sourceName("agent")} value={cost(day().sources.agent.cost)} title={exactCost(day().sources.agent.cost)} />
+                  <ReadoutItem spread label={sourceName("coder")} value={cost(day().sources.coder.cost)} title={exactCost(day().sources.coder.cost)} />
+                </View>
+                <View class="flex-row gap-3">
+                  <ReadoutItem spread label={t("stats_requests")} value={exactNumber(day().requests)} />
+                  <ReadoutItem spread label={t("stats_tokens")} value={compactNumber(day().tokens)} title={exactNumber(day().tokens)} />
+                </View>
+              </If>
               <ReadoutItem
                 spread
                 label={`${t("stats_input")} / ${t("stats_output")}`}
@@ -446,7 +572,7 @@ export function DailyUsagePanel() {
         <Plot
           data={rows()}
           xScale={{ type: "band", paddingInner: series().days.length > 31 ? 0.15 : 0.38, paddingOuter: 0.19 }}
-          yScale={{ type: "linear", domain: [0, scaleMax()] }}
+          yScale={{ type: "linear", domain: [split() ? -scaleMax() : 0, scaleMax()] }}
           accessibilityLabel={`${t("stats_daily_title")}: ${t(METRIC_TITLE_KEYS[metric()])}`}
           accessibilityValue={{ text: focusedDay() ? barLabel(focusedDay()) : "" }}
           appearGeneration={`${generation()}:${metric()}`}
@@ -476,9 +602,11 @@ export function DailyUsagePanel() {
                   </View>
                   <Each of={tip().rows} key={(row) => row.key}>
                     {(row) => (
-                      <View class="flex-row items-center gap-2">
-                        <View class={`size-2 ${row().swatch}`} />
-                        <Text class={`flex-1 ${MONO} text-subtle line-clamp-1`}>{row().name}</Text>
+                      <View class={`flex-row items-center gap-2 ${row().head ? "mt-0.5" : ""}`} testID={row().head ? `stats-daily-tip-${row().key}` : undefined}>
+                        <If when={!row().head}>
+                          <View class={`size-2 ${row().swatch}`} />
+                        </If>
+                        <Text class={`flex-1 ${MONO} line-clamp-1 ${row().head ? "uppercase tracking-[0.12em] text-foreground" : "text-subtle"}`}>{row().name}</Text>
                         <If when={row().note}>
                           <Text class={`${MONO} text-subtle`}>{row().note}</Text>
                         </If>
@@ -492,31 +620,26 @@ export function DailyUsagePanel() {
           }
           onHoverChange={({ index }) => hovered.set(index)}
           class="mb-4.75 ml-13.5"
-          style={{ height: phone() ? 150 : 184 }}
+          style={{ height: split() ? (phone() ? 210 : 260) : phone() ? 150 : 184 }}
           testID="stats-daily-plot"
         >
           {/* A dashed rule at each tick above the base (Vue draws them from the same ticks). */}
-          <Grid y={(series().ticks as number[]).filter((value) => value > 0)} class="stroke-line-soft" style={{ strokeDasharray: "3 3" }} />
+          <Grid y={(series().ticks as number[]).filter((value) => value !== 0)} class="stroke-line-soft" style={{ strokeDasharray: "3 3" }} />
 
           <Grid y={[0]} class="stroke-line" />
-          {STACK_FIELDS.flatMap((field) => [
-            <Bar
-              value={(row: Record<string, number | string | null>) => row[field] as number}
-              stack="day"
-              stagger={0.5}
-              inactiveOpacity={0.55}
-              class={SERIES[field].fill}
-            />,
-            <Bar
-              value={(row: Record<string, number | string | null>) => row[field + TODAY_SUFFIX] as number}
-              stack="day"
-              stagger={0.5}
-              inactiveOpacity={0.55}
-              backgroundStyle={{ backgroundImage: todayHatch(field) }}
-            />,
-          ])}
+          {/* One list, so the bars join the stack in this order: the agent's half upward, the
+              unpainted bar back to the base, then the coder's half downward. Without coder runs
+              the last two have no values and draw nothing. */}
+          {[
+            ...stackBars(""),
+            <Bar value={(row: Record<string, number | string | null>) => row[RETURN_FIELD] as number} stack="day" class="fill-transparent" />,
+            ...stackBars(CODER_PREFIX),
+          ]}
           <If when={averageLine() !== null}>
             <Grid y={[averageLine() ?? 0]} class="stroke-foreground/45" style={{ strokeDasharray: "3 3" }} />
+          </If>
+          <If when={sourceAverageLines().length > 0}>
+            <Grid y={sourceAverageLines()} class="stroke-foreground/45" style={{ strokeDasharray: "3 3" }} />
           </If>
           <PlotAxis
             placement="left"
@@ -530,6 +653,15 @@ export function DailyUsagePanel() {
             labelClass="pt-1.5 font-mono text-[11px] leading-[13.2px] tabular-nums text-subtle"
           />
         </Plot>
+        {/* Which half is whose, at the two ends of the value axis. */}
+        <If when={split()}>
+          <Text class={`absolute left-0 w-11 text-right ${AXIS_END}`} style={{ top: 13, pointerEvents: "none" }} testID="stats-daily-axis-agent">
+            {sourceName("agent")}
+          </Text>
+          <Text class={`absolute left-0 w-11 text-right ${AXIS_END}`} style={{ bottom: 32, pointerEvents: "none" }} testID="stats-daily-axis-coder">
+            {sourceName("coder")}
+          </Text>
+        </If>
         <If when={emptyMessage()}>
           <View class="absolute inset-0 items-center justify-center px-6" style={{ pointerEvents: "none" }}>
             <Text class={`text-center ${MONO} uppercase tracking-[0.12em] text-subtle`}>{emptyMessage()}</Text>
@@ -563,22 +695,23 @@ export function DailyUsagePanel() {
 
       {/* The range's figures as one datasheet row (two of three on narrower windows). */}
       <View class="border-t border-line" testID="stats-daily-figures">
-        <Each of={figureRows(figures(), figureColumns())}>
+        <Each of={figureRows(bySourceRows(figures(), figureColumns()), figureColumns())}>
           {(row, rowIndex) => (
             <View class={`flex-row ${rowIndex() > 0 ? "mt-2.5 border-t border-dashed border-line-soft" : ""}`}>
               <Each of={row()}>
                 {(item, index) => (
                   <View class={`flex-1 gap-0.75 pt-2.5 ${index() > 0 ? "border-l border-dashed border-line-soft px-3" : "pr-3"}`}>
                     <View class="flex-row items-center">
-                      <If when={item().key === "avg"}>
+                      <If when={item().key === "avg" || item().key.endsWith("-avg")}>
                         <View class="mr-1.5 w-3.5 border-t border-dashed border-foreground/55" />
                       </If>
                       <Text class={`${MONO} uppercase tracking-[0.12em] text-subtle line-clamp-1`}>{item().label}</Text>
                     </View>
-                    <View class="flex-row items-baseline" tooltip={hint(item().title)}>
+                    {/* A note that does not fit beside the value (a phone's column) goes under it. */}
+                    <View class="flex-row flex-wrap items-baseline gap-x-1.5" tooltip={hint(item().title)}>
                       <Text class={`${MONO} text-foreground`}>{item().value}</Text>
                       <If when={item().note}>
-                        <Text class={`ml-1.5 ${MONO} text-subtle`}>{item().note}</Text>
+                        <Text class={`${MONO} text-subtle`}>{item().note}</Text>
                       </If>
                     </View>
                   </View>
@@ -594,6 +727,36 @@ export function DailyUsagePanel() {
 
 // Vue's .stats-daily-key/.stats-daily-value face: mono label size.
 const MONO = "font-mono text-[11px] leading-[15.4px] tabular-nums";
+// The source names at the ends of the value axis: smaller than its tick labels, in caps.
+const AXIS_END = "font-mono text-[9px] leading-[11px] uppercase tracking-[0.1em] text-subtle";
+
+// A bar per series, and its hatched twin for today, for one half of the stack.
+function stackBars(prefix: string) {
+  return STACK_FIELDS.flatMap((field) => [
+    <Bar
+      value={(row: Record<string, number | string | null>) => row[prefix + field] as number}
+      stack="day"
+      stagger={0.5}
+      inactiveOpacity={0.55}
+      class={SERIES[field].fill}
+    />,
+    <Bar
+      value={(row: Record<string, number | string | null>) => row[prefix + field + TODAY_SUFFIX] as number}
+      stack="day"
+      stagger={0.5}
+      inactiveOpacity={0.55}
+      backgroundStyle={{ backgroundImage: todayHatch(field) }}
+    />,
+  ]);
+}
+
+// On three columns the two sources' figures are a row each: the agent's total and average over
+// the coder's, rather than a total and an average of different sources side by side.
+function bySourceRows<T extends { key: string }>(items: T[], columns: number): T[] {
+  if (columns !== 3 || items[0]?.key !== "agent-total") return items;
+  const order = ["agent-total", "agent-avg", "active", "coder-total", "coder-avg", "cache"];
+  return [...items].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+}
 
 function figureRows<T>(items: T[], size: number): T[][] {
   const rows: T[][] = [];
