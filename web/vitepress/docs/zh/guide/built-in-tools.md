@@ -97,10 +97,10 @@ Shell 的默认启用状态按平台区分：
 
 关键限制：默认通过 `tools.coder.enabled=false` 关闭，但 `$coder` 可以只为当前任务暴露它；只支持 `coder=codex` 或 `coder=claude`；本地 CLI 会以 bypass approval / permission 的方式运行。如果 CLI 不在服务进程 PATH 里，设置 `tools.coder.path_extra`。
 
-- Codex 默认路径：`codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -`
-- Claude 默认路径：`claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`，task 通过 stdin 传入
+- Codex 默认路径：`codex app-server`
+- Claude 默认路径：`claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`，task 通过 stdin 传入
 
-CLI 在独立的进程组中运行，取消时它启动的命令也会一并停止。如果 CLI 退出后，它留在后台的进程（例如 dev server）仍占用输出，`coder` 会在 1 秒后停止读取并返回结果。超过 64 KiB 的输出只保留最后 64 KiB，并注明 `stdout.jsonl` 的位置。`file_cache_dir/coder` 下只保留最近 20 个诊断目录。
+CLI 在独立的进程组中运行，取消时它启动的命令也会一并停止。
 
 聊天渠道（Telegram、Slack、Discord、LINE、Lark、Mixin 以及各类私信渠道）无法显示这些实时进度，因此 `coder` 运行超过 2 分钟时，会向对话发送一条简短的状态消息，之后每 5 分钟一条，直到结束，例如 "Claude Code is still working (12 min so far). Now: running a command."。消息只说明步骤类型，不包含命令、文件路径或输出。
 

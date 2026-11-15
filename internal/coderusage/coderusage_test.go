@@ -17,8 +17,10 @@ import (
 
 // The events below are as Claude Code 2.1.323 and Codex 0.169.0 wrote them (2026-11-13).
 const (
-	claudeRateLimitEvent  = `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1794564600,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false,"unifiedWindows":{"five_hour":{"utilization":0.12,"resetsAt":1794564600,"status":"allowed"},"seven_day":{"utilization":0.02,"resetsAt":1795118400,"status":"allowed"}}}}`
-	claudeResult          = `{"type":"result","subtype":"success","num_turns":1,"total_cost_usd":0.09425,"usage":{"input_tokens":2,"cache_creation_input_tokens":11486,"cache_read_input_tokens":11370,"output_tokens":4},"modelUsage":{"claude-opus-5-5":{"inputTokens":2,"outputTokens":4,"cacheReadInputTokens":11370,"cacheCreationInputTokens":11486,"costUSD":0.09425,"thinkingTokens":0}}}`
+	claudeRateLimitEvent = `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1794564600,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false,"unifiedWindows":{"five_hour":{"utilization":0.12,"resetsAt":1794564600,"status":"allowed"},"seven_day":{"utilization":0.02,"resetsAt":1795118400,"status":"allowed"}}}}`
+	claudeResult         = `{"type":"result","subtype":"success","num_turns":1,"total_cost_usd":0.09425,"usage":{"input_tokens":2,"cache_creation_input_tokens":11486,"cache_read_input_tokens":11370,"output_tokens":4},"modelUsage":{"claude-opus-5-5":{"inputTokens":2,"outputTokens":4,"cacheReadInputTokens":11370,"cacheCreationInputTokens":11486,"costUSD":0.09425,"thinkingTokens":0}},"model_usage_since_last_result":{"claude-opus-5-5":{"inputTokens":2,"outputTokens":4,"cacheReadInputTokens":11370,"cacheCreationInputTokens":11486,"costUSD":0.09425,"thinkingTokens":0}}}`
+	// The second task of the same process: modelUsage and total_cost_usd went on counting.
+	claudeSecondResult    = `{"type":"result","subtype":"success","num_turns":2,"total_cost_usd":0.10625,"modelUsage":{"claude-opus-5-5":{"inputTokens":5,"outputTokens":10,"cacheReadInputTokens":34226,"cacheCreationInputTokens":11486,"costUSD":0.10585,"thinkingTokens":2},"claude-haiku-5-5":{"inputTokens":300,"outputTokens":20,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"costUSD":0.0004}},"model_usage_since_last_result":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":6,"cacheReadInputTokens":22856,"cacheCreationInputTokens":0,"costUSD":0.0116,"thinkingTokens":2},"claude-haiku-5-5":{"inputTokens":300,"outputTokens":20,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"costUSD":0.0004}}}`
 	codexTurnCompleted    = `{"type":"turn.completed","usage":{"input_tokens":17664,"cached_input_tokens":12160,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}`
 	codexRateLimitsResult = `{"ordinaryUsageAllowed":true,"rateLimits":{"limitId":"codex","limitName":null,"primary":{"usedPercent":9,"windowDurationMins":10080,"resetsAt":1795099901},"secondary":null,"credits":{"hasCredits":true,"unlimited":false,"balance":"60864.73"},"planType":"pro","rateLimitReachedType":null},"rateLimitsByLimitId":{},"rateLimitResetCredits":{"availableCount":1}}`
 )
@@ -71,22 +73,67 @@ func TestClaudeRateLimitWithoutWindows(t *testing.T) {
 	}
 }
 
-func TestClaudeResultUsage(t *testing.T) {
-	models, turns, ok := ClaudeResultUsage(decode(t, claudeResult))
-	if !ok || turns != 1 || len(models) != 1 {
-		t.Fatalf("models = %+v, turns %d, %v", models, turns, ok)
+// A result line of a stream session: the task's usage is model_usage_since_last_result; modelUsage
+// and total_cost_usd are the process's running totals and are not the task's.
+func TestClaudeTaskUsage(t *testing.T) {
+	task, turns := ClaudeTaskUsage(decode(t, claudeResult))
+	if turns != 1 || len(task) != 1 {
+		t.Fatalf("task = %+v, turns %d", task, turns)
 	}
-	m := models[0]
+	m := task[0]
 	// Input counts the cache reads and writes, as llmstats does for Anthropic.
 	if m.Model != "claude-opus-5-5" || m.InputTokens != 2+11370+11486 || m.CachedInputTokens != 11370 || m.CacheCreationInputTokens != 11486 || m.OutputTokens != 4 || m.CostUSD != 0.09425 {
 		t.Fatalf("model usage = %+v", m)
 	}
-	// Without modelUsage, the overall usage and cost.
-	payload := decode(t, claudeResult)
-	delete(payload, "modelUsage")
-	models, _, ok = ClaudeResultUsage(payload)
-	if !ok || models[0].Model != BackendClaude || models[0].InputTokens != 22858 || models[0].CostUSD != 0.09425 {
-		t.Fatalf("fallback = %+v", models)
+
+	second, turns := ClaudeTaskUsage(decode(t, claudeSecondResult))
+	want := []ModelUsage{
+		{Model: "claude-haiku-5-5", InputTokens: 300, OutputTokens: 20, CostUSD: 0.0004},
+		{Model: "claude-opus-5-5", InputTokens: 3 + 22856, CachedInputTokens: 22856, OutputTokens: 6, ReasoningTokens: 2, CostUSD: 0.0116},
+	}
+	if turns != 2 || !reflect.DeepEqual(second, want) {
+		t.Fatalf("second task = %+v, turns %d\nwant          %+v", second, turns, want)
+	}
+
+	// A task that called no model used nothing, whatever the running totals say.
+	payload := decode(t, claudeSecondResult)
+	payload["model_usage_since_last_result"] = map[string]any{}
+	if none, _ := ClaudeTaskUsage(payload); len(none) != 0 {
+		t.Fatalf("an empty task = %+v", none)
+	}
+}
+
+// modelUsage, usage and total_cost_usd alone are not a task's usage: a result line without
+// model_usage_since_last_result gives none, for the first task of a process and for the ones
+// after it, whose running totals have grown.
+func TestClaudeTaskUsageIsNotTheRunningTotals(t *testing.T) {
+	for i, line := range []string{claudeResult, claudeSecondResult} {
+		payload := decode(t, line)
+		if _, ok := payload["modelUsage"]; !ok || payload["total_cost_usd"] == nil {
+			t.Fatalf("task %d: the line has no running totals", i)
+		}
+		for name, since := range map[string]any{"absent": nil, "null": "null", "not an object": "0.5"} {
+			if since == nil {
+				delete(payload, "model_usage_since_last_result")
+			} else {
+				payload["model_usage_since_last_result"] = decode(t, `{"v":`+since.(string)+`}`)["v"]
+			}
+			task, turns := ClaudeTaskUsage(payload)
+			if len(task) != 0 {
+				t.Fatalf("task %d, %s: usage from the running totals = %+v", i, name, task)
+			}
+			if turns != i+1 {
+				t.Fatalf("task %d, %s: turns = %d", i, name, turns)
+			}
+			// Nothing to record: no row, no cost.
+			run := Run{Backend: BackendClaude, Models: task, Turns: turns}
+			if records := run.Records(context.Background(), time.Now()); len(records) != 0 || run.Total().CostUSD != 0 {
+				t.Fatalf("task %d, %s: records = %+v", i, name, records)
+			}
+		}
+	}
+	if task, turns := ClaudeTaskUsage(map[string]any{"type": "result"}); task != nil || turns != 0 {
+		t.Fatalf("no usage = %+v, %d", task, turns)
 	}
 }
 
@@ -132,7 +179,7 @@ func TestRecordsAndQuotasInUsageDB(t *testing.T) {
 	recorder := NewRecorder(path, nil)
 	recorder.now = func() time.Time { return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC) }
 	ctx := llmstats.WithRunID(context.Background(), "run-1")
-	models, turns, _ := ClaudeResultUsage(decode(t, claudeResult))
+	models, turns := ClaudeTaskUsage(decode(t, claudeResult))
 	recorder.RecordRun(ctx, Run{Backend: BackendClaude, Models: models, Turns: turns, DurationMs: 1200})
 	quota, _ := ParseClaudeRateLimit(decode(t, claudeRateLimitEvent)["rate_limit_info"].(map[string]any), time.Unix(1794550000, 0))
 	recorder.SaveQuota(ctx, quota)
@@ -245,38 +292,6 @@ func TestReadCodexQuotaFromAppServer(t *testing.T) {
 	}
 	if _, err := ReadCodexQuota(context.Background(), errorScript, nil); err == nil || !strings.Contains(err.Error(), "not logged in") {
 		t.Fatalf("error = %v", err)
-	}
-}
-
-// Claude Code's status line JSON, as a terminal session keeps it: the 5-hour and weekly windows
-// become the quota; a gateway's spend limit, other fields and a status without windows do not.
-func TestParseClaudeStatusLine(t *testing.T) {
-	now := time.Date(2026, 11, 13, 13, 0, 0, 0, time.UTC)
-	data := []byte(`{"session_id":"s","model":{"id":"claude-opus-5-5"},"cost":{"total_cost_usd":0.4},
-		"rate_limits":{"seven_day":{"used_percentage":21.5,"resets_at":1795046400},
-		"five_hour":{"used_percentage":100,"resets_at":1794580200},
-		"spend_limit":{"used_percentage":3,"resets_at":1795046400}}}`)
-	q, ok := ParseClaudeStatusLine(data, now)
-	if !ok {
-		t.Fatal("no quota")
-	}
-	if q.Backend != BackendClaude || q.Source != SourceRun || q.ObservedAt != "2026-11-13T13:00:00Z" || q.Status != StatusRejected {
-		t.Fatalf("quota = %+v", q)
-	}
-	if len(q.Windows) != 2 || q.Windows[0].Kind != "five_hour" || q.Windows[1].Kind != "seven_day" {
-		t.Fatalf("windows = %+v", q.Windows)
-	}
-	five, week := q.Windows[0], q.Windows[1]
-	if five.WindowMinutes != 300 || *five.UsedPercent != 100 || five.Status != StatusRejected || five.ResetsAt != "2026-11-13T14:30:00Z" {
-		t.Fatalf("5h = %+v", five)
-	}
-	if week.WindowMinutes != 10080 || *week.UsedPercent != 21.5 || week.Status != StatusAllowed {
-		t.Fatalf("7d = %+v", week)
-	}
-	for _, data := range []string{`{"model":{"id":"x"}}`, `{"rate_limits":{}}`, `{"rate_limits":{"spend_limit":{"used_percentage":3}}}`, `not json`} {
-		if _, ok := ParseClaudeStatusLine([]byte(data), now); ok {
-			t.Fatalf("%s gave a quota", data)
-		}
 	}
 }
 

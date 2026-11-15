@@ -1,8 +1,10 @@
 ---
 date: 2026-10-31
 title: Coder Tool 的持续终端会话（Claude Code 与 Codex）
-status: implemented-experimental
+status: superseded
 ---
+
+> Superseded by [`feat_20261116_coder_sessions_everywhere.md`](feat_20261116_coder_sessions_everywhere.md) (2026-11-16): the coder no longer runs any CLI in a terminal. The PTY sessions, the screen parsers and `internal/coderterm` described below were removed; Codex runs on `codex app-server` and Claude Code on `claude -p` with JSON streams. This document is kept as the record of the removed design.
 
 # Coder Tool 的持续终端会话（Claude Code 与 Codex）
 

@@ -2907,6 +2907,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	}
 	runReq := taskruntime.RunRequest{
 		CoderConversation:       conversationKey,
+		CoderCanAsk:             true,
 		Task:                    task,
 		Model:                   model,
 		Route:                   &selectedRoute,

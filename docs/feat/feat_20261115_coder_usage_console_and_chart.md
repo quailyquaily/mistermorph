@@ -22,6 +22,8 @@ Not in this change: the summary at the top of the Usage page and the Overview pa
 
 ## Part 1: usage of terminal runs
 
+> Superseded by [`feat_20261116_coder_sessions_everywhere.md`](feat_20261116_coder_sessions_everywhere.md) (2026-11-16): the terminal sessions are gone. Claude Code's usage now comes from its stream session's `result` line (`model_usage_since_last_result`, with the CLI's own list price), and its transcript reader was removed. What remains of this part: Codex's usage is still read from its rollout files (now in `internal/codersessions`), and `llm_requests.pricing_parts` with the pricing by requests stays, for Codex's rows and for the Claude Code rows already written.
+
 ### Source
 
 The terminal session already follows each CLI's own session file to know when a task is done (`claude_transcript.go`, `codex.go`). The same files carry the usage. Checked against Claude Code 2.1.325 and the Codex CLI's rollouts of 2026-11-14.
@@ -93,31 +95,29 @@ Rejected: the status line's `cost.total_cost_usd`. It is a running total of the 
 
 ### Chart
 
-**Agent above the base line, coder below it, on one scale.** One column per day, as now.
+**Two bars per day, agent at the left and coder at the right, on one scale.** (First built as one column per day with the agent above the base line and the coder mirrored below it; changed at the owner's choice.)
 
 ```
-  agent  ▲      █
-         │  █   █       █
-         │  █   █   █   █
-  ───────┼──█───█───█───█───  0
-         │  █       █   █
-  coder  ▼  █           █
-            █
-           11  12  13  14
+      │      A
+      │  A   A       A
+      │  AC  A   AC  AC
+      │  AC  A   AC  AC
+      └──────────────────
+         11  12  13  14        A = agent   C = coder
 ```
 
-- Each half is the stack it is today: model segments (cost, tokens) or cache parts (cache), same colours. Model colours are assigned over both sources together, so a model is one colour on both sides; today's column is hatched on both sides.
-- The value axis reads the same above and below (no minus signs), with a small `Agent` label at its top end and `Coder` at its bottom end. Both halves share the scale, so a day's coder use can be compared with its agent use by eye.
-- A dashed average line per half, each the average of its own source.
-- The readout above the plot shows two totals for the range, Agent and Coder, in place of the one; the coder's cost is marked as list price. The hover tooltip has a group per source, each with its subtotal and model rows.
-- The legend stays one row of models. Pressing an entry isolates that model on both sides.
-- A range without coder rows draws as today: no lower half, no labels, one total.
+- Each bar is the stack it is today: model segments (cost, tokens) or cache parts (cache). Model colours are assigned over both sources together, so a model is one hue in both bars; the coder's bar is that colour at half its share. Today's bars are both hatched.
+- Both bars share the value axis, so a day's coder use can be compared with its agent use by eye. The plot is as high as the single stack's.
+- The legend stays one row of models and ends with the key to the two bars (`Agent` in full tone, `Coder` lighter). Pressing a model isolates it in both bars.
+- A dashed average line per source, each the average of its own source, the coder's lighter.
+- The figures under the plot show two totals and two averages for the range, Agent and Coder, in place of the one; the coder's cost is marked as list price. The hover tooltip has a group per source, each with its subtotal and model rows.
+- A range without coder rows draws as today: one bar per day, no key, one total.
 
-Why not two bars per day: at 90 days two bars per day are 180 bars, under 4 px each in the desktop plot and less on a phone, and the eye has to pair them. One column per day stays readable at every range. Why not an Agent / Coder / All switch: it hides the comparison, which is the point, and adds a control.
+At 90 days this is 180 bars: about 5 px each in the desktop plot and under 2 px on a phone, where the pairs are hard to tell apart; the tooltip and the readout still give each day's two figures. Why not an Agent / Coder / All switch: it hides the comparison, which is the point, and adds a control.
 
-`nsh/base/plot` has no stack that goes both ways, but one stack can be made to: the agent's bars, an unpainted bar of minus their sum that takes the stack back to the base, then the coder's bars with negative values, on a scale from `-max` to `max`. So the planned form was built and the fallback (two bars per day at 7 and 30 days, two plots at 90) was not needed. The trap is in `web/console-nsh/PORTING.md`.
+Each source is a stack of its own (`stack="agent"`, `stack="coder"`), which `nsh/base/plot` stands side by side in the band. The coder's stack is attached only when the range has coder rows, so the single stack keeps the whole band.
 
-`lib/core/daily-usage.js` (`summarizeDailyUsage`) builds both halves from `sources`; a payload without `sources` (an older agent) is drawn as the single stack of today.
+`lib/core/daily-usage.js` (`summarizeDailyUsage`) builds both sources' bars from `sources`; a payload without `sources` (an older agent) is drawn as the single stack of today.
 
 ## Tests
 
@@ -126,7 +126,7 @@ Why not two bars per day: at 90 days two bars per day are 180 bars, under 4 px e
 - `agent/coder_usage_test.go`: a terminal run's usage and quota arrive in one report, the rows in `usage.db`, and the usage line in the result.
 - `internal/llmstats`: a `coder` row with a known model is priced from the catalog and repriced when the catalog changes; one with an unknown model or with the CLI's own cost is left alone. `Daily` with agent and coder rows of the same model on the same day: both sources, the combined fields their sum, a day with only one source.
 - `internal/daemonruntime`: `/stats/llm/daily` carries `sources` and the old fields.
-- `web/console-nsh/tests/stats.test.tsx`: both halves, the two totals and averages, the tooltip groups, isolating a model, a payload without coder rows, a payload without `sources`.
+- `web/console-nsh/tests/stats.test.tsx`: both bars and their key, the two totals and averages, the tooltip groups, isolating a model, a payload without coder rows, a payload without `sources`.
 
 ## As built
 
@@ -135,6 +135,12 @@ The plan above was built as written, with these differences and details:
 - **Where the readers live.** `internal/coderterm/usage.go` has a usage reader per CLI (`claudeUsage`, `codexUsage`), apart from the turn readers, with its own offset per file. A session reads it once when a task ends, after the CLI was stopped if the task failed, so a failed task's last lines are counted. `coderterm.Request.Usage` is not called when the files record nothing.
 - **A session reopened in the same runtime** (after a failed task, or when the CLI exited between tasks) keeps its reader, so it counts on from where it was. Only a reopened session without one starts at the files' end; the runtime keeps no resume points over a restart today, so that path is covered by tests alone.
 - **Claude Code.** A response is counted by its last line: when a later line of the same `message.id` carries other numbers, the difference is added. The IDs are kept for the session over all its files, so a response repeated in a sub-agent's file is counted once. Messages of the model `<synthetic>` (Claude Code's own notices) are skipped. Sub-agents' files are every `agent-*.jsonl` under `<session id>/subagents/`, sub-folders included. Turns are the main transcript's responses that ended a turn.
+- **Codex's model and cost (changed after the plan, at the owner's request).** Codex rows are recorded under the model's own name and priced from the catalog, not under `codex` without a cost as planned above:
+  - A rollout names the model in a `turn_context` line at the start of each turn (checked: Codex CLI 0.169.0, terminal and `codex exec` rollouts). A response's model is the one of its thread's last `turn_context`; a response before any is recorded under `codex`, without a cost.
+  - Each counted `token_count` line is one response and is kept as one (`Responses`), so the row is priced response by response as Claude Code's terminal rows are. `gpt-6.1-sol` costs twice as much above 272,000 input tokens in one request, which a run's sum passes easily.
+  - A headless run (`codex exec --json`) gives only each turn's sum and no model in its stream. When the CLI ends, the coder tool reads the run's thread (`thread.started`'s `thread_id`) from its rollout under the CLI's own `CODEX_HOME` (`coderterm.CodexThreadUsage`, sub-agents' threads included) and records that; without a rollout the stream's sums stay, under `codex`, without a cost.
+  - The cost is a list price, marked estimated, as Claude Code's. Rows written before this change keep the model `codex` and no cost.
+  - The Antigravity CLI's rows stay under `agy` without a cost: its stream names no model (agy 1.5.9: not in `init`, the steps or `result`), and nothing else it writes for a run does but a debug log.
 - **Codex.** A `token_count` line whose `total_token_usage` equals the one before it in that file is not counted: Codex writes the line again when only its rate limits changed. Lines without `info` are skipped. Sub-agents are found from the `sub_agent_activity` lines of the session's rollout and of the sub-agents' own; a rollout that is not written yet is looked for again at the next task. Turns are the session's own `task_complete` lines.
 - **A file that got shorter** (cut or replaced) is not counted again; reading goes on from its new end. A line that does not parse is skipped. Reading usage never fails a task.
 - **One report.** `taskruntime.coderTerminalReport` gathers the usage and the status line's quota and makes the one `request.Report`; it also gives the run its duration.
@@ -150,11 +156,11 @@ The plan above was built as written, with these differences and details:
   - A headless run is unchanged: its `result` gives a cost per model, which is kept, and no split by lifetime per model.
 - **API.** A source's `models` is an empty list, not absent, when it has no rows.
 - **Chart, when the two are drawn apart:**
-  - The plot is taller (260 pt, 210 pt on phones; 184 and 150 otherwise), so each half keeps about the room the single stack had.
+  - Two bars per day, not the mirrored halves the plan first had (see Chart above); the plot keeps the single stack's height.
   - The figures under the plot are Agent total, Coder total (with `list price` beside a cost), Agent avg / day, Coder avg / day, Active days and Cache rate. Peak and Today are not shown there; today's two values are in the readout. On phones the agent's figures are one row and the coder's the next.
   - The readout of the focused day shows the day's Agent and Coder cost in place of the one Cost.
   - The tooltip has no overall total: the two subtotals are different kinds of money.
-  - The cache view draws each half's cache split, and keeps its own figures (combined).
+  - The cache view draws each source's cache split, and keeps its own figures (combined).
   - The split is drawn when the range has coder rows (`sources.coder.summary.requests > 0`), also when the agent has none.
 
 Not checked: a live Codex or Claude Code terminal run end to end (the readers are tested against lines in the shape the CLIs write), the GPUI desktop app and an Android device. The chart was looked at in Chrome (the built web Console with stubbed APIs) at 7, 30 and 90 days, 1280 pt and 390 pt wide, with mixed, agent-only, coder-only and no-`sources` data.

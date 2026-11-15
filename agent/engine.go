@@ -195,9 +195,10 @@ func WithEngineToolsConfig(cfg EngineToolsConfig) Option {
 	}
 }
 
-// WithCoderTerminal runs coder tasks in runtime-owned terminal sessions instead of one-shot CLI processes.
-func WithCoderTerminal(run func(context.Context, CoderRequest) (string, error)) Option {
-	return func(e *Engine) { e.coderTerminal = run }
+// WithCoderSessions runs the coder tool's tasks (Codex, Claude Code, Antigravity) in
+// runtime-owned sessions. Without it the coder tool reports that sessions are unavailable.
+func WithCoderSessions(run func(context.Context, CoderRequest) (string, error)) Option {
+	return func(e *Engine) { e.coderSessions = run }
 }
 
 type Config struct {
@@ -220,7 +221,7 @@ type Engine struct {
 	logOpts  LogOptions
 
 	engineToolsConfig EngineToolsConfig
-	coderTerminal     func(context.Context, CoderRequest) (string, error)
+	coderSessions     func(context.Context, CoderRequest) (string, error)
 
 	systemPromptCacheControl *llm.CacheControl
 	// runContext adds notes to each fresh run, after the metadata (WithRunContext).
@@ -303,13 +304,11 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			Runner:     e.subtaskRunner,
 		},
 		coderToolDeps{
-			Runner:         e.subtaskRunner,
-			RunCLI:         runCoderCLI,
-			RunTerminal:    e.coderTerminal,
-			LookupTool:     e.registry.Get,
-			Usage:          coderusage.Default,
-			ReadCodexQuota: readCodexQuota,
-			ReadAgyQuota:   readAgyQuota,
+			Runner:       e.subtaskRunner,
+			RunSessions:  e.coderSessions,
+			LookupTool:   e.registry.Get,
+			Usage:        coderusage.Default,
+			ReadAgyQuota: readAgyQuota,
 		},
 		e.modelProfiles,
 	)

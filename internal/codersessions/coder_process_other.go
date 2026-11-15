@@ -1,6 +1,6 @@
 //go:build !unix
 
-package agent
+package codersessions
 
 import "os/exec"
 

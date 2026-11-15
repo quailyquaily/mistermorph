@@ -1,21 +1,13 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
@@ -27,32 +19,23 @@ const (
 	coderToolName      = "coder"
 	coderBackendCodex  = "codex"
 	coderBackendClaude = "claude"
-	// The Antigravity CLI, Google's terminal agent. It runs one-shot everywhere: there is no
-	// terminal session for it, so no approval prompts either.
+	// The Antigravity CLI, Google's terminal agent.
 	coderBackendAgy = coderusage.BackendAgy
-
-	coderStderrTailBytes = 4 * 1024
-	coderLineMaxBytes    = 4 * 1024 * 1024
-	coderOutputMaxBytes  = 64 * 1024
-	// After the CLI exits, a process it left in the background can keep its output open.
-	coderWaitDelay = time.Second
-	// Diagnostics directories kept under file_cache_dir/coder, including the new one.
-	coderDiagnosticsKeep = 20
 )
 
 type coderTool struct {
 	deps coderToolDeps
 }
 
-// CoderRequest describes one coding task. Command and Env are resolved for an injected terminal runner.
+// CoderRequest describes one coding task. Command and Env are the CLI and its environment,
+// resolved for the session runner.
 type CoderRequest struct {
 	Backend string
 	Task    string
 	CWD     string
 	// CoderEnv builds the CLI's environment and finds the CLI in it.
 	CoderEnv shellenv.CoderEnv
-	LogRoot  string
-	// BypassApprovals asks a terminal session to run without approval prompts or sandbox.
+	// BypassApprovals asks a session that could ask the user to run without approval prompts.
 	BypassApprovals bool
 	Command         string
 	Env             []string
@@ -61,20 +44,11 @@ type CoderRequest struct {
 	Progress func(summary, text, step string)
 	// Process reports the OS PID of the CLI used for this task.
 	Process func(pid int)
-	// Report hears, once the CLI has ended, what the run used and the quota it reported (Claude
-	// Code reports one; nil otherwise). A terminal session reports what its session files record.
-	// A run that failed for lack of a sign-in says so in Run.NotSignedIn.
+	// Report hears, once the task has ended, what it used and the quota the CLI reported (Claude
+	// Code and Codex report one; nil otherwise). A run that failed for lack of a sign-in says so
+	// in Run.NotSignedIn.
 	Report func(run coderusage.Run, quota *coderusage.Quota)
 }
-
-type coderCLICommand struct {
-	Command string
-	Args    []string
-	Stdin   string
-	Dir     string
-}
-
-type coderCLIRunFunc func(ctx context.Context, req CoderRequest, emit func(string)) (string, error)
 
 func newCoderTool(deps coderToolDeps) *coderTool {
 	return &coderTool{deps: deps}
@@ -83,24 +57,10 @@ func newCoderTool(deps coderToolDeps) *coderTool {
 func (t *coderTool) Name() string { return coderToolName }
 
 func (t *coderTool) Description() string {
-	if t.deps.RunTerminal != nil {
-		approvals := "asks the user to approve actions when needed"
-		switch codex, claude := t.deps.BypassApprovals[coderBackendCodex], t.deps.BypassApprovals[coderBackendClaude]; {
-		case codex && claude:
-			approvals = "runs actions without asking the user"
-		case codex:
-			approvals = "asks the user to approve actions when needed (Codex runs actions without asking)"
-		case claude:
-			approvals = "asks the user to approve actions when needed (Claude Code runs actions without asking)"
-		}
-		return "Delegate a repository coding task to local Codex, Claude Code (cc) or the Antigravity CLI (agy) when the user asks for them. " +
-			"Codex and Claude Code each keep a terminal session for this conversation and working directory, and " + approvals + ". " +
-			"agy has no session: each task is a fresh non-interactive run that remembers nothing of the last, and it runs every action without asking the user. " +
-			"Returns a SubtaskResult envelope. " + coderUsageNote
-	}
-	return "Delegate a repository coding task to the local Codex, Claude Code or Antigravity (agy) CLI. " +
-		"Use this when the user explicitly asks for Codex, Claude Code, cc, Antigravity, or agy to handle code edits, review fixes, tests, or file generation. " +
-		"The child coder runs non-interactively with approvals bypassed and returns a SubtaskResult envelope. " + coderUsageNote
+	return "Delegate a repository coding task to local Codex, Claude Code (cc), or Antigravity (agy) when the user explicitly asks for that CLI. " +
+		"Each coder keeps one session per working directory within this run, or within a Console conversation, so a later task can build on an earlier one. " +
+		"Only a Console conversation's sessions ask the user to approve actions and show the coder's own questions; every other run has approvals bypassed, and a question the coder asks there fails the task with the question as its error. " +
+		"Returns a SubtaskResult envelope. " + coderUsageNote
 }
 
 // coderUsageNote tells the model what the result's usage line is for.
@@ -153,32 +113,13 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 	}
 	req.CoderEnv = t.coderEnv()
 	req.BypassApprovals = t.deps.BypassApprovals[req.Backend]
-	req.LogRoot = pathroots.Resolve(ctx, t.deps.Roots).FileCacheDir
 
 	runner := t.deps.Runner
 	if runner == nil {
 		return "", fmt.Errorf("subtask runner unavailable")
 	}
-	runCLI := t.deps.RunCLI
-	if runCLI == nil {
-		runCLI = runCoderCLI
-	}
-	// agy has no terminal session: it runs one-shot in the Console too.
-	if t.deps.RunTerminal != nil && req.Backend != coderBackendAgy {
-		runCLI = func(ctx context.Context, req CoderRequest, emit func(string)) (string, error) {
-			// The backend name is also the CLI's command name.
-			command, env, err := req.CoderEnv.Command(req.Backend)
-			if err != nil {
-				return "", err
-			}
-			req.Command, req.Env = command, env
-			output, err := t.deps.RunTerminal(ctx, req)
-			if output != "" {
-				// A line of its own: the usage line that may follow starts on the next.
-				emit(strings.TrimRight(output, "\n") + "\n")
-			}
-			return output, err
-		}
+	if t.deps.RunSessions == nil {
+		return "", fmt.Errorf("coder sessions unavailable")
 	}
 
 	result, err := runner.RunSubtask(ctx, SubtaskRequest{
@@ -193,19 +134,16 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 					Text: text, Summary: summary, Progress: step, Status: "running",
 				})
 			}
-			output, runErr := runCLI(runCtx, req, func(text string) {
-				text = strings.TrimRight(text, "\x00")
-				if text == "" {
-					return
-				}
-				EmitEvent(runCtx, nil, Event{
-					Kind:     EventKindToolOutput,
-					ToolName: coderToolName,
-					Stream:   req.Backend,
-					Text:     text,
-					Status:   "running",
-				})
-			})
+			var output string
+			command, env, runErr := req.CoderEnv.Command(req.Backend)
+			if runErr == nil {
+				req.Command, req.Env = command, env
+				output, runErr = t.deps.RunSessions(runCtx, req)
+			}
+			if output != "" {
+				req.Progress("", strings.TrimRight(output, "\n")+"\n", "")
+			}
+
 			usage := t.reportUsage(runCtx, req, run, quota)
 			if runErr != nil {
 				out := FailedSubtaskResult("", runErr)
@@ -239,8 +177,8 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 }
 
 // reportUsage records what a run used and the coder's quota, and says both in a line for the
-// result and the activity: Claude Code reports its quota during the run; Codex's is read from its
-// app server and the Antigravity CLI's from its /usage after the run (no quota used). A quota that
+// result and the activity: Claude Code reports its quota during the task; Codex's is read from its
+// app server and the Antigravity CLI's from its /usage after the task (no quota used). A quota that
 // cannot be read is left out: nothing is made up, and the run's own outcome stands. It returns ""
 // when there is nothing to say.
 func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coderusage.Run, quota *coderusage.Quota) string {
@@ -250,11 +188,6 @@ func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coder
 	}
 	run.Backend = req.Backend
 	recorder.RecordRun(ctx, run)
-	if quota == nil && req.Backend == coderBackendCodex && t.deps.ReadCodexQuota != nil {
-		if read, err := t.deps.ReadCodexQuota(context.WithoutCancel(ctx), req.CoderEnv); err == nil {
-			quota = &read
-		}
-	}
 	// A run that found no sign-in has no quota to read (and the read would meet the same prompt).
 	if quota == nil && req.Backend == coderBackendAgy && t.deps.ReadAgyQuota != nil && !run.NotSignedIn {
 		if read, err := t.deps.ReadAgyQuota(context.WithoutCancel(ctx), req.CoderEnv); err == nil {
@@ -279,15 +212,6 @@ func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coder
 		req.Progress(line, line, "")
 	}
 	return text
-}
-
-// readCodexQuota reads Codex's quota from its app server, finding codex as the coder tool does.
-func readCodexQuota(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error) {
-	command, env, err := coderEnv.Command(coderBackendCodex)
-	if err != nil {
-		return coderusage.Quota{}, err
-	}
-	return coderusage.ReadCodexQuota(ctx, command, env)
 }
 
 // readAgyQuota reads the Antigravity CLI's quota from its /usage, finding agy as the coder tool does.
@@ -412,779 +336,6 @@ func resolveCoderAliasedCWD(roots pathroots.PathRoots, alias string, rest string
 	return candAbs, nil
 }
 
-func buildCoderCLICommand(req CoderRequest) coderCLICommand {
-	switch strings.TrimSpace(req.Backend) {
-	case coderBackendCodex:
-		return coderCLICommand{
-			Command: "codex",
-			Args: []string{
-				"exec",
-				"--dangerously-bypass-approvals-and-sandbox",
-				"--json",
-				"-C",
-				strings.TrimSpace(req.CWD),
-				"-",
-			},
-			Stdin: req.Task,
-			Dir:   strings.TrimSpace(req.CWD),
-		}
-	case coderBackendClaude:
-		return coderCLICommand{
-			Command: "claude",
-			// The task goes on stdin: as an argument, a task starting with "-" reads as an option.
-			Args: []string{
-				"-p",
-				"--output-format",
-				"stream-json",
-				"--verbose",
-				"--include-partial-messages",
-				"--no-session-persistence",
-				"--dangerously-skip-permissions",
-			},
-			Stdin: req.Task,
-			Dir:   strings.TrimSpace(req.CWD),
-		}
-	case coderBackendAgy:
-		return coderCLICommand{
-			Command: "agy",
-			// The task goes on stdin, which agy reads as its prompt when -p is not given: as -p's
-			// value it would be in the process list, and bounded by the argument size. stream-json
-			// on its own is headless; without the permission bypass a headless run cannot ask and
-			// denies every action that needs approval.
-			Args: []string{
-				"--output-format",
-				"stream-json",
-				"--dangerously-skip-permissions",
-			},
-			Stdin: req.Task,
-			Dir:   strings.TrimSpace(req.CWD),
-		}
-	default:
-		return coderCLICommand{}
-	}
-}
-
-func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (output string, runErr error) {
-	started := time.Now()
-	// stdout and stderr can both publish progress. Serialize the consumer.
-	var emitMu sync.Mutex
-	publish := func(text string) {
-		emitMu.Lock()
-		defer emitMu.Unlock()
-		if emit != nil {
-			emit(text)
-		}
-	}
-	progress := func(summary, text, step string) {
-		emitMu.Lock()
-		defer emitMu.Unlock()
-		if req.Progress != nil {
-			req.Progress(summary, text, step)
-		} else if emit != nil {
-			emit(text)
-		}
-	}
-	spec := buildCoderCLICommand(req)
-	if strings.TrimSpace(spec.Command) == "" {
-		return "", fmt.Errorf("unsupported coder: %s", req.Backend)
-	}
-	commandPath, env, err := req.CoderEnv.Command(spec.Command)
-	if err != nil {
-		return "", err
-	}
-	root := strings.TrimSpace(req.LogRoot)
-	if root != "" {
-		root, err = filepath.Abs(filepath.Join(root, "coder"))
-		if err != nil {
-			return "", err
-		}
-		if err := os.MkdirAll(root, 0o700); err != nil {
-			return "", fmt.Errorf("create coder diagnostics directory: %w", err)
-		}
-		// The system temporary directory has its own cleanup; file_cache_dir does not.
-		pruneCoderDiagnostics(root, coderDiagnosticsKeep-1)
-	}
-	diagnosticDir, err := os.MkdirTemp(root, req.Backend+"-")
-	if err != nil {
-		return "", fmt.Errorf("create coder diagnostics directory: %w", err)
-	}
-	stdoutLog, err := os.OpenFile(filepath.Join(diagnosticDir, "stdout.jsonl"), os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", err
-	}
-	defer stdoutLog.Close()
-	stderrLog, err := os.OpenFile(filepath.Join(diagnosticDir, "stderr.log"), os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", err
-	}
-	defer stderrLog.Close()
-	if req.Backend == coderBackendClaude {
-		spec.Args = append(spec.Args, "--debug-file", filepath.Join(diagnosticDir, "debug.log"))
-	}
-	line := fmt.Sprintf("[%s] diagnostics: %s\n", req.Backend, diagnosticDir)
-	progress(line, line, "")
-	collector := newCoderStreamCollector(req.Backend, publish)
-	collector.progress = progress
-	var stderrTail coderTailBuffer
-	stderrTail.Limit = coderStderrTailBytes
-	defer func() {
-		line := fmt.Sprintf("[%s] process ended after %s; diagnostics: %s\n", req.Backend, time.Since(started).Round(time.Millisecond), diagnosticDir)
-		progress(line, line, "")
-		if runErr == nil {
-			return
-		}
-		detail := fmt.Sprintf("%s failed after %s", req.Backend, time.Since(started).Round(time.Millisecond))
-		if collector.lastActivity != "" {
-			detail += "; last activity: " + collector.lastActivity
-		}
-		if tail := strings.TrimSpace(stderrTail.String()); tail != "" {
-			detail += "; stderr: " + tail
-		}
-		detail += "; diagnostics: " + diagnosticDir
-		runErr = fmt.Errorf("%s: %w", detail, runErr)
-	}()
-	// stop ends the CLI early: agy waiting at its sign-in prompt.
-	procCtx, stop := context.WithCancel(ctx)
-	defer stop()
-	var needsSignIn atomic.Bool
-	cmd := exec.CommandContext(procCtx, commandPath, spec.Args...)
-	configureCoderProcess(cmd)
-	if env != nil {
-		cmd.Env = env
-	}
-	if spec.Dir != "" {
-		cmd.Dir = spec.Dir
-	}
-	if spec.Stdin != "" {
-		cmd.Stdin = strings.NewReader(spec.Stdin)
-	}
-	// exec copies the output, so Wait returns once the CLI exits and WaitDelay passes,
-	// even when a process the CLI left in the background still holds the pipes.
-	stdoutLines := &coderLineWriter{handle: func(line []byte) { _ = collector.ConsumeLine(line) }}
-	stderrLines := &coderLineWriter{handle: func(line []byte) {
-		if req.Backend == coderBackendAgy {
-			// Not signed in, agy prints a sign-in link and waits a minute for it. Nobody can
-			// answer here: stop it now, and keep the link out of the progress and the result.
-			if needsSignIn.Load() {
-				return
-			}
-			if coderusage.IsAgyAuthPrompt(string(line)) {
-				needsSignIn.Store(true)
-				stop()
-				return
-			}
-		}
-		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
-	}}
-	stdoutLines.overflow = func() {
-		line := fmt.Sprintf("[%s] skipped an output line over %d bytes\n", req.Backend, coderLineMaxBytes)
-		progress(line, line, "")
-	}
-	stderrLines.overflow = stdoutLines.overflow
-	cmd.Stdout = io.MultiWriter(stdoutLog, stdoutLines)
-	cmd.Stderr = io.MultiWriter(stderrLog, &stderrTail, stderrLines)
-	cmd.WaitDelay = coderWaitDelay
-
-	if err := cmd.Start(); err != nil {
-		return "", err
-	}
-
-	if req.Process != nil {
-		req.Process(cmd.Process.Pid)
-	}
-	remaining := ""
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining = fmt.Sprintf("; remaining task time: %s", time.Until(deadline).Round(time.Second))
-	}
-	line = fmt.Sprintf("[%s] started pid=%d%s\n", req.Backend, cmd.Process.Pid, remaining)
-	progress(line, line, "")
-
-	waitErr := cmd.Wait()
-	stdoutLines.Flush()
-	stderrLines.Flush()
-	signIn := needsSignIn.Load() || (req.Backend == coderBackendAgy && coderusage.IsAgyAuthError(collector.Error()))
-	if req.Report != nil {
-		run := collector.Run()
-		run.Backend = req.Backend
-		run.DurationMs = time.Since(started).Milliseconds()
-		run.NotSignedIn = signIn
-		req.Report(run, collector.quota)
-	}
-	output = capCoderOutput(collector.Output(), diagnosticDir)
-	if signIn {
-		// The stderr tail holds the sign-in link: it is not part of the error.
-		stderrTail.Reset()
-		return output, coderusage.ErrAgySignIn
-	}
-	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
-		line := fmt.Sprintf("[%s] exited; stopped reading output still held by a background process\n", req.Backend)
-		progress(line, line, "")
-		waitErr = nil
-	}
-	if waitErr != nil {
-		if ctx.Err() != nil {
-			return output, ctx.Err()
-		}
-		if errText := collector.Error(); errText != "" && req.Backend == coderBackendAgy {
-			// agy exits 1 after a result that says why.
-			return output, fmt.Errorf("agy failed: %s (%v)", errText, coderExitError(req.Backend, waitErr))
-		}
-		return output, coderExitError(req.Backend, waitErr)
-	}
-	if errText := collector.Error(); errText != "" {
-		return output, fmt.Errorf("%s failed: %s", req.Backend, errText)
-	}
-	if req.Backend == coderBackendAgy && !collector.agy.resultSeen {
-		// Exit 0 without a result is not a finished run: the answer would be a guess.
-		return output, fmt.Errorf("agy ended without a result event")
-	}
-	return output, nil
-}
-
-// coderLineWriter hands each complete line to handle. A line longer than coderLineMaxBytes
-// is dropped, and overflow is called once for it.
-type coderLineWriter struct {
-	handle   func(line []byte)
-	overflow func()
-
-	buf      []byte
-	skipping bool
-}
-
-func (w *coderLineWriter) Write(p []byte) (int, error) {
-	n := len(p)
-	for len(p) > 0 {
-		i := bytes.IndexByte(p, '\n')
-		if i < 0 {
-			if !w.skipping {
-				w.buf = append(w.buf, p...)
-				if len(w.buf) > coderLineMaxBytes {
-					w.buf = nil
-					w.skipping = true
-					if w.overflow != nil {
-						w.overflow()
-					}
-				}
-			}
-			break
-		}
-		if !w.skipping {
-			w.buf = append(w.buf, p[:i]...)
-			if len(w.buf) <= coderLineMaxBytes {
-				w.handle(w.buf)
-			} else if w.overflow != nil {
-				w.overflow()
-			}
-		}
-		w.buf = w.buf[:0]
-		w.skipping = false
-		p = p[i+1:]
-	}
-	return n, nil
-}
-
-// Flush hands over a final line that has no trailing newline.
-func (w *coderLineWriter) Flush() {
-	if len(w.buf) > 0 && !w.skipping {
-		w.handle(w.buf)
-	}
-	w.buf = nil
-	w.skipping = false
-}
-
-// capCoderOutput keeps the end of an oversized result, where the CLI's conclusion usually is.
-func capCoderOutput(output string, diagnosticDir string) string {
-	if len(output) <= coderOutputMaxBytes {
-		return output
-	}
-	start := len(output) - coderOutputMaxBytes
-	for start < len(output) && !utf8.RuneStart(output[start]) {
-		start++
-	}
-	return fmt.Sprintf("[%d bytes omitted; the full stream is in %s]\n", start, filepath.Join(diagnosticDir, "stdout.jsonl")) + output[start:]
-}
-
-// pruneCoderDiagnostics removes the oldest codex-*, claude-* and agy-* directories under root
-// until at most keep remain.
-func pruneCoderDiagnostics(root string, keep int) {
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return
-	}
-	type diagDir struct {
-		path    string
-		modTime time.Time
-	}
-	var dirs []diagDir
-	for _, entry := range entries {
-		name := entry.Name()
-		if !entry.IsDir() || !(strings.HasPrefix(name, coderBackendCodex+"-") || strings.HasPrefix(name, coderBackendClaude+"-") || strings.HasPrefix(name, coderBackendAgy+"-")) {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		dirs = append(dirs, diagDir{path: filepath.Join(root, name), modTime: info.ModTime()})
-	}
-	if len(dirs) <= keep {
-		return
-	}
-	sort.Slice(dirs, func(i, j int) bool { return dirs[i].modTime.Before(dirs[j].modTime) })
-	for _, dir := range dirs[:len(dirs)-keep] {
-		_ = os.RemoveAll(dir.path)
-	}
-}
-
-func coderExitError(backend string, err error) error {
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		return fmt.Errorf("%s: %w", backend, err)
-	}
-	return fmt.Errorf("%s exited with code %d", backend, exitErr.ExitCode())
-}
-
-type coderStreamCollector struct {
-	backend  string
-	emit     func(string)
-	progress func(summary, text, step string)
-
-	emitted       strings.Builder
-	final         string
-	errText       string
-	lastActivity  string
-	step          string
-	itemOutputLen map[string]int
-	// run is what the run used, as its events said; quota the subscription quota it reported.
-	run   coderusage.Run
-	quota *coderusage.Quota
-	// agy is what the Antigravity CLI's stream needs kept.
-	agy agyStreamState
-}
-
-// Run is what the run used.
-func (c *coderStreamCollector) Run() coderusage.Run {
-	if c.backend == coderBackendAgy {
-		return c.agyRun()
-	}
-	return c.run
-}
-
-func newCoderStreamCollector(backend string, emit func(string)) *coderStreamCollector {
-	return &coderStreamCollector{
-		backend:       strings.ToLower(strings.TrimSpace(backend)),
-		emit:          emit,
-		itemOutputLen: map[string]int{},
-		agy:           agyStreamState{lastStep: -1, textStep: -1},
-	}
-}
-
-func (c *coderStreamCollector) ConsumeLine(line []byte) error {
-	if c == nil {
-		return nil
-	}
-	line = bytes.TrimSpace(line)
-	if len(line) == 0 {
-		return nil
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(line, &payload); err != nil {
-		if c.backend == coderBackendAgy {
-			// agy's stream is JSON lines only: anything else is a broken stream, not an answer.
-			c.agyMalformedLine(line)
-			return nil
-		}
-		c.addDelta(string(line) + "\n")
-		return nil
-	}
-	switch c.backend {
-	case coderBackendClaude:
-		c.consumeClaude(payload)
-	case coderBackendAgy:
-		c.consumeAgy(payload)
-	default:
-		c.consumeCodex(payload)
-	}
-	return nil
-}
-
-func (c *coderStreamCollector) Output() string {
-	if c == nil {
-		return ""
-	}
-	if text := strings.TrimSpace(c.final); text != "" {
-		return text
-	}
-	return strings.TrimSpace(c.emitted.String())
-}
-
-func (c *coderStreamCollector) Error() string {
-	if c == nil {
-		return ""
-	}
-	if c.backend == coderBackendAgy {
-		return c.agyError()
-	}
-	return strings.TrimSpace(c.errText)
-}
-
-func (c *coderStreamCollector) addDelta(text string) {
-	if c == nil || text == "" {
-		return
-	}
-	c.emitted.WriteString(text)
-	if c.emit != nil {
-		c.emit(text)
-	}
-}
-
-func (c *coderStreamCollector) setAssistantText(text string) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return
-	}
-	emitted := c.emitted.String()
-	if strings.HasPrefix(text, emitted) {
-		c.addDelta(strings.TrimPrefix(text, emitted))
-	} else if emitted == "" {
-		c.addDelta(text)
-	} else if !strings.Contains(emitted, text) {
-		c.addDelta("\n" + text)
-	}
-	c.final = text
-}
-
-func (c *coderStreamCollector) consumeClaude(payload map[string]any) {
-	switch strings.TrimSpace(stringField(payload, "type")) {
-	case "system":
-		if stringField(payload, "subtype") == "thinking_tokens" {
-			return
-		}
-		if stringField(payload, "subtype") == "init" {
-			c.step = coderStepStarting
-		} else if stringField(payload, "status") == "requesting" {
-			c.step = coderStepThinking
-		}
-		c.emitActivity("[claude] " + stringField(payload, "subtype") + " " + stringField(payload, "status"))
-	case "tool_progress":
-		c.step = claudeToolStep(stringField(payload, "tool_name"))
-		c.emitActivity(fmt.Sprintf("[claude] %s (%s), elapsed %vs", stringField(payload, "tool_name"), stringField(payload, "tool_use_id"), payload["elapsed_time_seconds"]))
-	case "stream_event":
-		if event, ok := mapField(payload, "event"); ok {
-			if block, ok := mapField(event, "content_block"); ok {
-				switch stringField(block, "type") {
-				case "tool_use":
-					c.step = claudeToolStep(stringField(block, "name"))
-					c.emitActivity("[claude] starting " + stringField(block, "name") + " (" + stringField(block, "id") + ")")
-				case "thinking":
-					c.step = coderStepThinking
-					c.emitActivity("[claude] thinking")
-				}
-			}
-		}
-		if text := claudeStreamDelta(payload["event"]); text != "" {
-			c.addDelta(text)
-		}
-	case "assistant", "user":
-		if message, ok := mapField(payload, "message"); ok {
-			blocks, _ := message["content"].([]any)
-			for _, value := range blocks {
-				block, ok := value.(map[string]any)
-				if !ok {
-					continue
-				}
-				switch stringField(block, "type") {
-				case "tool_use":
-					c.step = claudeToolStep(stringField(block, "name"))
-					input, _ := json.Marshal(block["input"])
-					c.emitActivity(fmt.Sprintf("[claude] %s (%s)", stringField(block, "name"), stringField(block, "id")), string(input))
-				case "tool_result":
-					status := "completed"
-					if boolField(block, "is_error") {
-						status = "failed"
-					}
-					c.step = coderStepThinking
-					c.emitActivity(fmt.Sprintf("[claude] %s %s", stringField(block, "tool_use_id"), status), textFromValue(block["content"]))
-				}
-			}
-		}
-		if text := textFromValue(payload["message"]); stringField(payload, "type") == "assistant" && text != "" {
-			c.setAssistantText(text)
-		}
-	case "rate_limit_event":
-		if info, ok := mapField(payload, "rate_limit_info"); ok {
-			if quota, ok := coderusage.ParseClaudeRateLimit(info, time.Now()); ok {
-				c.quota = &quota
-			}
-		}
-	case "result":
-		if models, turns, ok := coderusage.ClaudeResultUsage(payload); ok {
-			c.run.Models, c.run.Turns = models, turns
-		}
-		if text := stringField(payload, "result"); text != "" {
-			c.final = text
-		}
-		if boolField(payload, "is_error") {
-			c.errText = firstNonEmptyString(stringField(payload, "result"), stringField(payload, "error"))
-			if c.errText == "" {
-				errorsJSON, _ := json.Marshal(payload["errors"])
-				c.errText = stringField(payload, "subtype") + ": " + string(errorsJSON)
-			}
-		}
-	}
-}
-
-func (c *coderStreamCollector) emitActivity(summary string, details ...string) {
-	// Keep progress separate from the assistant's answer and bound UI previews.
-	text := summary
-	if len(details) > 0 {
-		text += " " + strings.Join(details, " ")
-	}
-	runes := []rune(strings.TrimSpace(text))
-	if len(runes) > 1000 {
-		runes = append(runes[:1000], []rune("…")...)
-	}
-	c.lastActivity = strings.TrimSpace(summary)
-	if c.progress != nil {
-		c.progress("\n"+c.lastActivity+"\n", "\n"+string(runes)+"\n", c.step)
-	} else if c.emit != nil {
-		c.emit("\n" + string(runes) + "\n")
-	}
-}
-
-func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
-	typ := stringField(payload, "type")
-	switch typ {
-	case "thread.started", "turn.started", "turn.completed":
-		switch typ {
-		case "thread.started":
-			c.step = coderStepStarting
-		case "turn.started":
-			c.step = coderStepThinking
-		case "turn.completed":
-			c.errText = ""
-			c.addCodexTurn(payload)
-		}
-		c.emitActivity("[codex] " + typ)
-	case "error":
-		c.emitActivity("[codex] error", firstNonEmptyString(stringField(payload, "message"), stringField(payload, "error")))
-	case "turn.failed":
-		if failure, ok := mapField(payload, "error"); ok {
-			c.errText = stringField(failure, "message")
-		} else {
-			c.errText = stringField(payload, "error")
-		}
-		if c.errText == "" {
-			c.errText = "turn failed"
-		}
-		c.emitActivity("[codex] turn.failed", c.errText)
-		return
-	}
-	if strings.Contains(strings.ToLower(typ), "delta") {
-		if text := firstNonEmptyString(stringField(payload, "delta"), stringField(payload, "text")); text != "" {
-			c.addDelta(text)
-			return
-		}
-	}
-	if item, ok := mapField(payload, "item"); ok && isAssistantCoderItem(item) {
-		if text := firstNonEmptyString(stringField(item, "text"), textFromValue(item["content"])); text != "" {
-			c.setAssistantText(text)
-			return
-		}
-	}
-	if item, ok := mapField(payload, "item"); ok && strings.HasPrefix(typ, "item.") {
-		// An item that finishes hands control back to the model.
-		if typ == "item.completed" {
-			c.step = coderStepThinking
-		} else if step := codexItemStep(stringField(item, "type")); step != "" {
-			c.step = step
-		}
-	}
-	if item, ok := mapField(payload, "item"); ok && strings.TrimSpace(stringField(item, "type")) == "command_execution" {
-		c.consumeCodexCommandItem(item)
-		return
-	}
-	if item, ok := mapField(payload, "item"); ok && strings.HasPrefix(typ, "item.") {
-		if kind := stringField(item, "type"); kind != "" {
-			c.emitActivity(fmt.Sprintf("[codex] %s %s (%s)", kind, strings.TrimPrefix(typ, "item."), stringField(item, "id")))
-		}
-	}
-	if text := firstNonEmptyString(stringField(payload, "output"), stringField(payload, "result"), stringField(payload, "final")); text != "" {
-		c.final = text
-	}
-	if errText := firstNonEmptyString(stringField(payload, "error"), stringField(payload, "message")); errText != "" && strings.Contains(strings.ToLower(typ), "error") {
-		c.errText = errText
-	}
-}
-
-// addCodexTurn adds a Codex turn's usage to the run's: one model, the turns summed.
-func (c *coderStreamCollector) addCodexTurn(payload map[string]any) {
-	usage, ok := coderusage.CodexTurnUsage(payload)
-	if !ok {
-		return
-	}
-	c.run.Turns++
-	if len(c.run.Models) == 0 {
-		c.run.Models = []coderusage.ModelUsage{{Model: usage.Model}}
-	}
-	total := &c.run.Models[0]
-	total.InputTokens += usage.InputTokens
-	total.CachedInputTokens += usage.CachedInputTokens
-	total.CacheCreationInputTokens += usage.CacheCreationInputTokens
-	total.OutputTokens += usage.OutputTokens
-	total.ReasoningTokens += usage.ReasoningTokens
-}
-
-func claudeStreamDelta(value any) string {
-	event, ok := value.(map[string]any)
-	if !ok {
-		return ""
-	}
-	if delta, ok := mapField(event, "delta"); ok {
-		if text := stringField(delta, "text"); text != "" {
-			return text
-		}
-	}
-	return ""
-}
-
-const (
-	coderStepStarting = "starting up"
-	coderStepThinking = "thinking"
-	coderStepCommand  = "running a command"
-	coderStepEdit     = "editing files"
-	coderStepRead     = "reading code"
-	coderStepWeb      = "searching the web"
-	coderStepTool     = "calling a tool"
-	coderStepPlan     = "planning"
-	coderStepSubagent = "running a subagent"
-)
-
-// claudeToolStep names a Claude Code tool by what it does. Unknown tools keep their name.
-func claudeToolStep(name string) string {
-	switch name {
-	case "":
-		return ""
-	case "Bash", "BashOutput", "KillShell":
-		return coderStepCommand
-	case "Edit", "MultiEdit", "Write", "NotebookEdit":
-		return coderStepEdit
-	case "Read", "Glob", "Grep", "LS":
-		return coderStepRead
-	case "WebFetch", "WebSearch":
-		return coderStepWeb
-	case "TodoWrite":
-		return coderStepPlan
-	case "Task", "Agent":
-		return coderStepSubagent
-	}
-	if strings.HasPrefix(name, "mcp__") {
-		return coderStepTool
-	}
-	return "using " + name
-}
-
-// codexItemStep names a Codex item type by what it does, or returns "" for items that are not steps.
-func codexItemStep(kind string) string {
-	switch kind {
-	case "command_execution":
-		return coderStepCommand
-	case "file_change":
-		return coderStepEdit
-	case "mcp_tool_call":
-		return coderStepTool
-	case "web_search":
-		return coderStepWeb
-	case "todo_list":
-		return coderStepPlan
-	case "reasoning":
-		return coderStepThinking
-	}
-	return ""
-}
-
-func isAssistantCoderItem(item map[string]any) bool {
-	role := strings.ToLower(strings.TrimSpace(stringField(item, "role")))
-	typ := strings.ToLower(strings.TrimSpace(stringField(item, "type")))
-	return role == "assistant" || typ == "message" || typ == "assistant_message" || typ == "agent_message"
-}
-
-func (c *coderStreamCollector) consumeCodexCommandItem(item map[string]any) {
-	id := strings.TrimSpace(stringField(item, "id"))
-	command := strings.TrimSpace(stringField(item, "command"))
-	status := strings.TrimSpace(stringField(item, "status"))
-	output := stringField(item, "aggregated_output")
-	emittedLen := c.itemOutputLen[id]
-	runes := []rune(output)
-	if emittedLen > len(runes) {
-		emittedLen = 0
-	}
-	details := string(runes[emittedLen:])
-	c.itemOutputLen[id] = len(runes)
-	if command != "" {
-		details = "$ " + command + "\n" + details
-	}
-	summary := fmt.Sprintf("[codex] command_execution %s (%s)", status, id)
-	if code, ok := item["exit_code"]; ok && code != nil {
-		summary += fmt.Sprintf(" exit=%v", code)
-	}
-	c.emitActivity(summary, details)
-}
-
-func textFromValue(value any) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case []any:
-		var b strings.Builder
-		for _, item := range v {
-			b.WriteString(textFromValue(item))
-		}
-		return b.String()
-	case map[string]any:
-		if text := firstNonEmptyString(stringField(v, "text"), stringField(v, "output_text")); text != "" {
-			return text
-		}
-		if content, ok := v["content"]; ok {
-			return textFromValue(content)
-		}
-		if message, ok := v["message"]; ok {
-			return textFromValue(message)
-		}
-	}
-	return ""
-}
-
-func mapField(m map[string]any, key string) (map[string]any, bool) {
-	value, ok := m[key]
-	if !ok {
-		return nil, false
-	}
-	out, ok := value.(map[string]any)
-	return out, ok
-}
-
-func stringField(m map[string]any, key string) string {
-	value, ok := m[key]
-	if !ok {
-		return ""
-	}
-	s, ok := value.(string)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(s)
-}
-
-func boolField(m map[string]any, key string) bool {
-	value, ok := m[key]
-	if !ok {
-		return false
-	}
-	b, ok := value.(bool)
-	return ok && b
-}
-
 func firstNonEmptyString(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -1192,34 +343,4 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
-}
-
-type coderTailBuffer struct {
-	Limit int
-	buf   []byte
-}
-
-func (b *coderTailBuffer) Write(p []byte) (int, error) {
-	if b == nil {
-		return len(p), nil
-	}
-	b.buf = append(b.buf, p...)
-	if b.Limit > 0 && len(b.buf) > b.Limit {
-		b.buf = append([]byte(nil), b.buf[len(b.buf)-b.Limit:]...)
-	}
-	return len(p), nil
-}
-
-// Reset drops what was kept.
-func (b *coderTailBuffer) Reset() {
-	if b != nil {
-		b.buf = nil
-	}
-}
-
-func (b *coderTailBuffer) String() string {
-	if b == nil {
-		return ""
-	}
-	return string(bytes.ToValidUTF8(b.buf, []byte("\n[non-utf8 output]\n")))
 }

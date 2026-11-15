@@ -9,16 +9,15 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/audience"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
-	"github.com/quailyquaily/mistermorph/internal/coderterm"
-	"github.com/quailyquaily/mistermorph/internal/coderusage"
+	"github.com/quailyquaily/mistermorph/internal/codersessions"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
@@ -109,7 +108,8 @@ func (owners *runtimeClientOwners) resources() []any {
 }
 
 type Runtime struct {
-	CoderSessions         coderterm.Sessions
+	// CoderSessions are the coding CLIs' sessions of this runtime, closed with it.
+	CoderSessions         codersessions.Sessions
 	commonDeps            depsutil.CommonDependencies
 	bootstrapClientOwners *runtimeClientOwners
 	closeOnce             sync.Once
@@ -141,8 +141,11 @@ type Runtime struct {
 type PromptAugmentFunc func(spec *agent.PromptSpec, reg *tools.Registry)
 
 type RunRequest struct {
-	// CoderConversation enables persistent coder terminals for this Console conversation.
+	// CoderConversation keeps the coder sessions for this Console conversation between runs.
+	// Empty scopes them to the run.
 	CoderConversation string
+	// CoderCanAsk is set only by the local Console runtime, independently of question channels.
+	CoderCanAsk bool
 	// SessionID overrides the conversation scope used for provider caching.
 	SessionID                string
 	Task                     string
@@ -578,10 +581,17 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	closeTaskMCP := func() error { return nil }
 	closeToolSearch := func() error { return nil }
 	var memoryStore *memories.Store
+	coderScope := req.CoderConversation
+	if coderScope == "" {
+		coderScope = "run:" + uuid.NewString()
+	}
 	var cleanupOnce sync.Once
 	var cleanupErr error
 	cleanup := func() error {
 		cleanupOnce.Do(func() {
+			if req.CoderConversation == "" {
+				rt.CoderSessions.Reset(coderScope)
+			}
 			cleanupErr = errors.Join(closeToolSearch(), closeTaskMCP(), memoryStore.Close(), closeRuntimeClientScope(logger, runClientOwners, ownedImageClient))
 		})
 		return cleanupErr
@@ -789,47 +799,8 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		agent.WithSubtaskRunner(boundSubtaskRunner{runtime: rt, route: mainRoute}),
 		agent.WithEngineToolsConfig(engineToolsConfig),
 	}
-	if req.CoderConversation != "" && coderterm.Supported {
-		ask := userQuestionsFromContext(ctx)
-		engineOpts = append(engineOpts, agent.WithCoderTerminal(func(runCtx context.Context, request agent.CoderRequest) (string, error) {
-			report := coderTerminalReport{started: time.Now()}
-			terminalRequest := coderterm.Request{
-				Backend: request.Backend, Command: request.Command, Env: request.Env, CWD: request.CWD,
-				Task: request.Task, LogRoot: request.LogRoot, BypassApprovals: request.BypassApprovals,
-				Process: request.Process,
-				// Claude Code's status line carries its subscription's quota, and the session files
-				// what the task used: reported together below, as a stream run's are, so they are
-				// saved and said with the result.
-				Status: report.status,
-				Usage:  report.usage,
-				Progress: func(status string) {
-					if request.Progress != nil {
-						request.Progress(status, status+"\n", status)
-					}
-				},
-				// What the CLI says while it works goes into the output as lines of its own; the
-				// status label stays what the CLI is doing.
-				Note: func(text string) {
-					if request.Progress != nil {
-						request.Progress("", text+"\n", "")
-					}
-				},
-			}
-			if ask != nil {
-				terminalRequest.Ask = func(ctx context.Context, question coderterm.Question) (coderterm.Answer, error) {
-					q := UserQuestion{ID: newUserQuestionID(), Text: question.Text, ChoicesOnly: question.ChoicesOnly}
-					for _, option := range question.Options {
-						q.Options = append(q.Options, UserQuestionOption{Label: option})
-					}
-					answer, err := ask(ctx, q)
-					return coderterm.Answer{Option: answer.Option, Text: answer.Text}, err
-				}
-			}
-			output, err := rt.CoderSessions.Run(runCtx, req.CoderConversation, terminalRequest)
-			report.send(request)
-			return output, err
-		}))
-	}
+	engineOpts = append(engineOpts, agent.WithCoderSessions(CoderSessionRunner(&rt.CoderSessions, coderScope, req.CoderCanAsk, userQuestionsFromContext(ctx))))
+
 	if engineToolsConfig.SpawnEnabled || engineToolsConfig.ToolTriggers["spawn"] {
 		if lister := ModelProfileLister(rt.commonDeps, mainRoute.Profile); lister != nil {
 			engineOpts = append(engineOpts, agent.WithModelProfiles(lister))
@@ -1252,59 +1223,4 @@ func imageToolRegistrationTask(task string, current *llm.Message) string {
 		}
 	}
 	return strings.Join(parts, "\n")
-}
-
-// coderTerminalReport gathers what a terminal coder task reports when it ends: the usage its
-// session files record and the quota of Claude Code's status line. They go to the coder tool in
-// one report, so neither replaces the other.
-type coderTerminalReport struct {
-	started time.Time
-	run     coderusage.Run
-	quota   *coderusage.Quota
-}
-
-func (r *coderTerminalReport) status(data []byte) {
-	if quota, ok := coderusage.ParseClaudeStatusLine(data, time.Now()); ok {
-		r.quota = &quota
-	}
-}
-
-func (r *coderTerminalReport) usage(usage coderterm.Usage) {
-	r.run = coderusage.Run{Turns: usage.Turns}
-	for _, m := range usage.Models {
-		model := coderusage.ModelUsage{
-			Model:                    m.Model,
-			InputTokens:              m.InputTokens,
-			CachedInputTokens:        m.CachedInputTokens,
-			CacheCreationInputTokens: m.CacheCreationInputTokens,
-			OutputTokens:             m.OutputTokens,
-			ReasoningTokens:          m.ReasoningTokens,
-			CacheDetails:             m.CacheCreation,
-		}
-		// The responses go along one by one: the rows are priced by them, not by their sum.
-		for _, response := range m.Responses {
-			model.Requests = append(model.Requests, coderusage.RequestUsage{
-				InputTokens:              response.InputTokens,
-				CachedInputTokens:        response.CachedInputTokens,
-				CacheCreationInputTokens: response.CacheCreationInputTokens,
-				OutputTokens:             response.OutputTokens,
-				CacheDetails:             response.CacheCreation,
-				Count:                    response.Count,
-			})
-		}
-		r.run.Models = append(r.run.Models, model)
-	}
-}
-
-// send makes the one report, when there is anything to report.
-func (r *coderTerminalReport) send(request agent.CoderRequest) {
-	if request.Report == nil || (r.quota == nil && r.run.Empty()) {
-		return
-	}
-	run := r.run
-	run.Backend = request.Backend
-	if !r.started.IsZero() {
-		run.DurationMs = time.Since(r.started).Milliseconds()
-	}
-	request.Report(run, r.quota)
 }

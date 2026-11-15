@@ -28,7 +28,8 @@ func TestWorkerTaskEventsKeepTheExactTask(t *testing.T) {
 	coderRunner := &execDirectSubtaskRunner{}
 	if err := reg.Register(newCoderTool(coderToolDeps{
 		Runner: coderRunner,
-		RunCLI: func(_ context.Context, req CoderRequest, _ func(string)) (string, error) {
+		Env:    fakeCoderEnv(t),
+		RunSessions: func(_ context.Context, req CoderRequest) (string, error) {
 			coderReq = req
 			return "coded", nil
 		},

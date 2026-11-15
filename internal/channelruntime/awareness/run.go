@@ -19,6 +19,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
+	"github.com/quailyquaily/mistermorph/internal/codersessions"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
@@ -747,7 +748,10 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if useTaskRoute {
 		currentProfile = taskRoute.Profile
 	}
+	var coderSessions codersessions.Sessions
+	defer coderSessions.Close()
 	engineOptions := []agent.Option{
+		agent.WithCoderSessions(taskruntime.CoderSessionRunner(&coderSessions, "run", false, nil)),
 		agent.WithLogger(opts.Logger),
 		agent.WithLogOptions(opts.LogOptions),
 		agent.WithEngineToolsConfig(engineToolsConfig),

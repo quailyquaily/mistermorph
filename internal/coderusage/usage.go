@@ -5,16 +5,17 @@
 //
 // Sources, each the CLI's own:
 //
-//   - Codex: `codex exec --json` ends each turn with `turn.completed` and its `usage`; its quota
-//     comes only from the app server's `account/rateLimits/read` (ReadCodexQuota), which uses no
-//     quota itself.
+//   - Codex: a session's rollout files record each response's tokens and model; its quota comes
+//     only from the app server's `account/rateLimits/read` (the session's own server after a
+//     task, ReadCodexQuota for a refresh), which uses no quota itself.
 //
-//   - Claude Code: `claude -p --output-format stream-json` reports the quota in a
-//     `rate_limit_event` during the run and the run's cost and tokens per model in `result`.
+//   - Claude Code: a `claude -p` stream session reports the quota in a `rate_limit_event` during
+//     a task, and the task's cost and tokens per model in the `result` line that ends it
+//     (`model_usage_since_last_result`); a refresh reads `claude -p /usage` (ReadClaudeQuota).
 //
-//   - Antigravity CLI: `agy --output-format stream-json` ends with a `result` and the run's
-//     `usage` (tokens, no cost); its quota, per model group, comes from `agy -p /usage
-//     --output-format json` (ReadAgyQuota), which the CLI answers itself.
+//   - Antigravity CLI: an `agy acp` prompt's result carries its `usage` (tokens, no cost); its
+//     quota, per model group, comes from `agy -p /usage --output-format json` (ReadAgyQuota),
+//     which the CLI answers itself.
 //
 // Nothing here reads the CLIs' credentials or calls their services directly.
 package coderusage
@@ -52,7 +53,7 @@ type ModelUsage struct {
 	// different prices.
 	CacheDetails map[string]int64
 	// Requests are the model's upstream requests the usage sums, when the CLI tells them apart
-	// and gives no cost (a terminal run of Claude Code). The pricing catalog prices a request,
+	// and gives no cost (Codex's rollout files). The pricing catalog prices a request,
 	// not a run: the row is priced request by request (llmstats.RequestRecord.PricingParts).
 	Requests []RequestUsage
 }
@@ -156,51 +157,43 @@ func CodexTurnUsage(payload map[string]any) (ModelUsage, bool) {
 	}, true
 }
 
-// ClaudeResultUsage reads a Claude Code `result` event: the run's usage per model (its
-// `modelUsage`), else its overall `usage` and `total_cost_usd`, and the number of turns.
-func ClaudeResultUsage(payload map[string]any) (models []ModelUsage, turns int, ok bool) {
-	turns = int(intField(payload, "num_turns"))
-	if byModel, isMap := payload["modelUsage"].(map[string]any); isMap && len(byModel) > 0 {
-		names := make([]string, 0, len(byModel))
-		for name := range byModel {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			usage, isMap := byModel[name].(map[string]any)
-			if !isMap {
-				continue
-			}
-			read := intField(usage, "cacheReadInputTokens")
-			write := intField(usage, "cacheCreationInputTokens")
-			models = append(models, ModelUsage{
-				Model:                    strings.TrimSpace(name),
-				InputTokens:              intField(usage, "inputTokens") + read + write,
-				CachedInputTokens:        read,
-				CacheCreationInputTokens: write,
-				OutputTokens:             intField(usage, "outputTokens"),
-				ReasoningTokens:          intField(usage, "thinkingTokens"),
-				CostUSD:                  floatField(usage, "costUSD"),
-			})
-		}
-		if len(models) > 0 {
-			return models, turns, true
-		}
+// ClaudeTaskUsage reads what one task used from the `result` line that ends it in a `claude -p`
+// stream session: `model_usage_since_last_result`, per model the tokens, the cache reads and
+// writes and the CLI's cost at list price, and the line's `num_turns`. The line's `modelUsage` and
+// `total_cost_usd` are running totals of the process, never a task's usage: a line without
+// `model_usage_since_last_result` gives no usage.
+func ClaudeTaskUsage(payload map[string]any) (task []ModelUsage, turns int) {
+	since, _ := payload["model_usage_since_last_result"].(map[string]any)
+	return claudeModelUsage(since), int(intField(payload, "num_turns"))
+}
+
+// claudeModelUsage reads a `result` line's usage by model, in the order of the models' names.
+// Input counts the cache reads and writes, as llmstats counts every input token.
+func claudeModelUsage(byModel map[string]any) []ModelUsage {
+	names := make([]string, 0, len(byModel))
+	for name := range byModel {
+		names = append(names, name)
 	}
-	usage, isMap := payload["usage"].(map[string]any)
-	if !isMap {
-		return nil, turns, false
+	sort.Strings(names)
+	var models []ModelUsage
+	for _, name := range names {
+		usage, isMap := byModel[name].(map[string]any)
+		if !isMap || strings.TrimSpace(name) == "" {
+			continue
+		}
+		read := intField(usage, "cacheReadInputTokens")
+		write := intField(usage, "cacheCreationInputTokens")
+		models = append(models, ModelUsage{
+			Model:                    strings.TrimSpace(name),
+			InputTokens:              intField(usage, "inputTokens") + read + write,
+			CachedInputTokens:        read,
+			CacheCreationInputTokens: write,
+			OutputTokens:             intField(usage, "outputTokens"),
+			ReasoningTokens:          intField(usage, "thinkingTokens"),
+			CostUSD:                  floatField(usage, "costUSD"),
+		})
 	}
-	read := intField(usage, "cache_read_input_tokens")
-	write := intField(usage, "cache_creation_input_tokens")
-	return []ModelUsage{{
-		Model:                    BackendClaude,
-		InputTokens:              intField(usage, "input_tokens") + read + write,
-		CachedInputTokens:        read,
-		CacheCreationInputTokens: write,
-		OutputTokens:             intField(usage, "output_tokens"),
-		CostUSD:                  floatField(payload, "total_cost_usd"),
-	}}, turns, true
+	return models
 }
 
 func intField(m map[string]any, key string) int64 {
