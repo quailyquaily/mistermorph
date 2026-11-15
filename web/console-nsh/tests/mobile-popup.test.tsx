@@ -1,8 +1,8 @@
 // Popups on phones (design/mobile-popups.md): every menu, select, date picker, picker bubble and
 // dialog the console draws is the floating paper of More and the agent switcher there: a small
 // gap from the window's left, right and bottom outside the system's insets and the keyboard, never
-// above the status bar, tall content scrolling inside it, sliding in from above the window's top
-// edge (at once with reduced motion). The desktops keep their dropdowns at the trigger and their
+// above the status bar, tall content scrolling inside it, sliding up from below the window's bottom
+// edge and back down out there (at once with reduced motion). The desktops keep their dropdowns at the trigger and their
 // centred dialogs. The numbers are lib/mobilePopup.ts's; the frames and motion come from
 // tests/fixtures/mobile-popup-app.tsx (the bottom navigation's own two are in
 // tests/mobile-bottom-nav.test.tsx, the dialogs' actions in tests/dialog-sheet.test.tsx). The
@@ -86,7 +86,14 @@ async function openFixture(options: Options = {}) {
     await app.waitUntil(() => report()[`${name}.motion`] !== undefined);
     return report()[`${name}.motion`] as Sample[];
   };
-  return { app, report, frame, show, dismiss, sampled, width, height };
+  /** Closes the open popup and gives its paper's motion on the way out, from when it was told to go. */
+  const left = async (name: string) => {
+    if (platform === "android") await app.back();
+    else await app.press("id:close-all");
+    await app.waitUntil(() => report()[`${name}.exit`] !== undefined);
+    return report()[`${name}.exit`] as Sample[];
+  };
+  return { app, report, frame, show, dismiss, sampled, left, width, height };
 }
 
 /** The paper keeps POPUP_GAP from the left, the right and the bottom, outside `area` and `keyboard`, and stays under the status bar. */
@@ -137,16 +144,26 @@ test("the paper's place: a gap outside every inset, the keyboard in place of the
   expect(mobilePopupFrame({ width: 390, height: 844, area: { top: Number.NaN, bottom: -3 }, keyboard: Number.NaN }).bottom).toBe(12);
 });
 
-test("the paper comes from above the window's top edge, wherever it lands", () => {
-  // A paper 300pt tall whose top is at 484: out of sight once it is 784pt (and a point) up.
-  expect(mobilePopupEntrance(484, 300, 844)).toBe(-785);
-  expect(mobilePopupEntrance(0, 100, 844)).toBe(-101);
-  // Not laid out yet: a window's height up, never in view.
-  expect(mobilePopupEntrance(0, 0, 844)).toBe(-844);
-  expect(mobilePopupEntrance(0, 0, 0)).toBe(-1);
-  for (const [y, height] of [[36, 748], [500, 120], [0, 844]] as const) {
-    expect(mobilePopupEntrance(y, height, 844)).toBeLessThan(0);
-    expect(y + height + mobilePopupEntrance(y, height, 844)).toBeLessThan(0);
+test("the paper comes from below the window's bottom edge, wherever it lands", () => {
+  // A paper 300pt tall whose top is at 484: out of sight once its top is at the foot, 360pt (and a point) down.
+  expect(mobilePopupEntrance(484, 300, 844)).toBe(361);
+  // One at the top of the layer goes the whole layer down.
+  expect(mobilePopupEntrance(0, 100, 844)).toBe(845);
+  // Not laid out yet: a window's height down, never in view, and never the other way.
+  expect(mobilePopupEntrance(0, 0, 844)).toBe(844);
+  expect(mobilePopupEntrance(0, 0, 0)).toBe(1);
+  expect(mobilePopupEntrance(Number.NaN, Number.NaN, Number.NaN)).toBe(1);
+  // A layer whose height is unknown, or a paper hanging out of it: its own height down at least.
+  expect(mobilePopupEntrance(484, 300, 0)).toBe(301);
+  expect(mobilePopupEntrance(700, 300, 844)).toBe(301);
+  expect(mobilePopupEntrance(-20, 300, 844)).toBe(845);
+  // Tall, short, as tall as the window, in a window resized: always positive, the top past the foot.
+  for (const layer of [844, 360, 1200]) {
+    for (const [y, height] of [[36, 748], [500, 120], [0, 844], [200, 100]] as const) {
+      if (y + height > layer) continue;
+      expect(mobilePopupEntrance(y, height, layer)).toBeGreaterThan(0);
+      expect(y + mobilePopupEntrance(y, height, layer)).toBeGreaterThan(layer);
+    }
   }
 });
 
@@ -233,25 +250,34 @@ test("with the software keyboard up every paper stands on it, the gap above it, 
   run.app.dispose();
 });
 
-test("each paper slides in from above the window's top edge, never from below", async () => {
+test("each paper slides up from below the window's bottom edge and back down out there, never from above", async () => {
   const run = await openFixture({ safeArea: BUTTONS });
-  for (const popup of [DROPDOWNS[0], DROPDOWNS[2], DROPDOWNS[3], DROPDOWNS[6], DIALOGS[0], DIALOGS[1]]) {
+  for (const popup of [DROPDOWNS[0], DROPDOWNS[2], DROPDOWNS[3], DROPDOWNS[6], DIALOGS[0], DIALOGS[1], DIALOGS[2], DIALOGS[3]]) {
     const samples = await run.sampled(popup.trigger, popup.name);
     const frame = run.frame(popup.name)!;
     const ys = samples.map((sample) => sample.y);
-    // It starts out of sight above the top edge: its whole frame, and more, up.
-    expect(Math.min(...ys)).toBeLessThanOrEqual(-(frame.y + frame.h));
-    // Never below its place: the translation is negative all the way, and ends at rest.
-    expect(Math.max(...ys)).toBe(0);
+    // It starts out of sight below the bottom edge: its top at the window's foot, or further down.
+    expect(frame.y + Math.max(...ys)).toBeGreaterThanOrEqual(run.height);
+    // Never above its place: the translation is positive all the way, and ends at rest.
+    expect(Math.min(...ys)).toBe(0);
     expect(ys[ys.length - 1]).toBe(0);
-    // Once it moves it only comes down.
-    const moving = ys.slice(ys.findIndex((y) => y > Math.min(...ys)));
+    // Once it moves it only comes up.
+    const moving = ys.slice(ys.findIndex((y) => y < Math.max(...ys)));
     expect(moving.length).toBeGreaterThan(2);
-    for (let i = 1; i < moving.length; i += 1) expect(moving[i]).toBeGreaterThanOrEqual(moving[i - 1]);
+    for (let i = 1; i < moving.length; i += 1) expect(moving[i]).toBeLessThanOrEqual(moving[i - 1]);
     // It slides; it does not scale or fade in as a desktop dialog does.
-    const shown = samples.filter((sample) => sample.y > Math.min(...ys));
+    const shown = samples.filter((sample) => sample.y < Math.max(...ys));
     expect(shown.every((sample) => sample.s === 1 && sample.o === 1)).toBe(true);
-    await run.dismiss();
+
+    // Told to go, it only sinks from its place, to out of sight below the bottom edge again.
+    const exit = (await run.left(popup.name)).map((sample) => sample.y);
+    expect(exit[0]).toBeLessThan(mobilePopupEntrance(frame.y, frame.h, run.height) * 0.5);
+    expect(Math.min(...exit)).toBeGreaterThanOrEqual(0);
+    for (let i = 1; i < exit.length; i += 1) expect(exit[i]).toBeGreaterThanOrEqual(exit[i - 1]);
+    expect(exit.filter((y) => y > 0 && frame.y + y < run.height).length).toBeGreaterThan(2);
+    expect(exit[exit.length - 1]).toBe(mobilePopupEntrance(frame.y, frame.h, run.height));
+    expect(frame.y + exit[exit.length - 1]).toBeGreaterThan(run.height);
+    await run.app.wait(100);
   }
   run.app.dispose();
 });
@@ -263,9 +289,9 @@ test("with reduced motion each paper is in its place at once, the same place", a
     const samples = await still.sampled(popup.trigger, popup.name);
     const frame = still.frame(popup.name)!;
     // No displacement in view: wherever it is drawn it is at rest (before its first layout it
-    // waits out of sight above, never part-way).
-    const hidden = -(frame.y + frame.h);
-    expect(samples.every((sample) => sample.y === 0 || sample.y <= hidden)).toBe(true);
+    // waits out of sight below, never part-way).
+    const hidden = still.height - frame.y;
+    expect(samples.every((sample) => sample.y === 0 || sample.y >= hidden)).toBe(true);
     expect(samples[samples.length - 1].y).toBe(0);
     expect(samples.filter((sample) => sample.y === 0).length).toBeGreaterThan(samples.length / 2);
     expect(frame).toEqual(await moving.show(popup.trigger, popup.name));

@@ -397,8 +397,8 @@ Headless tests prove behaviour, not the look.
   720pt, and touch screens up to the phone layout's 980pt, a phone on its side): its layer takes
   every inset, the keyboard's height in place of the bottom one, and a 12pt gap at the left, the
   right and the bottom (lib/mobilePopup.ts; iOS and the web too), so the panel pads nothing for
-  the system and its own bottom edge shows above the inset. It slides in from above the window's
-  top edge. Its footer's buttons go in `DialogActions` (Modal's footer and SettingDialog's are):
+  the system and its own bottom edge shows above the inset. It slides up from below the window's
+  bottom edge, and back down out there. Its footer's buttons go in `DialogActions` (Modal's footer and SettingDialog's are):
   exactly two share the row's width there; put them in the row itself, not each in a column of
   its own (`flex-1` would grow it down).
 - nsh/base's `Sheet` is such an overlay: the frame's padding does not reach it, and its panel runs

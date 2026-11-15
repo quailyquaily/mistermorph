@@ -4,7 +4,7 @@
 // takes there (the navigation bar, gesture handle or home indicator; the keyboard instead while it
 // is up), which the layer takes once: the paper is no taller for it. Exactly two footer actions
 // share the row's width while other counts, and every desktop dialog, keep their own; the paper
-// slides in from above the window's top edge and back out there, its contents mounted until it is
+// slides up from below the window's bottom edge and back down out there, its contents mounted until it is
 // out, and lands at once with reduced motion. Frames and motion come from
 // tests/fixtures/dialog-sheet-app.tsx; the other popups are in tests/mobile-popup.test.tsx.
 import type { Platform, SafeArea } from "nsh/test";
@@ -55,7 +55,7 @@ async function openFixture(options: { platform?: Platform; width?: number; safeA
   return { app, report, frame, width, samples, show, closed, dismiss };
 }
 
-/** How far up a paper is out of sight (lib/mobilePopup.ts): what it slides by. */
+/** How far down a paper is out of sight (lib/mobilePopup.ts): what it slides by, a positive translation. */
 const away = (panel: Frame) => mobilePopupEntrance(panel.y, panel.h, HEIGHT);
 
 for (const [name, platform, safeArea, inset] of [
@@ -165,14 +165,17 @@ const drawn = (samples: Sample[]) => samples.slice(Math.max(0, samples.findIndex
 function expectSlideIn(samples: Sample[], panel: Frame) {
   const shown = drawn(samples);
   const out = away(panel);
-  // Until its first layout it waits further up, out of sight; then it starts just out of sight
-  // above the window's top edge (its own frame up): the first frame in sight is near that (samples
-  // come every 16ms or so), not part way down. It is never below its place.
-  const inSight = shown.filter((s) => s.y > out);
-  expect(inSight[0].y).toBeLessThan(out * 0.8);
-  expect(shown.some((s) => s.y < 0 && s.y > out)).toBe(true);
-  for (let i = 1; i < shown.length; i++) expect(shown[i].y).toBeGreaterThanOrEqual(shown[i - 1].y);
-  for (const s of shown) expect(s.y).toBeLessThanOrEqual(0);
+  // Its top at the window's bottom edge is out of sight: a positive translation, never above its place.
+  expect(out).toBeGreaterThan(0);
+  expect(panel.y + out).toBeGreaterThanOrEqual(HEIGHT);
+  // Until its first layout it waits further down, out of sight; then it starts just out of sight
+  // below the window's bottom edge: the first frame in sight is near that (samples come every
+  // 16ms or so), not part way up. From there it only rises, and it is never above its place.
+  const inSight = shown.filter((s) => s.y < out);
+  expect(inSight[0].y).toBeGreaterThan(out * 0.8);
+  expect(shown.some((s) => s.y > 0 && s.y < out)).toBe(true);
+  for (let i = 1; i < shown.length; i++) expect(shown[i].y).toBeLessThanOrEqual(shown[i - 1].y);
+  for (const s of shown) expect(s.y).toBeGreaterThanOrEqual(0);
   expect(shown[shown.length - 1].y).toBe(0);
   // Sliding, not fading or growing.
   for (const s of shown) {
@@ -183,9 +186,13 @@ function expectSlideIn(samples: Sample[], panel: Frame) {
 
 function expectSlideOut(samples: Sample[], panel: Frame, body = true) {
   const out = away(panel);
-  for (let i = 1; i < samples.length; i++) expect(samples[i].y).toBeLessThanOrEqual(samples[i - 1].y);
-  // On the way up its contents stay mounted, and they go once it is out of sight.
-  const moving = samples.filter((s) => s.y < 0 && s.y > out);
+  // It only sinks, never rising above its place.
+  for (const s of samples) expect(s.y).toBeGreaterThanOrEqual(0);
+  for (let i = 1; i < samples.length; i++) expect(samples[i].y).toBeGreaterThanOrEqual(samples[i - 1].y);
+  // On the way down its contents stay mounted, and they go once it is out of sight, below the
+  // window's bottom edge.
+  expect(panel.y + out).toBeGreaterThanOrEqual(HEIGHT);
+  const moving = samples.filter((s) => s.y > 0 && s.y < out);
   expect(moving.length).toBeGreaterThan(2);
   for (const s of moving) {
     if (body) expect(s.alive).toBe(true);
@@ -197,7 +204,7 @@ function expectSlideOut(samples: Sample[], panel: Frame, body = true) {
 
 // The slide is the same code on both phones; the insets above are what differ between them.
 for (const [name, platform, safeArea] of [["an Android phone", "android", BUTTONS]] as const) {
-  test(`on ${name} a dialog slides in from above the top edge and back out there, the same each time it opens`, async () => {
+  test(`on ${name} a dialog slides up from below the bottom edge and back down out there, the same each time it opens`, async () => {
     const { app, frame, show, closed, dismiss } = await openFixture({ platform, safeArea });
     for (const kind of ["two", "message2", "setting", "bare"]) {
       const first = await show(kind);
@@ -224,12 +231,13 @@ test("a dialog opened again while it goes out turns back from where it is, its c
   await closed("two");
   await app.waitUntil(() => report()["two.in2"] !== undefined);
   const back = samples("two.in2");
-  // Part way up when it turned (the highest point; values read a frame late): it never went out
-  // of sight, nor jumped back to the top, and from there it only comes down.
-  const highest = back.reduce((at, s, i) => (s.y < back[at].y ? i : at), 0);
-  expect(back[highest].y).toBeLessThan(0);
-  expect(back[highest].y).toBeGreaterThan(out * 0.95);
-  for (let i = highest + 1; i < back.length; i++) expect(back[i].y).toBeGreaterThanOrEqual(back[i - 1].y);
+  // Part way down when it turned (the lowest point; values read a frame late): it never went out
+  // of sight, nor jumped back below the window, and from there it only comes up.
+  const lowest = back.reduce((at, s, i) => (s.y > back[at].y ? i : at), 0);
+  expect(back[lowest].y).toBeGreaterThan(0);
+  expect(back[lowest].y).toBeLessThan(out * 0.95);
+  for (const s of back) expect(s.y).toBeGreaterThanOrEqual(0);
+  for (let i = lowest + 1; i < back.length; i++) expect(back[i].y).toBeLessThanOrEqual(back[i - 1].y);
   expect(back[back.length - 1].y).toBe(0);
   for (const s of [...samples("two.out1").filter((s) => s.t < 90), ...back]) expect(s.alive).toBe(true);
   expect(app.count("id:body-two")).toBe(1);
@@ -294,12 +302,12 @@ test("a dialog goes out quicker than it came in (280ms, 200ms), leaving fast as 
   const out = away(frame("two.panel"));
   await dismiss();
   const exit = await closed("two");
-  const coming = run(entrance, (s) => s.y > out, (s) => s.y === 0);
-  const going = run(exit, (s) => s.y < 0, (s) => s.y === out);
+  const coming = run(entrance, (s) => s.y < out, (s) => s.y === 0);
+  const going = run(exit, (s) => s.y > 0, (s) => s.y === out);
   // 80ms quicker, give or take a sampled frame either side.
   expect(going.ms).toBeLessThan(coming.ms - 32);
   // MOTION_EXIT_EASE starts slow: half way through its time it has gone less than half the way.
-  expect(going.middle.y).toBeGreaterThan(out * 0.5);
+  expect(going.middle.y).toBeLessThan(out * 0.5);
   app.dispose();
 });
 

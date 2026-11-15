@@ -1,7 +1,8 @@
 # Mobile popup presentation
 
 Implementation tracking: FT123 on the factory board. This specification supersedes the earlier
-top-corners-only requirement.
+top-corners-only requirement. FT127 reversed the entrance direction: the popups rise from the
+bottom edge, as a bottom sheet does, instead of dropping in from the top.
 
 ## Scope
 
@@ -17,8 +18,8 @@ Desktop presentation remains unchanged.
   addition to applicable safe-area clearance.
 - Match the reference surfaces, borders, shadows, spacing, and backdrop treatment. Bring More and
   the agent switcher into compliance too if necessary.
-- Slide in from the top. This specifies the entrance direction, not a requirement to anchor every
-  popup at the top of the screen.
+- Slide up from below the bottom edge, and close by sliding back down out of view. This specifies
+  the direction of the motion; the popup's resting place, backdrop and timing are unchanged.
 - Respect reduced-motion preferences while preserving the final layout.
 
 ## Safe areas and scrolling
@@ -61,7 +62,7 @@ One floating paper serves every popup on phones. Its numbers are pure functions 
 | Backdrop | `bg-scrim`, fading with the paper; a press on it closes | `DialogLayer`, `MobileBottomNav` |
 | Title row | A square mark and the name in spaced mono capitals over a hairline (`PopupTitle`), where the popup has a name | `components/ui.tsx` |
 | Rows | The agent switcher's rows (`PickerList`): rounded, 44pt tall for a finger | `components/shared/PickerList.tsx` |
-| Entrance | Slides down from out of sight above the window's top edge to its place in 280ms; leaves the same way in 200ms. Only the translation is negative: the paper is never below its place | `mobilePopupEntrance` |
+| Entrance | Slides up from out of sight below the window's bottom edge (its top at the layer's foot) to its place in 280ms; leaves the same way, downward, in 200ms. The translation is only ever positive: the paper is never above its place. Until its first layout it waits a layer's height down; reopened while it leaves, it turns back from where it is | `mobilePopupEntrance` |
 | Reduced motion | In place at once, gone at once; the same final frame | `motionMs` |
 
 The layer that holds the paper takes each inset once, as its padding, and adds the gap to it: the
@@ -90,7 +91,7 @@ title bar and actions staying in place.
 
 | Category | Popups | Component | On phones |
 |---|---|---|---|
-| Navigation | More, the agent switcher | `components/frame/MobileBottomNav.tsx` | The reference. Own layer inside the page so the bottom bar stays usable; floats 12pt above the bar; 62% of the page at most. Brought into compliance: slides in from the top (was from the bottom), keeps the gap inside side insets, 560pt at most |
+| Navigation | More, the agent switcher | `components/frame/MobileBottomNav.tsx` | The reference. Own layer inside the page so the bottom bar stays usable; floats 12pt above the bar; 62% of the page at most. Slides up from below the page's bottom edge, behind the bar; keeps the gap inside side insets, 560pt at most |
 | Menus of commands | Topic rows, skills, contacts, settings rows, every `DropdownMenu` | `DropdownMenu` (`components/ui.tsx`) | `PopupList`: the commands as rows (icon, danger tone, check mark, second line, separators as hairlines) |
 | Selects | `SelectField` (plain and searchable), settings lists (`SettingMenu`, behind `SettingSelect` and the unit pickers), TODO pickers (`TodoSelect`) | `components/ui.tsx`, `components/settings/SettingFields.tsx`, `components/todo/TodoSelect.tsx` | `PopupList`; a searchable one gets the filter field, which takes the focus only when pressed |
 | Date pickers | TODO "Run at" (date and time), the memories journal's "Since" (clears) | `components/shared/DateField.tsx` | `PopupSheet` holding the calendar, the time field and a Clear button |
@@ -121,8 +122,8 @@ composer lowers the software keyboard and gives the field its focus back on clos
 
 `tests/mobile-popup.test.tsx` covers a representative of each category on an Android phone, an
 iPhone, a narrow browser window, a 320pt phone and a phone on its side: the gaps and insets, tall
-content, the keyboard, the entrance direction, reduced motion, choosing and cancelling, and the
+content, the keyboard, the entrance and exit direction, reduced motion, choosing and cancelling, and the
 unchanged desktop presentation at 1280pt and 800pt. `tests/mobile-bottom-nav.test.tsx` covers More
-and the agent switcher, `tests/dialog-sheet.test.tsx` the dialogs' motion and actions. Headless
+and the agent switcher (their frames, and their slide in, out and turned back), `tests/dialog-sheet.test.tsx` the dialogs' motion and actions. Headless
 tests cannot read a view's corner radius back: the four corners are one `borderRadius` on the
 paper, and what the tests prove is that the paper's bottom edge ends above the inset.

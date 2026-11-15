@@ -18,7 +18,14 @@ async function openNav(width: number, height: number, extra: Record<string, unkn
   const frames = () => JSON.parse(app.texts().find((text) => text.startsWith("{")) ?? "{}") as Record<string, Frame>;
   await app.waitFor("id:mobile-bottom-nav");
   await app.waitUntil(() => SLOTS.every((slot) => frames()[slot]));
-  return { app, frames };
+  /** A sheet's sampled progress (0 out of sight, 1 in its place) after it was told to open or close. */
+  const motion = () =>
+    JSON.parse((app.texts().find((text) => text.startsWith("motion:")) ?? "motion:{}").slice(7)) as Record<string, { t: number; p: number }[]>;
+  const sampled = async (label: string) => {
+    await app.waitUntil(() => motion()[label] !== undefined);
+    return motion()[label];
+  };
+  return { app, frames, sampled };
 }
 
 /** The slots' frames side by side: each its own stretch of the row, as wide as a press needs. */
@@ -127,7 +134,7 @@ test("a sheet floats above the bar, inset as the bar is, and leaves room above i
 
 /** A sheet's frame: the page's width less the popups' gap at each side (12pt, the bar's margins),
  * up to the popups' widest and centred; its foot the same gap off the page's, above the bottom
- * inset `area` leaves (the fixture has no route, so no bar room); and it comes in from above. */
+ * inset `area` leaves (the fixture has no route, so no bar room); and it comes in from below. */
 function expectFloatingSheet(
   frames: Record<string, Frame>,
   name: string,
@@ -144,8 +151,10 @@ function expectFloatingSheet(
   expect(sheet.y).toBeGreaterThanOrEqual(POPUP_GAP);
   // The gap under it shows above the inset: the sheet's own bottom edge ends there.
   expect(Math.abs(sheet.y + sheet.h - (height - area.bottom - POPUP_GAP))).toBeLessThan(0.5);
-  // It slides in from above the page's top edge: out of sight there, never from below.
-  expect(sheet.from).toBeLessThanOrEqual(-(sheet.y + sheet.h));
+  // It slides up from below the page's bottom edge: out of sight there (its top past the foot),
+  // never from above.
+  expect(sheet.from).toBeGreaterThan(0);
+  expect(sheet.y + (sheet.from as number)).toBeGreaterThan(height);
 }
 
 for (const [label, width, height] of [
@@ -186,6 +195,66 @@ test("in a phone browser More and the agents keep the gap inside the notch, the 
     expectFloatingSheet(frames(), "mobile-agents", width, height, area);
     await app.dispose();
   }
+});
+
+test("More and the agents slide up from below the page's bottom edge, and back down out of sight", async () => {
+  const height = 780;
+  const { app, frames, sampled } = await openNav(360, height, { host: { params: { agents: 3 } } });
+  for (const [slot, name, part] of [
+    ["mobile-nav-more", "mobile-more", "mobile-more-sheet"],
+    ["mobile-nav-agent", "mobile-agents", "mobile-agents-list"],
+  ] as const) {
+    for (const turn of [1, 2]) {
+      await app.press(`id:${slot}`);
+      await app.waitFor(`id:${part}`);
+      const sheet = frames()[name];
+      const from = sheet.from as number;
+      // Out of sight is below: a positive translation that puts the sheet's top past the page's foot.
+      expect(from).toBeGreaterThan(0);
+      expect(sheet.y + from).toBeGreaterThan(height);
+      // The sheet is `from * (1 - progress)` below its place: coming in, that only shrinks, from
+      // the whole way down to none.
+      const coming = (await sampled(`${name}.in${turn}`)).map((s) => from * (1 - s.p));
+      expect(sheet.y + coming[0]).toBeGreaterThan(height - 40);
+      for (let i = 1; i < coming.length; i++) expect(coming[i]).toBeLessThanOrEqual(coming[i - 1]);
+      expect(coming.filter((y) => y > 0 && y < from).length).toBeGreaterThan(2);
+      for (const y of coming) expect(y).toBeGreaterThanOrEqual(0);
+      expect(coming[coming.length - 1]).toBe(0);
+
+      // Closed (the same slot again), it only sinks, to out of sight, and is unmounted there.
+      await app.press(`id:${slot}`);
+      const going = (await sampled(`${name}.out${turn}`)).map((s) => from * (1 - s.p));
+      expect(going[0]).toBeLessThan(from * 0.5);
+      for (let i = 1; i < going.length; i++) expect(going[i]).toBeGreaterThanOrEqual(going[i - 1]);
+      expect(going.filter((y) => y > 0 && y < from).length).toBeGreaterThan(2);
+      expect(going[going.length - 1]).toBe(from);
+      await app.waitFor(`id:${name}`, { state: "gone" });
+      expect(app.count(`id:${part}`)).toBe(0);
+    }
+  }
+  await app.dispose();
+});
+
+test("More opened again while it goes out turns back from where it is", async () => {
+  const { app, frames, sampled } = await openNav(360, 780, { host: { params: { agents: 3 } } });
+  await app.press("id:mobile-nav-more");
+  await app.waitFor("id:mobile-more-sheet");
+  await sampled("mobile-more.in1");
+  const from = frames()["mobile-more"].from as number;
+  await app.press("id:bounce-more");
+  const back = (await sampled("mobile-more.in2")).map((s) => from * (1 - s.p));
+  // Part way down when it turned (the lowest point; values read a frame late): it never went out
+  // of sight nor jumped there, and from that point it only comes up, to its place.
+  const lowest = back.reduce((at, y, i) => (y > back[at] ? i : at), 0);
+  expect(back[lowest]).toBeGreaterThan(0);
+  expect(back[lowest]).toBeLessThan(from * 0.95);
+  for (let i = lowest + 1; i < back.length; i++) expect(back[i]).toBeLessThanOrEqual(back[i - 1]);
+  expect(back[back.length - 1]).toBe(0);
+  // It was never taken down: the sheet is there, open, and takes presses.
+  expect(app.count("id:mobile-more-sheet")).toBe(1);
+  await app.keyboard.press("escape");
+  await app.waitFor("id:mobile-more", { state: "gone" });
+  await app.dispose();
 });
 
 test("with reduced motion More and the agents are in place at once, in the same place", async () => {

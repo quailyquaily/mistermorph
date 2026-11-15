@@ -1174,7 +1174,7 @@ export function PopupTitle(props: { label: string }) {
  * the desktops (a menu, a select, a date picker, a picker) is here the floating paper of More and
  * the agent switcher, over their scrim: all four corners round, a small gap from the window's left,
  * right and bottom outside the system's insets and the keyboard, never wider than POPUP_MAX_WIDTH,
- * sliding in from above the window's top edge. It is `DialogLayer`'s paper, so it is modal as a
+ * sliding up from below the window's bottom edge. It is `DialogLayer`'s paper, so it is modal as a
  * dialog is: the focus stays inside it and goes back to what had it, and Escape, Android's Back
  * and a press on the scrim close it (`onClose`). `children` gets the tallest its content may be
  * (a getter: it follows the keyboard and the window), and scrolls what is taller itself.
@@ -1649,8 +1649,8 @@ export function Tabs(props: {
 // press opened it (within 900 ms) it grows out of that point from 90 % instead, and goes back into
 // it on close. On phones (`mobilePopups`) it is the shared floating paper instead
 // (design/mobile-popups.md, lib/mobilePopup.ts): a small gap from the window's left, right and
-// bottom, outside the system's insets and the keyboard, sliding in from above the window's top edge
-// and back out there. The panel has the popups' large corners (POPUP_RADIUS), all four of them,
+// bottom, outside the system's insets and the keyboard, sliding up from below the window's bottom
+// edge and back down out there. The panel has the popups' large corners (POPUP_RADIUS), all four of them,
 // on phones too; it clips what it holds to them (a title bar, a painted footer). The
 // backdrop
 // and the panel are drawn here (the base Dialog is only the layer), so both can move, natively, on
@@ -1705,6 +1705,8 @@ export function popupFrame() {
 export interface DialogProbe {
   layout?: (bounds: Bounds) => void;
   motion?: (motion: Motion) => void;
+  /** The panel starts going out. */
+  leave?: () => void;
 }
 
 let dialogWatcher: ((name: string) => DialogProbe | undefined) | null = null;
@@ -1746,11 +1748,11 @@ export function DialogLayer(props: {
   let press: { x: number; y: number } | null = null;
   let pendingEnter = false;
   let closing = false;
-  // Whether the paper came in from out of sight (a first opening, or after it went out): it slides
-  // in from above the window's top edge; reopened while going out, from where it is.
-  let fromAbove = true;
+  // Whether the paper comes in from out of sight (a first opening, or after it went out): it slides
+  // up from below the window's bottom edge; reopened while going out, from where it is.
+  let fromBelow = true;
   const narrow = () => !!props.sheet || dialogIsSheet();
-  /** How far up the paper is out of sight: its own frame above the layer's top edge. */
+  /** How far down the paper is out of sight: its top at the layer's bottom edge (positive). */
   const away = (bounds?: Bounds | null) =>
     mobilePopupEntrance(bounds?.origin.y ?? 0, bounds?.size.height ?? 0, untracked(() => windowSize().height));
   // The paper slides the whole way in and out, as the phone's other popups do (MobileBottomNav): a
@@ -1773,7 +1775,7 @@ export function DialogLayer(props: {
         panel.translateY.set(0);
         return;
       }
-      if (fromAbove) panel.translateY.set(away(bounds ?? panelBox));
+      if (fromBelow) panel.translateY.set(away(bounds ?? panelBox));
       void panel.translateY.timing(0, { duration: ms, easing: MOTION_EASE });
       return;
     }
@@ -1794,14 +1796,14 @@ export function DialogLayer(props: {
     const open = props.open;
     untracked(() => {
       if (open) {
-        fromAbove = !closing;
+        fromBelow = !closing;
         closing = false;
         press = recentPress();
         pendingEnter = true;
         if (narrow()) {
-          // Out of sight above the top edge until its first layout says where it is and how tall;
-          // reopened while going out, it turns back from where it is.
-          if (fromAbove) {
+          // Out of sight below the bottom edge until its first layout says where it is and how
+          // tall; reopened while going out, it turns back from where it is.
+          if (fromBelow) {
             panel.opacity.set(1);
             panel.translateY.set(away());
           }
@@ -1820,6 +1822,7 @@ export function DialogLayer(props: {
           return;
         }
         void scrim.timing(0, { duration: ms, easing: MOTION_EXIT_EASE });
+        probe?.leave?.();
         // The panel stays drawn (and its contents mounted) while it goes out.
         const out = sheet
           ? panel.translateY.timing(away(panelBox), { duration: ms, easing: MOTION_EXIT_EASE })

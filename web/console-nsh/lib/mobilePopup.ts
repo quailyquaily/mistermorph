@@ -4,8 +4,8 @@
 // right and bottom, outside whatever the system takes there (a notch or the navigation bar at a
 // side, the gesture handle or the software keyboard at the bottom, or the floating navigation bar
 // with More and the agents); it never reaches above the status bar's inset and the same gap; what
-// does not fit scrolls inside it. It slides in from above the window's top edge, and back out
-// there.
+// does not fit scrolls inside it. It slides up from below the window's bottom edge, and back down
+// out there.
 //
 // The layer that holds the paper takes each inset once, as its padding (the paper never pads
 // itself for the system): the paper's own bottom edge, corners included, stays in view above the
@@ -73,11 +73,14 @@ export function mobilePopupFrame(options: {
 }
 
 /**
- * How far above its place the paper starts (a negative translation): out of sight above the
- * layer's top edge, for a paper whose top is at `y` in the layer and which is `height` tall. Until
- * it is laid out (`height` 0) it waits a layer's height up.
+ * How far below its place the paper starts, and ends (a positive translation): out of sight below
+ * the layer's bottom edge, for a paper whose top is at `y` in the layer and which is `height`
+ * tall: the room from its top to the layer's foot, and a point. Until it is laid out (`height` 0)
+ * it waits a layer's height down, which is out of sight wherever it lands. Never less than the
+ * paper's own height (a layer whose height is not known yet, or a paper that hangs out of it).
  */
 export function mobilePopupEntrance(y: number, height: number, layerHeight: number): number {
-  if (!(height > 0)) return -Math.max(1, size(layerHeight));
-  return -(Math.max(0, y) + height + 1);
+  const layer = size(layerHeight);
+  if (!(height > 0)) return Math.max(1, layer);
+  return Math.max(height, layer - Math.max(0, size(y))) + 1;
 }
