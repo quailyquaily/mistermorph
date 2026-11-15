@@ -21,7 +21,7 @@
 // column is laid out exactly as before.
 import type { ViewRef } from "nsh";
 import { View } from "nsh";
-import { glassClass, glassEnabled, glassStyle } from "../../lib/glass";
+import { glassClass, glassEnabled, glassMounted, glassStyle } from "../../lib/glass";
 import { CHROME_BAR_HEIGHT } from "./metrics";
 
 /** Where a scroller's content starts on the page, and the room it gives its bar there (0 without glass). */
@@ -63,6 +63,8 @@ export function underBar(height: number = CHROME_BAR_HEIGHT): { marginTop?: numb
  */
 export function BarRoom(props: { height?: number; gap?: number } = {}) {
   const room = () => barRoom(props?.height ?? CHROME_BAR_HEIGHT);
+  // Android draws a new bar without its blur until it is painted again (lib/glass.ts).
+  glassMounted();
   // A watched room tells its frame; without glass a mark of no height stands at the content's
   // start in its place (out of the flow: it takes no gap and moves nothing).
   const watcher = roomWatcher;

@@ -354,6 +354,14 @@ Headless tests prove behaviour, not the look.
   shot of the bar with one taken with its `backdrop-filter` off, and one with the bar hidden
   (what lies under it); headless, `barRooms(app)` (tests/harness.ts) tells where each real page's
   scroller starts under its bar (tests/glass-page-heads.test.tsx).
+- Android (nsh 0.5.0) leaves a glass view without its blur when another glass view over the page
+  was attached before it (a page's head under the phone's bottom navigation): the older view
+  records its backdrop first and draws the page for it, the new head in it, before the head's own
+  backdrop exists, and nothing draws the head again. Contacts' and Settings' heads stayed sharp,
+  Topics' depended on which was attached first, and Todo's blurred once its border changed on
+  scroll. `glassMounted()` (lib/glass.ts, called by `BarRoom`) moves the blur radius by 0.01pt
+  after the first frames, which repaints every glass view. Drop it once nsh repaints the view
+  itself after the first recording.
 
 ### Android (nsh 0.4.0)
 
