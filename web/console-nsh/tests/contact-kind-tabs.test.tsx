@@ -1,24 +1,28 @@
-// The Contacts head's kind tabs (ContactKindTabs) as shapes: two icon tabs drawn as the app's tabs
-// are, quiet 16pt icons on a hairline that dips under the current one, flush, the last ending at the
-// head's gutter; each a 38pt target on a desktop and a 44pt one on a phone, down to a 320pt window;
-// the hairline spans both tabs (and a little more) just under a 38pt tab's foot, inside the head; a press (or an arrow
-// key) chooses the other tab, a press on the current one changes nothing; the selected state and the
-// dip follow. Headless runs read neither a canvas nor an icon's tint, so the dip is where the
-// component places it (contactKindDipCenter) against the measured tabs, and the colours and the
-// focus ring are the constants they are drawn with. The page's behaviour: tests/contacts-kinds.test.tsx.
+// The Contacts head's kind tabs (ContactKindTabs) in the column's real head (IndexColumn): two icon
+// tabs drawn as the Topics head's view toggles are, the standard round 38pt button with a 16pt icon,
+// the current tab a blue icon on a blue tint, the other quiet; each a 38pt target on a desktop and a
+// 44pt one on a phone (the same 38pt circle in its middle), down to a 320pt window, the last circle
+// ending at the head's gutter; nothing drawn in the head's middle: the head's bottom hairline dips
+// under the current tab; a press (or an arrow key) chooses the other tab, a press on the current one
+// changes nothing; the selected state and the dip follow. Headless runs read neither a canvas nor a
+// fill or an icon's tint, so the dip is where the page places it (contactKindSagCenter) against the
+// measured tabs, and the fills, colours and the focus ring are the constants they are drawn with.
+// The two heads side by side: tests/contacts-topics-heads.test.tsx. The page's behaviour:
+// tests/contacts-kinds.test.tsx.
 import { expect, open, test } from "nsh/test";
+import { CIRCLE_BUTTON_ON_FILL, circleButtonClass } from "../components/ui";
 import {
-  CONTACT_KIND_RULE_OVERHANG,
-  CONTACT_KIND_TAB_BOX,
-  CONTACT_KIND_TAB_BOX_CLASS,
+  CONTACT_KIND_TAB_CIRCLE_CLASS,
   CONTACT_KIND_TAB_ICON,
   CONTACT_KIND_TAB_SIZE,
   CONTACT_KIND_TAB_TOUCH,
-  contactKindDipCenter,
+  contactKindSagCenter,
+  contactKindStripPull,
 } from "../pages/contacts/ContactKindTabs";
 
 type Frame = { x: number; y: number; w: number; h: number };
-const NAMES = ["tab-human", "tab-human-box", "tab-human-icon", "tab-agent", "tab-agent-box", "tab-agent-icon", "rule"];
+const TABS = ["tab-human", "tab-human-box", "tab-human-icon", "tab-agent", "tab-agent-box", "tab-agent-icon"];
+const NAMES = [...TABS, "head", "head-row", "head-title", "head-actions", "head-rule"];
 const HEAD = 57;
 
 async function openTabs(width: number, platform: "linux" | "android" = "linux") {
@@ -32,63 +36,84 @@ async function openTabs(width: number, platform: "linux" | "android" = "linux") 
 // Headless frames snap to whole points: a centre may be half a point off.
 const near = (a: number, b: number, by = 0.5) => Math.abs(a - b) <= by;
 const centre = (f: Frame) => ({ x: f.x + f.w / 2, y: f.y + f.h / 2 });
+/** The head's gutter (`gutterX`, components/knowledge/parts.tsx). */
+const gutter = (width: number) => (width <= 620 ? 12 : width <= 980 ? 14 : Math.min(28, Math.max(16, width * 0.02)));
 
-test("the tabs are drawn as tabs: quiet icons, the current one in ink, no fill or circle, a ring for the keyboard", () => {
-  const classes = CONTACT_KIND_TAB_BOX_CLASS.split(/\s+/);
-  for (const cls of ["size-9", "items-center", "justify-center", "border-transparent", "group-focus-visible:border-blue"]) {
-    expect(classes.includes(cls)).toBe(true);
+test("the tabs are drawn as the Topics head's toggles: a round 38pt button, a blue tint and a blue icon on the current one, a ring for the keyboard", () => {
+  const classes = CONTACT_KIND_TAB_CIRCLE_CLASS.split(/\s+/);
+  // Every class of the standard round button, its hover and press fills following the tab.
+  for (const cls of circleButtonClass().split(/\s+/)) {
+    const mine = /^(hover|active):/.test(cls) ? `group-${cls}` : cls;
+    expect([mine, classes.includes(mine)]).toEqual([mine, true]);
   }
-  // The round tinted toolbar button is gone: no circle, no fill in any state.
-  expect(classes.includes("rounded-full")).toBe(false);
-  expect(classes.some((cls) => /(^|:)bg-/.test(cls))).toBe(false);
-  expect(CONTACT_KIND_TAB_ICON).toEqual({ selected: "ink", idle: "muted-foreground" });
+  for (const cls of ["size-[38px]", "rounded-full", "items-center", "justify-center", "group-hover:bg-hover", "group-active:bg-press"]) {
+    expect([cls, classes.includes(cls)]).toEqual([cls, true]);
+  }
+  // The circle is filled only while its tab is selected, with the Topics toggle's tint.
+  expect(CIRCLE_BUTTON_ON_FILL).toBe("bg-blue/12");
+  expect(classes.includes(`group-selected:${CIRCLE_BUTTON_ON_FILL}`)).toBe(true);
+  expect(classes.some((cls) => /^bg-/.test(cls))).toBe(false);
+  // The keyboard's ring, round the circle; no ring otherwise.
+  expect(classes.includes("border-transparent") && classes.includes("group-focus-visible:border-blue")).toBe(true);
+  // The square tab look is gone.
+  expect(classes.includes("size-9") || classes.includes("rounded-md")).toBe(false);
+  expect(CONTACT_KIND_TAB_ICON).toEqual({ selected: "blue", idle: "subtle" });
   expect(CONTACT_KIND_TAB_SIZE).toBe(38);
   expect(CONTACT_KIND_TAB_TOUCH).toBe(44);
-  expect(CONTACT_KIND_TAB_BOX).toBe(36);
 });
 
 for (const item of [
-  { name: "a desktop", width: 1280, mobile: false },
-  { name: "a phone", width: 390, mobile: true },
-  { name: "a narrow phone", width: 320, mobile: true },
+  { name: "a desktop", width: 1280, platform: "linux" as const, mobile: false },
+  { name: "a tablet-wide desktop", width: 1024, platform: "linux" as const, mobile: false },
+  { name: "a phone", width: 390, platform: "android" as const, mobile: true },
+  { name: "a phone-wide web window", width: 390, platform: "linux" as const, mobile: true },
+  { name: "a narrow phone", width: 320, platform: "android" as const, mobile: true },
 ]) {
   const target = item.mobile ? CONTACT_KIND_TAB_TOUCH : CONTACT_KIND_TAB_SIZE;
-  test(`on ${item.name} (${item.width}pt) each tab is a ${target}pt target with its icon in the middle, on a hairline in the head`, async () => {
-    const { app, frames } = await openTabs(item.width);
+  test(`on ${item.name} (${item.width}pt) each tab is a ${target}pt target round a 38pt circle, in a head whose bottom hairline dips under the current one`, async () => {
+    const { app, frames } = await openTabs(item.width, item.platform);
     const all = frames();
+    const head = all.head;
+    // The head: the column's width, 57pt, all of it the head row (nothing under it).
+    expect([head.x, head.w, head.h]).toEqual([0, item.width, HEAD]);
+    expect(all["head-row"]).toEqual(head);
     for (const kind of ["human", "agent"]) {
       const tab = all[`tab-${kind}`];
       const box = all[`tab-${kind}-box`];
       const icon = all[`tab-${kind}-icon`];
       expect(near(tab.w, target) && near(tab.h, target)).toBe(true);
-      expect(near(box.w, CONTACT_KIND_TAB_BOX) && near(box.h, CONTACT_KIND_TAB_BOX)).toBe(true);
+      expect([box.w, box.h]).toEqual([CONTACT_KIND_TAB_SIZE, CONTACT_KIND_TAB_SIZE]);
       expect(near(icon.w, 16) && near(icon.h, 16)).toBe(true);
-      // The box in the middle of its target, the icon in the middle of its box.
+      // The circle in the middle of its target, the icon in the middle of its circle.
       expect(near(centre(box).x, centre(tab).x) && near(centre(box).y, centre(tab).y)).toBe(true);
       expect(near(centre(icon).x, centre(box).x) && near(centre(icon).y, centre(box).y)).toBe(true);
-      // Centred in the 57pt head.
-      expect(near(centre(tab).y, HEAD / 2)).toBe(true);
+      // In the middle of the head and inside it, the target too.
+      expect(near(centre(box).y, head.y + HEAD / 2)).toBe(true);
+      expect(tab.y >= head.y && tab.y + tab.h <= head.y + HEAD).toBe(true);
+      expect(tab.x >= 0 && tab.x + tab.w <= item.width).toBe(true);
     }
-    // Side by side, flush, inside the window, the last ending at the head's 16pt gutter.
+    // Side by side, the targets flush (so the circles too on a desktop, and 6pt apart on a phone),
+    // the last circle ending at the head's gutter (a phone's target reaches 3pt into it), clear of
+    // the title.
     const human = all["tab-human"];
     const agent = all["tab-agent"];
+    const last = all["tab-agent-box"];
     expect(near(agent.x, human.x + human.w)).toBe(true);
-    expect(near(agent.x + agent.w, item.width - 16)).toBe(true);
-    expect(human.x).toBeGreaterThan(0);
-    // The hairline: under both tabs and 8pt past them at each end (inside the gutter and the
-    // window), 7pt of canvas whose line is 1pt above the foot of a 38pt tab (a phone's larger
-    // targets do not move it), the dip below it still inside the head.
-    const rule = all.rule;
-    expect(near(rule.x, human.x - CONTACT_KIND_RULE_OVERHANG)).toBe(true);
-    expect(near(rule.w, human.w + agent.w + 2 * CONTACT_KIND_RULE_OVERHANG, 1)).toBe(true);
-    expect(rule.x + rule.w).toBeLessThanOrEqual(item.width);
-    expect(near(rule.h, 7)).toBe(true);
-    expect(near(rule.y, HEAD / 2 + CONTACT_KIND_TAB_SIZE / 2 - 1, 1)).toBe(true);
-    expect(rule.y).toBeGreaterThan(all["tab-human-icon"].y + 16);
-    expect(rule.y + rule.h).toBeLessThanOrEqual(HEAD);
+    expect(near(last.x - (all["tab-human-box"].x + CONTACT_KIND_TAB_SIZE), target - CONTACT_KIND_TAB_SIZE)).toBe(true);
+    expect(near(last.x + last.w, item.width - gutter(item.width))).toBe(true);
+    expect(near(agent.x + agent.w, item.width - gutter(item.width) + contactKindStripPull(item.mobile))).toBe(true);
+    expect(all["head-title"].x + all["head-title"].w).toBeLessThanOrEqual(human.x);
+    // The hairline: the head's whole width, its line on the head's bottom edge (the canvas starts
+    // 1pt above the foot and hangs 6pt below it for the dip), nowhere near the tabs.
+    const rule = all["head-rule"];
+    expect([rule.x, rule.w, rule.h]).toEqual([head.x, head.w, 7]);
+    expect(rule.y).toBe(head.y + HEAD - 1);
+    expect(rule.y).toBeGreaterThanOrEqual(all["tab-human-box"].y + CONTACT_KIND_TAB_SIZE);
     // The dip is under the current tab's middle, and under the other's once that is chosen.
-    expect(near(rule.x + contactKindDipCenter("human", item.mobile), centre(human).x)).toBe(true);
-    expect(near(rule.x + contactKindDipCenter("agent", item.mobile), centre(agent).x)).toBe(true);
+    const strip = all["head-actions"];
+    expect(near(strip.x, human.x)).toBe(true);
+    expect(near(rule.x + strip.x + contactKindSagCenter("human", item.mobile), centre(all["tab-human-box"]).x)).toBe(true);
+    expect(near(rule.x + strip.x + contactKindSagCenter("agent", item.mobile), centre(all["tab-agent-box"]).x)).toBe(true);
     expect(app.count("label:Humans")).toBe(1);
     expect(app.count("label:Agents")).toBe(1);
     expect(app.shows("id:contacts-tab-human-selected") && app.shows("id:contacts-tab-agent-idle")).toBe(true);
@@ -97,8 +122,7 @@ for (const item of [
     expect(app.shows("id:contacts-tab-agent-selected") && app.shows("id:contacts-tab-human-idle")).toBe(true);
     // Choosing a tab moves nothing: the same frames.
     await app.wait(400);
-    expect(frames()["tab-agent"]).toEqual(agent);
-    expect(frames().rule).toEqual(rule);
+    expect(frames()).toEqual(all);
   });
 }
 

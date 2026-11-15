@@ -42,7 +42,7 @@ const TELEGRAM_IDS = IDS.filter((id) => id.startsWith("tg:"));
 const PARTS = ["avatar", "name", "kind", "foot", "handle"];
 const GUTTER = 12;
 
-async function openLibrary(width: number, options: { items?: unknown[]; listDelay?: number } = {}) {
+async function openLibrary(width: number, options: { items?: unknown[]; listDelay?: number; listError?: boolean } = {}) {
   const app = await open("./fixtures/contacts-library-app.tsx", {
     width,
     height: 844,
@@ -89,6 +89,7 @@ async function openLibrary(width: number, options: { items?: unknown[]; listDela
     }
     if (path === "/proxy" && uri === "/contacts/list") {
       if (options.listDelay) await new Promise((done) => setTimeout(done, options.listDelay));
+      if (options.listError) return { status: 500, body: { error: "the list failed" } };
       return { body: { items: options.items ?? CONTACTS } };
     }
     if (path === "/proxy" && uri === "/memories") return { body: { items: [] } };
@@ -268,6 +269,73 @@ test("while the list loads, a phone shows a row of blocks in the cards' columns"
   }
   expect(all["block:3"]).toBe(undefined);
 });
+
+// The page's head (IndexColumn with the kind tabs, drawn as the Topics head's toggles:
+// tests/contacts-topics-heads.test.tsx) is the same whatever the library under it shows.
+const HEAD_PARTS = ["head", "head-row", "head-title", "head-actions", "head-rule", "tab-human", "tab-human-box", "tab-human-icon", "tab-agent", "tab-agent-box", "tab-agent-icon"];
+async function headFrames(app: App, frames: () => Record<string, Frame>) {
+  await app.waitUntil(() => HEAD_PARTS.every((part) => Boolean(frames()[part])));
+  await app.wait(100);
+  const all = frames();
+  return Object.fromEntries(HEAD_PARTS.map((part) => [part, all[part]]));
+}
+
+for (const width of [320, 390, 1280]) {
+  test(`at ${width}pt the page's head is the same loading, loaded, empty, failed and on either tab`, async () => {
+    // Loading, then loaded.
+    // (A step waits for the list's answer, so what the head reported while the list loaded is read
+    // from the posts before the first card's.)
+    const { app, frames } = await openLibrary(width, { listDelay: 400 });
+    await app.waitFor("id:contact-row:tg:1007");
+    const loading: Record<string, Frame> = {};
+    for (const post of app.host.posts()) {
+      if (post.name !== "morph.fixture.event") continue;
+      const event = post.data as { name: string; frame: Frame };
+      if (event.name.startsWith("card:")) break;
+      if (HEAD_PARTS.includes(event.name)) loading[event.name] = event.frame;
+    }
+    expect(Object.keys(loading).sort()).toEqual([...HEAD_PARTS].sort());
+    const mobile = width < 1280;
+    const gutter = mobile ? GUTTER : 1280 * 0.02;
+    // A 57pt head across the page; the tabs' 38pt circles in its middle, the last ending at the
+    // gutter; the hairline on the head's bottom edge.
+    check(loading.head.x === 0 && loading.head.y === 0 && loading.head.w === width && loading.head.h === 57, "the head", loading.head);
+    for (const kind of ["human", "agent"]) {
+      const circle = loading[`tab-${kind}-box`];
+      check(circle.w === 38 && circle.h === 38 && Math.abs(circle.y + 19 - 57 / 2) <= 0.5, `the ${kind} tab's circle`, circle);
+      expectInside(loading[`tab-${kind}`], loading.head, `the ${kind} tab`);
+      check(loading[`tab-${kind}`].w === (mobile ? 44 : 38), `the ${kind} tab's press target`, loading[`tab-${kind}`]);
+    }
+    check(Math.abs(loading["tab-agent-box"].x + 38 - (width - gutter)) <= 0.5, "the last circle at the gutter", loading["tab-agent-box"]);
+    check(loading["head-rule"].y === 56 && loading["head-rule"].x === 0 && loading["head-rule"].w === width, "the hairline on the head's bottom edge", loading["head-rule"]);
+    await app.waitFor("id:contact-row:tg:1007");
+    expect(app.shows("id:contacts-tab-human-selected") && app.shows("id:contacts-tab-agent-idle")).toBe(true);
+    expect(await headFrames(app, frames)).toEqual(loading);
+    // The other tab, and back.
+    await app.press("id:contacts-tab-agent");
+    await app.waitFor("id:contact-row:mm:inst_research");
+    expect(app.shows("id:contacts-tab-agent-selected") && app.shows("id:contacts-tab-human-idle")).toBe(true);
+    await app.wait(400);
+    expect(await headFrames(app, frames)).toEqual(loading);
+    await app.press("id:contacts-tab-human");
+    await app.waitFor("id:contact-row:tg:1007");
+    expect(await headFrames(app, frames)).toEqual(loading);
+
+    // No contacts at all, on either tab.
+    const none = await openLibrary(width, { items: [] });
+    await none.app.waitFor("id:contacts-empty");
+    expect(await headFrames(none.app, none.frames)).toEqual(loading);
+    await none.app.press("id:contacts-tab-agent");
+    await none.app.waitFor("id:contacts-tab-agent-selected");
+    await none.app.wait(400);
+    expect(await headFrames(none.app, none.frames)).toEqual(loading);
+
+    // The list failed.
+    const failed = await openLibrary(width, { listError: true });
+    await failed.app.waitFor("id:contacts-error");
+    expect(await headFrames(failed.app, failed.frames)).toEqual(loading);
+  });
+}
 
 test("the Android app's library opens a compact card's contact and comes back", async () => {
   const { app } = await openConsole({

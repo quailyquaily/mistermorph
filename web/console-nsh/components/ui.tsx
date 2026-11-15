@@ -468,6 +468,9 @@ export type CircleButtonSize = keyof typeof CIRCLE_BUTTON_SIZES;
  * close button, the soft red tint of the close strip it replaced, deeper on hover. */
 export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger" | "close";
 
+/** The fill of a head's round button while it is on (the Topics head's view toggles, the Contacts head's tabs): a blue tint under a blue icon. */
+export const CIRCLE_BUTTON_ON_FILL = "bg-blue/12";
+
 /**
  * A circle button's look, for a control that draws its own box (a menu's trigger): round, the
  * glyph in the middle, the variant's fill and ring.
