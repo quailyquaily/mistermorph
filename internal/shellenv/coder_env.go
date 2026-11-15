@@ -21,8 +21,8 @@ type ConfigReader interface {
 	GetStringSlice(string) []string
 }
 
-// CoderEnv builds the environment the runtime starts Codex and Claude Code in, and finds them in
-// it: the shell tool's environment (BashEnv; PowerShellEnv on Windows) and nothing else of the
+// CoderEnv builds the environment the runtime starts Codex, Claude Code and the Antigravity CLI
+// (agy) in, and finds them in it: the shell tool's environment (BashEnv; PowerShellEnv on Windows) and nothing else of the
 // runtime's, with PATH in this order:
 //
 //  1. PathExtra (tools.coder.path_extra),
@@ -140,9 +140,11 @@ func uniquePathDirs(dirs []string, goos string) []string {
 	return out
 }
 
-// DefaultCoderInstallDirs are the directories the installers of Claude Code and Codex put the
-// CLIs in (https://claude.ai/install.sh, https://chatgpt.com/codex/install.sh and their .ps1,
-// checked 2026-11-15), and Homebrew's prefixes. getenv gives the home directories.
+// DefaultCoderInstallDirs are the directories the installers of Claude Code, Codex and the
+// Antigravity CLI put the CLIs in (https://claude.ai/install.sh,
+// https://chatgpt.com/codex/install.sh and their .ps1, https://antigravity.google/cli/install.sh,
+// checked 2026-11-15; agy's Windows directory is from its docs), and Homebrew's prefixes. getenv
+// gives the home directories.
 func DefaultCoderInstallDirs(goos string, getenv func(string) string) []string {
 	if goos == "windows" {
 		var dirs []string
@@ -151,12 +153,13 @@ func DefaultCoderInstallDirs(goos string, getenv func(string) string) []string {
 		}
 		if local := strings.TrimSpace(getenv("LOCALAPPDATA")); local != "" {
 			dirs = append(dirs, filepath.Join(local, "Programs", "OpenAI", "Codex", "bin")) // Codex
+			dirs = append(dirs, filepath.Join(local, "agy", "bin"))                         // Antigravity CLI
 		}
 		return dirs
 	}
 	var dirs []string
 	if home := strings.TrimSpace(getenv("HOME")); home != "" {
-		dirs = append(dirs, filepath.Join(home, ".local", "bin")) // both installers
+		dirs = append(dirs, filepath.Join(home, ".local", "bin")) // the three installers
 	}
 	return append(dirs, "/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin")
 }

@@ -358,6 +358,89 @@ func TestCoderStreamCollectorAgySteps(t *testing.T) {
 	}
 }
 
+// agy starts in the coder's environment as the other two do, the run and the quota read after it:
+// found in a default install location when tools.coder.path_extra is empty, with the bash tool's
+// PATH and injected variables, and nothing else of the runtime's. In the Console too it is the
+// one-shot run, not a terminal session.
+func TestCoderToolAgyRunsInTheCoderEnvironment(t *testing.T) {
+	root := t.TempDir()
+	defaultDir := filepath.Join(root, "default")
+	if err := os.MkdirAll(defaultDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := filepath.Abs(filepath.Join("testdata", "agy"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each start writes its environment down: <defaultDir>/env.usage for the quota read, env.run for the run.
+	writeFakeCoderExecutable(t, defaultDir, "agy", "if [ \"$1\" = \"-p\" ] && [ \"$2\" = \"/usage\" ]; then\n  env > '"+filepath.Join(defaultDir, "env.usage")+"'\n  cat '"+filepath.Join(data, "usage.json")+"'\n  exit 0\nfi\n"+
+		"env > '"+filepath.Join(defaultDir, "env.run")+"'\ncat > /dev/null\ncat '"+filepath.Join(data, "tool_run.jsonl")+"'\n")
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("SERVICE_SECRET", "do-not-leak")
+	t.Setenv("HTTPS_PROXY", "http://proxy.invalid")
+	t.Setenv("AGY_TEST_INJECTED", "passed-on")
+
+	terminal := 0
+	recorder := coderusage.NewRecorder(filepath.Join(t.TempDir(), "usage.db"), nil)
+	newTool := func(env shellenv.CoderEnv) *coderTool {
+		env.ShellPathExtra = []string{"/bash/extra"}
+		env.Injected = func() []shellenv.InjectedEnvVar {
+			return shellenv.InjectedEnvVarsFromConfig([]any{"AGY_TEST_INJECTED"})
+		}
+		// The machine's own install locations are never searched: the test gives the list.
+		env.DefaultDirs = func() []string { return []string{defaultDir} }
+		return newCoderTool(coderToolDeps{
+			Runner:       &execDirectSubtaskRunner{},
+			RunCLI:       runCoderCLI,
+			Env:          env,
+			Usage:        func() *coderusage.Recorder { return recorder },
+			ReadAgyQuota: readAgyQuota,
+			RunTerminal: func(context.Context, CoderRequest) (string, error) {
+				terminal++
+				return "from the terminal", nil
+			},
+		})
+	}
+	execute := func(env shellenv.CoderEnv) SubtaskResult {
+		t.Helper()
+		raw, err := newTool(env).Execute(context.Background(), map[string]any{"coder": "agy", "task": "read note.txt", "cwd": t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result SubtaskResult
+		if err := json.Unmarshal([]byte(raw), &result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+
+	result := execute(shellenv.CoderEnv{})
+	if result.Status != SubtaskStatusDone || terminal != 0 || !strings.Contains(result.Usage, "agy run: ") || !strings.Contains(result.Usage, "agy quota: Gemini Models 7d") {
+		t.Fatalf("result = %+v, terminal = %d", result, terminal)
+	}
+	for _, name := range []string{"env.run", "env.usage"} {
+		seen, err := os.ReadFile(filepath.Join(defaultDir, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got := "\n" + string(seen)
+		for _, want := range []string{"\nPATH=/bash/extra:/usr/bin:/bin:" + defaultDir + "\n", "\nAGY_TEST_INJECTED=passed-on\n"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("%s lacks %q:\n%s", name, want, got)
+			}
+		}
+		if strings.Contains(got, "do-not-leak") || strings.Contains(got, "proxy.invalid") {
+			t.Fatalf("%s: the runtime's own variables reached agy:\n%s", name, got)
+		}
+	}
+
+	// tools.coder.path_extra is set: the default install location is not searched.
+	result = execute(shellenv.CoderEnv{PathExtra: []string{filepath.Join(root, "empty")}})
+	if result.Status != SubtaskStatusFailed || !strings.Contains(result.Error, "agy executable not found in PATH") {
+		t.Fatalf("result = %+v, want agy not found", result)
+	}
+}
+
 // Opt in to run the installed, signed-in agy once through the coder tool: a harmless task in a
 // throwaway folder, then its quota read.
 func TestInstalledAgyRun(t *testing.T) {

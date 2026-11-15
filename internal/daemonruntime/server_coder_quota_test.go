@@ -205,7 +205,7 @@ func TestCoderQuotaRoutesUseTheCoderEnvironment(t *testing.T) {
 }
 
 // Three coders: the Antigravity CLI is found and read as the other two, with the stand-in agy the
-// routes' own lookup finds on PATH, and its quota keeps its model groups.
+// routes' own lookup finds in a default install location, and its quota keeps its model groups.
 func TestCoderQuotaRoutesWithAgy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script stand-in")
@@ -215,11 +215,22 @@ func TestCoderQuotaRoutesWithAgy(t *testing.T) {
 	usage := `{"status":"SUCCESS","command":{"name":"usage","data":{"groups":[` +
 		`{"name":"Gemini Models","description":"Models within this group: Gemini 3.8 Flash","buckets":[{"id":"gemini-weekly","window":"weekly","remaining_fraction":0.25,"reset_time":"2026-11-22T12:15:22Z"}]},` +
 		`{"name":"Claude and GPT models","description":"Models within this group: Claude Sonnet 4.6, GPT-OSS 120B","buckets":[{"id":"3p-weekly","window":"weekly","remaining_fraction":0,"reset_time":"2026-11-22T12:15:36Z"}]}]}}}`
-	script := "#!/bin/sh\nif [ -f '" + filepath.Join(binDir, "broken") + "' ]; then echo 'jetski: backend unavailable' >&2; exit 1; fi\nprintf '%s\\n' '" + usage + "'\n"
+	envFile := filepath.Join(binDir, "env")
+	script := "#!/bin/sh\nenv > '" + envFile + "'\nif [ -f '" + filepath.Join(binDir, "broken") + "' ]; then echo 'jetski: backend unavailable' >&2; exit 1; fi\nprintf '%s\\n' '" + usage + "'\n"
 	if err := os.WriteFile(filepath.Join(binDir, "agy"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", binDir)
+	// Found in a default install location, and read in the coder's environment: the service's
+	// own variables do not reach it. The machine's own install locations are never searched.
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("SERVICE_SECRET", "do-not-leak")
+	origEnv := coderEnvFromSettings
+	t.Cleanup(func() { coderEnvFromSettings = origEnv })
+	coderEnvFromSettings = func(settings agentsettings.Reader) shellenv.CoderEnv {
+		env := origEnv(settings)
+		env.DefaultDirs = func() []string { return []string{binDir} }
+		return env
+	}
 
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, RoutesOptions{Mode: "serve", AuthToken: "token", RuntimePaths: paths})
@@ -250,6 +261,13 @@ func TestCoderQuotaRoutesWithAgy(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body lacks %s: %s", want, body)
 		}
+	}
+	seen, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := "\n" + string(seen); !strings.Contains(got, "\nPATH=/usr/bin:/bin:"+binDir+"\n") || strings.Contains(got, "SERVICE_SECRET") {
+		t.Fatalf("the agy read's environment:\n%s", got)
 	}
 	// A failed read says why and keeps the last quota.
 	if err := os.WriteFile(filepath.Join(binDir, "broken"), nil, 0o644); err != nil {

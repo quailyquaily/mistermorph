@@ -162,7 +162,7 @@ func TestDefaultCoderInstallDirs(t *testing.T) {
 		t.Fatalf("dirs without a home = %v, want %v", got, want[1:])
 	}
 	got = DefaultCoderInstallDirs("windows", getenv(map[string]string{"USERPROFILE": "profile", "LOCALAPPDATA": "local"}))
-	want = []string{filepath.Join("profile", ".local", "bin"), filepath.Join("local", "Programs", "OpenAI", "Codex", "bin")}
+	want = []string{filepath.Join("profile", ".local", "bin"), filepath.Join("local", "Programs", "OpenAI", "Codex", "bin"), filepath.Join("local", "agy", "bin")}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("windows dirs = %v, want %v", got, want)
 	}
