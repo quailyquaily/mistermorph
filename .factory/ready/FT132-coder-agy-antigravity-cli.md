@@ -106,3 +106,18 @@ Checks: manager independently passed test -z "$(gofmt -l .)" && go vet ./... && 
 Real agy 1.5.9 Linux smoke passed with permission bypass in a throwaway directory: 17.6k input (6.6k cached), 405 output, one turn. Quota: Gemini Models weekly 2% used, Claude and GPT models weekly 0% used. Linux sign-in works with HOME/PATH only; missing-sign-in detection stopped a real prompt in 155 ms. Small live probes consumed a few model calls; one extra flag probe inadvertently became a prompt whose command was denied.
 
 Not checked: Windows/macOS lookup/keyring/auth, live five-hour quota tier, live subagents/checkpoints/tool errors, or visual UI (headless tests only). No deployment. Initial branch push lacked credential.useHttpPath and was refused; the permitted retry with command-local useHttpPath succeeded.
+
+## factory · review · 2026-11-15 22:08
+head: cf1b4ceaf593cae7184f0b1c9c5807fa722fe7bc
+verdict: pass
+notes:
+- [P3] agent/coder_tool.go:555 and internal/coderusage/agy.go:30: stderr substring authentication detection can abort a signed-in run for an unrelated service's auth warning. A fake CLI emitting `warning: MCP server github: authentication required, skipping` before a successful fixture was incorrectly reported as not signed in. Match agy's own auth prompt or restrict prompt detection to before init. Whether real agy emits this warning while signed in is unverified.
+- [P3] internal/coderusage/agy.go:166: bucket-id fallback checks 5h before daily and strips separators; a synthetic bucket with id `gpt-5-high-daily`, no window and remaining_fraction=1 becomes a 300-minute window. Match delimited tokens or prioritize explicit daily/week labels. Captured real buckets include window and do not trigger this case.
+
+Reviewed origin/master...HEAD (base 2d7ffea036927b4672fda8314ae6837f4ee80739), all 34 changed files against the request and plan. No P0/P1/P2 findings; branch merges cleanly with current base. No code changes or commits made by reviewer; worktree remains clean.
+
+Validation: Claude Code passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with an absolute throwaway HOME. Targeted race checks for agent coder/agy, coderusage and daemonruntime quota passed. Console `nsh check` passed; `scripts/test.sh` passed all 125 files with no retries. Overlay probes confirmed the two low-priority cases without modifying tracked files.
+
+Installs: none unpinned; restored pinned Go modules and TypeScript 7.0.2 for nsh 0.5.0 into throwaway HOME only.
+
+Residual risks: signed-in live smoke/quota not repeated (build's Linux smoke remains its evidence); Windows/macOS lookup/keyring/auth, live five-hour quota, live subagent/checkpoint/tool-error events and visual UI not checked. Slash-command expansion for tasks beginning with / remains unverified. FT131 default discovery paths are not in base: agy location must currently be in PATH or tools.coder.path_extra. All-permission one-shot execution is intentional and documented. Post-run quota may delay cancellation up to 30 seconds, consistent with existing Codex behavior. No linked GitHub issue or PR in the item, so no review comments posted.
