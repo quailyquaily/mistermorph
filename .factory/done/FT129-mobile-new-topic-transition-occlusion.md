@@ -48,3 +48,7 @@ Visual validation: headless Chrome with stubbed API and 14 topics, slowed push/p
 Installs: nsh check downloaded TypeScript 7.0.2 into temporary cache; no dependency manifests changed. Existing pinned nsh runtime, browser and Playwright reused.
 Residual risks: real Android device/emulator and loading/error mid-slide states not visually checked. Desktop and reduced motion covered by passing suite, not re-screenshotted. Both themes currently use the same background palette. Base visual comparison not repeated. First Back blurring composer and plus/navigation overlay during pop reported unchanged by builder, not independently compared against base; changed code does not alter these handlers/stacking.
 Move: review/ → ready/. Owner should verify the transition on Android before shipping.
+
+## factory · 2026-11-15 16:59
+Shipped to master using Claude Code. Merge: e19b49e9e8b8afd093009dd5e3e491e84cd542dc. Tag: v0.3.111; master and annotated tag pushed atomically. ready/ → done/.
+Final gates passed: gofmt, go vet ./..., go test ./... (163 packages); nsh check; required parallel Console runner (125 files, 1092 tests, zero failures and no retries); Node tests 274/274. No conflicts, integration fixes or unpinned installs. No visual/device checks or platform builds during ship. No linked issue/PR; branch retained (clean not configured).

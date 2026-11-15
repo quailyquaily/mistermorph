@@ -63,3 +63,7 @@ notes:
 - Review did not visually inspect a browser, Android or GPUI; visual evidence remains the build's reported Chrome comparison. Dark scheme, selected-hover parity and frame-by-frame dip animation remain unchecked.
 - Owner attention: Contacts scroll={false} leaves its straight header hairline transparent (selected dip remains); matches Topics at list top, but scrolled presentation is unverified. Resize fixture's parent-relative tab coordinates do not update on every position-only move, so that regression test is weaker than the independent probe.
 - review/ → ready/. No linked GitHub issue or PR in this item.
+
+## factory · 2026-11-15 16:59
+Shipped to master using Claude Code. Merge: 73a47e404969f78a8ac65154e824f3645ffe6876. Tag: v0.3.111; master and annotated tag pushed atomically. ready/ → done/.
+Final gates passed: gofmt, go vet ./..., go test ./... (163 packages); nsh check; required parallel Console runner (125 files, 1092 tests, zero failures and no retries); Node tests 274/274. No conflicts, integration fixes or unpinned installs. No visual/device checks or platform builds during ship. No linked issue/PR; branch retained (clean not configured).

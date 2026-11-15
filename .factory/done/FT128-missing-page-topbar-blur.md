@@ -49,3 +49,8 @@ notes:
 - Installs: none; pinned toolchain/cache restoration only.
 - Residual risk: owner's device-specific visual complaint remains unexplained. Reviewer did not repeat browser checks or build's mutation test; Android/iOS/Safari/Firefox/native desktop unverified. Owner should inspect the four headers on the affected device before shipping; review pass does not claim a visible visual fix.
 - Move: review/ → ready/.
+
+## factory · 2026-11-15 16:59
+Shipped to master using Claude Code. Merge: 529af7c1389d817de50f94f872bac54e7e20d20c. Tag: v0.3.111; master and annotated tag pushed atomically. ready/ → done/.
+Final gates passed: gofmt, go vet ./..., go test ./... (163 packages); nsh check; required parallel Console runner (125 files, 1092 tests, zero failures and no retries); Node tests 274/274. No conflicts, integration fixes or unpinned installs. No visual/device checks or platform builds during ship. No linked issue/PR; branch retained (clean not configured).
+Diagnosis and regression coverage only; no visible styling fix. Affected-device blur complaint remains unexplained.

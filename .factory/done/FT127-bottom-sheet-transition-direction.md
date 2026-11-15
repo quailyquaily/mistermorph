@@ -51,3 +51,8 @@ Validation: required gofmt/vet/go test ./... command passed (163 packages); nsh 
 Residual risks: reviewer could not visually verify any platform (headless Chrome probe stalled even with the stock fixture). In particular, manually check More/agent sheet clipping when a phone workbench is docked below the page: displacement uses the page bottom rather than the window bottom, and paint/clipping could not be verified. This is an unconfirmed risk, not a finding. Android/iOS/desktop and other dialog sheets remain visually unverified; prior build checked selected mobile-web sheets.
 
 Moved review/ → ready/. No linked issue or PR found in the item.
+
+## factory · 2026-11-15 16:59
+Shipped to master using Claude Code. Merge: a32e1607713c4b5563b147355cd98399df4637f5. Tag: v0.3.111; master and annotated tag pushed atomically. ready/ → done/.
+Final gates passed: gofmt, go vet ./..., go test ./... (163 packages); nsh check; required parallel Console runner (125 files, 1092 tests, zero failures and no retries); Node tests 274/274. No conflicts, integration fixes or unpinned installs. No visual/device checks or platform builds during ship. No linked issue/PR; branch retained (clean not configured).
+Existing P3 documentation contradiction remains; docked-workbench sheet clipping remains unconfirmed.
