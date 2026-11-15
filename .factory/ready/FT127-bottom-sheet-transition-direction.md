@@ -37,3 +37,17 @@ Checks: nsh check passed. Required Console parallel runner passed: 122 files, 0 
 Visual: coder checked the real mobile web build in headless Chrome touch emulation at 390×844, 844×390 and reduced motion: More, agents and composer add menu move from/to the bottom correctly. Not visually checked: Android device/emulator, iOS, desktop app and other dialog sheets (headless coverage only).
 
 Push initially failed because the credential request lacked repository path; retry with command-scoped credential.useHttpPath=true succeeded. No base branch or tags pushed.
+
+## factory · review · 2026-11-15 15:38
+head: 6f371501e2f7e26c10f76b2f15e8ec4aba329acc
+verdict: pass
+notes:
+- [P3] design/README.md:14: the mobile popup index still says "the entrance from the top", contradicting the updated bottom-entry specification in design/mobile-popups.md:21; update the index to say entry from below.
+
+Claude Code reviewed all 10 changed files in origin/master...HEAD and the shared sheet consumers. No P0/P1/P2 findings. Branch merges cleanly with origin/master. No source edits or commits; worktree remained clean. No unpinned installs or manifest/lock changes.
+
+Validation: required gofmt/vet/go test ./... command passed (163 packages); nsh check passed; required parallel Console runner passed (122 files, 0 failed, 255 s). chat-attachments failed concurrently and passed on the runner's isolated retry; this unchanged flaky test was already reproduced on base during build. All three changed regression test files passed first time. Scripted tests used throwaway HOME.
+
+Residual risks: reviewer could not visually verify any platform (headless Chrome probe stalled even with the stock fixture). In particular, manually check More/agent sheet clipping when a phone workbench is docked below the page: displacement uses the page bottom rather than the window bottom, and paint/clipping could not be verified. This is an unconfirmed risk, not a finding. Android/iOS/desktop and other dialog sheets remain visually unverified; prior build checked selected mobile-web sheets.
+
+Moved review/ → ready/. No linked issue or PR found in the item.
