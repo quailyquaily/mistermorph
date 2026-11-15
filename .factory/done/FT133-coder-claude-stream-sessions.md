@@ -111,3 +111,9 @@ Review: Claude Code reviewed origin/master...HEAD, including both prerequisite c
 Validation reported by reviewer: required gofmt gate, go vet ./..., go test ./... passed with an absolute throwaway HOME; nsh check passed; Console script passed all 125 files (four initial concurrent failures passed isolated retries). Three temporary probe tests reproduced the findings; removed afterward. Two signed-out real Claude protocol checks used an empty HOME and no model calls. No unpinned installs, no manifest changes, no commits or remaining tracked/untracked worktree edits; manager verified clean status and reviewed head.
 
 Residual risks: no real Claude/Codex/agy model task or live approvals; no browser visual check of usage chart/settings; Windows not executed. Late Claude lines after result, control_cancel_request, sub-agent usage and num_turns semantics remain unverified. Codex rollout-lag fallback loses per-model pricing for that session by design. No linked issue or PR in the item.
+
+
+## factory · 2026-11-16 07:09
+Shipped to master with Claude Code. Merge commit: 5983b0587fa92dff46e692f0d5044da1633cae26. Merge tree is identical to reviewed head acc8d33a; no integration edits or conflicts. Pushed and verified remote master. No tag created or pushed, per owner request. No linked issue or PR. Branch not deleted (clean not requested).
+
+Final merged-HEAD checks passed: gofmt, go vet ./..., go test ./..., nsh check, Console scripts/test.sh (125 files, zero final failures; chat-attachments passed isolated retry after concurrent failure), and 277 Node tests. Absolute throwaway HOME used. No unpinned installs reported. Existing P2/P3 findings retained as reviewed (missing Claude resume identity, non-chat approval callback, late Codex quota response). No live model/CLI approval tests, browser/device checks or native platform execution performed during shipping.
