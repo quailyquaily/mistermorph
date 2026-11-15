@@ -82,3 +82,11 @@ Claude Code reviewed all 31 changed files against origin/master...HEAD. No P0/P1
 Validation reported by reviewer: configured gofmt check, go vet ./..., go test ./... PASS; nsh check PASS; Console scripts/test.sh PASS (125 files, 0 failed; one unrelated attachment test passed on isolated retry); daily-usage Node tests 11/11 PASS. Tests used an absolute throwaway HOME. Manager verified unchanged head and clean worktree after review. No unpinned installs or manifest/lock changes.
 
 Not checked: live terminal CLI end-to-end, browser chart inspection in this review, GPUI desktop or Android. Codex child rollouts containing copied parent token events remain unverified; no sampled rollout had sub-agent activity. Catalog-unknown Claude models remain unpriced by design; Codex-only cost view can show $0 list price. No linked GitHub issue/PR to comment on.
+
+## lyric · 2026-11-15 21:11
+FT130 there are 2 P2 need to fix, move it to new/
+
+## factory · 2026-11-15 21:11
+Sent back from ready/ to new/ on the owner's word above, for a fix round on the same branch. The latest review (head 92edfa11) lists two notes, one P2 and one P3, and no others; the owner's "2 P2" is taken as both of them:
+- [P2] internal/llmstats/usagedb.go:306 (internal/coderterm/usage.go:247): terminal Claude usage is summed per model before catalog pricing; keep per-response or pricing-tier granularity through insertion and repricing.
+- [P3] internal/coderterm/usage.go:203-208: Claude cache_creation TTL details are discarded; carry the cache detail split through coderterm, coderusage and RequestRecord.CacheDetails.
