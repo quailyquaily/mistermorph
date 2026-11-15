@@ -51,3 +51,22 @@ Built on `factory/FT122-blurred-glass-composer-topbars-bottom-nav`, head: 6a8d33
 - Coder reports real built Console checked in headless Chrome at mobile 390x844 and desktop 1280x800, with content scrolled behind glass, one/multiline/focused composer and both unsupported/reduced-transparency fallbacks.
 - Not checked: Android device/emulator blur and frame cost; desktop native app; iOS/Safari rendering; physical finger scrolling/frame rate. Native reduced-transparency is unsupported by current platform API. Chrome screenshots were 1x due to an independently reproduced headless 2x blur artifact.
 - Code branch pushed successfully after enabling repository-path credential lookup for that command. No changes to base or tags.
+
+
+## factory · review · 2026-11-15 10:26
+head: 6a8d3373ef36aa15f396c10fe955af8a15fd0b95
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/chat/TopicSidebar.tsx:514: underBar extends the drag viewport behind the glass head, but the drop guard still accepts inView >= 0. Exclude the covered barRoom from the drop area and add coverage. Example: desktop 1280x800, food/travel/Untagged groups and 30 untagged topics; scrolling by 185–228pt and dragging Untagged 02 upward 120pt onto the head sends PUT /topics/u02/tags with travel, although that group is hidden. A throwaway probe reproduced this only with glass enabled.
+- [P3] web/console-nsh/pages/chat/ChatPage.tsx:241: the mobile glass container pulls the loading skeleton up 57pt, but only the loaded List receives topInset. Apply the pull only after loading or inset the skeleton. Example: history loading beyond the 160ms skeleton delay places the first bubble at y=20–58 under the 57pt bar (code trace, not rendered).
+- [P3] web/console-nsh/components/knowledge/parts.tsx:296: BarRoom is outside the content-layout measurement, hiding the initial end fade when overflow is smaller than the bar room; TodoIndex and Settings share this shape. Include BarRoom in the measurement. Example: Settings index with 500pt visible list, 560pt rows and 103pt room evaluates 603 < 559 as false despite 60pt hidden (code trace, not rendered).
+
+Reviewed by Claude Code against origin/master (137458ce), all 25 changed files. No P0/P1 findings; moved review/ → ready/ under factory policy. P2/P3 notes remain for owner consideration.
+
+Validation (coder run, throwaway absolute HOME and TMPDIR):
+- Configured gofmt/vet/Go test command: PASS, 163 packages ok.
+- nsh check: PASS.
+- Required Console scripts/test.sh: PASS, 119 files, 0 failed; no isolated retries needed.
+- Installs outside pinned dependencies reported: TypeScript 7.0.2 fetched by nsh check into throwaway HOME cache; no manifest changes.
+- Worktree verified clean at reviewed head; no code commits made. Branch merges cleanly with fetched master.
+- Visual browser inspection could not be completed: local headless page did not finish loading. Blur/tint/readability not independently visually checked. Android/iOS, native desktop and scrolling frame rate not checked. Focus traversal under the bar and scrollbar-thumb visibility remain unconfirmed, not findings.
