@@ -74,6 +74,8 @@ export interface ConsoleOptions {
    * read them with `scrollProbe(app)`.
    */
   scrollProbe?: boolean;
+  /** The window draws glass (tests/glassConsole.tsx): bars over the lists, a glass composer and navigation. */
+  glass?: boolean;
 }
 
 /** Where the phone app keeps the console server's address and its last location (lib/mobileHost.ts). */
@@ -174,7 +176,13 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
   const routes = { ...defaults(options), ...(options.api || {}) };
   // A bare "*" is a GET of any URL; each method needs its own catch-all.
   const network = Object.fromEntries(["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => [`${method} *`, answer]));
-  const entry = options.slowSlides ? "./slowSlidesConsole.tsx" : options.scrollProbe ? "./scrollProbeConsole.tsx" : "../App.tsx";
+  const entry = options.slowSlides
+    ? "./slowSlidesConsole.tsx"
+    : options.scrollProbe
+      ? "./scrollProbeConsole.tsx"
+      : options.glass
+        ? "./glassConsole.tsx"
+        : "../App.tsx";
   const probe = options.scrollProbe ? { "morph.fixture.scroll": null, "morph.fixture.saved": null } : {};
   if (options.platform === "android") {
     const app = await open(entry, {

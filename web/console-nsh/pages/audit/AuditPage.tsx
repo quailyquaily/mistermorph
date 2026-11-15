@@ -46,6 +46,7 @@ import { AuditBadge, hint, ObserveSection, t } from "../../components/observe/pa
 import { createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { gutterX } from "../../components/frame/metrics";
 import { BAR_ICON_SIZE, Button, CircleButton, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, TextField, TipButton } from "../../components/ui";
+import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const AUDIT_ITEMS_PER_PAGE = 50;
@@ -971,12 +972,24 @@ export function AuditPage() {
             testID="audit-index"
           >
             {/* The head: the page's title, as tall as the page bar (Vue's workspace-sidebar-head). */}
-            <View class="flex-row items-center" style={{ height: HEAD_HEIGHT, paddingLeft: gutterX(), paddingRight: gutterX() }}>
+            {/* Glass over the list of logs, which runs on under it (components/frame/glassBar.tsx). */}
+            <View
+              class={`flex-row items-center ${glassBarClass()}`}
+              style={{ ...glassBarStyle(), height: HEAD_HEIGHT, paddingLeft: gutterX(), paddingRight: gutterX() }}
+            >
               <Text class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground line-clamp-1" role="header">
                 {t("audit_title")}
               </Text>
             </View>
-            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass={isMobile() ? "py-4" : "p-4"} ref={indexMemory.ref} onScroll={indexMemory.onScroll}>
+            <Scroll
+              class="flex-1"
+              scrollbar={SCROLLBAR}
+              contentClass={isMobile() ? "py-4" : "p-4"}
+              style={underBar(HEAD_HEIGHT)}
+              ref={indexMemory.ref}
+              onScroll={indexMemory.onScroll}
+            >
+              <BarRoom height={HEAD_HEIGHT} />
               <If when={loading() && fileItems().length === 0}>
                 <ProgressBar indeterminate label={t("runtime_loading")} />
               </If>

@@ -25,6 +25,7 @@ import {
   systemInsets,
   type NavItem,
 } from "../../lib/shell";
+import { glassClass, glassEnabled, glassStyle } from "../../lib/glass";
 import { onSystemBack } from "../../lib/systemBack";
 import { MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SHEET_OUT, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
@@ -321,11 +322,14 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
       }}
     >
       <View
-        class="max-w-full rounded-full border-[0.5px] border-line bg-card/85"
+        // Glass where the window draws it (lib/glass.ts): the page shows through, blurred; else the
+        // card's own fill, opaque (a tint alone left the page's text under the icons).
+        class={`max-w-full rounded-full border-[0.5px] border-line ${glassClass("nav")}`}
+        testID={glassEnabled() ? "mobile-nav-capsule.glass" : "mobile-nav-capsule"}
         style={{
           padding: BAR_INSET,
           marginBottom: systemInsets() ? 0 : BAR_BELOW,
-          backdropFilter: "blur(20px)",
+          ...glassStyle(),
           boxShadow: platform.os === "android" ? undefined : BAR_SHADOW,
         }}
       >

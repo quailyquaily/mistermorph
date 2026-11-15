@@ -29,6 +29,7 @@ import { sagHalf, SagRule } from "./motion/Sag";
 import { recentPress } from "./motion/pressOrigin";
 import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
+import { BarRoom, glassBarClass, glassBarStyle, underBar } from "./frame/glassBar";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
 import { bottomSheetInsets, dialogLayerInsets, dialogSheetInsets } from "../lib/systemInsets";
 import {
@@ -2053,6 +2054,9 @@ export function Page(props: {
   /** Whether the body scrolls as one (default true); false for pages that own their scrolling. */
   scroll?: boolean;
   hideBar?: boolean;
+  /** With `scroll` false: the body's own scroller runs on under the bar (it takes `underBar()` and
+   * starts with the bar's room itself), so the bar is glass. */
+  glassBar?: boolean;
   children?: JSX.Element;
   bodyClass?: string;
   testID?: string;
@@ -2063,10 +2067,20 @@ export function Page(props: {
   return (
     <View class="flex-1" testID={props.testID}>
       <If when={!props.hideBar}>
-        <PageBar title={props.title} leading={props.leading} actions={props.actions} />
+        {/* Over a body that scrolls as one, the bar is glass: the body runs on under it. */}
+        <PageBar title={props.title} leading={props.leading} actions={props.actions} glass={props.scroll !== false || props.glassBar} />
       </If>
       <If when={props.scroll !== false} else={<View class={`flex-1 ${props.bodyClass ?? ""}`}>{props.children}</View>}>
-        <EdgeScroll class="flex-1" start={false} ref={(node) => props.memory?.ref(node)} onScroll={(event) => props.memory?.onScroll(event)}>
+        <EdgeScroll
+          class="flex-1"
+          start={false}
+          style={props.hideBar ? undefined : underBar()}
+          ref={(node) => props.memory?.ref(node)}
+          onScroll={(event) => props.memory?.onScroll(event)}
+        >
+          <If when={!props.hideBar}>
+            <BarRoom />
+          </If>
           <View
             class={props.bodyClass ?? ""}
             style={{ gap: pageGap(), paddingTop: pageTop(), paddingHorizontal: gutterX(), paddingBottom: gutterY() }}
@@ -2080,12 +2094,16 @@ export function Page(props: {
   );
 }
 
-/** A page's bar alone (AppPage.css `.page-bar`), for pages that lay out their own body. */
-export function PageBar(props: { title?: string; leading?: JSX.Element; actions?: JSX.Element; class?: string }) {
+/**
+ * A page's bar alone (AppPage.css `.page-bar`), for pages that lay out their own body. `glass`: the
+ * scroller under it runs on behind it (components/frame/glassBar.tsx: give that scroller
+ * `underBar()` and start its content with `BarRoom`).
+ */
+export function PageBar(props: { title?: string; leading?: JSX.Element; actions?: JSX.Element; class?: string; glass?: boolean }) {
   return (
     <View
-      class={`flex-row items-center gap-2 border-b border-line-soft py-2 ${props.class ?? ""}`}
-      style={{ height: CHROME_BAR_HEIGHT, paddingHorizontal: gutterX() }}
+      class={`flex-row items-center gap-2 border-b border-line-soft py-2 ${props.glass ? glassBarClass() : ""} ${props.class ?? ""}`}
+      style={{ height: CHROME_BAR_HEIGHT, paddingHorizontal: gutterX(), ...(props.glass ? glassBarStyle() : {}) }}
     >
       <View class="flex-1 flex-row items-center gap-2">
         <If when={props.leading} else={<PageTitle text={props.title ?? ""} />}>

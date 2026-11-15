@@ -20,6 +20,7 @@ import {
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { StoreSkillDetail, type StoreDoc, type StoreSkill } from "./StoreSkillDetail";
+import { BarRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 // How many tags a card shows; the panel shows them all.
@@ -207,6 +208,8 @@ export function SkillStorePage() {
   return (
     <Page
       scroll={false}
+      // The grid runs on under the bar where the bar is glass.
+      glassBar
       testID="store-page"
       leading={
         <View class="flex-row items-center gap-2">
@@ -232,7 +235,8 @@ export function SkillStorePage() {
       }
     >
       <View class="flex-1 flex-row" style={{ paddingLeft: gutterX(), paddingTop: gutterY(), paddingRight: isMobile() ? gutterX() : selected() ? 0 : gutterX() }}>
-        <EdgeScroll class="flex-1" contentClass="gap-4" style={{ maxWidth: 1120 }}>
+        <EdgeScroll class="flex-1" contentClass="gap-4" style={{ maxWidth: 1120, ...underBar() }}>
+          <BarRoom gap={16} />
           <If when={skills().length}>
             <View class="gap-2.5">
               <SearchField

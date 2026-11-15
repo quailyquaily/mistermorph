@@ -11,7 +11,7 @@
 // components/motion's sliding selection); a row's hover fill comes in after 60 ms and goes at once,
 // so sweeping the pointer down a list does not flash every row it passes.
 import type { InputRef, JSX, ScrollRef } from "nsh";
-import { cleanup, effect, keymap, Scroll, signal, Text, View, windowSize } from "nsh";
+import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import type { ScrollMemory } from "../../lib/scrollMemory";
@@ -20,8 +20,9 @@ import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
 import { BackButton, BAR_ICON_SIZE, CircleButton, Icon, TextField, type IconName } from "../ui";
 import type { PartLayoutListener } from "../shared/partProbe";
+import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../frame/glassBar";
 import { MobileBarSpacer } from "../frame/mobileBar";
-import { listTitleSize } from "../frame/metrics";
+import { CHROME_BAR_HEIGHT, listTitleSize } from "../frame/metrics";
 
 /** translate with its variables typed (the JS default `vars = null` reads as `null` only). */
 export const t = translate as unknown as (key: string, vars?: Record<string, unknown>) => string;
@@ -227,7 +228,8 @@ export function IndexColumn(props: {
   label?: string;
   testID?: string;
   children?: JSX.Element;
-  /** Draw the body yourself (a List that scrolls on its own). */
+  /** Draw the body yourself (a List that scrolls on its own). It is pulled up under the head where
+   * the head is glass: start the list's content with `BarRoom` (components/frame/glassBar.tsx). */
   scroll?: boolean;
   /** The head's right padding: the gutter (default) or none (a row of buttons to the edge). */
   headRight?: "gutter" | "none";
@@ -240,8 +242,17 @@ export function IndexColumn(props: {
   memory?: ScrollMemory;
 }) {
   const edges = createScrollEdges({ start: false });
-  const hasTop = () => Boolean(props.top || props.search);
+  // The slots, drawn once: reading a slot again draws it again, and a second search field takes
+  // the first one's ref and keys.
+  const top = untracked(() => props.top);
+  const search = untracked(() => props.search);
+  const hasTop = () => Boolean(top || search);
   const listPad = () => (props.fill ? (hasTop() ? "pt-2" : "pt-4") : hasTop() ? "px-4 pt-2" : "px-4 pt-4");
+  // The head and what is fixed under it (a search) are one glass bar over the list
+  // (components/frame/glassBar.tsx): the list runs on under all of it. Its height is measured (the
+  // head's own until then).
+  const headHeight = signal(0);
+  const headRoom = () => headHeight() || CHROME_BAR_HEIGHT;
   return (
     <View
       testID={props.testID}
@@ -251,29 +262,31 @@ export function IndexColumn(props: {
       accessibilityElementsHidden={props.hidden || undefined}
       importantForAccessibility={props.hidden ? "no-hide-descendants" : undefined}
     >
-      <View
-        class="h-[57px] flex-row items-center justify-between gap-3 border-b"
-        style={{
-          paddingLeft: gutterX(),
-          paddingRight: props.headRight === "none" && !props.fill ? 0 : gutterX(),
-          borderColor: edges.scrolled() ? "#a5bad040" : "#a5bad000",
-          transitionProperty: "colors",
-          transitionDuration: motionMs(MOTION_NORMAL),
-          transitionTimingFunction: MOTION_EASE_CSS,
-        }}
-      >
-        <View class="flex-1">
-          <WorkspaceTitle text={props.title} />
+      <View class={glassBarClass()} style={glassBarStyle()} onLayout={({ bounds }) => headHeight.set(bounds.size.height)}>
+        <View
+          class="h-[57px] flex-row items-center justify-between gap-3 border-b"
+          style={{
+            paddingLeft: gutterX(),
+            paddingRight: props.headRight === "none" && !props.fill ? 0 : gutterX(),
+            borderColor: edges.scrolled() ? "#a5bad040" : "#a5bad000",
+            transitionProperty: "colors",
+            transitionDuration: motionMs(MOTION_NORMAL),
+            transitionTimingFunction: MOTION_EASE_CSS,
+          }}
+        >
+          <View class="flex-1">
+            <WorkspaceTitle text={props.title} />
+          </View>
+          <If when={props.actions}>
+            <View class="flex-row items-center gap-0.5">{props.actions}</View>
+          </If>
         </View>
-        <If when={props.actions}>
-          <View class="flex-row items-center gap-0.5">{props.actions}</View>
+        <If when={top}>
+          <View class="px-4 pb-2 pt-3.5">{top}</View>
         </If>
+        <If when={search}>{search}</If>
       </View>
-      <If when={props.top}>
-        <View class="px-4 pb-2 pt-3.5">{props.top}</View>
-      </If>
-      <If when={props.search}>{props.search}</If>
-      <If when={props.scroll !== false} else={<View class="flex-1">{props.children}</View>}>
+      <If when={props.scroll !== false} else={<View class="flex-1" style={underBar(headRoom())}>{props.children}</View>}>
         <Scroll
           class="flex-1"
           scrollbar={SCROLLBAR}
@@ -285,8 +298,9 @@ export function IndexColumn(props: {
           }}
           onLayout={edges.handlers.onLayout}
           scrollEventThrottle={edges.handlers.scrollEventThrottle}
-          style={edges.style()}
+          style={{ ...edges.style(), ...underBar(headRoom()) }}
         >
+          <BarRoom height={headRoom()} />
           <View class={`grow gap-0.5 ${props.listClass ?? listPad()}`} style={{ paddingBottom: 16 + gutterY() }} onLayout={edges.onContentLayout}>
             {props.children}
           </View>
@@ -520,6 +534,9 @@ export function MobileBar(props: {
   backLabel: string;
   onBack?: () => void;
   actions?: JSX.Element;
+  /** The scroller under it runs on behind it (components/frame/glassBar.tsx: `underBar()` on that
+   * scroller, `BarRoom` at the start of its content). */
+  glass?: boolean;
   /** Hears where the back arrow lies on the page as `back` (tests). */
   onPartLayout?: PartLayoutListener;
 }) {
@@ -528,7 +545,10 @@ export function MobileBar(props: {
     () => props.onBack?.(),
   );
   return (
-    <View class="h-[57px] flex-row items-center gap-2 border-b border-line-soft" style={{ paddingLeft: gutterX(), paddingRight: gutterX() }}>
+    <View
+      class={`h-[57px] flex-row items-center gap-2 border-b border-line-soft ${props.glass ? glassBarClass() : ""}`}
+      style={{ paddingLeft: gutterX(), paddingRight: gutterX(), ...(props.glass ? glassBarStyle() : {}) }}
+    >
       <If when={props.onBack}>
         <BackButton title={props.backLabel} onPress={() => props.onBack?.()} testID="mobile-back" onPartLayout={props.onPartLayout} />
       </If>

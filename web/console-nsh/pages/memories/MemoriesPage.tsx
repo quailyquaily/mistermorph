@@ -41,6 +41,7 @@ import { createPaneStack } from "../../components/motion/PaneStack";
 import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
+import { BarRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const VISIBILITIES = ["private", "conversation", "public"] as const;
@@ -651,14 +652,15 @@ export function MemoriesPage() {
             importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
           >
             <If when={isMobile()}>
-              <MobileBar title={heldBarTitle()} backLabel={t("memories_title")} onBack={panes.hidden(1) ? undefined : showIndexView} />
+              <MobileBar title={heldBarTitle()} backLabel={t("memories_title")} onBack={panes.hidden(1) ? undefined : showIndexView} glass />
             </If>
             <EdgeScroll
               class="flex-1"
               contentClass="gap-5"
               style={
                 isMobile()
-                  ? { paddingLeft: gutterX(), paddingRight: gutterX(), paddingTop: 16 }
+                  ? // Under the phone's bar, which the cards run on behind where it is glass.
+                    { paddingLeft: gutterX(), paddingRight: gutterX(), paddingTop: 16, ...underBar() }
                   : // None at the left: the cards meet the index's column, whose rows then sit its
                     // 16pt gutter from them as from the sidebar on the other side.
                     { paddingRight: gutterX(), paddingTop: 18 }
@@ -667,6 +669,9 @@ export function MemoriesPage() {
               ref={mainMemory.ref}
               onScroll={mainMemory.onScroll}
             >
+              <If when={isMobile()}>
+                <BarRoom gap={20} />
+              </If>
               <If when={err()}>
                 <InlineNotice type="error" text={err()} testID="memories-error" />
               </If>

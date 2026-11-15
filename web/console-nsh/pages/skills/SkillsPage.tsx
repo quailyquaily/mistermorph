@@ -56,6 +56,7 @@ import { createPaneStack } from "../../components/motion/PaneStack";
 import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { scrollIntoViewNearest } from "./scroll";
+import { BarRoom, barRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 // Search appears once the list is long enough to need it.
@@ -353,7 +354,7 @@ export function SkillsPage() {
     if (!skill || untracked(editing)) return;
     void preview.open(skill.id, path);
     if (untracked(viewPath)) {
-      setTimeout(() => void scrollIntoViewNearest(detailScroll, docSection, detailOffset, detailHeight), 0);
+      setTimeout(() => void scrollIntoViewNearest(detailScroll, docSection, detailOffset, detailHeight, isMobile() ? barRoom() : 0), 0);
     }
   }
 
@@ -662,7 +663,7 @@ export function SkillsPage() {
             importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
           >
             <If when={isMobile()}>
-              <MobileBar title={t("skills_title")} backLabel={t("action_back")} onBack={panes.hidden(1) ? undefined : closeSkill} />
+              <MobileBar title={t("skills_title")} backLabel={t("action_back")} onBack={panes.hidden(1) ? undefined : closeSkill} glass />
             </If>
             <Scroll
               ref={(node: ScrollRef) => {
@@ -672,6 +673,8 @@ export function SkillsPage() {
               class="flex-1"
               scrollbar={SCROLLBAR}
               contentClass="grow"
+              // On a phone the skill runs on under its bar where the bar is glass.
+              style={isMobile() ? underBar() : undefined}
               onScroll={(event) => {
                 detailOffset = event.offset.y;
                 detailHeight = event.size.height;
@@ -681,6 +684,9 @@ export function SkillsPage() {
                 detailHeight = bounds.size.height;
               }}
             >
+              <If when={isMobile()}>
+                <BarRoom />
+              </If>
               <If
                 when={selected()}
                 else={
