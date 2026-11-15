@@ -51,3 +51,15 @@ Built in a524564b; new/ → review/ (round 1).
 - Not checked: real Android/GPUI applications, dark scheme, Contacts scrolled straight hairline, or frame-by-frame dip animation. Contacts scroll is not reported to this header, so its straight hairline remains transparent; selected dip is drawn. Selected-hover tint is 0.10 rather than selected 0.12; Topics hover parity not inspected.
 - Installs: none. Existing pinned toolchain and existing browser tooling reused.
 - Initial branch push lacked credential repository path; the single retry with command-local credential.useHttpPath=true succeeded. No base branch or tags pushed.
+
+## factory · review · 2026-11-15 14:52
+head: a524564b718b1533458dd84d71b74ae4a728d0ec
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD; no qualifying findings, including no P0/P1. Branch merges cleanly with the fetched master.
+- Validation passed: configured gofmt/vet/go-test gate; nsh 0.5.0 check; required scripts/test.sh (123 files, zero failures, 208s); throwaway-output nsh build without unknown-class warnings. Scripted runs used an absolute throwaway HOME. chat-voice.test.tsx failed once concurrently and passed the required isolated retry; not checked on base.
+- Reviewed keyboard/filtering/accessibility, 44pt mobile targets, optional IndexColumn sag compatibility, style variants and position-only header resize behavior. A temporary probe confirmed the dip tracks a position-only move and was removed. Tracked worktree remains unchanged; no code commits.
+- Installs: no unpinned tools or dependencies; nsh restored its pinned TypeScript 7.0.2 cache.
+- Review did not visually inspect a browser, Android or GPUI; visual evidence remains the build's reported Chrome comparison. Dark scheme, selected-hover parity and frame-by-frame dip animation remain unchecked.
+- Owner attention: Contacts scroll={false} leaves its straight header hairline transparent (selected dip remains); matches Topics at list top, but scrolled presentation is unverified. Resize fixture's parent-relative tab coordinates do not update on every position-only move, so that regression test is weaker than the independent probe.
+- review/ → ready/. No linked GitHub issue or PR in this item.
