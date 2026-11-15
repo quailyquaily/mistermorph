@@ -26,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -70,7 +70,7 @@ jobs:
           ./desktop/nsh/packaging/package-linux-deb.sh
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: MrMorph-${{ matrix.label }}
           path: |
@@ -89,7 +89,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up the console build
         uses: ./.github/actions/setup-desktop-build
@@ -108,7 +108,7 @@ jobs:
           sha256sum dist/MrMorph-android.apk > dist/MrMorph-android.apk.sha256
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: MrMorph-android
           path: |

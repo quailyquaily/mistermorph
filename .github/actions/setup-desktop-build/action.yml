@@ -31,9 +31,11 @@ runs:
           libxkbcommon-dev libxkbcommon-x11-dev libzstd-dev
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: 22
+        # As before v5: no dependency cache (v5 on caches by itself for a root packageManager).
+        package-manager-cache: false
 
     # nsh's install scripts from the pinned release download that release's archive and check
     # its .sha256 before installing it.
