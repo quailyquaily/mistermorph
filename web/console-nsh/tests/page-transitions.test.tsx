@@ -132,7 +132,7 @@ test("a topic opens and closes within the chat page: its own slide, the same pag
   await app.back();
   await app.waitFor("id:chat-topic-sidebar");
   await app.waitUntil(() => location(app) === "/e/default/chat");
-  await app.waitFor("id:chat-conversation-pane", { state: "gone" });
+  await app.waitFor("id:chat-conversation-pane.paper", { state: "gone" });
   expect(layer(app, "none")).toBe(1);
   expect(app.count("id:page-layer-out")).toBe(0);
   // The topic is let go once the conversation has gone.

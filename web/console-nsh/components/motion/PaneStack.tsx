@@ -8,7 +8,7 @@
 //   const panes = createPaneStack(() => (isMobile() ? (detailVisible() ? 1 : 0) : null));
 //   <If when={panes.shown(0, showIndex())}>
 //     <View
-//       class="flex-1"
+//       class={`flex-1 ${panes.paper(0)}`}
 //       style={panes.style(0)}
 //       accessibilityElementsHidden={panes.hidden(0) || undefined}
 //       importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
@@ -27,17 +27,30 @@
 // moving their native views, and a view moved takes the focus off a text field inside it (Android
 // keeps the keyboard up, with no field to type in): a new topic's composer, focused as its pane
 // slid in, lost the focus where the slide ended.
+//
+// A pane is a page of its own while it moves: it draws on the page's paper (`paper`), opaque, so
+// the pane underneath shows only where the moving one is not. A pane with no fill of its own is
+// see-through between its parts: the topic list showed through a new topic as it slid in. A glass
+// bar inside the pane then blurs the pane's own content, not the list under it.
 import type { Motion } from "nsh";
 import { batch, createMotion, effect, Keyboard, reduceMotion, signal, untracked, windowSize } from "nsh";
 import { currentX, FILL, nativeSlide, pageSlideMs, slideFrames, type SlideDriver } from "./pageSlide";
 
 const LEVELS = 4;
 
+/** The fill of a pane that slides: the frame's paper (App.tsx), opaque in every theme. */
+export const PANE_PAPER = "bg-background";
+
 export interface PaneStack {
   /** Whether the pane of `level` is drawn: `wanted` (the page's own condition), or while it goes out. */
   shown(level: number, wanted: boolean): boolean;
   /** The pane's motion, its place above or below the other and, while it goes out, its box over the panes. */
   style(level: number): Record<string, unknown> | undefined;
+  /**
+   * The pane's fill, a class for its root view: the page's paper where the panes slide over each
+   * other (`PANE_PAPER`), nothing where they stand side by side.
+   */
+  paper(level: number): string;
   /** Whether the pane of `level` is going out (inert, hidden from assistive tech). */
   hidden(level: number): boolean;
   /** The level going out, null when none. */
@@ -181,6 +194,7 @@ export function createPaneStack(
         pointerEvents: out ? "none" : "auto",
       };
     },
+    paper: (at) => (level() === null || at >= LEVELS ? "" : PANE_PAPER),
     hidden: (at) => exiting() === at,
     exiting: () => exiting(),
     sliding: () => sliding(),
