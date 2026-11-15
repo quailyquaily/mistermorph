@@ -45,6 +45,7 @@ import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { useNotice } from "../../lib/core/notices.js";
 import { copyText } from "../../lib/platform";
 import { locationOf, navigate } from "../../lib/router";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import {
@@ -704,6 +705,11 @@ export function ContactsPage(props: {
 
   let list: ListRef | undefined;
   const scrollY = signal(0);
+  // Where the library and the open contact are scrolled, across visits of the page. The library's
+  // place belongs to the tab it was left on: the other tab is another list, and starts at its top
+  // (the page opens on people again, never where the agents were left).
+  const libraryMemory = useScrollMemory({ column: 2, area: "library", selection: () => kind(), ready: () => !store.loading });
+  const contactMemory = useScrollMemory({ column: 3, area: "contact", selection: () => selectedContactID() });
   const viewHeight = signal(0);
   /** Scrolls card `index` into view when its row is out of it. */
   function reveal(index: number) {
@@ -831,7 +837,10 @@ export function ContactsPage(props: {
     return (
       <View class="relative flex-1" {...parts.probe(() => "library")}>
       <List
-        ref={(node: ListRef) => (list = node)}
+        ref={(node: ListRef) => {
+          list = node;
+          libraryMemory.ref(node);
+        }}
         footer={MobileBarSpacer}
         header={() => (
           <View onLayout={({ bounds }) => headerHeight.set(bounds.size.height)}>
@@ -854,7 +863,10 @@ export function ContactsPage(props: {
           listWidth.set(bounds.size.width);
           viewHeight.set(bounds.size.height);
         }}
-        onScroll={(event) => scrollY.set(event.offset.y)}
+        onScroll={(event) => {
+          scrollY.set(event.offset.y);
+          libraryMemory.onScroll(event);
+        }}
         scrollValue={scrollValue}
         scrollEventThrottle={50}
         refreshIndicator={pull.indicator}
@@ -1136,7 +1148,7 @@ export function ContactsPage(props: {
                 class="flex-1 overflow-hidden border border-line-faint bg-dialog"
                 style={{ borderRadius: POPUP_RADIUS, boxShadow: platform.os === "android" ? undefined : PANEL_SHADOW }}
               >
-                <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow">
+                <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow" ref={contactMemory.ref} onScroll={contactMemory.onScroll}>
                   <View class="grow" style={bodyMotion.style}>
                     <ContactBody contact={contact()} />
                   </View>
@@ -1156,7 +1168,7 @@ export function ContactsPage(props: {
             importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
           >
             <MobileBar title={heldBarTitle()} backLabel={t("contacts_title")} onBack={panes.hidden(1) ? undefined : showIndexView} />
-            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow">
+            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow" ref={contactMemory.ref} onScroll={contactMemory.onScroll}>
               <If when={shownContact()}>{(contact) => <ContactBody contact={contact()} />}</If>
               <MobileBarSpacer testID="contact-detail-bar-room" />
             </Scroll>

@@ -3,6 +3,7 @@
 import { batch, Canvas, effect, pixelRatio, signal, Text, token, untracked, View, windowSize } from "nsh";
 import type { CanvasRenderingContext2D } from "nsh";
 import { endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { RollingNumber } from "../../components/shared/RollingNumber";
 import { CoderQuotaButton } from "../../components/observe/CoderQuotaButton";
 import { DailyUsagePanel } from "../../components/observe/DailyUsagePanel";
@@ -86,8 +87,10 @@ export function StatsPage() {
   // --font-size-hero: clamp(2.5rem, 2rem + 2vw, 4rem).
   const heroSize = () => Math.round(Math.min(64, Math.max(40, 32 + windowSize().width * 0.02)));
 
+  // Where the page is scrolled, across visits (its one column, beside the sidebar).
+  const memory = useScrollMemory({ column: 2, area: "body", ready: () => !loading() });
   return (
-    <Page title={t("stats_title")} actions={<CoderQuotaButton />} error={err()} testID="stats-page">
+    <Page title={t("stats_title")} actions={<CoderQuotaButton />} error={err()} memory={memory} testID="stats-page">
       <View style={{ rowGap: pageGap() }} class="pb-6">
         <If when={loading()}>
           <ProgressBar indeterminate label={t("runtime_loading")} />

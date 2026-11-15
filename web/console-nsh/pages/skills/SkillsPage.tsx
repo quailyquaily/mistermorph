@@ -53,6 +53,7 @@ import { SKILL_DOC_PATH, skillFileURL, useSkillFilePreview } from "../../lib/cor
 import { openExternal } from "../../lib/platform";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { createPaneStack } from "../../components/motion/PaneStack";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { scrollIntoViewNearest } from "./scroll";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -340,6 +341,9 @@ export function SkillsPage() {
 
   // The detail pane scrolls; a file opened from the tree is brought into view.
   let detailScroll: ScrollRef | undefined;
+  // Where the index and the open skill are scrolled, across visits of the page.
+  const indexMemory = useScrollMemory({ column: 2, area: "index", ready: () => !loading() });
+  const detailMemory = useScrollMemory({ column: 3, area: "detail", selection: () => selectedID().toLowerCase() });
   let docSection: ViewRef | undefined;
   let detailOffset = 0;
   let detailHeight = 0;
@@ -598,6 +602,7 @@ export function SkillsPage() {
             actions={indexActions}
             headRight="none"
             testID="skills-index"
+            memory={indexMemory}
           >
             <If when={showSearch()}>
               <View class={`pb-2 ${isMobile() ? "px-4" : ""}`}>
@@ -660,13 +665,17 @@ export function SkillsPage() {
               <MobileBar title={t("skills_title")} backLabel={t("action_back")} onBack={panes.hidden(1) ? undefined : closeSkill} />
             </If>
             <Scroll
-              ref={detailScroll}
+              ref={(node: ScrollRef) => {
+                detailScroll = node;
+                detailMemory.ref(node);
+              }}
               class="flex-1"
               scrollbar={SCROLLBAR}
               contentClass="grow"
               onScroll={(event) => {
                 detailOffset = event.offset.y;
                 detailHeight = event.size.height;
+                detailMemory.onScroll(event);
               }}
               onLayout={({ bounds }) => {
                 detailHeight = bounds.size.height;

@@ -4,6 +4,7 @@
 import { effect, Scroll, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { BackButton, Button, Fab, type MessageAction, MessageDialog, Page, PageBar, PageTitle } from "../../components/ui";
@@ -126,10 +127,18 @@ function EditorPane(props: { state: TodoState; mobile?: boolean }) {
   const panel = () => !props.mobile && state.calendarView();
   const margin = () =>
     props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8 };
+  // What it shows: an item of the list or a day of the calendar (the entrance plays for a new one).
+  const shown = () => `${mode()}:${state.selectedTaskKey() ?? ""}:${state.selectedCalendarDate() ?? ""}`;
+  // Where it is scrolled, across visits of the page, for as long as it shows the same item.
+  const memory = useScrollMemory({
+    column: 3,
+    area: "editor",
+    selection: () => (mode() === "none" || mode() === "placeholder" ? "" : shown()),
+  });
   return (
     <If when={mode() !== "placeholder"} else={<Placeholder state={state} mobile={props.mobile} />}>
-      <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="min-h-full">
-        <Entrance watch={`${mode()}:${state.selectedTaskKey() ?? ""}:${state.selectedCalendarDate() ?? ""}`} class="flex-1" rise={4}>
+      <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="min-h-full" ref={memory.ref} onScroll={memory.onScroll}>
+        <Entrance watch={shown()} class="flex-1" rise={4}>
           <View class="flex-1" style={margin()}>
             <If when={mode() === "heartbeat"}>
               <TodoHeartbeatEditor state={state} />
@@ -198,6 +207,8 @@ export function TodoPage() {
     return [dismiss];
   };
 
+  // Where the calendar is scrolled, across visits of the page (the list keeps its own, TodoIndex).
+  const calendarMemory = useScrollMemory({ column: 2, area: "calendar" });
   return (
     // The phone's bar belongs to the task (it slides with it), below.
     <Page title={t("todo_title")} hideBar scroll={false} testID="todo-page">
@@ -221,7 +232,7 @@ export function TodoPage() {
           >
             {/* The calendar and its side column share the page's height, 1.45 : 0.55 (360 at least). */}
             <View class="flex-1 flex-row gap-1">
-              <Scroll class="flex-[1.45]" scrollbar={SCROLLBAR} contentClass="min-h-full">
+              <Scroll class="flex-[1.45]" scrollbar={SCROLLBAR} contentClass="min-h-full" ref={calendarMemory.ref} onScroll={calendarMemory.onScroll}>
                 <Calendar state={state} />
                 <MobileBarSpacer />
               </Scroll>
@@ -241,7 +252,7 @@ export function TodoPage() {
               importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
             >
               <If when={state.calendarView()} else={<TodoIndex state={state} mobile />}>
-                <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24">
+                <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24" ref={calendarMemory.ref} onScroll={calendarMemory.onScroll}>
                   <Calendar state={state} mobile />
                   <MobileBarSpacer />
                 </Scroll>

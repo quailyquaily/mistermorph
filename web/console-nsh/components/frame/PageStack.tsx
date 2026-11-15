@@ -19,6 +19,7 @@
 import type { JSX, Motion, Signal } from "nsh";
 import { computed, createMotion, effect, Keyboard, reduceMotion, signal, untracked, View, windowSize } from "nsh";
 import { navigation, PageRouteContext, route, type Route } from "../../lib/router";
+import { notePageSettled } from "../../lib/scrollMemory";
 import { SystemBackScope } from "../../lib/systemBack";
 import { pagePresentation, topPageOf, type PagePresentation } from "../../lib/navMotion";
 import { playRise } from "../motion/Entrance";
@@ -87,6 +88,7 @@ export function PageStack(props: PageStackProps) {
         motion.reset();
       });
       slide.incoming.z.set(0);
+      notePageSettled();
     }
     if (untracked(layers).some((layer) => untracked(layer.out))) {
       layers.set(untracked(layers).filter((layer) => !untracked(layer.out)));
@@ -145,6 +147,8 @@ export function PageStack(props: PageStackProps) {
         running = null;
         incoming.z.set(0);
         layers.set(untracked(layers).filter((layer) => layer !== active));
+        // The page that arrived was moved (its order changed): its remembered places again.
+        notePageSettled();
       });
   }
 

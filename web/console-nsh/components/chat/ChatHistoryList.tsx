@@ -3,8 +3,10 @@
 // place whatever changes above or below them. While another topic's history loads, a placeholder
 // thread shows instead of the old messages. Ported from web/console/src/components/ChatHistoryList.js.
 import type { ListRef, ViewRef } from "nsh";
-import { computed, createMotion, effect, List, signal, Text, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, createMotion, effect, List, signal, Text, untracked, View, windowSize } from "nsh";
 import { createArrivalTracker } from "../../lib/core/arrivals.js";
+import { SystemBackScope } from "../../lib/systemBack";
+import { forgetScroll, hasSavedScroll, onPageSettled, recallScroll, rememberScroll, reportScrollArea } from "../../lib/scrollMemory";
 import { SCROLLBAR } from "../motion/ScrollEdges";
 import { Button } from "../ui";
 import { ChatHistoryItem, type ChatRowContext, type HistoryItem } from "./ChatHistoryItem";
@@ -86,6 +88,12 @@ export function ChatHistoryList(props: {
   endInset?: number;
   /** Each row's view as its cell is made, and the id it shows now (cells are recycled). For tests. */
   onRowRef?: (ref: ViewRef, id: () => string) => void;
+  /**
+   * The conversation's area in the page's scroll memory (lib/scrollMemory.ts `scrollAreaKey`): a
+   * reader who left the page scrolled up finds the same message there when they come back to the
+   * same topic. Fixed when the list is made.
+   */
+  memoryKey?: string;
 }) {
   // nsh's List (0.4.0) tells its items apart by identity (`===`), not by `keyExtractor`. Every
   // update gives a message a new object (a streamed word, a status, a finished task's reload gives
@@ -129,6 +137,105 @@ export function ChatHistoryList(props: {
   const following = signal(true);
   let list: ListRef | undefined;
   let last = { offset: 0, view: 0, content: 0 };
+
+  // The place a reader scrolled up to, remembered across visits of the page (lib/scrollMemory.ts)
+  // for the topic it was left in: the message at the top of the view and how far into it, since
+  // the rows above are laid out from estimates again in a list made anew, and an offset alone would
+  // name another message. At the newest message nothing is remembered: the conversation opens at
+  // its end and follows it, as it always did. Another topic forgets the place.
+  const memoryKey = untracked(() => props.memoryKey) || "";
+  const topic = () => String(props.ctx.topicID() ?? "");
+  /** Whether the page around is the one shown: a page sliding out saves nothing. */
+  const pageShown = SystemBackScope();
+  /** A remembered place waits to be put back: nothing is saved over it until it was, or cannot be. */
+  let awaiting = Boolean(memoryKey) && hasSavedScroll(memoryKey);
+  /** The place is being put back (the list's opening scroll to its end and the page's own after a load come first). */
+  let restoring = false;
+  let restoreTimers: ReturnType<typeof setTimeout>[] = [];
+  /** Puts the restored place back again, until the reader scrolls (a page's slide ending moves the list's view). */
+  let reapply: (() => void) | null = null;
+  const stopRestore = () => {
+    for (const timer of restoreTimers) clearTimeout(timer);
+    restoreTimers = [];
+    restoring = false;
+  };
+  function restorePlace() {
+    if (!awaiting || !list) return;
+    const now = untracked(topic);
+    if (!now) return;
+    const anchor = recallScroll(memoryKey, now)?.anchor;
+    const ids = untracked(rows);
+    if (!anchor || untracked(() => props.loading) || ids.length === 0) {
+      if (!anchor) awaiting = false;
+      return;
+    }
+    awaiting = false;
+    if (!ids.includes(anchor.id)) {
+      // The message is not among those loaded any more: the conversation stays at its end.
+      forgetScroll(memoryKey);
+      return;
+    }
+    const node = list;
+    const apply = () => {
+      const index = untracked(rows).indexOf(anchor.id);
+      if (list !== node || index < 0) return;
+      following.set(false);
+      node.scrollToIndex({ index, viewOffset: -anchor.offset, animated: false });
+    };
+    restoring = true;
+    reapply = apply;
+    apply();
+    // Again once the opening scrolls are over (the list's to its end before the first frame, the
+    // page's after a load, on a timer) and the rows around the place are measured.
+    restoreTimers = [0, 60, 200].map((ms, i, all) =>
+      setTimeout(() => {
+        apply();
+        if (i === all.length - 1) stopRestore();
+      }, ms),
+    );
+  }
+  if (memoryKey) {
+    let previous = untracked(topic);
+    effect(() => {
+      const now = topic();
+      void rows();
+      void props.loading;
+      untracked(() => {
+        if (now !== previous) {
+          // Another topic (or none): its conversation opens at its end; the old place is not kept.
+          const changed = Boolean(previous) || (Boolean(now) && hasSavedScroll(memoryKey) && !recallScroll(memoryKey, now));
+          previous = now;
+          if (changed) {
+            stopRestore();
+            awaiting = false;
+            forgetScroll(memoryKey);
+            return;
+          }
+        }
+        restorePlace();
+      });
+    });
+    onPageSettled(() => reapply?.());
+    cleanup(stopRestore);
+  }
+  /** Remembers where the reader is: nothing at the newest message, else the message at the view's top. */
+  function savePlace(node: ListRef, y: number, pulledToEnd: boolean) {
+    if (!memoryKey) return;
+    reportScrollArea(memoryKey, y);
+    const now = untracked(topic);
+    // Pulled to a shorter content's end (rows going with the page as it leaves): not the reader's doing.
+    if (awaiting || restoring || !now || pulledToEnd || (pageShown && !untracked(pageShown))) return;
+    reapply = null;
+    if (untracked(following)) {
+      forgetScroll(memoryKey);
+      return;
+    }
+    void node.measureScrollPosition().then((place) => {
+      if (!place || list !== node || awaiting || restoring || untracked(following) || untracked(topic) !== now) return;
+      const id = untracked(rows)[place.index];
+      if (id) rememberScroll(memoryKey, { y, selection: now, anchor: { id, offset: place.offset } });
+    });
+  }
   return (
     <If when={!props.loading} else={<Skeleton label={props.loadingText} />}>
       <List
@@ -139,6 +246,7 @@ export function ChatHistoryList(props: {
           list = node;
           last = { offset: 0, view: 0, content: 0 };
           props.onListRef?.(node);
+          restorePlace();
         }}
         each={rows()}
         keyExtractor={(id) => id}
@@ -161,11 +269,13 @@ export function ChatHistoryList(props: {
           const resized = Math.abs(event.size.height - last.view) > 0.5 || Math.abs(event.contentSize.height - last.content) > 0.5;
           const clamped = last.offset > event.contentSize.height - event.size.height + 0.5;
           const movedUp = known && !clamped && event.offset.y < last.offset - 0.5;
+          const pulledToEnd = known && !untracked(following) && clamped && event.contentSize.height < last.content - 0.5;
           if (distance <= HISTORY_FOLLOW_THRESHOLD) following.set(true);
           else if (movedUp) following.set(false);
           else if (known && resized && untracked(following)) list?.scrollToEnd({ animated: false });
           last = { offset: event.offset.y, view: event.size.height, content: event.contentSize.height };
           props.onScrollFromEnd?.(distance, event.size.height);
+          if (list) savePlace(list, event.offset.y, pulledToEnd);
         }}
         class="flex-1"
         // The Vue history: 20pt around the conversation and between turns; above the oldest

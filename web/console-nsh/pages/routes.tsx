@@ -2,9 +2,8 @@
 // currentRoute() and draw their content only, inside the frame the shell gives them.
 import type { JSX } from "nsh";
 import { Text, View } from "nsh";
-import type { PageKey, Route } from "../lib/router";
-import { currentRoute } from "../lib/router";
-import { endpointRefFromRouteParam } from "../lib/core/endpoint-routes.js";
+import type { PageKey } from "../lib/router";
+import { currentRoute, pageInstanceKey } from "../lib/router";
 import { isMobile } from "../lib/shell";
 import { PageStack } from "../components/frame/PageStack";
 import { AuditPage } from "./audit/AuditPage";
@@ -63,7 +62,4 @@ export function PageView() {
   return <PageStack keyOf={pageInstanceKey} render={(route) => PAGES[route.page]()} stacked={() => isMobile()} />;
 }
 
-/** A page instance's identity: its kind and, for an agent's pages, the agent. */
-export function pageInstanceKey(route: Route) {
-  return `${route.page}\u0000${route.meta.endpointScoped ? endpointRefFromRouteParam(route.params.endpoint_ref) : ""}`;
-}
+export { pageInstanceKey };

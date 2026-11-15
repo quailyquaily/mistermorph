@@ -21,6 +21,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/i18n/index.js` | The Vue console's strings, unchanged: `translate(key, vars)` |
 | `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()`, the last committed `navigation()` |
 | `lib/navMotion.ts` | Which way a navigation moves (further in, back, the navigation's order); `lib/navOrder.ts` is that order |
+| `lib/scrollMemory.ts` | Where a page's columns were scrolled, in memory only: `useScrollMemory({ column, area, selection, ready })` on a page's `Scroll` or `List` (docs/console/scroll-memory.md) |
 | `lib/shell.ts` | The frame's state: endpoints, nav items, mobile breakpoint |
 | `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back, then the history |
 | `lib/softKeyboard.ts` | Whether the software keyboard is up; a phone back arrow lowers it before it leaves |
@@ -115,6 +116,11 @@ Headless tests prove behaviour, not the look.
 - Headless (`nsh test`), a list's own scroll corrections are not reported back: `measure()` and
   `onScroll` lag until the next scroll. Scroll by a point and back before reading positions
   (`tests/chat-scroll-anchor.test.tsx`).
+- A scroller whose content no longer reaches its offset is pulled back with a scroll report (rows
+  going as a page leaves, a list emptied by a reload): to the content's end headless, to the top in
+  a browser. And a browser puts a scroller back at its top, with no report at all, when its page's
+  view is moved (nsh orders siblings by `zIndex` by moving them: the page host as a slide ends).
+  `lib/scrollMemory.ts` takes neither for the reader's scroll (docs/console/scroll-memory.md).
 - `lifecycle()` from `nsh` breaks the whole page on the web runtime (0.4.0).
 - A page loaded in a hidden browser tab gets no frames, so animated values stall part-way until
   the tab is shown; take screenshots from a visible tab.

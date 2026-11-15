@@ -3,7 +3,7 @@
 // lists a page of the file's events, newest first and grouped by run, or a page of tasks; the side
 // pane shows the one opened with its raw JSON. Pages move by cursor; the first page refreshes every
 // 15 seconds while the window shows it, and what arrives flashes.
-import type { JSX } from "nsh";
+import type { JSX, ListRef, ScrollRef } from "nsh";
 import { batch, cleanup, computed, effect, List, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import {
@@ -24,6 +24,7 @@ import { createArrivalTracker, createChangeTracker, createHighlightWindow } from
 import { taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
 import { isVisible } from "../../lib/platform";
 import { navigate } from "../../lib/router";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
@@ -736,6 +737,8 @@ export function AuditPage() {
               class="flex-1"
               contentClass="pb-4"
               testID="audit-feed"
+              ref={(node: ListRef) => feedMemory.ref(node)}
+              onScroll={(event) => feedMemory.onScroll(event)}
             >
               {(row) => (
                 <If
@@ -763,7 +766,14 @@ export function AuditPage() {
             <ErrorNotice text={taskErr()} />
           </View>
         </If>
-        <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-4" testID="audit-task-feed">
+        <Scroll
+          class="flex-1"
+          scrollbar={SCROLLBAR}
+          contentClass="pb-4"
+          testID="audit-task-feed"
+          ref={(node: ScrollRef) => taskFeedMemory.ref(node)}
+          onScroll={(event) => taskFeedMemory.onScroll(event)}
+        >
           <Each of={taskItems()} key={(item) => String(item.id)}>
             {(item) => (
               <BaseButton
@@ -942,6 +952,10 @@ export function AuditPage() {
   const indexKey = () => (isTasks() ? "tasks" : selectedStream() === "audit" && selectedFile() ? `file:${selectedFile()}` : null);
   const indexSelection = createSlidingSelection(() => indexKey());
   const fileRowKey = (item: AuditFileItem) => `file:${item.value}`;
+  // Where the index and the open ledger are scrolled, across visits of the page.
+  const indexMemory = useScrollMemory({ column: 2, area: "index" });
+  const feedMemory = useScrollMemory({ column: 3, area: "feed", selection: () => indexKey() ?? "", ready: () => !loading() });
+  const taskFeedMemory = useScrollMemory({ column: 3, area: "tasks", selection: () => indexKey() ?? "" });
 
   return (
     <Page title={t("audit_title")} hideBar scroll={false} testID="audit-page">
@@ -962,7 +976,7 @@ export function AuditPage() {
                 {t("audit_title")}
               </Text>
             </View>
-            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass={isMobile() ? "py-4" : "p-4"}>
+            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass={isMobile() ? "py-4" : "p-4"} ref={indexMemory.ref} onScroll={indexMemory.onScroll}>
               <If when={loading() && fileItems().length === 0}>
                 <ProgressBar indeterminate label={t("runtime_loading")} />
               </If>
