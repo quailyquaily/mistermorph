@@ -38,3 +38,14 @@ Tests: nsh check passed; required Console parallel runner passed (123 files, 0 f
 Visual checks: headless Chrome 157 with stub API, phone 390x844 and desktop 1280x800, scale 1 and GPU/SwiftShader scale 2. Compared glass/blur-disabled/hidden headers; phone unsupported/reduced-transparency fallback and empty/error tours. After test-only change, scale-2 GPU measurements and phone fallback rerun; screenshots not re-inspected. Not checked: Android device/emulator, iOS, Safari, Firefox, native desktop app. Device-specific cause remains unruled-out.
 Review focus: whether diagnosis plus regression coverage satisfies the request; stronger visible frosting would be a design change not made here.
 Move: new/ → review/, round 1.
+
+## factory · review · 2026-11-15 16:07
+head: 9cfc075d6934e7aa9581cff243b4938369106f80
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD; no qualifying findings. All four named heads already use shared glass styling and under-header scrolling on master. This branch adds diagnosis and regression coverage, NOT a visible styling fix.
+- Production BarRoom hook is inactive without a test watcher; six changed Console files, no forbidden paths or manifests changed; one item-scoped commit. Branch merges cleanly with current master.
+- Validation: configured gofmt/go vet/go test passed (163 packages); nsh check passed; required parallel Console runner passed (123 files, 0 failed). chat-attachments failed during parallel execution then passed on the runner's isolated retry. Tests used absolute throwaway HOME.
+- Installs: none; pinned toolchain/cache restoration only.
+- Residual risk: owner's device-specific visual complaint remains unexplained. Reviewer did not repeat browser checks or build's mutation test; Android/iOS/Safari/Firefox/native desktop unverified. Owner should inspect the four headers on the affected device before shipping; review pass does not claim a visible visual fix.
+- Move: review/ → ready/.
