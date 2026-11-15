@@ -121,3 +121,11 @@ Validation: Claude Code passed `test -z "$(gofmt -l .)" && go vet ./... && go te
 Installs: none unpinned; restored pinned Go modules and TypeScript 7.0.2 for nsh 0.5.0 into throwaway HOME only.
 
 Residual risks: signed-in live smoke/quota not repeated (build's Linux smoke remains its evidence); Windows/macOS lookup/keyring/auth, live five-hour quota, live subagent/checkpoint/tool-error events and visual UI not checked. Slash-command expansion for tasks beginning with / remains unverified. FT131 default discovery paths are not in base: agy location must currently be in PATH or tools.coder.path_extra. All-permission one-shot execution is intentional and documented. Post-run quota may delay cancellation up to 30 seconds, consistent with existing Codex behavior. No linked GitHub issue or PR in the item, so no review comments posted.
+
+## factory · 2026-11-15 23:15
+
+Shipped using Claude Code. Merge: 7212b5f864d4586c5531c910f8cbf1e1a04b978c. Annotated tag: v0.3.112; final master: 075f57cf0f2a59418b66bab9d6585c83ccbbc83d. Master and tag pushed atomically and remote targets verified.
+
+Combined Go formatting/vet/tests passed (163 packages ok); nsh check passed; Console scripts/test.sh passed 125 files, with unchanged attachment test passing isolated retry; all Console Node tests passed 277/277 (daily usage 11/11). Windows/macOS cross-builds passed. Integration conflicts resolved preserving usage/pricing and restricted CoderEnv; added agy Windows default path and environment regressions. No unpinned installs.
+
+No live CLI, visual/browser/device or real Windows/macOS checks during ship; no race run. Existing P3 findings remain. No linked issue/PR to close; branch retained (clean not configured).

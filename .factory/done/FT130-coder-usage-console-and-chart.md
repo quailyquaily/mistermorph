@@ -128,3 +128,11 @@ Claude Code reviewed all 35 changed files against origin/master (2d7ffea0)...HEA
 Validation reported by reviewer: configured gofmt check, go vet ./..., go test ./... PASS (163 packages ok, 19 without tests); nsh check PASS; Console scripts/test.sh PASS (125 files, 0 failed; unchanged chat-attachments and chat-workspace tests passed on isolated retries); daily-usage Node tests 11/11 PASS. Scripted tests used an absolute throwaway HOME. Manager verified clean worktree, unchanged local head and matching remote head after review. No unpinned installs or manifest/lock changes; nsh restored its pinned TypeScript 7.0.2 cache.
 
 Not checked: live Claude Code/Codex terminal end-to-end; whether Codex child rollouts copy parent token events, final token_count ordering, or live transcript model aliases; browser chart inspection in this review, GPUI desktop, Android device and zh/ja UI. Security-sensitive surfaces were inspected in code only, not exercised dynamically. No linked GitHub issue or PR to comment on.
+
+## factory · 2026-11-15 23:15
+
+Shipped using Claude Code. Merge: 2494c41237e3b7ebeb06f1a9087198e151a353fe. Annotated tag: v0.3.112; final master: 075f57cf0f2a59418b66bab9d6585c83ccbbc83d. Master and tag pushed atomically and remote targets verified.
+
+Combined Go formatting/vet/tests passed (163 packages ok); nsh check passed; Console scripts/test.sh passed 125 files, with unchanged attachment test passing isolated retry; all Console Node tests passed 277/277 (daily usage 11/11). Windows/macOS cross-builds passed. Integration conflicts resolved preserving usage/pricing and restricted CoderEnv; added agy Windows default path and environment regressions. No unpinned installs.
+
+No live CLI, visual/browser/device or real Windows/macOS checks during ship; no race run. Existing P3 findings remain. No linked issue/PR to close; branch retained (clean not configured).

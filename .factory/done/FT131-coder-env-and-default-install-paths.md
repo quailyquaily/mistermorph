@@ -83,3 +83,13 @@ Claude Code reviewed all 38 changed files on origin/master...HEAD against the re
 Validation: required test `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (exit 0; 163 packages ok) with an absolute throwaway HOME and TMPDIR. Reviewer also reports Windows/macOS cross-builds and touched-package vet passed. Fake-CLI probes only; worktree remains clean. Installs: none. Initial review call timed out; a second Claude Code call completed and reran the required gate successfully.
 
 Not checked: real Windows/macOS execution, real CLI sign-in/subscription/quota under the restricted environment, running-binary quota routes or a full model-to-coder run. Console source UI unchanged; no UI inspection or Console test run. External embedders using removed CoderPathExtra/PathExtra fields need migration to CoderEnv.PathExtra. Existing allowlist/injection edge cases were not introduced here. Breaking environment restriction from the build report still requires explicit proxy/custom-config/provider-key injections; preserve that release note at ship.
+
+## factory · 2026-11-15 23:15
+
+Shipped using Claude Code. Merge: 22dd03173f8eed5bd1c8fa476b3a64fdefd36e65. Annotated tag: v0.3.112; final master: 075f57cf0f2a59418b66bab9d6585c83ccbbc83d. Master and tag pushed atomically and remote targets verified.
+
+Combined Go formatting/vet/tests passed (163 packages ok); nsh check passed; Console scripts/test.sh passed 125 files, with unchanged attachment test passing isolated retry; all Console Node tests passed 277/277 (daily usage 11/11). Windows/macOS cross-builds passed. Integration conflicts resolved preserving usage/pricing and restricted CoderEnv; added agy Windows default path and environment regressions. No unpinned installs.
+
+No live CLI, visual/browser/device or real Windows/macOS checks during ship; no race run. Existing P3 findings remain. No linked issue/PR to close; branch retained (clean not configured).
+
+Breaking: coder CLIs no longer inherit arbitrary service environment variables. Explicitly list proxy, CODEX_HOME, CLAUDE_CONFIG_DIR and provider-key variables in tools.bash.injected_env_vars (tools.powershell.injected_env_vars on Windows). Existing terminal sessions retain their startup environment until restarted.
