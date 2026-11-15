@@ -1,3 +1,5 @@
+---
+---
 # Coder: Claude Code on `claude -p` sessions, and no terminal
 
 ## factory · 2026-11-16 00:58
