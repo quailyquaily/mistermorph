@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -26,6 +27,9 @@ const (
 	coderToolName      = "coder"
 	coderBackendCodex  = "codex"
 	coderBackendClaude = "claude"
+	// The Antigravity CLI, Google's terminal agent. It runs one-shot everywhere: there is no
+	// terminal session for it, so no approval prompts either.
+	coderBackendAgy = coderusage.BackendAgy
 
 	coderStderrTailBytes = 4 * 1024
 	coderLineMaxBytes    = 4 * 1024 * 1024
@@ -59,6 +63,7 @@ type CoderRequest struct {
 	Process func(pid int)
 	// Report hears, once the CLI has ended, what the run used and the quota it reported (Claude
 	// Code reports one; nil otherwise). A terminal session reports what its session files record.
+	// A run that failed for lack of a sign-in says so in Run.NotSignedIn.
 	Report func(run coderusage.Run, quota *coderusage.Quota)
 }
 
@@ -88,12 +93,13 @@ func (t *coderTool) Description() string {
 		case claude:
 			approvals = "asks the user to approve actions when needed (Claude Code runs actions without asking)"
 		}
-		return "Delegate a repository coding task to local Codex or Claude Code (cc) when the user asks for them. " +
-			"Each keeps a terminal session for this conversation and working directory, and " + approvals + ". " +
+		return "Delegate a repository coding task to local Codex, Claude Code (cc) or the Antigravity CLI (agy) when the user asks for them. " +
+			"Codex and Claude Code each keep a terminal session for this conversation and working directory, and " + approvals + ". " +
+			"agy has no session: each task is a fresh non-interactive run that remembers nothing of the last, and it runs every action without asking the user. " +
 			"Returns a SubtaskResult envelope. " + coderUsageNote
 	}
-	return "Delegate a repository coding task to the local Codex or Claude Code CLI. " +
-		"Use this when the user explicitly asks for Codex, Claude Code, or cc to handle code edits, review fixes, tests, or file generation. " +
+	return "Delegate a repository coding task to the local Codex, Claude Code or Antigravity (agy) CLI. " +
+		"Use this when the user explicitly asks for Codex, Claude Code, cc, Antigravity, or agy to handle code edits, review fixes, tests, or file generation. " +
 		"The child coder runs non-interactively with approvals bypassed and returns a SubtaskResult envelope. " + coderUsageNote
 }
 
@@ -107,8 +113,8 @@ func (t *coderTool) ParameterSchema() string {
 		"properties": map[string]any{
 			"coder": map[string]any{
 				"type":        "string",
-				"enum":        []string{coderBackendCodex, coderBackendClaude},
-				"description": "CLI backend to run: use codex for Codex CLI; use claude for Claude Code or cc.",
+				"enum":        []string{coderBackendCodex, coderBackendClaude, coderBackendAgy},
+				"description": "CLI backend to run: use codex for Codex CLI; use claude for Claude Code or cc; use agy for the Antigravity CLI (Google's agy).",
 			},
 			"task": map[string]any{
 				"type":        "string",
@@ -157,7 +163,8 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 	if runCLI == nil {
 		runCLI = runCoderCLI
 	}
-	if t.deps.RunTerminal != nil {
+	// agy has no terminal session: it runs one-shot in the Console too.
+	if t.deps.RunTerminal != nil && req.Backend != coderBackendAgy {
 		runCLI = func(ctx context.Context, req CoderRequest, emit func(string)) (string, error) {
 			// The backend name is also the CLI's command name.
 			command, env, err := req.CoderEnv.Command(req.Backend)
@@ -233,7 +240,9 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 
 // reportUsage records what a run used and the coder's quota, and says both in a line for the
 // result and the activity: Claude Code reports its quota during the run; Codex's is read from its
-// app server after the run (no quota used). It returns "" when there is nothing to say.
+// app server and the Antigravity CLI's from its /usage after the run (no quota used). A quota that
+// cannot be read is left out: nothing is made up, and the run's own outcome stands. It returns ""
+// when there is nothing to say.
 func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coderusage.Run, quota *coderusage.Quota) string {
 	var recorder *coderusage.Recorder
 	if t.deps.Usage != nil {
@@ -243,6 +252,12 @@ func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coder
 	recorder.RecordRun(ctx, run)
 	if quota == nil && req.Backend == coderBackendCodex && t.deps.ReadCodexQuota != nil {
 		if read, err := t.deps.ReadCodexQuota(context.WithoutCancel(ctx), req.CoderEnv); err == nil {
+			quota = &read
+		}
+	}
+	// A run that found no sign-in has no quota to read (and the read would meet the same prompt).
+	if quota == nil && req.Backend == coderBackendAgy && t.deps.ReadAgyQuota != nil && !run.NotSignedIn {
+		if read, err := t.deps.ReadAgyQuota(context.WithoutCancel(ctx), req.CoderEnv); err == nil {
 			quota = &read
 		}
 	}
@@ -275,13 +290,22 @@ func readCodexQuota(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage
 	return coderusage.ReadCodexQuota(ctx, command, env)
 }
 
+// readAgyQuota reads the Antigravity CLI's quota from its /usage, finding agy as the coder tool does.
+func readAgyQuota(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error) {
+	command, env, err := coderEnv.Command(coderBackendAgy)
+	if err != nil {
+		return coderusage.Quota{}, err
+	}
+	return coderusage.ReadAgyQuota(ctx, command, env)
+}
+
 func coderRequestFromParams(ctx context.Context, params map[string]any, roots pathroots.PathRoots) (CoderRequest, error) {
 	backend, _ := params["coder"].(string)
 	backend = strings.ToLower(strings.TrimSpace(backend))
 	if backend == "" {
 		return CoderRequest{}, fmt.Errorf("missing required param: coder")
 	}
-	if backend != coderBackendCodex && backend != coderBackendClaude {
+	if backend != coderBackendCodex && backend != coderBackendClaude && backend != coderBackendAgy {
 		return CoderRequest{}, fmt.Errorf("unsupported coder: %s", backend)
 	}
 	task, _ := params["task"].(string)
@@ -420,6 +444,21 @@ func buildCoderCLICommand(req CoderRequest) coderCLICommand {
 			Stdin: req.Task,
 			Dir:   strings.TrimSpace(req.CWD),
 		}
+	case coderBackendAgy:
+		return coderCLICommand{
+			Command: "agy",
+			// The task goes on stdin, which agy reads as its prompt when -p is not given: as -p's
+			// value it would be in the process list, and bounded by the argument size. stream-json
+			// on its own is headless; without the permission bypass a headless run cannot ask and
+			// denies every action that needs approval.
+			Args: []string{
+				"--output-format",
+				"stream-json",
+				"--dangerously-skip-permissions",
+			},
+			Stdin: req.Task,
+			Dir:   strings.TrimSpace(req.CWD),
+		}
 	default:
 		return coderCLICommand{}
 	}
@@ -504,7 +543,11 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 		detail += "; diagnostics: " + diagnosticDir
 		runErr = fmt.Errorf("%s: %w", detail, runErr)
 	}()
-	cmd := exec.CommandContext(ctx, commandPath, spec.Args...)
+	// stop ends the CLI early: agy waiting at its sign-in prompt.
+	procCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	var needsSignIn atomic.Bool
+	cmd := exec.CommandContext(procCtx, commandPath, spec.Args...)
 	configureCoderProcess(cmd)
 	if env != nil {
 		cmd.Env = env
@@ -519,6 +562,18 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	// even when a process the CLI left in the background still holds the pipes.
 	stdoutLines := &coderLineWriter{handle: func(line []byte) { _ = collector.ConsumeLine(line) }}
 	stderrLines := &coderLineWriter{handle: func(line []byte) {
+		if req.Backend == coderBackendAgy {
+			// Not signed in, agy prints a sign-in link and waits a minute for it. Nobody can
+			// answer here: stop it now, and keep the link out of the progress and the result.
+			if needsSignIn.Load() {
+				return
+			}
+			if coderusage.IsAgyAuthPrompt(string(line)) {
+				needsSignIn.Store(true)
+				stop()
+				return
+			}
+		}
 		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
 	}}
 	stdoutLines.overflow = func() {
@@ -547,13 +602,20 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	waitErr := cmd.Wait()
 	stdoutLines.Flush()
 	stderrLines.Flush()
+	signIn := needsSignIn.Load() || (req.Backend == coderBackendAgy && coderusage.IsAgyAuthError(collector.Error()))
 	if req.Report != nil {
-		run := collector.run
+		run := collector.Run()
 		run.Backend = req.Backend
 		run.DurationMs = time.Since(started).Milliseconds()
+		run.NotSignedIn = signIn
 		req.Report(run, collector.quota)
 	}
 	output = capCoderOutput(collector.Output(), diagnosticDir)
+	if signIn {
+		// The stderr tail holds the sign-in link: it is not part of the error.
+		stderrTail.Reset()
+		return output, coderusage.ErrAgySignIn
+	}
 	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
 		line := fmt.Sprintf("[%s] exited; stopped reading output still held by a background process\n", req.Backend)
 		progress(line, line, "")
@@ -563,10 +625,18 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 		if ctx.Err() != nil {
 			return output, ctx.Err()
 		}
+		if errText := collector.Error(); errText != "" && req.Backend == coderBackendAgy {
+			// agy exits 1 after a result that says why.
+			return output, fmt.Errorf("agy failed: %s (%v)", errText, coderExitError(req.Backend, waitErr))
+		}
 		return output, coderExitError(req.Backend, waitErr)
 	}
 	if errText := collector.Error(); errText != "" {
 		return output, fmt.Errorf("%s failed: %s", req.Backend, errText)
+	}
+	if req.Backend == coderBackendAgy && !collector.agy.resultSeen {
+		// Exit 0 without a result is not a finished run: the answer would be a guess.
+		return output, fmt.Errorf("agy ended without a result event")
 	}
 	return output, nil
 }
@@ -634,7 +704,7 @@ func capCoderOutput(output string, diagnosticDir string) string {
 	return fmt.Sprintf("[%d bytes omitted; the full stream is in %s]\n", start, filepath.Join(diagnosticDir, "stdout.jsonl")) + output[start:]
 }
 
-// pruneCoderDiagnostics removes the oldest codex-* and claude-* directories under root
+// pruneCoderDiagnostics removes the oldest codex-*, claude-* and agy-* directories under root
 // until at most keep remain.
 func pruneCoderDiagnostics(root string, keep int) {
 	entries, err := os.ReadDir(root)
@@ -648,7 +718,7 @@ func pruneCoderDiagnostics(root string, keep int) {
 	var dirs []diagDir
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() || !(strings.HasPrefix(name, coderBackendCodex+"-") || strings.HasPrefix(name, coderBackendClaude+"-")) {
+		if !entry.IsDir() || !(strings.HasPrefix(name, coderBackendCodex+"-") || strings.HasPrefix(name, coderBackendClaude+"-") || strings.HasPrefix(name, coderBackendAgy+"-")) {
 			continue
 		}
 		info, err := entry.Info()
@@ -688,6 +758,16 @@ type coderStreamCollector struct {
 	// run is what the run used, as its events said; quota the subscription quota it reported.
 	run   coderusage.Run
 	quota *coderusage.Quota
+	// agy is what the Antigravity CLI's stream needs kept.
+	agy agyStreamState
+}
+
+// Run is what the run used.
+func (c *coderStreamCollector) Run() coderusage.Run {
+	if c.backend == coderBackendAgy {
+		return c.agyRun()
+	}
+	return c.run
 }
 
 func newCoderStreamCollector(backend string, emit func(string)) *coderStreamCollector {
@@ -695,6 +775,7 @@ func newCoderStreamCollector(backend string, emit func(string)) *coderStreamColl
 		backend:       strings.ToLower(strings.TrimSpace(backend)),
 		emit:          emit,
 		itemOutputLen: map[string]int{},
+		agy:           agyStreamState{lastStep: -1, textStep: -1},
 	}
 }
 
@@ -708,12 +789,19 @@ func (c *coderStreamCollector) ConsumeLine(line []byte) error {
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(line, &payload); err != nil {
+		if c.backend == coderBackendAgy {
+			// agy's stream is JSON lines only: anything else is a broken stream, not an answer.
+			c.agyMalformedLine(line)
+			return nil
+		}
 		c.addDelta(string(line) + "\n")
 		return nil
 	}
 	switch c.backend {
 	case coderBackendClaude:
 		c.consumeClaude(payload)
+	case coderBackendAgy:
+		c.consumeAgy(payload)
 	default:
 		c.consumeCodex(payload)
 	}
@@ -733,6 +821,9 @@ func (c *coderStreamCollector) Output() string {
 func (c *coderStreamCollector) Error() string {
 	if c == nil {
 		return ""
+	}
+	if c.backend == coderBackendAgy {
+		return c.agyError()
 	}
 	return strings.TrimSpace(c.errText)
 }
@@ -1117,6 +1208,13 @@ func (b *coderTailBuffer) Write(p []byte) (int, error) {
 		b.buf = append([]byte(nil), b.buf[len(b.buf)-b.Limit:]...)
 	}
 	return len(p), nil
+}
+
+// Reset drops what was kept.
+func (b *coderTailBuffer) Reset() {
+	if b != nil {
+		b.buf = nil
+	}
 }
 
 func (b *coderTailBuffer) String() string {

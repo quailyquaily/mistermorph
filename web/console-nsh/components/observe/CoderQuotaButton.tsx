@@ -1,11 +1,13 @@
 // The Usage page's Coding agents button and dialog: the subscription quota of each local coding
-// CLI the coder tool runs (Codex, Claude Code). Opening the dialog reads every installed coder's
-// quota at once (Codex's app server, Claude Code's /usage: no quota used); meanwhile it shows the
-// last saved ones, each bar a scanning line. A coder run saves its coder's quota too.
+// CLI the coder tool runs (Codex, Claude Code, the Antigravity CLI). Opening the dialog reads every
+// installed coder's quota at once (Codex's app server, Claude Code's and the Antigravity CLI's
+// /usage: no quota used); meanwhile it shows the last saved ones, each bar a scanning line. A coder
+// run saves its coder's quota too.
 //
 // Each coder is a section: its name, plan and a limit badge, and when it reported; under it a row
 // per window (5 hours, 7 days, a model's own week): its name and the share used, large, over a
-// bar that turns amber and red near the limit, and when it starts again. The button is in the
+// bar that turns amber and red near the limit, and when it starts again. The Antigravity CLI's
+// limits are per model group: its windows come under each group's name and models. The button is in the
 // page's bar only for the coders installed where the agent runs or that reported a quota, and not
 // for an agent built before the quota routes (they answer 404).
 import { batch, effect, signal, Text, untracked, View } from "nsh";
@@ -13,10 +15,12 @@ import { endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/
 import { Badge, Button, Divider, Modal, ProgressBar } from "../ui";
 import { InlineNotice } from "../settings/DialogShell";
 import {
+  CODERS,
   normalizeCoderQuota,
   shownCoders,
   untilText,
   windowExpired,
+  windowGroups,
   windowLabel,
   windowTone,
   type CoderQuotaPayload,
@@ -64,7 +68,7 @@ export function CoderQuotaButton() {
   });
 
   const coders = () => shownCoders(payload());
-  const installed = () => payload().available.codex === true || payload().available.claude === true;
+  const installed = () => CODERS.some((coder) => payload().available[coder.backend] === true);
 
   const show = () => {
     open.set(true);
@@ -130,9 +134,26 @@ export function CoderQuotaButton() {
                     </If>
                   }
                 >
-                  <View class="gap-4">
-                    <Each of={coder().quota?.windows ?? []} key={(w) => w.kind}>
-                      {(w) => <WindowRow window={w()} reading={reading() && coder().available} testID={`stats-coder-${coder().backend}-${w().kind}`} />}
+                  <View class="gap-5">
+                    <Each of={windowGroups(coder().quota)} key={(group) => group.name}>
+                      {(group, groupIndex) => (
+                        <View class="gap-4">
+                          {/* A model group's limits come under its name and the models that share them. */}
+                          <If when={group().name}>
+                            <View class="gap-0.5" testID={`stats-coder-${coder().backend}-group-${groupIndex()}`}>
+                              <Text class="text-sm font-medium text-foreground">{group().name}</Text>
+                              <If when={group().models.length > 0}>
+                                <Text class="text-xs text-subtle" testID={`stats-coder-${coder().backend}-group-${groupIndex()}-models`}>
+                                  {group().models.join(", ")}
+                                </Text>
+                              </If>
+                            </View>
+                          </If>
+                          <Each of={group().windows} key={(w) => w.kind}>
+                            {(w) => <WindowRow window={w()} reading={reading() && coder().available} testID={`stats-coder-${coder().backend}-${w().kind}`} />}
+                          </Each>
+                        </View>
+                      )}
                     </Each>
                   </View>
                 </If>
@@ -181,7 +202,7 @@ function WindowRow(props: { window: QuotaWindow; reading: boolean; testID: strin
           <ProgressBar
             value={expired() ? 0 : (used() ?? 0)}
             tone={tone()}
-            label={`${windowLabel(props.window)}: ${share()}${caption() ? `, ${caption()}` : ""}`}
+            label={`${props.window.group ? `${props.window.group} ` : ""}${windowLabel(props.window)}: ${share()}${caption() ? `, ${caption()}` : ""}`}
           />
         }
       >

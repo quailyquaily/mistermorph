@@ -12,13 +12,13 @@ Use a subagent boundary mainly in these cases:
 - A shell command is slow or noisy, and you want its output isolated from the parent loop.
 - The work is still multi-step, but you want the inner execution to operate with a narrower tool set.
 - You want one compact final result instead of leaking raw intermediate output back to the parent.
-- The child work should run in the local Codex or Claude Code CLI.
+- The child work should run in the local Codex, Claude Code or Antigravity (`agy`) CLI.
 
 Choose the entry like this:
 
 - Use `bash.run_in_subtask=true` for one concrete shell command.
 - Use `spawn` when the inner execution still needs agent-style tool use such as `read_file`, `url_fetch`, or `bash`.
-- Use `coder` when the inner execution should be delegated to local Codex or Claude Code.
+- Use `coder` when the inner execution should be delegated to local Codex, Claude Code or the Antigravity CLI.
 - Do not add an isolated layer for trivial one-step work the parent can finish directly.
 
 ## Overview
@@ -28,7 +28,7 @@ Mistermorph currently exposes three isolated-task entries:
 | Entry | Starts another LLM loop | Best for | Returns |
 |---|---|---|---|
 | `spawn` | Yes | an inner agent that still needs tools and reasoning | `SubtaskResult` JSON envelope |
-| `coder` | No local inner Mister Morph loop; starts Codex or Claude Code CLI | coding subtasks handled by local coding-agent CLIs | `SubtaskResult` JSON envelope |
+| `coder` | No local inner Mister Morph loop; starts Codex, Claude Code or Antigravity CLI | coding subtasks handled by local coding-agent CLIs | `SubtaskResult` JSON envelope |
 | `bash.run_in_subtask=true` | No | one shell command with isolated execution/output | `SubtaskResult` JSON envelope |
 
 Shared behavior:
@@ -67,7 +67,7 @@ Current behavior:
 
 Parameters:
 
-- `coder`: required backend, `codex` or `claude`
+- `coder`: required backend, `codex`, `claude` or `agy` (the Antigravity CLI)
 - `task`: required prompt for the coding CLI
 - `cwd`: optional working-directory override
 
@@ -179,11 +179,11 @@ Expected result: `SUBAGENT_BASH_OK`
 ### Config and Embedding
 
 - `tools.spawn.enabled` controls only the explicit `spawn` tool entry.
-- `tools.coder.enabled` controls whether the explicit `coder` tool entry is exposed by default. It defaults to false because the child Codex / Claude Code process runs with approval and permission prompts bypassed. `$coder` can still expose it for one task.
-- `coder` starts `codex` and `claude` in the `bash` tool's environment (the `powershell` tool's on Windows), not in the service's: the allowlisted variables (`HOME`, `LANG`, `TERM`, `USER`, ...), the variables of `tools.bash.injected_env_vars` (`tools.powershell.injected_env_vars` on Windows), and nothing else. Console terminal sessions set `TERM=xterm-256color`. Proxy variables (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY`), `CODEX_HOME`, `CLAUDE_CONFIG_DIR` and provider keys such as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` reach the CLIs only when listed there. A subscription sign-in under the home directory needs nothing.
-- The CLIs' PATH, in order: `tools.coder.path_extra`, `tools.bash.path_extra`, the service's PATH, and, only while `tools.coder.path_extra` is empty, the default install locations that exist: `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/home/linuxbrew/.linuxbrew/bin`; on Windows `%USERPROFILE%\.local\bin` and `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`. They come last, so they never replace a CLI the PATH already finds.
+- `tools.coder.enabled` controls whether the explicit `coder` tool entry is exposed by default. It defaults to false because the child Codex / Claude Code / Antigravity CLI process runs with approval and permission prompts bypassed. `$coder` can still expose it for one task.
+- `coder` starts `codex`, `claude` and `agy` in the `bash` tool's environment (the `powershell` tool's on Windows), not in the service's: the allowlisted variables (`HOME`, `LANG`, `TERM`, `USER`, ...), the variables of `tools.bash.injected_env_vars` (`tools.powershell.injected_env_vars` on Windows), and nothing else. Console terminal sessions set `TERM=xterm-256color`. Proxy variables (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY`), `CODEX_HOME`, `CLAUDE_CONFIG_DIR` and provider keys such as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` reach the CLIs only when listed there. A subscription sign-in under the home directory needs nothing.
+- The CLIs' PATH, in order: `tools.coder.path_extra`, `tools.bash.path_extra`, the service's PATH, and, only while `tools.coder.path_extra` is empty, the default install locations that exist: `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/home/linuxbrew/.linuxbrew/bin`; on Windows `%USERPROFILE%\.local\bin`, `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` and `%LOCALAPPDATA%\agy\bin`. They come last, so they never replace a CLI the PATH already finds.
 - `tools.coder.path_extra` prepends directories to that PATH for the coder only. Set it when the CLIs are somewhere else, such as an npm global directory under a version manager; setting it turns the default install locations off.
-- `tools.coder.bypass_approvals.codex` and `tools.coder.bypass_approvals.claude` (default false) apply to the Console, where Codex and Claude Code run in terminal sessions that ask the user to approve actions. Set one to true to start that CLI without approval prompts or sandbox: Codex yolo mode (`--dangerously-bypass-approvals-and-sandbox`) or Claude Code `--dangerously-skip-permissions`. A running session is reopened with the new setting before its next task. Only turn this on where the CLI may run anything the service user can.
+- `tools.coder.bypass_approvals.codex` and `tools.coder.bypass_approvals.claude` (default false) apply to the Console, where Codex and Claude Code run in terminal sessions that ask the user to approve actions. Set one to true to start that CLI without approval prompts or sandbox: Codex yolo mode (`--dangerously-bypass-approvals-and-sandbox`) or Claude Code `--dangerously-skip-permissions`. A running session is reopened with the new setting before its next task. Only turn this on where the CLI may run anything the service user can. The Antigravity CLI has no terminal session and no such setting: it always runs one-shot with every action approved (`--dangerously-skip-permissions`), in the Console too.
 - Direct isolated runs such as `bash.run_in_subtask=true` still work even if `tools.spawn.enabled=false`.
 - `integration.Config.BuiltinToolNames` can include or omit `spawn` and `coder`.
 - If you build an engine directly with `agent.New(...)`, `spawn` is enabled by default, while `coder` is disabled by default. Override them with `agent.WithSpawnToolEnabled(...)` and `agent.WithCoderToolEnabled(...)`.

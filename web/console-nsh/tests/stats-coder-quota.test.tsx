@@ -3,7 +3,7 @@
 // Opening it reads the installed coders' quotas, the bars scanning meanwhile. No button for agents
 // without the CLIs, nor for agents built before the route.
 import { expect, test } from "nsh/test";
-import { normalizeCoderQuota, shownCoders, untilText, windowExpired, windowLabel, windowTone } from "../components/observe/coder-quota";
+import { normalizeCoderQuota, shownCoders, untilText, windowExpired, windowGroups, windowLabel, windowTone } from "../components/observe/coder-quota";
 import { openConsole } from "./harness";
 
 const USAGE = { "GET /proxy:/stats/llm/usage": { body: { summary: {}, api_hosts: [], models: [] } }, "GET /proxy:/stats/llm/daily": { body: { days: [], summary: {}, models: [] } } };
@@ -36,6 +36,24 @@ const CODEX = {
   observed_at: "2026-11-13T10:00:00Z",
   source: "read",
   windows: [{ kind: "primary", window_minutes: 10080, used_percent: 9, resets_at: LATER, status: "allowed" }],
+};
+
+// The Antigravity CLI's quota: its limits are per model group. Here the Gemini group has a 5-hour
+// and a weekly window, and the other group's week is used up.
+const AGY = {
+  backend: "agy",
+  status: "allowed_warning",
+  observed_at: "2026-11-15T12:00:00Z",
+  source: "read",
+  groups: [
+    { name: "Gemini Models", models: ["Gemini 3.8 Flash", "Gemini 3.8 Pro"] },
+    { name: "Claude and GPT models", models: ["Claude Sonnet 4.6", "GPT-OSS 120B"] },
+  ],
+  windows: [
+    { kind: "gemini-5h", group: "Gemini Models", window_minutes: 300, used_percent: 41, resets_at: LATER, status: "allowed" },
+    { kind: "gemini-weekly", group: "Gemini Models", window_minutes: 10080, used_percent: 7, resets_at: LATER, status: "allowed" },
+    { kind: "3p-weekly", group: "Claude and GPT models", window_minutes: 10080, used_percent: 100, resets_at: LATER, status: "rejected" },
+  ],
 };
 
 test("windows are named by their length, and the bars warn near the limit", () => {
@@ -170,4 +188,77 @@ test("no button where neither CLI is installed, nor for an agent without the rou
     expect(app.shows("id:stats-coders-open")).toBe(false);
     await app.dispose();
   }
+});
+
+test("a coder's windows by model group: one unnamed group without groups, one per group with them", () => {
+  const payload = normalizeCoderQuota({ quotas: [CODEX, AGY, { backend: "claude", windows: [], groups: [null, { name: "" }, { name: "G", models: [1, "m"] }] }], available: { agy: true } });
+  expect(shownCoders(payload).map((c) => c.backend)).toEqual(["codex", "claude", "agy"]);
+  const [codex, agy, claude] = payload.quotas;
+  expect(windowGroups(codex).map((g) => [g.name, g.models, g.windows.map((w) => w.kind)])).toEqual([["", [], ["primary"]]]);
+  expect(windowGroups(agy).map((g) => [g.name, g.models, g.windows.map((w) => w.kind)])).toEqual([
+    ["Gemini Models", ["Gemini 3.8 Flash", "Gemini 3.8 Pro"], ["gemini-5h", "gemini-weekly"]],
+    ["Claude and GPT models", ["Claude Sonnet 4.6", "GPT-OSS 120B"], ["3p-weekly"]],
+  ]);
+  expect(claude.groups).toEqual([{ name: "G", models: ["m"] }]);
+  expect(windowGroups(claude)).toEqual([]);
+  expect(windowGroups(null)).toEqual([]);
+  // A window whose group the quota does not list still shows, under its group's name.
+  expect(windowGroups({ ...agy, groups: [] }).map((g) => [g.name, g.models])).toEqual([["Gemini Models", []], ["Claude and GPT models", []]]);
+});
+
+test("the Antigravity CLI is a third coder: a row per group and window under each group's name and models", async () => {
+  let reads = 0;
+  const { app } = await openConsole({
+    location: "/e/default/stats",
+    api: {
+      ...USAGE,
+      // Only agy is installed here: the button shows for it, and opening reads its quota.
+      "GET /proxy:/stats/coder/quota": { body: { quotas: [CODEX], available: { codex: false, claude: false, agy: true } } },
+      "POST /proxy:/stats/coder/quota/refresh": () => {
+        reads++;
+        return { body: { quotas: [AGY, CODEX], available: { codex: false, claude: false, agy: true } } };
+      },
+    },
+  });
+  await app.press("id:stats-coders-open");
+  await app.waitFor("id:stats-coder-agy-gemini-weekly");
+  expect(reads).toBe(1);
+  // Codex first, agy after it, under its own name.
+  expect(app.shows("id:stats-coder-codex-primary")).toBe(true);
+  expect(app.shows("id:stats-coder-claude")).toBe(false);
+  expect(app.shows("id:stats-coder-agy >> text:Antigravity CLI")).toBe(true);
+  // Each group: its name, its models, then its windows.
+  expect(app.shows("id:stats-coder-agy-group-0 >> text:Gemini Models")).toBe(true);
+  expect(app.shows("id:stats-coder-agy-group-0-models")).toBe(true);
+  expect(app.texts()).toContain("Gemini 3.8 Flash, Gemini 3.8 Pro");
+  expect(app.shows("id:stats-coder-agy-group-1 >> text:Claude and GPT models")).toBe(true);
+  expect(app.shows("id:stats-coder-agy-group-1-models")).toBe(true);
+  expect(app.texts()).toContain("Claude Sonnet 4.6, GPT-OSS 120B");
+  expect(app.shows("id:stats-coder-agy-gemini-5h >> text:41%")).toBe(true);
+  expect(app.shows("id:stats-coder-agy-gemini-weekly >> text:7%")).toBe(true);
+  expect(app.shows("id:stats-coder-agy-3p-weekly >> text:100%")).toBe(true);
+  // The bars say their group to a screen reader.
+  const caption = app.texts().find((text) => text.startsWith("Resets in 3h10m · "));
+  expect(app.shows(`label:Gemini Models 5h: 41%, ${caption}`)).toBe(true);
+  expect(app.shows(`label:Claude and GPT models 7d: 100%, ${caption}`)).toBe(true);
+  // One group at its limit: the coder is near a limit, not out of quota. Codex has no groups.
+  expect(app.shows("id:stats-coder-agy-status >> text:Near limit")).toBe(true);
+  expect(app.shows("id:stats-coder-codex-group-0")).toBe(false);
+});
+
+test("the Antigravity CLI not signed in: the read's reason shows under it", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/stats",
+    api: {
+      ...USAGE,
+      "GET /proxy:/stats/coder/quota": { body: { quotas: [], available: { agy: true } } },
+      "POST /proxy:/stats/coder/quota/refresh": {
+        body: { quotas: [], available: { agy: true }, errors: { agy: "agy is not signed in: run `agy` once in a terminal and sign in with a Google account, then try again" } },
+      },
+    },
+  });
+  await app.press("id:stats-coders-open");
+  await app.waitFor("id:stats-coder-agy-error");
+  expect(app.texts().some((text) => text.startsWith("agy is not signed in"))).toBe(true);
+  expect(app.shows("id:stats-coder-agy-empty")).toBe(true);
 });

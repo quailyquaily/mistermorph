@@ -309,6 +309,7 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			LookupTool:     e.registry.Get,
 			Usage:          coderusage.Default,
 			ReadCodexQuota: readCodexQuota,
+			ReadAgyQuota:   readAgyQuota,
 		},
 		e.modelProfiles,
 	)

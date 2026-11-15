@@ -41,7 +41,8 @@ type spawnToolDeps struct {
 type coderToolDeps struct {
 	Runner SubtaskRunner
 	RunCLI coderCLIRunFunc
-	// RunTerminal runs Codex and Claude Code in persistent terminal sessions when set.
+	// RunTerminal runs Codex and Claude Code in persistent terminal sessions when set; agy always
+	// runs one-shot.
 	RunTerminal func(context.Context, CoderRequest) (string, error)
 	Roots       pathroots.PathRoots
 	// Env is EngineToolsConfig.CoderEnv.
@@ -54,6 +55,8 @@ type coderToolDeps struct {
 	Usage func() *coderusage.Recorder
 	// ReadCodexQuota reads Codex's quota after a Codex run; nil reads none.
 	ReadCodexQuota func(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error)
+	// ReadAgyQuota reads the Antigravity CLI's quota after an agy run; nil reads none.
+	ReadAgyQuota func(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error)
 }
 
 // registerEngineTools registers the enabled engine tools and returns the prompt blocks that go

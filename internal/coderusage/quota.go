@@ -26,7 +26,11 @@ const (
 type Window struct {
 	// Kind is the CLI's name for it: Claude Code's "five_hour", "seven_day", …; Codex's "primary"
 	// or "secondary".
+	// The Antigravity CLI's is its bucket id ("gemini-weekly").
 	Kind string `json:"kind"`
+	// Group is the model group the window is a limit of (the Antigravity CLI's "Gemini Models"),
+	// "" for a window of the whole subscription. Its models are in Quota.Groups.
+	Group string `json:"group,omitempty"`
 	// WindowMinutes is its length (300, 10080), 0 when unknown.
 	WindowMinutes int64 `json:"window_minutes,omitempty"`
 	// UsedPercent is how much of it is used, 0–100; nil when the CLI did not say.
@@ -38,12 +42,21 @@ type Window struct {
 
 // Quota is a coder's subscription quota as last reported.
 type Quota struct {
-	Backend    string   `json:"backend"`
-	Plan       string   `json:"plan,omitempty"`
-	Status     string   `json:"status,omitempty"`
-	Windows    []Window `json:"windows"`
-	ObservedAt string   `json:"observed_at"`
-	Source     string   `json:"source"`
+	Backend string   `json:"backend"`
+	Plan    string   `json:"plan,omitempty"`
+	Status  string   `json:"status,omitempty"`
+	Windows []Window `json:"windows"`
+	// Groups are the model groups the windows belong to, in the CLI's order; none for a coder whose
+	// windows are of the whole subscription.
+	Groups     []Group `json:"groups,omitempty"`
+	ObservedAt string  `json:"observed_at"`
+	Source     string  `json:"source"`
+}
+
+// Group is a set of models that share their usage windows.
+type Group struct {
+	Name   string   `json:"name"`
+	Models []string `json:"models,omitempty"`
 }
 
 // Observed is when the quota was reported (the zero time when unknown).
@@ -218,7 +231,10 @@ func ParseCodexRateLimits(result json.RawMessage, now time.Time) (Quota, error) 
 }
 
 // Note is the quota in a line for the agent and the activity, e.g.
-// "claude quota: 5h 12% used (resets in 3h10m), 7d 2% used (resets in 5d 4h)".
+// "claude quota: 5h 12% used (resets in 3h10m), 7d 2% used (resets in 5d 4h)". A window of a model
+// group is named with its group, and said when it is nearly used up or at its limit:
+// "agy quota: Gemini Models 7d 93% used (nearly used up) (resets in 2d), Claude and GPT models 7d
+// 100% used (limit reached) (resets in 2d); limit reached for Claude and GPT models".
 func (q Quota) Note(now time.Time) string {
 	if len(q.Windows) == 0 {
 		return ""
@@ -226,11 +242,16 @@ func (q Quota) Note(now time.Time) string {
 	parts := make([]string, 0, len(q.Windows))
 	for _, w := range q.Windows {
 		text := WindowLabel(w)
+		if w.Group != "" {
+			text = w.Group + " " + text
+		}
 		if w.UsedPercent != nil {
 			text += fmt.Sprintf(" %.0f%% used", *w.UsedPercent)
 		}
 		if w.Status == StatusRejected {
 			text += " (limit reached)"
+		} else if w.Status == StatusWarning && w.Group != "" {
+			text += " (nearly used up)"
 		}
 		if reset, err := time.Parse(time.RFC3339, w.ResetsAt); err == nil && reset.After(now) {
 			text += " (resets in " + shortDuration(reset.Sub(now)) + ")"
@@ -240,8 +261,29 @@ func (q Quota) Note(now time.Time) string {
 	note := q.Backend + " quota: " + strings.Join(parts, ", ")
 	if q.Status == StatusRejected {
 		note += "; the limit is reached"
+	} else if groups := q.groupsAtLimit(); len(groups) > 0 {
+		// The other groups' models still run.
+		note += "; limit reached for " + strings.Join(groups, ", ")
 	}
 	return note
+}
+
+// groupsAtLimit names the model groups with a window at its limit, in the windows' order.
+func (q Quota) groupsAtLimit() []string {
+	var groups []string
+	for _, w := range q.Windows {
+		if w.Group == "" || w.Status != StatusRejected {
+			continue
+		}
+		seen := false
+		for _, name := range groups {
+			seen = seen || name == w.Group
+		}
+		if !seen {
+			groups = append(groups, w.Group)
+		}
+	}
+	return groups
 }
 
 // WindowLabel names a window by its length, and a model's own window by its model too: "5h",

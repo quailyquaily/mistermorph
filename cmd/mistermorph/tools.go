@@ -55,7 +55,7 @@ func runToolsCmd(cmd *cobra.Command, _ []string, registryFactory func() *tools.R
 	if viper.GetBool("tools.coder.enabled") {
 		addToolPreview(extraPreviews, toolPreview{
 			Name:        "coder",
-			Description: "Runs a coding subtask with the local Codex or Claude Code CLI and streams JSON output as tool events.",
+			Description: "Runs a coding subtask with the local Codex, Claude Code or Antigravity (agy) CLI and streams JSON output as tool events.",
 		})
 	}
 	// Runtime tools are injected in run/serve/telegram/slack.

@@ -1,0 +1,3 @@
+{"event":"init","conversation_id":"97336c2d-0000-4000-8000-000000000000","init":{"cwd":"/work","tools":["ask_permission","run_command"],"permission_mode":"request-review"}}
+{"event":"step_update","step_update":{"conversation_id":"97336c2d-0000-4000-8000-000000000000","step_index":0,"state":"DONE","step_type":"user_input"}}
+{"event":"result","result":{"conversation_id":"97336c2d-0000-4000-8000-000000000000","status":"ERROR","response":"","error":"model quota exhausted for this group","duration_seconds":1.5,"num_turns":0,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0},"finished_reason":"error"}}

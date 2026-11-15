@@ -1,14 +1,20 @@
-// Package coderusage reads what the local coding CLIs the coder tool runs (Codex, Claude Code)
-// report about their use: what each run used (tokens, and Claude Code's cost), and how much of the
+// Package coderusage reads what the local coding CLIs the coder tool runs (Codex, Claude Code, the
+// Antigravity CLI) report about their use: what each run used (tokens, and Claude Code's cost), and how much of the
 // user's subscription quota is left (the 5-hour and weekly windows). Runs go into usage.db as LLM
 // usage; the last quota of each coder is kept beside them (llmstats.UsageStore.PutCoderQuota).
 //
 // Sources, each the CLI's own:
+//
 //   - Codex: `codex exec --json` ends each turn with `turn.completed` and its `usage`; its quota
 //     comes only from the app server's `account/rateLimits/read` (ReadCodexQuota), which uses no
 //     quota itself.
+//
 //   - Claude Code: `claude -p --output-format stream-json` reports the quota in a
 //     `rate_limit_event` during the run and the run's cost and tokens per model in `result`.
+//
+//   - Antigravity CLI: `agy --output-format stream-json` ends with a `result` and the run's
+//     `usage` (tokens, no cost); its quota, per model group, comes from `agy -p /usage
+//     --output-format json` (ReadAgyQuota), which the CLI answers itself.
 //
 // Nothing here reads the CLIs' credentials or calls their services directly.
 package coderusage
@@ -24,7 +30,11 @@ import (
 const (
 	BackendCodex  = "codex"
 	BackendClaude = "claude"
+	BackendAgy    = "agy"
 )
+
+// Backends are the coders, in the order they are listed.
+var Backends = []string{BackendCodex, BackendClaude, BackendAgy}
 
 // ModelUsage is what one run used of one model. InputTokens counts every input token, cached
 // reads and cache writes included (as llmstats counts them).
@@ -65,6 +75,8 @@ type Run struct {
 	Models     []ModelUsage
 	Turns      int
 	DurationMs int64
+	// NotSignedIn says the run failed because the CLI had no sign-in (the Antigravity CLI).
+	NotSignedIn bool
 }
 
 // Empty reports whether the run reported no usage at all.

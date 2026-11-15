@@ -14,8 +14,9 @@ import (
 )
 
 // findCoderCommand and readCoderQuota are the CLI lookups the quota routes use (tests replace
-// them): Codex's app server, Claude Code's /usage; neither uses quota. The CLIs are found and
-// started as the coder tool does it: in the bash tool's environment, with the coder's PATH.
+// them): Codex's app server, Claude Code's /usage, the Antigravity CLI's /usage; none uses quota.
+// The CLIs are found and started as the coder tool does it: in the bash tool's environment, with
+// the coder's PATH.
 var (
 	// coderEnvFromSettings reads the coder's environment settings for a request.
 	coderEnvFromSettings = func(settings agentsettings.Reader) shellenv.CoderEnv {
@@ -29,8 +30,11 @@ var (
 		if err != nil {
 			return coderusage.Quota{}, err
 		}
-		if backend == coderusage.BackendClaude {
+		switch backend {
+		case coderusage.BackendClaude:
 			return coderusage.ReadClaudeQuota(ctx, command, env)
+		case coderusage.BackendAgy:
+			return coderusage.ReadAgyQuota(ctx, command, env)
 		}
 		return coderusage.ReadCodexQuota(ctx, command, env)
 	}
@@ -47,7 +51,8 @@ type coderQuotaPayload struct {
 
 // registerCoderQuotaRoutes serves the local coding CLIs' subscription quotas: GET
 // /stats/coder/quota gives the last ones saved; POST /stats/coder/quota/refresh reads each
-// installed coder's first, at once (Codex's app server, Claude Code's /usage).
+// installed coder's first, at once (Codex's app server, Claude Code's /usage, the Antigravity
+// CLI's /usage).
 func registerCoderQuotaRoutes(mux *http.ServeMux, authToken string, openStore func(context.Context) (*llmstats.UsageStore, error), settings agentsettings.Reader) {
 	serve := func(w http.ResponseWriter, r *http.Request, refresh bool) {
 		if !checkAuth(r, authToken) {
@@ -56,7 +61,7 @@ func registerCoderQuotaRoutes(mux *http.ServeMux, authToken string, openStore fu
 		}
 		coderEnv := coderEnvFromSettings(settings)
 		payload := coderQuotaPayload{Available: map[string]bool{}}
-		for _, backend := range []string{coderusage.BackendCodex, coderusage.BackendClaude} {
+		for _, backend := range coderusage.Backends {
 			_, _, err := findCoderCommand(backend, coderEnv)
 			payload.Available[backend] = err == nil
 		}
@@ -69,7 +74,7 @@ func registerCoderQuotaRoutes(mux *http.ServeMux, authToken string, openStore fu
 		if refresh {
 			var mu sync.Mutex
 			var wg sync.WaitGroup
-			for _, backend := range []string{coderusage.BackendCodex, coderusage.BackendClaude} {
+			for _, backend := range coderusage.Backends {
 				if !payload.Available[backend] {
 					continue
 				}

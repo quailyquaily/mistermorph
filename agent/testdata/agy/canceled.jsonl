@@ -1,0 +1,4 @@
+{"event":"init","conversation_id":"97336c2d-0000-4000-8000-000000000000","init":{"cwd":"/work","tools":["ask_permission","run_command"],"permission_mode":"request-review"}}
+{"event":"step_update","step_update":{"conversation_id":"97336c2d-0000-4000-8000-000000000000","step_index":0,"state":"DONE","step_type":"user_input"}}
+{"event":"step_update","step_update":{"conversation_id":"97336c2d-0000-4000-8000-000000000000","step_index":1,"state":"DONE","step_type":"agent_response","duration_seconds":3.2,"usage":{"input_tokens":8740,"output_tokens":84,"thinking_tokens":75,"cache_read_tokens":0,"total_tokens":8824}}}
+{"event":"result","result":{"conversation_id":"97336c2d-0000-4000-8000-000000000000","status":"CANCELED","response":"","duration_seconds":2.5,"num_turns":1,"usage":{"input_tokens":8740,"output_tokens":84,"thinking_tokens":75,"cache_read_tokens":0,"total_tokens":8824}}}
