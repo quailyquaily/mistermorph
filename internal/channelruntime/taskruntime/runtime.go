@@ -1271,14 +1271,27 @@ func (r *coderTerminalReport) status(data []byte) {
 func (r *coderTerminalReport) usage(usage coderterm.Usage) {
 	r.run = coderusage.Run{Turns: usage.Turns}
 	for _, m := range usage.Models {
-		r.run.Models = append(r.run.Models, coderusage.ModelUsage{
+		model := coderusage.ModelUsage{
 			Model:                    m.Model,
 			InputTokens:              m.InputTokens,
 			CachedInputTokens:        m.CachedInputTokens,
 			CacheCreationInputTokens: m.CacheCreationInputTokens,
 			OutputTokens:             m.OutputTokens,
 			ReasoningTokens:          m.ReasoningTokens,
-		})
+			CacheDetails:             m.CacheCreation,
+		}
+		// The responses go along one by one: the rows are priced by them, not by their sum.
+		for _, response := range m.Responses {
+			model.Requests = append(model.Requests, coderusage.RequestUsage{
+				InputTokens:              response.InputTokens,
+				CachedInputTokens:        response.CachedInputTokens,
+				CacheCreationInputTokens: response.CacheCreationInputTokens,
+				OutputTokens:             response.OutputTokens,
+				CacheDetails:             response.CacheCreation,
+				Count:                    response.Count,
+			})
+		}
+		r.run.Models = append(r.run.Models, model)
 	}
 }
 

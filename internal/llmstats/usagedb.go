@@ -64,6 +64,32 @@ const (
 	repriceBatch = 500
 )
 
+// pricingPartsColumnSQL adds the column that keeps the upstream requests a row sums
+// (RequestRecord.PricingParts), as JSON; empty for a row that is one request. Like coder_quota it
+// is not a migration step, so an older build still opens the file: that build names the columns
+// it writes and leaves this one at its default.
+const pricingPartsColumnSQL = `ALTER TABLE llm_requests ADD COLUMN pricing_parts TEXT NOT NULL DEFAULT ''`
+
+// ensurePricingPartsColumn adds the column when the table has none yet.
+func ensurePricingPartsColumn(ctx context.Context, db *sql.DB) error {
+	var have int
+	const query = `SELECT COUNT(*) FROM pragma_table_info('llm_requests') WHERE name = 'pricing_parts'`
+	if err := db.QueryRowContext(ctx, query).Scan(&have); err != nil {
+		return err
+	}
+	if have > 0 {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, pricingPartsColumnSQL); err != nil {
+		// Another process may have added it between the two statements.
+		if again := db.QueryRowContext(ctx, query).Scan(&have); again == nil && have > 0 {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 // LegacyUsageJournalDir is where the JSONL usage journal was, relative to the state folder.
 var LegacyUsageJournalDir = filepath.Join("stats", "llm_usage")
 
@@ -101,7 +127,8 @@ type UsageStoreOptions struct {
 	Logger        *slog.Logger
 }
 
-// UsageStore is the LLM usage in usage.db: one row per successful call.
+// UsageStore is the LLM usage in usage.db: one row per successful call, and one per model of a
+// coder run.
 type UsageStore struct {
 	db      *sql.DB
 	path    string
@@ -142,6 +169,10 @@ func OpenUsageStore(ctx context.Context, path string, opts UsageStoreOptions) (*
 		if _, err := db.ExecContext(ctx, coderQuotaSchemaSQL); err != nil {
 			_ = db.Close()
 			return nil, fmt.Errorf("open usage database: create coder quota: %w", err)
+		}
+		if err := ensurePricingPartsColumn(ctx, db); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("open usage database: add pricing parts: %w", err)
 		}
 		if err := stateimport.FinishRenames(ctx, db, stateDir, logger); err != nil {
 			logger.Warn("llm_usage_import_rename_failed", "error", err)
@@ -225,7 +256,7 @@ func (s *UsageStore) repriceBatch(ctx context.Context, catalog *uniaiapi.Pricing
 	}
 	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctx, `SELECT id, operation, model, input_tokens, output_tokens, total_tokens, cached_input_tokens,
-		cache_creation_input_tokens, cache_details FROM llm_requests
+		cache_creation_input_tokens, cache_details, pricing_parts FROM llm_requests
 		WHERE id > ? AND operation IN ('chat', 'coder') AND cost_source IN ('catalog', '') ORDER BY id LIMIT ?`, after, repriceBatch)
 	if err != nil {
 		return 0, after, err
@@ -237,13 +268,14 @@ func (s *UsageStore) repriceBatch(ctx context.Context, catalog *uniaiapi.Pricing
 	var batch []pending
 	for rows.Next() {
 		var p pending
-		var details string
+		var details, parts string
 		if err := rows.Scan(&p.id, &p.rec.Operation, &p.rec.Model, &p.rec.InputTokens, &p.rec.OutputTokens, &p.rec.TotalTokens,
-			&p.rec.CachedInputTokens, &p.rec.CacheCreationInputTokens, &details); err != nil {
+			&p.rec.CachedInputTokens, &p.rec.CacheCreationInputTokens, &details, &parts); err != nil {
 			_ = rows.Close()
 			return 0, after, err
 		}
 		_ = json.Unmarshal([]byte(details), &p.rec.CacheDetails)
+		p.rec.PricingParts = decodePricingParts(parts)
 		batch = append(batch, p)
 	}
 	if err := rows.Close(); err != nil {
@@ -336,20 +368,45 @@ func insertRequest(ctx context.Context, db execer, rec RequestRecord, ts time.Ti
 		}
 		evaluation = string(data)
 	}
-	_, err := db.ExecContext(ctx, `INSERT INTO llm_requests (ts, run_id, origin_event_id, provider, api_base, api_host, model,
-		operation, scene, input_tokens, output_tokens, total_tokens, cached_input_tokens, cache_creation_input_tokens,
-		cache_details, cost_currency, cost_estimated, cost_source, input_cost, cached_input_cost, cache_creation_input_cost,
-		output_cost, total_cost, duration_ms, evaluation)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	// The JSONL import runs as a migration step, before the pricing_parts column is added: only
+	// a row that has parts names the column, and an imported row has none.
+	columns, values := "", ""
+	args := make([]any, 0, 26)
+	if len(rec.PricingParts) > 0 {
+		data, err := json.Marshal(rec.PricingParts)
+		if err != nil {
+			return err
+		}
+		columns, values = "pricing_parts, ", "?, "
+		args = append(args, string(data))
+	}
+	args = append(args,
 		ts.UnixMilli(), rec.RunID, rec.OriginEventID, rec.Provider, rec.APIBase, rec.APIHost, rec.Model,
 		rec.Operation, rec.Scene, rec.InputTokens, rec.OutputTokens, rec.TotalTokens, rec.CachedInputTokens,
 		rec.CacheCreationInputTokens, details, rec.CostCurrency, boolInt(rec.CostEstimated), costSource,
 		rec.InputCost, rec.CachedInputCost, rec.CacheCreationInputCost, rec.OutputCost, rec.TotalCost,
 		rec.DurationMs, evaluation)
+	_, err := db.ExecContext(ctx, `INSERT INTO llm_requests (`+columns+`ts, run_id, origin_event_id, provider, api_base, api_host, model,
+		operation, scene, input_tokens, output_tokens, total_tokens, cached_input_tokens, cache_creation_input_tokens,
+		cache_details, cost_currency, cost_estimated, cost_source, input_cost, cached_input_cost, cache_creation_input_cost,
+		output_cost, total_cost, duration_ms, evaluation)
+		VALUES (`+values+`?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args...)
 	if err != nil {
 		return fmt.Errorf("record llm usage: %w", err)
 	}
 	return nil
+}
+
+// decodePricingParts reads the pricing_parts column; text that is not parts gives none.
+func decodePricingParts(raw string) []PricingPart {
+	if raw == "" {
+		return nil
+	}
+	var parts []PricingPart
+	if json.Unmarshal([]byte(raw), &parts) != nil {
+		return nil
+	}
+	return normalizePricingParts(parts)
 }
 
 func parseRecordTime(raw string) (time.Time, error) {

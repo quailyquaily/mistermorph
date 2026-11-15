@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -51,9 +52,14 @@ func (r Run) Records(ctx context.Context, ts time.Time) []llmstats.RequestRecord
 			CachedInputTokens:        m.CachedInputTokens,
 			CacheCreationInputTokens: m.CacheCreationInputTokens,
 		}
+		if len(m.CacheDetails) > 0 {
+			rec.CacheDetails = maps.Clone(m.CacheDetails)
+		}
 		if m.CostUSD > 0 {
 			// The CLI's price is the list price: on a subscription it is not what is billed.
 			rec.CostCurrency, rec.CostEstimated, rec.TotalCost = "USD", true, m.CostUSD
+		} else {
+			rec.PricingParts = m.pricingParts()
 		}
 		// The run's duration goes on its first row only, so totals do not count it twice.
 		if i == 0 {
@@ -62,6 +68,26 @@ func (r Run) Records(ctx context.Context, ts time.Time) []llmstats.RequestRecord
 		out = append(out, rec)
 	}
 	return out
+}
+
+// pricingParts are the model's requests as the row keeps them for pricing. One request that is
+// the whole usage needs none: the row's own numbers are that request's.
+func (m ModelUsage) pricingParts() []llmstats.PricingPart {
+	if len(m.Requests) == 0 || (len(m.Requests) == 1 && (m.Requests[0].Count == 0 || m.Requests[0].Count == 1)) {
+		return nil
+	}
+	parts := make([]llmstats.PricingPart, 0, len(m.Requests))
+	for _, r := range m.Requests {
+		parts = append(parts, llmstats.PricingPart{
+			InputTokens:              r.InputTokens,
+			CachedInputTokens:        r.CachedInputTokens,
+			CacheCreationInputTokens: r.CacheCreationInputTokens,
+			OutputTokens:             r.OutputTokens,
+			CacheDetails:             maps.Clone(r.CacheDetails),
+			Count:                    r.Count,
+		})
+	}
+	return parts
 }
 
 // Recorder writes coder runs and quotas into usage.db.

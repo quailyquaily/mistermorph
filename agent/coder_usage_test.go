@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -157,6 +158,14 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 			req.Report(coderusage.Run{Turns: 2, Models: []coderusage.ModelUsage{
 				{Model: "claude-opus-5-5", InputTokens: 1_000_000, CachedInputTokens: 400_000, CacheCreationInputTokens: 100_000, OutputTokens: 20_000},
 				{Model: "claude-not-in-the-catalog", InputTokens: 500, OutputTokens: 5},
+				// Three responses of 50,000 input tokens each, one of them writing to the 1-hour cache.
+				{Model: "claude-haiku-5-5", InputTokens: 150_000, CachedInputTokens: 96_000, CacheCreationInputTokens: 48_000, OutputTokens: 3000,
+					CacheDetails: map[string]int64{"ephemeral_1h_input_tokens": 48_000},
+					Requests: []coderusage.RequestUsage{
+						{InputTokens: 50_000, CacheCreationInputTokens: 48_000, OutputTokens: 1000, CacheDetails: map[string]int64{"ephemeral_1h_input_tokens": 48_000}},
+						{InputTokens: 50_000, CachedInputTokens: 48_000, OutputTokens: 1000},
+						{InputTokens: 50_000, CachedInputTokens: 48_000, OutputTokens: 1000},
+					}},
 			}}, &coderusage.Quota{Backend: "claude", Status: coderusage.StatusAllowed, ObservedAt: "2026-11-15T09:00:00Z",
 				Windows: []coderusage.Window{{Kind: "five_hour", WindowMinutes: 300, UsedPercent: &used, Status: coderusage.StatusAllowed}}})
 			return "fixed in the terminal", nil
@@ -178,7 +187,7 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 	if reports != 1 || result.Status != SubtaskStatusDone || result.Output != "fixed in the terminal" {
 		t.Fatalf("reports = %d, result = %+v", reports, result)
 	}
-	for _, want := range []string{"claude run: 1.0M in (400.0k cached) · 20.0k out · 2 turns", "claude quota: 5h 61% used"} {
+	for _, want := range []string{"claude run: 1.2M in (496.0k cached) · 23.0k out · 2 turns", "claude quota: 5h 61% used"} {
 		if !strings.Contains(result.Usage, want) {
 			t.Fatalf("usage = %q, want %q", result.Usage, want)
 		}
@@ -193,10 +202,19 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 	}
 	defer store.Close()
 	records, err := store.Records(ctx, 10)
-	if err != nil || len(records) != 2 {
+	if err != nil || len(records) != 3 {
 		t.Fatalf("records = %+v, %v", records, err)
 	}
-	known, unknown := records[0], records[1]
+	known, unknown, byRequest := records[0], records[1], records[2]
+	// A row of several requests is priced request by request, each in its own tier of the
+	// catalog (claude-haiku-5-5 up to 100,000 input tokens: $0.10 in, $0.01 cached, $0.20 for a
+	// 1-hour cache write, $0.50 out per 1M), not as one request of their sum.
+	wantCost := 3*(2000*0.10+1000*0.50)/1e6 + 2*48_000*0.01/1e6 + 48_000*0.20/1e6
+	if byRequest.Model != "claude-haiku-5-5" || byRequest.InputTokens != 150_000 || len(byRequest.PricingParts) != 3 ||
+		byRequest.CacheDetails["ephemeral_1h_input_tokens"] != 48_000 ||
+		math.Abs(byRequest.TotalCost-wantCost) > 1e-9 || math.Abs(byRequest.CacheCreationInputCost-48_000*0.20/1e6) > 1e-9 {
+		t.Fatalf("record priced by request = %+v, want cost %v", byRequest, wantCost)
+	}
 	if known.APIHost != "claude-code" || known.Operation != llmstats.OperationCoder || known.Scene != llmstats.OperationCoder ||
 		known.Model != "claude-opus-5-5" || known.RunID != "run-9" || known.InputTokens != 1_000_000 || known.CachedInputTokens != 400_000 ||
 		known.CacheCreationInputTokens != 100_000 || known.OutputTokens != 20_000 {

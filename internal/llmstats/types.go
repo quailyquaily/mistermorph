@@ -64,6 +64,55 @@ type RequestRecord struct {
 	OutputCost               float64           `json:"output_cost,omitempty"`
 	TotalCost                float64           `json:"total_cost,omitempty"`
 	DurationMs               int64             `json:"duration_ms,omitempty"`
+	// PricingParts are the upstream requests the row sums, when it sums several and reports no
+	// cost: a catalog price is per request (its tier goes by one request's input), so the row is
+	// priced part by part. Empty for a row that is one request.
+	PricingParts []PricingPart `json:"pricing_parts,omitempty"`
+}
+
+// PricingPart is one upstream request of a row that sums several (a response of a terminal coder
+// run), with what its price depends on. The token counts are RequestRecord's.
+type PricingPart struct {
+	InputTokens              int64            `json:"in,omitempty"`
+	CachedInputTokens        int64            `json:"cached,omitempty"`
+	CacheCreationInputTokens int64            `json:"write,omitempty"`
+	OutputTokens             int64            `json:"out,omitempty"`
+	CacheDetails             map[string]int64 `json:"details,omitempty"`
+	// Count is how many such requests the part stands for; 0 means 1. A negative count takes
+	// back a request an earlier row counted, when a later row counts its corrected numbers.
+	Count int64 `json:"n,omitempty"`
+}
+
+func (p PricingPart) count() int64 {
+	if p.Count == 0 {
+		return 1
+	}
+	return p.Count
+}
+
+func normalizePricingParts(in []PricingPart) []PricingPart {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]PricingPart, 0, len(in))
+	for _, p := range in {
+		p.InputTokens = nonNegative(p.InputTokens)
+		p.CachedInputTokens = nonNegative(p.CachedInputTokens)
+		p.CacheCreationInputTokens = nonNegative(p.CacheCreationInputTokens)
+		p.OutputTokens = nonNegative(p.OutputTokens)
+		p.CacheDetails = normalizeCacheDetails(p.CacheDetails)
+		if p.Count == 1 {
+			p.Count = 0
+		}
+		if p.InputTokens == 0 && p.OutputTokens == 0 {
+			continue
+		}
+		out = append(out, p)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // EvaluationRecord preserves missing counts separately from aggregate zeros.
@@ -159,6 +208,7 @@ func normalizeRequestRecord(rec RequestRecord) RequestRecord {
 	rec.CachedInputTokens = nonNegative(rec.CachedInputTokens)
 	rec.CacheCreationInputTokens = nonNegative(rec.CacheCreationInputTokens)
 	rec.CacheDetails = normalizeCacheDetails(rec.CacheDetails)
+	rec.PricingParts = normalizePricingParts(rec.PricingParts)
 	rec.CostCurrency = normalizeCostCurrency(rec.CostCurrency)
 	rec.InputCost = nonNegativeFloat(rec.InputCost)
 	rec.CachedInputCost = nonNegativeFloat(rec.CachedInputCost)

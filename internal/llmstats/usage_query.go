@@ -345,7 +345,7 @@ func (s *UsageStore) Records(ctx context.Context, limit int) ([]RequestRecord, e
 	query := `SELECT ts, run_id, origin_event_id, provider, api_base, api_host, model, operation, scene, input_tokens,
 		output_tokens, total_tokens, cached_input_tokens, cache_creation_input_tokens, cache_details, cost_currency,
 		cost_estimated, input_cost, cached_input_cost, cache_creation_input_cost, output_cost, total_cost, duration_ms,
-		evaluation FROM llm_requests ORDER BY id`
+		evaluation, pricing_parts FROM llm_requests ORDER BY id`
 	var args []any
 	if limit > 0 {
 		query += ` LIMIT ?`
@@ -363,10 +363,11 @@ func (s *UsageStore) Records(ctx context.Context, limit int) ([]RequestRecord, e
 		var details string
 		var estimated int
 		var evaluation sql.NullString
+		var parts string
 		if err := rows.Scan(&ts, &rec.RunID, &rec.OriginEventID, &rec.Provider, &rec.APIBase, &rec.APIHost, &rec.Model,
 			&rec.Operation, &rec.Scene, &rec.InputTokens, &rec.OutputTokens, &rec.TotalTokens, &rec.CachedInputTokens,
 			&rec.CacheCreationInputTokens, &details, &rec.CostCurrency, &estimated, &rec.InputCost, &rec.CachedInputCost,
-			&rec.CacheCreationInputCost, &rec.OutputCost, &rec.TotalCost, &rec.DurationMs, &evaluation); err != nil {
+			&rec.CacheCreationInputCost, &rec.OutputCost, &rec.TotalCost, &rec.DurationMs, &evaluation, &parts); err != nil {
 			return nil, err
 		}
 		rec.TS = time.UnixMilli(ts).UTC().Format(time.RFC3339Nano)
@@ -374,6 +375,7 @@ func (s *UsageStore) Records(ctx context.Context, limit int) ([]RequestRecord, e
 		if details != "" && details != "{}" {
 			_ = json.Unmarshal([]byte(details), &rec.CacheDetails)
 		}
+		rec.PricingParts = decodePricingParts(parts)
 		if evaluation.Valid && evaluation.String != "" {
 			rec.Evaluation = &EvaluationRecord{}
 			if err := json.Unmarshal([]byte(evaluation.String), rec.Evaluation); err != nil {

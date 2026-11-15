@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -164,6 +165,48 @@ func TestRecordsAndQuotasInUsageDB(t *testing.T) {
 	none.SaveQuota(ctx, quota)
 	if NewRecorder("", nil) != nil {
 		t.Fatal("a recorder without a path")
+	}
+}
+
+// A run's rows keep what their price depends on: the cache writes by lifetime, and the model's
+// requests when there are several and the CLI gave no cost.
+func TestRecordsKeepRequestsAndCacheDetails(t *testing.T) {
+	request := RequestUsage{InputTokens: 50_000, CachedInputTokens: 48_000, OutputTokens: 1000}
+	hour := map[string]int64{"ephemeral_1h_input_tokens": 700}
+	run := Run{Backend: BackendClaude, DurationMs: 900, Models: []ModelUsage{
+		{Model: "claude-haiku-5-5", InputTokens: 100_000, CachedInputTokens: 96_000, OutputTokens: 2000,
+			Requests: []RequestUsage{request, request}},
+		{Model: "claude-sonnet-5-5", InputTokens: 710, CacheCreationInputTokens: 700, OutputTokens: 5, CacheDetails: hour,
+			Requests: []RequestUsage{{InputTokens: 710, CacheCreationInputTokens: 700, OutputTokens: 5, CacheDetails: hour, Count: 1}}},
+		{Model: "claude-opus-5-5", InputTokens: 10, OutputTokens: 60, Requests: []RequestUsage{
+			{InputTokens: 1210, OutputTokens: 4, Count: -1}, {InputTokens: 1210, OutputTokens: 60, Count: 1}, {InputTokens: 10, Count: 1},
+		}},
+		// The CLI's own cost is the row's cost: nothing is priced, so nothing is kept for it.
+		{Model: "claude-fable-5-2", InputTokens: 100, OutputTokens: 1, CostUSD: 0.5, Requests: []RequestUsage{request, request}},
+	}}
+	records := run.Records(context.Background(), time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC))
+	if len(records) != 4 {
+		t.Fatalf("records = %+v", records)
+	}
+	part := llmstats.PricingPart{InputTokens: 50_000, CachedInputTokens: 48_000, OutputTokens: 1000}
+	if got := records[0]; !reflect.DeepEqual(got.PricingParts, []llmstats.PricingPart{part, part}) || got.CacheDetails != nil ||
+		got.InputTokens != 100_000 || got.TotalTokens != 102_000 || got.DurationMs != 900 {
+		t.Fatalf("two requests = %+v", got)
+	}
+	// One request that is the whole usage: the row's own numbers say it.
+	if got := records[1]; got.PricingParts != nil || !reflect.DeepEqual(got.CacheDetails, hour) || got.CacheCreationInputTokens != 700 {
+		t.Fatalf("one request = %+v", got)
+	}
+	if got := records[2]; len(got.PricingParts) != 3 || got.PricingParts[0].Count != -1 || got.PricingParts[1].Count != 1 {
+		t.Fatalf("corrected request = %+v", got)
+	}
+	if got := records[3]; got.PricingParts != nil || got.TotalCost != 0.5 || !got.CostEstimated {
+		t.Fatalf("the CLI's cost = %+v", got)
+	}
+	// The row's details are its own copy.
+	records[1].CacheDetails["ephemeral_1h_input_tokens"] = 1
+	if hour["ephemeral_1h_input_tokens"] != 700 {
+		t.Fatal("the run's cache details changed with the record's")
 	}
 }
 

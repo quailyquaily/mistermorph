@@ -17,6 +17,16 @@ func writeUsageFile(t *testing.T, path, data string) {
 	}
 }
 
+// sums is the usage without its responses, for the checks of what was counted.
+func sums(u Usage) Usage {
+	out := Usage{Turns: u.Turns}
+	for _, m := range u.Models {
+		m.Responses = nil
+		out.Models = append(out.Models, m)
+	}
+	return out
+}
+
 func appendUsageFile(t *testing.T, path, data string) {
 	t.Helper()
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
@@ -61,7 +71,7 @@ func TestClaudeUsageCountsEachResponseOncePerModel(t *testing.T) {
 		// Three lines of one response: counted once, with its last line's output.
 		{Model: "claude-opus-5-5", InputTokens: 1210, CachedInputTokens: 1000, CacheCreationInputTokens: 200, OutputTokens: 60},
 	}}
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(sums(got), want) {
 		t.Fatalf("usage = %+v\nwant   %+v", got, want)
 	}
 	// Nothing new: nothing counted twice.
@@ -97,7 +107,7 @@ func TestClaudeUsageOverTasks(t *testing.T) {
 		// msg_3 by its last line (1 in, 6 out) and msg_4 (52 in, 9 out).
 		{Model: "claude-opus-5-5", InputTokens: 53, CachedInputTokens: 50, OutputTokens: 15},
 	}}
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(sums(got), want) {
 		t.Fatalf("usage = %+v\nwant   %+v", got, want)
 	}
 
@@ -130,7 +140,7 @@ func TestClaudeUsageOfAResumedSessionStartsAtTheEnd(t *testing.T) {
 		{Model: "claude-haiku-5-5", InputTokens: 1, OutputTokens: 1},
 		{Model: "claude-opus-5-5", InputTokens: 3, OutputTokens: 4},
 	}}
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(sums(got), want) {
 		t.Fatalf("usage = %+v\nwant   %+v", got, want)
 	}
 	// A session whose file does not exist yet starts at 0.
@@ -178,7 +188,7 @@ func TestCodexUsageSumsLastTokenUsage(t *testing.T) {
 	got := r.take()
 	// The sub-agent's rollout is not written yet: only the parent's two responses.
 	want := Usage{Turns: 1, Models: []ModelUsage{{Model: "codex", InputTokens: 3000, CachedInputTokens: 1600, CacheCreationInputTokens: 100, OutputTokens: 80, ReasoningTokens: 20}}}
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(sums(got), want) {
 		t.Fatalf("usage = %+v\nwant   %+v", got, want)
 	}
 
@@ -191,7 +201,7 @@ func TestCodexUsageSumsLastTokenUsage(t *testing.T) {
 	r.read(path)
 	got = r.take()
 	want = Usage{Models: []ModelUsage{{Model: "codex", InputTokens: 500, OutputTokens: 45, ReasoningTokens: 5}}}
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(sums(got), want) {
 		t.Fatalf("second task = %+v\nwant          %+v", got, want)
 	}
 }
@@ -211,7 +221,7 @@ func TestCodexUsageOfAResumedSessionStartsAtTheEnd(t *testing.T) {
 	r.read(path)
 	got := r.take()
 	want := Usage{Models: []ModelUsage{{Model: "codex", InputTokens: 70, OutputTokens: 3}}}
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(sums(got), want) {
 		t.Fatalf("usage = %+v\nwant   %+v", got, want)
 	}
 }

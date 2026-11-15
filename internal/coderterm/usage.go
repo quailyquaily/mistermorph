@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,6 +23,34 @@ type ModelUsage struct {
 	CacheCreationInputTokens int64
 	OutputTokens             int64
 	ReasoningTokens          int64
+	// CacheCreation splits CacheCreationInputTokens by the cache's lifetime, under the CLI's own
+	// names (Claude Code: ephemeral_5m_input_tokens, ephemeral_1h_input_tokens), when it says.
+	CacheCreation map[string]int64
+	// Responses are the model's responses the usage sums, when the CLI's files tell them apart
+	// (Claude Code): a list price goes by the single request, so the sum alone cannot be priced.
+	Responses []ResponseUsage
+}
+
+// ResponseUsage is what one response used; the fields are ModelUsage's.
+type ResponseUsage struct {
+	InputTokens              int64
+	CachedInputTokens        int64
+	CacheCreationInputTokens int64
+	OutputTokens             int64
+	CacheCreation            map[string]int64
+	// Count is 1, or -1 for a response an earlier task of the session reported with these
+	// numbers and this task reports again with corrected ones.
+	Count int64
+}
+
+func (u ResponseUsage) same(o ResponseUsage) bool {
+	return u.InputTokens == o.InputTokens && u.CachedInputTokens == o.CachedInputTokens &&
+		u.CacheCreationInputTokens == o.CacheCreationInputTokens && u.OutputTokens == o.OutputTokens &&
+		maps.Equal(u.CacheCreation, o.CacheCreation)
+}
+
+func (u ResponseUsage) zero() bool {
+	return u.InputTokens <= 0 && u.OutputTokens <= 0
 }
 
 func (u *ModelUsage) add(o ModelUsage) {
@@ -30,14 +59,6 @@ func (u *ModelUsage) add(o ModelUsage) {
 	u.CacheCreationInputTokens += o.CacheCreationInputTokens
 	u.OutputTokens += o.OutputTokens
 	u.ReasoningTokens += o.ReasoningTokens
-}
-
-func (u *ModelUsage) sub(o ModelUsage) {
-	u.InputTokens -= o.InputTokens
-	u.CachedInputTokens -= o.CachedInputTokens
-	u.CacheCreationInputTokens -= o.CacheCreationInputTokens
-	u.OutputTokens -= o.OutputTokens
-	u.ReasoningTokens -= o.ReasoningTokens
 }
 
 func (u ModelUsage) zero() bool {
@@ -117,15 +138,56 @@ func (t *usageTotals) model(name string) *ModelUsage {
 	return m
 }
 
+// response adds one response to its model and returns where it is kept, for replace.
+func (t *usageTotals) response(model string, usage ResponseUsage) int {
+	m := t.model(model)
+	m.Responses = append(m.Responses, usage)
+	return len(m.Responses) - 1
+}
+
+// replace puts a response's later numbers in place of the ones response kept at index.
+func (t *usageTotals) replace(model string, index int, usage ResponseUsage) {
+	if m := t.models[model]; m != nil && index < len(m.Responses) {
+		m.Responses[index] = usage
+	}
+}
+
 func (t *usageTotals) take() Usage {
 	out := Usage{Turns: t.turns}
 	for _, m := range t.models {
+		// A model counted by its responses is their sum.
+		responses := m.Responses
+		m.Responses = nil
+		for _, r := range responses {
+			if r.zero() || r.Count == 0 {
+				continue // a response whose later line moved it to another model
+			}
+			m.Responses = append(m.Responses, r)
+			m.InputTokens += r.Count * r.InputTokens
+			m.CachedInputTokens += r.Count * r.CachedInputTokens
+			m.CacheCreationInputTokens += r.Count * r.CacheCreationInputTokens
+			m.OutputTokens += r.Count * r.OutputTokens
+			for key, tokens := range r.CacheCreation {
+				if m.CacheCreation == nil {
+					m.CacheCreation = map[string]int64{}
+				}
+				m.CacheCreation[key] += r.Count * tokens
+			}
+		}
 		// A later line of a message can correct an earlier one downward across two tasks.
 		m.InputTokens = max(m.InputTokens, 0)
 		m.CachedInputTokens = max(m.CachedInputTokens, 0)
 		m.CacheCreationInputTokens = max(m.CacheCreationInputTokens, 0)
 		m.OutputTokens = max(m.OutputTokens, 0)
 		m.ReasoningTokens = max(m.ReasoningTokens, 0)
+		for key, tokens := range m.CacheCreation {
+			if tokens <= 0 {
+				delete(m.CacheCreation, key)
+			}
+		}
+		if len(m.CacheCreation) == 0 {
+			m.CacheCreation = nil
+		}
 		if !m.zero() {
 			out.Models = append(out.Models, *m)
 		}
@@ -138,22 +200,29 @@ func (t *usageTotals) take() Usage {
 // claudeUsage reads Claude Code's transcript and its sub-agents' files
 // (<session id>/subagents/agent-*.jsonl beside it). Every assistant line carries its response's
 // usage, and one response is written as several lines (one per content block) with the same
-// message ID: a response counts once, by its last line.
+// message ID: a response counts once, by its last line. The responses are kept apart, not only
+// summed, since each is priced as the request it was.
 type claudeUsage struct {
 	files  map[string]*usageFile
 	seen   map[string]claudeCounted // by message ID, over all the session's files
 	ended  map[string]bool          // messages a turn ended on
+	task   int                      // counts the takes: which task a response was counted in
 	totals usageTotals
 }
 
 type claudeCounted struct {
 	model string
-	usage ModelUsage
+	usage ResponseUsage
+	task  int // the task that counted it
+	index int // where that task's totals keep it
 }
 
 func (claudeBackend) newUsage() usageReader { return &claudeUsage{} }
 
-func (r *claudeUsage) take() Usage { return r.totals.take() }
+func (r *claudeUsage) take() Usage {
+	r.task++
+	return r.totals.take()
+}
 
 func (r *claudeUsage) file(path string) *usageFile {
 	if r.files == nil {
@@ -205,6 +274,9 @@ func (r *claudeUsage) line(line []byte, main bool) {
 				CacheRead  int64 `json:"cache_read_input_tokens"`
 				CacheWrite int64 `json:"cache_creation_input_tokens"`
 				Output     int64 `json:"output_tokens"`
+				// The cache writes by lifetime: ephemeral_5m_input_tokens and
+				// ephemeral_1h_input_tokens, which have different prices.
+				CacheCreation map[string]any `json:"cache_creation"`
 			} `json:"usage"`
 		} `json:"message"`
 	}
@@ -229,22 +301,64 @@ func (r *claudeUsage) line(line []byte, main bool) {
 		return
 	}
 	read, write := max(m.Usage.CacheRead, 0), max(m.Usage.CacheWrite, 0)
-	usage := ModelUsage{
+	usage := ResponseUsage{
 		InputTokens:              max(m.Usage.Input, 0) + read + write,
 		CachedInputTokens:        read,
 		CacheCreationInputTokens: write,
 		OutputTokens:             max(m.Usage.Output, 0),
+		CacheCreation:            claudeCacheCreation(m.Usage.CacheCreation, write),
+		Count:                    1,
 	}
-	if m.ID != "" {
-		if before, ok := r.seen[m.ID]; ok {
-			r.totals.model(before.model).sub(before.usage)
-		}
-		if r.seen == nil {
-			r.seen = map[string]claudeCounted{}
-		}
-		r.seen[m.ID] = claudeCounted{model: model, usage: usage}
+	if m.ID == "" {
+		r.totals.response(model, usage)
+		return
 	}
-	r.totals.model(model).add(usage)
+	before, counted := r.seen[m.ID]
+	switch {
+	case !counted:
+		before = claudeCounted{index: r.totals.response(model, usage)}
+	case before.model == model && before.usage.same(usage):
+		// Another content block of the response, or its copy in another file.
+		return
+	case before.task == r.task && before.model == model:
+		r.totals.replace(model, before.index, usage)
+	case before.task == r.task:
+		r.totals.replace(before.model, before.index, ResponseUsage{})
+		before.index = r.totals.response(model, usage)
+	default:
+		// An earlier task reported the response with other numbers: this one takes those back
+		// and counts the corrected response, so the two tasks together count it once.
+		taken := before.usage
+		taken.Count = -1
+		r.totals.response(before.model, taken)
+		before.index = r.totals.response(model, usage)
+	}
+	if r.seen == nil {
+		r.seen = map[string]claudeCounted{}
+	}
+	r.seen[m.ID] = claudeCounted{model: model, usage: usage, task: r.task, index: before.index}
+}
+
+// claudeCacheCreation reads a usage's cache_creation object: its counts by lifetime. A split
+// that does not fit in the cache writes it splits is left out.
+func claudeCacheCreation(raw map[string]any, write int64) map[string]int64 {
+	var out map[string]int64
+	var sum int64
+	for key, value := range raw {
+		tokens, ok := value.(float64)
+		if key = strings.TrimSpace(key); !ok || tokens < 1 || key == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]int64{}
+		}
+		out[key] = int64(tokens)
+		sum += int64(tokens)
+	}
+	if sum > write {
+		return nil
+	}
+	return out
 }
 
 // codexUsageModel is the model Codex usage is recorded under, as a headless run's is: its rollout
