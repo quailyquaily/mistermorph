@@ -7,6 +7,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
 func BootstrapRuntimeGenerationManager(ctx context.Context, dependencies depsutil.CommonDependencies, opts ChannelBootstrapOptions) (*RuntimeGenerationManager, error) {
@@ -60,7 +61,7 @@ func engineToolsConfigFromReader(reader agentsettings.Reader, fallback *agent.En
 	}
 	config.SpawnEnabled = reader.GetBool("tools.spawn.enabled")
 	config.CoderEnabled = reader.GetBool("tools.coder.enabled")
-	config.CoderPathExtra = append([]string(nil), reader.GetStringSlice("tools.coder.path_extra")...)
+	config.CoderEnv = shellenv.CoderEnvFromConfig(reader)
 	config.WorkerNameSet = agent.NormalizeWorkerNameSet(reader.GetString("tools.agent_name_set"))
 	return config
 }

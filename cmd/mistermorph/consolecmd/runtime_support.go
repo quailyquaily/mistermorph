@@ -8,6 +8,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/viper"
@@ -38,6 +39,7 @@ func buildConsoleRegistriesFromReader(ctx context.Context, logger *slog.Logger, 
 }
 
 func consoleEngineToolsConfigFromReader(r interface {
+	Get(string) any
 	GetBool(string) bool
 	GetString(string) string
 	GetStringSlice(string) []string
@@ -46,9 +48,9 @@ func consoleEngineToolsConfigFromReader(r interface {
 		return agent.EngineToolsConfig{}
 	}
 	return agent.EngineToolsConfig{
-		SpawnEnabled:   r.GetBool("tools.spawn.enabled"),
-		CoderEnabled:   r.GetBool("tools.coder.enabled"),
-		CoderPathExtra: append([]string(nil), r.GetStringSlice("tools.coder.path_extra")...),
+		SpawnEnabled: r.GetBool("tools.spawn.enabled"),
+		CoderEnabled: r.GetBool("tools.coder.enabled"),
+		CoderEnv:     shellenv.CoderEnvFromConfig(r),
 		CoderBypassApprovals: map[string]bool{
 			"codex":  r.GetBool("tools.coder.bypass_approvals.codex"),
 			"claude": r.GetBool("tools.coder.bypass_approvals.claude"),

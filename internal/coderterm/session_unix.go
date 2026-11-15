@@ -18,6 +18,7 @@ import (
 
 	vt "github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
 const Supported = true
@@ -68,7 +69,8 @@ func start(b backend, req Request, resumeID string) (*session, error) {
 	}
 	env := req.Env
 	if env == nil {
-		env = os.Environ()
+		// Never the runtime's whole environment: the coder's, as the coder tool builds it.
+		env = shellenv.CoderEnv{}.Env()
 	}
 	values := make(map[string]string)
 	var childEnv []string

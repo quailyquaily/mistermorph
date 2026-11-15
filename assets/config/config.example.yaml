@@ -353,8 +353,22 @@ tools:
     # working directory) and ask the user to approve actions. Elsewhere they run as one-shot CLI
     # subtasks with approval and permission prompts bypassed.
     enabled: false
-    # Extra directories prepended to PATH when launching codex / claude for the coder tool.
-    # Use this when those CLIs are installed outside the service manager's PATH.
+    # codex / claude start in the bash tool's environment (the powershell tool's on Windows), not
+    # in the service's: its allowlist of variables (HOME, LANG, TERM, USER, ...), plus
+    # tools.bash.injected_env_vars, and nothing else. Proxy variables (HTTPS_PROXY, HTTP_PROXY,
+    # NO_PROXY, ALL_PROXY), CODEX_HOME, CLAUDE_CONFIG_DIR and provider keys (OPENAI_API_KEY,
+    # ANTHROPIC_API_KEY, ...) reach the CLIs only when listed in tools.bash.injected_env_vars
+    # (tools.powershell.injected_env_vars on Windows). The quota reads use the same environment.
+    #
+    # Their PATH, in order: path_extra below, tools.bash.path_extra, the service's PATH, and, only
+    # while path_extra is empty, the CLIs' default install locations that exist:
+    #   ~/.local/bin, /opt/homebrew/bin, /usr/local/bin, /home/linuxbrew/.linuxbrew/bin
+    #   Windows: %USERPROFILE%\.local\bin, %LOCALAPPDATA%\Programs\OpenAI\Codex\bin
+    # They come last, so they never replace a CLI the PATH already finds.
+    #
+    # Extra directories prepended to that PATH, for the coder only. Use this when the CLIs are
+    # somewhere else, such as an npm global directory under a version manager. Setting it turns
+    # the default install locations off.
     # path_extra:
     #   - "/opt/coder/bin"
     path_extra: []
@@ -451,12 +465,16 @@ tools:
       - "agent.db"
     # Extra directories prepended to PATH for bash execution.
     # Useful when the service manager starts mistermorph with a minimal PATH.
+    # The coder tool's CLIs (codex / claude) get them too, after tools.coder.path_extra.
     # path_extra:
     #   - "/opt/my-tools/bin"
     path_extra: []
     # Extra environment variables to inject into bash execution.
     # Each entry can be either a variable name (looked up from the parent process)
     # or an object with a fixed value written into config.yaml.
+    # The coder tool's CLIs (codex / claude) get them too, and nothing else from the service's
+    # environment: list here what they need, such as HTTPS_PROXY, CODEX_HOME, CLAUDE_CONFIG_DIR
+    # or a provider key for API billing.
     # injected_env_vars:
     #   - OPENAI_API_BASE
     #   - name: MY_FIXED_TOKEN
@@ -512,6 +530,7 @@ tools:
       - "agent.db"
     # Extra environment variables to inject into powershell execution.
     # Each entry can be either a variable name or an object with name/value.
+    # On Windows the coder tool's CLIs (codex / claude) get them too.
     injected_env_vars: []
     # Windows: a command the agent marks `elevated: true` runs as administrator through UAC, after
     # the user approves the UAC prompt on this machine.

@@ -8,10 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -118,32 +115,4 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 		w.buf.Write(p[:min(len(p), room)])
 	}
 	return len(p), nil
-}
-
-// FindCommand finds a coder's executable on PATH with pathExtra after it (tools.coder.path_extra),
-// never in the current directory, and returns it with the environment to run it in.
-func FindCommand(name string, pathExtra []string) (string, []string, error) {
-	pathValue := os.Getenv("PATH")
-	for _, dir := range pathExtra {
-		if dir = strings.TrimSpace(dir); dir != "" {
-			pathValue += string(os.PathListSeparator) + dir
-		}
-	}
-	names := []string{name}
-	if runtime.GOOS == "windows" {
-		names = []string{name + ".exe", name + ".cmd", name + ".bat", name}
-	}
-	for _, dir := range filepath.SplitList(pathValue) {
-		if dir == "" || !filepath.IsAbs(dir) {
-			continue
-		}
-		for _, candidate := range names {
-			path := filepath.Join(dir, candidate)
-			if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0) {
-				env := append(os.Environ(), "PATH="+pathValue)
-				return path, env, nil
-			}
-		}
-	}
-	return "", nil, fmt.Errorf("%s executable not found in PATH", name)
 }

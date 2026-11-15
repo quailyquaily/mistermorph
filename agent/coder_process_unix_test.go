@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
 func TestRunCoderCLICancelKillsBackgroundProcesses(t *testing.T) {
@@ -21,7 +23,7 @@ func TestRunCoderCLICancelKillsBackgroundProcesses(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	_, err := runCoderCLI(ctx, CoderRequest{Backend: coderBackendCodex, Task: "x", CWD: workDir, LogRoot: t.TempDir(), PathExtra: []string{binDir}}, nil)
+	_, err := runCoderCLI(ctx, CoderRequest{Backend: coderBackendCodex, Task: "x", CWD: workDir, LogRoot: t.TempDir(), CoderEnv: shellenv.CoderEnv{PathExtra: []string{binDir}}}, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("runCoderCLI() error = %v, want context deadline exceeded", err)
 	}

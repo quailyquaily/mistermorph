@@ -13,6 +13,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/logutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
@@ -72,7 +73,7 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 		Registry: registrySnapshot{
 			ToolsSpawnEnabled:         v.GetBool("tools.spawn.enabled"),
 			ToolsCoderEnabled:         v.GetBool("tools.coder.enabled"),
-			ToolsCoderPathExtra:       append([]string(nil), v.GetStringSlice("tools.coder.path_extra")...),
+			ToolsCoderEnv:             shellenv.CoderEnvFromConfig(v),
 			ToolsAgentNameSet:         agent.NormalizeWorkerNameSet(v.GetString("tools.agent_name_set")),
 			ToolsPlanCreateEnabled:    v.GetBool("tools.plan_create.enabled"),
 			ToolsPlanCreateMaxSteps:   v.GetInt("tools.plan_create.max_steps"),

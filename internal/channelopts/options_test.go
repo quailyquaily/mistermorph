@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
 func TestMixinOptionsDoNotExposeUnavailableGroupTriggerBehavior(t *testing.T) {
@@ -34,6 +35,8 @@ func TestMixinOptionsDoNotExposeUnavailableGroupTriggerBehavior(t *testing.T) {
 }
 
 type stubConfigReader map[string]any
+
+func (s stubConfigReader) Get(key string) any { return s[key] }
 
 func (s stubConfigReader) GetStringSlice(key string) []string {
 	if v, ok := s[key].([]string); ok {
@@ -186,9 +189,9 @@ func TestConfigReadersShareEngineToolsConfig(t *testing.T) {
 		"tools.coder.path_extra": []string{"/opt/coder"},
 	}
 	want := agent.EngineToolsConfig{
-		SpawnEnabled:   true,
-		CoderEnabled:   true,
-		CoderPathExtra: []string{"/opt/coder"},
+		SpawnEnabled: true,
+		CoderEnabled: true,
+		CoderEnv:     shellenv.CoderEnv{PathExtra: []string{"/opt/coder"}},
 	}
 	configs := []agent.EngineToolsConfig{
 		TelegramConfigFromReader(r).EngineToolsConfig,
@@ -199,7 +202,7 @@ func TestConfigReadersShareEngineToolsConfig(t *testing.T) {
 		DiscordConfigFromReader(r).EngineToolsConfig,
 	}
 	for i, got := range configs {
-		if got.SpawnEnabled != want.SpawnEnabled || got.CoderEnabled != want.CoderEnabled || len(got.CoderPathExtra) != 1 || got.CoderPathExtra[0] != want.CoderPathExtra[0] {
+		if got.SpawnEnabled != want.SpawnEnabled || got.CoderEnabled != want.CoderEnabled || len(got.CoderEnv.PathExtra) != 1 || got.CoderEnv.PathExtra[0] != want.CoderEnv.PathExtra[0] {
 			t.Fatalf("config %d engine tools = %+v, want %+v", i, got, want)
 		}
 	}
@@ -305,8 +308,8 @@ func TestTelegramConfigFromReaderToolsConfig(t *testing.T) {
 	if !cfg.EngineToolsConfig.CoderEnabled {
 		t.Fatalf("cfg.EngineToolsConfig.CoderEnabled = false, want true")
 	}
-	if len(cfg.EngineToolsConfig.CoderPathExtra) != 1 || cfg.EngineToolsConfig.CoderPathExtra[0] != "/opt/coder/bin" {
-		t.Fatalf("cfg.EngineToolsConfig.CoderPathExtra = %#v, want /opt/coder/bin", cfg.EngineToolsConfig.CoderPathExtra)
+	if got := cfg.EngineToolsConfig.CoderEnv.PathExtra; len(got) != 1 || got[0] != "/opt/coder/bin" {
+		t.Fatalf("cfg.EngineToolsConfig.CoderEnv.PathExtra = %#v, want /opt/coder/bin", got)
 	}
 }
 

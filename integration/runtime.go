@@ -283,11 +283,11 @@ func (rt *Runtime) newRunEngineWithRegistry(ctx context.Context, task string, ba
 		}
 	}
 	engineToolsConfig := agent.EngineToolsConfig{
-		SpawnEnabled:   snap.Registry.ToolsSpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn),
-		CoderEnabled:   snap.Registry.ToolsCoderEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinCoder),
-		PathRoots:      runStaticRegistry.Common.PathRoots,
-		CoderPathExtra: append([]string(nil), snap.Registry.ToolsCoderPathExtra...),
-		WorkerNameSet:  snap.Registry.ToolsAgentNameSet,
+		SpawnEnabled:  snap.Registry.ToolsSpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn),
+		CoderEnabled:  snap.Registry.ToolsCoderEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinCoder),
+		PathRoots:     runStaticRegistry.Common.PathRoots,
+		CoderEnv:      snap.Registry.ToolsCoderEnv,
+		WorkerNameSet: snap.Registry.ToolsAgentNameSet,
 	}
 	var clientDecorator taskruntime.ClientDecorator
 	if clientWrap != nil {

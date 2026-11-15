@@ -806,8 +806,8 @@ func TestBuildConsoleLocalRuntimeBundlePassesCoderEngineToolConfig(t *testing.T)
 	if !bundle.taskRuntime.EngineToolsConfig.CoderEnabled {
 		t.Fatal("CoderEnabled = false, want true from tools.coder.enabled")
 	}
-	if len(bundle.taskRuntime.EngineToolsConfig.CoderPathExtra) != 1 || bundle.taskRuntime.EngineToolsConfig.CoderPathExtra[0] != "/opt/coder/bin" {
-		t.Fatalf("CoderPathExtra = %#v, want /opt/coder/bin", bundle.taskRuntime.EngineToolsConfig.CoderPathExtra)
+	if got := bundle.taskRuntime.EngineToolsConfig.CoderEnv.PathExtra; len(got) != 1 || got[0] != "/opt/coder/bin" {
+		t.Fatalf("CoderEnv.PathExtra = %#v, want /opt/coder/bin", got)
 	}
 	additionalGuard, err := builtDeps.Guard(logger)
 	if err != nil {

@@ -5,15 +5,19 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
 type EngineToolsConfig struct {
-	SpawnEnabled   bool
-	CoderEnabled   bool
-	ToolTriggers   map[string]bool
-	PathRoots      pathroots.PathRoots
-	CoderPathExtra []string
+	SpawnEnabled bool
+	CoderEnabled bool
+	ToolTriggers map[string]bool
+	PathRoots    pathroots.PathRoots
+	// CoderEnv builds the environment Codex and Claude Code start in and finds them in it: the
+	// bash tool's environment (the PowerShell tool's on Windows) with tools.coder.path_extra in
+	// front of its PATH (shellenv.CoderEnvFromConfig).
+	CoderEnv shellenv.CoderEnv
 	// CoderBypassApprovals names the backends ("codex", "claude") whose terminal sessions start
 	// without approval prompts or sandbox. One-shot CLI runs bypass them anyway.
 	CoderBypassApprovals map[string]bool
@@ -40,13 +44,16 @@ type coderToolDeps struct {
 	// RunTerminal runs Codex and Claude Code in persistent terminal sessions when set.
 	RunTerminal func(context.Context, CoderRequest) (string, error)
 	Roots       pathroots.PathRoots
-	PathExtra   []string
+	// Env is EngineToolsConfig.CoderEnv.
+	Env shellenv.CoderEnv
+	// LookupTool finds a registered tool: the shell tool, for the variables it injects.
+	LookupTool func(name string) (tools.Tool, bool)
 	// BypassApprovals is EngineToolsConfig.CoderBypassApprovals.
 	BypassApprovals map[string]bool
 	// Usage gives the recorder of runs' usage and quotas (usage.db); nil records nothing.
 	Usage func() *coderusage.Recorder
 	// ReadCodexQuota reads Codex's quota after a Codex run; nil reads none.
-	ReadCodexQuota func(ctx context.Context, pathExtra []string) (coderusage.Quota, error)
+	ReadCodexQuota func(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error)
 }
 
 // registerEngineTools registers the enabled engine tools and returns the prompt blocks that go
@@ -70,7 +77,7 @@ func registerEngineTools(reg *tools.Registry, cfg EngineToolsConfig, spawnDeps s
 	}
 	if cfg.CoderEnabled || cfg.ToolTriggers[coderToolName] {
 		coderDeps.Roots = cfg.PathRoots
-		coderDeps.PathExtra = append([]string(nil), cfg.CoderPathExtra...)
+		coderDeps.Env = cfg.CoderEnv
 		coderDeps.BypassApprovals = cfg.CoderBypassApprovals
 		if err := reg.Replace(newCoderTool(coderDeps)); err != nil {
 			panic(err)

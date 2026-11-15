@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
@@ -85,8 +86,8 @@ func TestRegisterEngineToolsCoderSwitch(t *testing.T) {
 func TestRegisterEngineToolsPassesCoderPathExtra(t *testing.T) {
 	reg := tools.NewRegistry()
 	registerEngineTools(reg, EngineToolsConfig{
-		CoderEnabled:   true,
-		CoderPathExtra: []string{"/opt/coder/bin"},
+		CoderEnabled: true,
+		CoderEnv:     shellenv.CoderEnv{PathExtra: []string{"/opt/coder/bin"}},
 	}, spawnToolDeps{}, coderToolDeps{}, nil)
 
 	tool, ok := reg.Get("coder")
@@ -97,7 +98,7 @@ func TestRegisterEngineToolsPassesCoderPathExtra(t *testing.T) {
 	if !ok {
 		t.Fatalf("tool type = %T, want *coderTool", tool)
 	}
-	if len(coder.deps.PathExtra) != 1 || coder.deps.PathExtra[0] != "/opt/coder/bin" {
-		t.Fatalf("PathExtra = %#v, want /opt/coder/bin", coder.deps.PathExtra)
+	if got := coder.deps.Env.PathExtra; len(got) != 1 || got[0] != "/opt/coder/bin" {
+		t.Fatalf("PathExtra = %#v, want /opt/coder/bin", got)
 	}
 }

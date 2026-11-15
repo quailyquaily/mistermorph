@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -478,5 +479,54 @@ func TestBashTool_Execute_RunInSubtaskFailureReturnsErrorAndEnvelope(t *testing.
 	}
 	if result.Status != agent.SubtaskStatusFailed {
 		t.Fatalf("status = %q, want failed", result.Status)
+	}
+}
+
+// The bash tool's environment is shellenv.BashEnv, the one the coder tool builds its CLIs' from:
+// for the same settings a coder run gets what a bash command gets.
+func TestBashTool_EnvIsTheCoderEnvironment(t *testing.T) {
+	binDir := t.TempDir()
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("TERM", "dumb")
+	t.Setenv("SERVICE_SECRET", "do-not-leak")
+	t.Setenv("FROM_PARENT", "parent-value")
+
+	tool := NewBashTool(true, 5*time.Second, 16*1024, pathroots.PathRoots{})
+	tool.PathExtra = []string{binDir}
+	tool.InjectedEnvVars = shellenv.InjectedEnvVarsFromConfig([]any{"FROM_PARENT", map[string]any{"name": "LITERAL", "value": "fixed"}})
+
+	var source shellenv.InjectedEnvSource = tool
+	coder := shellenv.CoderEnv{ShellPathExtra: tool.PathExtra, DefaultDirs: func() []string { return nil }}.WithInjectedFrom(source).Env()
+	want := map[string]bool{}
+	for _, entry := range coder {
+		want[entry] = true
+	}
+	for _, entry := range []string{"PATH=" + binDir + ":/usr/bin:/bin", "TERM=dumb", "FROM_PARENT=parent-value", "LITERAL=fixed"} {
+		if !want[entry] {
+			t.Fatalf("coder env lacks %q: %v", entry, coder)
+		}
+	}
+
+	out, err := tool.Execute(context.Background(), map[string]any{"cmd": "env"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v (out=%q)", err, out)
+	}
+	got := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		key, _, ok := strings.Cut(line, "=")
+		if !ok || strings.ContainsAny(key, " :") {
+			continue
+		}
+		switch key {
+		case "PWD", "OLDPWD", "SHLVL", "_":
+			continue
+		}
+		got[strings.TrimSpace(line)] = true
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("bash command env = %v\ncoder env        = %v", got, want)
+	}
+	if strings.Contains(out, "do-not-leak") {
+		t.Fatalf("a secret reached the command: %q", out)
 	}
 }

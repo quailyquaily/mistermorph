@@ -11,6 +11,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 )
@@ -50,7 +51,7 @@ type serverSnapshot struct {
 type registrySnapshot struct {
 	ToolsSpawnEnabled         bool
 	ToolsCoderEnabled         bool
-	ToolsCoderPathExtra       []string
+	ToolsCoderEnv             shellenv.CoderEnv
 	ToolsAgentNameSet         string
 	ToolsPlanCreateEnabled    bool
 	ToolsPlanCreateMaxSteps   int
