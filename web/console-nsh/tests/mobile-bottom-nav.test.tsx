@@ -5,8 +5,9 @@
 // no taller than its rows.
 import { expect, open, test } from "nsh/test";
 import { mobileNavSlots, mobileSheetFrame, NAV_SLOT_MAX } from "../components/frame/mobileBar";
+import { POPUP_GAP, POPUP_MAX_WIDTH } from "../lib/mobilePopup";
 
-type Frame = { x: number; y: number; w: number; h: number };
+type Frame = { x: number; y: number; w: number; h: number; from?: number };
 
 const SLOTS = ["mobile-nav-chat", "mobile-nav-contacts", "mobile-nav-todo", "mobile-nav-more", "mobile-nav-agent"];
 /** The smallest press target the platforms ask for. */
@@ -106,25 +107,45 @@ test("rotating the phone refits the slots", async () => {
 });
 
 test("a sheet floats above the bar, inset as the bar is, and leaves room above it", () => {
-  // A 780pt page whose bar takes 90pt (58 + 8 below + 12 clear + 12 of system bar).
-  expect(mobileSheetFrame(780, 90)).toEqual({ side: 12, bottom: 90, maxHeight: 780 * 0.62 });
-  // In landscape the room above it holds it: 360 - 90 - 48.
-  expect(mobileSheetFrame(360, 90).maxHeight).toBe(222);
-  // Without the bar it keeps the side inset from the foot too.
-  expect(mobileSheetFrame(780, 0).bottom).toBe(12);
+  // A 780pt page whose bar takes 90pt (58 + 8 below + 12 clear + 12 of system bar): the same gap
+  // at the sides as above the bar (the room ends with it), 62% of the page at most.
+  expect(mobileSheetFrame(360, 780, 90)).toEqual({ top: 12, right: 12, bottom: 90, left: 12, maxHeight: Math.floor(780 * 0.62), maxWidth: 336 });
+  // In landscape the room between the top gap and the bar holds it: 360 - 12 - 90, capped at 62%.
+  expect(mobileSheetFrame(780, 360, 90).maxHeight).toBe(Math.floor(360 * 0.62));
+  // Never wider than the popups' widest.
+  expect(mobileSheetFrame(780, 360, 90).maxWidth).toBe(POPUP_MAX_WIDTH);
+  // Without the bar it keeps the gap from the foot too, above the bottom inset.
+  expect(mobileSheetFrame(360, 780, 0).bottom).toBe(12);
+  expect(mobileSheetFrame(360, 780, 0, { bottom: 34 }).bottom).toBe(46);
+  // The insets the page lies under (a phone browser on its side): the gap inside each.
+  expect(mobileSheetFrame(780, 360, 90, { left: 44, right: 48 })).toMatchObject({ left: 56, right: 60 });
+  // The keyboard over the page's foot (the agents' filter): above it, when it reaches higher than the bar.
+  expect(mobileSheetFrame(360, 780, 90, {}, 300).bottom).toBe(312);
   // Never shorter than a few rows.
-  expect(mobileSheetFrame(200, 90).maxHeight).toBe(120);
+  expect(mobileSheetFrame(360, 200, 90).maxHeight).toBe(120);
 });
 
-/** A sheet's frame: the window's width less the bar's side margins (12pt each), its foot off the
- * page's (the fixture has no route, so no bar room: the side inset). */
-function expectFloatingSheet(frames: Record<string, Frame>, name: string, width: number, height: number) {
+/** A sheet's frame: the page's width less the popups' gap at each side (12pt, the bar's margins),
+ * up to the popups' widest and centred; its foot the same gap off the page's, above the bottom
+ * inset `area` leaves (the fixture has no route, so no bar room); and it comes in from above. */
+function expectFloatingSheet(
+  frames: Record<string, Frame>,
+  name: string,
+  width: number,
+  height: number,
+  area: { left: number; right: number; bottom: number; top?: number } = { left: 0, right: 0, bottom: 0 },
+) {
   const sheet = frames[name];
   expect(sheet).toBeDefined();
-  expect(Math.abs(sheet.x - 12)).toBeLessThan(0.5);
-  expect(Math.abs(sheet.w - (width - 24))).toBeLessThan(0.5);
-  expect(sheet.y).toBeGreaterThan(0);
-  expect(Math.abs(sheet.y + sheet.h - (height - mobileSheetFrame(height, 0).bottom))).toBeLessThan(0.5);
+  const room = width - area.left - area.right - 2 * POPUP_GAP;
+  const wide = Math.min(room, POPUP_MAX_WIDTH);
+  expect(Math.abs(sheet.w - wide)).toBeLessThan(0.5);
+  expect(Math.abs(sheet.x - (area.left + POPUP_GAP + (room - wide) / 2))).toBeLessThan(0.5);
+  expect(sheet.y).toBeGreaterThanOrEqual(POPUP_GAP);
+  // The gap under it shows above the inset: the sheet's own bottom edge ends there.
+  expect(Math.abs(sheet.y + sheet.h - (height - area.bottom - POPUP_GAP))).toBeLessThan(0.5);
+  // It slides in from above the page's top edge: out of sight there, never from below.
+  expect(sheet.from).toBeLessThanOrEqual(-(sheet.y + sheet.h));
 }
 
 for (const [label, width, height] of [
@@ -148,6 +169,49 @@ for (const [label, width, height] of [
     await app.waitFor("id:mobile-agents", { state: "gone" });
   });
 }
+
+test("in a phone browser More and the agents keep the gap inside the notch, the side bar and the home indicator", async () => {
+  // An iPhone's browser: the frame takes no inset there, so the sheets' layer does.
+  for (const [width, height, area] of [
+    [390, 844, { top: 47, right: 0, bottom: 34, left: 0 }],
+    [844, 390, { top: 0, right: 48, bottom: 21, left: 44 }],
+  ] as const) {
+    const { app, frames } = await openNav(width, height, { platform: "ios", safeArea: area, host: { params: { agents: 3 } } });
+    await app.press("id:mobile-nav-more");
+    await app.waitUntil(() => Boolean(frames()["mobile-more"]));
+    expectFloatingSheet(frames(), "mobile-more", width, height, area);
+    expect(frames()["mobile-more"].y).toBeGreaterThanOrEqual(area.top + POPUP_GAP);
+    await app.press("id:mobile-nav-agent");
+    await app.waitUntil(() => Boolean(frames()["mobile-agents"]));
+    expectFloatingSheet(frames(), "mobile-agents", width, height, area);
+    await app.dispose();
+  }
+});
+
+test("with reduced motion More and the agents are in place at once, in the same place", async () => {
+  const moving = await openNav(360, 780, { host: { params: { agents: 3 } } });
+  const still = await openNav(360, 780, { reducedMotion: true, host: { params: { agents: 3 } } });
+  for (const [slot, name, part] of [
+    ["mobile-nav-more", "mobile-more", "mobile-more-sheet"],
+    ["mobile-nav-agent", "mobile-agents", "mobile-agents-list"],
+  ] as const) {
+    for (const run of [moving, still]) {
+      await run.app.press(`id:${slot}`);
+      await run.app.waitFor(`id:${part}`);
+      await run.app.waitUntil(() => Boolean(run.frames()[name]));
+    }
+    const { from: _moving, ...rest } = moving.frames()[name];
+    const { from: _still, ...same } = still.frames()[name];
+    expect(same).toEqual(rest);
+    // Closed, it is gone at once (no slide to wait for).
+    await still.app.press(`id:${slot}`);
+    expect(still.app.count(`id:${part}`)).toBe(0);
+    await moving.app.press(`id:${slot}`);
+    await moving.app.waitFor(`id:${name}`, { state: "gone" });
+  }
+  await moving.app.dispose();
+  await still.app.dispose();
+});
 
 test("the agents' sheet is as tall as its rows, with no empty stretch to scroll", async () => {
   const heights: number[] = [];

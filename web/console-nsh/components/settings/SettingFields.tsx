@@ -13,7 +13,7 @@ import { pickDesktopDirectory } from "../../lib/core/desktop-runtime.js";
 import { ROW_MODES } from "../../lib/core/setting-rows.js";
 import { useRevealRow } from "../settings-page/reveal";
 import { isMobile } from "../../lib/shell";
-import { bottomSheetStyle, Icon } from "../ui";
+import { Icon, PopupList, popupSheets } from "../ui";
 
 /** A choice in a settings list. `hint` shows beside the title, `one` is a unit's singular title. */
 export interface SettingOption {
@@ -197,27 +197,54 @@ export function SettingMenu(props: SettingMenuProps) {
     const index = props.items.findIndex((item) => String(item.value) === String(props.selected ?? ""));
     return index >= 0 ? String(index) : null;
   };
+  // Phones and touch screens: the list is the shared floating paper (`PopupList`); the base list
+  // stays shut there (`open` held false) and only says when its trigger asks to open.
+  const sheetOpen = signal(false);
+  const setOpen = (open: boolean) => {
+    sheetOpen.set(open);
+    props.onOpenChange?.(open);
+    if (!open) props.onClose?.();
+  };
+  const choose = (value: string | null) => {
+    if (value === null) return;
+    const item = props.items[Number(value)];
+    if (item && !item.disabled) props.onSelect?.(item);
+  };
   return (
+    <>
+    <PopupList
+      open={popupSheets() && (props.open ?? sheetOpen()) && !props.disabled}
+      onClose={() => setOpen(false)}
+      label={props.label || props.accessibilityLabel}
+      items={props.items.map((item, index) => ({
+        value: String(index),
+        title: item.title,
+        disabled: item.disabled,
+        trailing: item.hint ? <Text class="font-mono text-xs text-muted-foreground">{item.hint}</Text> : undefined,
+      }))}
+      value={selectedIndex() ?? ""}
+      onChoose={choose}
+      partID={props.testID ? `${props.testID}-popup` : undefined}
+    />
     <Select
       items={props.items.map((item, index) => ({ value: String(index), title: item.title, disabled: item.disabled }))}
       value={selectedIndex()}
-      open={props.open}
+      open={popupSheets() ? false : props.open}
       disabled={props.disabled}
       accessibilityLabel={props.accessibilityLabel || props.label || undefined}
       align={props.align === "end" ? "end" : "start"}
       testID={props.testID}
-      onChange={({ value }) => {
-        if (value === null) return;
-        const item = props.items[Number(value)];
-        if (item && !item.disabled) props.onSelect?.(item);
-      }}
+      onChange={({ value }) => choose(value)}
       onOpenChange={({ open }) => {
+        if (untracked(popupSheets)) {
+          if (open) setOpen(true);
+          return;
+        }
         props.onOpenChange?.(open);
         if (!open) props.onClose?.();
       }}
       class={`flex-row items-stretch ${props.class ?? ""}`}
       popupClass={`${MENU_POPUP} ${props.matchWidth ? "" : ""}`}
-      popupStyle={bottomSheetStyle(4, { contentMax: 320 })}
       itemClass={MENU_ITEM}
       trigger={props.trigger}
       renderItem={(entry) => (
@@ -229,6 +256,7 @@ export function SettingMenu(props: SettingMenuProps) {
         </View>
       )}
     />
+    </>
   );
 }
 

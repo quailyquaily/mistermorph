@@ -1,6 +1,6 @@
 // Where Upload files picks from on a touch screen: Gallery (the system's photo picker) or File (the
-// system's document picker, any type of file). A rounded sheet at the foot of a phone's screen (a
-// dialog on a wide one), after the attachment views of phone messengers: each choice a row with a
+// system's document picker, any type of file). The phone's floating paper at the foot of the screen
+// (design/mobile-popups.md; a dialog on a wide one), after the attachment views of phone messengers: each choice a row with a
 // round coloured glyph, its name and what it opens. Choosing one closes the sheet and opens that
 // picker; the scrim, Back and Escape close it and change nothing. The pickers are the platform's
 // (lib/platform.ts `pickFiles` with a `source`): no app lists the device's files itself.
@@ -26,9 +26,9 @@ export const DEFAULT_ATTACH_SOURCE_LABELS: AttachSourceLabels = {
   filesHint: "Documents and other files",
 };
 
-/** The sheet's corners: as round as the composer's ends, the top ones only on a phone's sheet. */
+/** The panel's widest: the phone paper's (a phone on its side), a narrow dialog's on a wide window. Its corners are the popups' (DialogLayer). */
 export function attachSourcePanelShape(sheet: boolean): string {
-  return sheet ? "rounded-t-[24px]" : "max-w-sm rounded-[24px]";
+  return sheet ? "max-w-[560px]" : "max-w-sm";
 }
 
 export function AttachSourceSheet(props: {
@@ -50,13 +50,9 @@ export function AttachSourceSheet(props: {
       onClose={props.onClose}
       testID={testID()}
       label={labels().title}
-      panelClass={`w-full items-stretch gap-3 px-3 pb-3 pt-2 ${attachSourcePanelShape(dialogIsSheet())}`}
-      panelPaddingBottom={12}
+      // No handle: the paper is not dragged; Back, Escape and the scrim close it.
+      panelClass={`w-full items-stretch gap-3 px-3 pb-3 pt-4 ${attachSourcePanelShape(dialogIsSheet())}`}
     >
-      {/* The sheet's handle: drawn only, Back and the scrim close it. */}
-      <View class="items-center py-1" accessibilityElementsHidden>
-        <View class="h-1 w-9 rounded-full bg-line" />
-      </View>
       <Text role="header" class="px-2 text-base font-semibold text-foreground">
         {labels().title}
       </Text>

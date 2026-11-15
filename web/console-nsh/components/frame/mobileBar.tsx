@@ -3,6 +3,8 @@
 // row clear of it.
 import { safeArea, View } from "nsh";
 import { mobileBottomNavVisible, phoneWorkbenchOpen, systemInsets } from "../../lib/shell";
+import { mobilePopupFrame, type MobilePopupFrame } from "../../lib/mobilePopup";
+import type { Edges } from "../../lib/systemInsets";
 
 /** The capsule's height: 44pt slots inset 4pt all round. */
 export const MOBILE_NAV_HEIGHT = 58;
@@ -29,20 +31,18 @@ export function mobileNavSlots(width: number, count: number) {
   return { slot, rowWidth: slot * Math.max(0, count), left: (index: number) => slot * index };
 }
 
-/** The share of the page's height a sheet over the bar may take, and the room it leaves above itself. */
-const SHEET_MAX_SHARE = 0.62;
-const SHEET_TOP_ROOM = 48;
+/** The share of the page's height More's and the agents' popup may take. */
+export const SHEET_MAX_SHARE = 0.62;
 
 /**
- * Where a sheet over the bar goes (MobileBottomNav's More and agent sheets) in a page `pageHeight`
- * tall whose bar takes `barRoom` (mobileBarRoom()): its inset from the window's sides (the bar's),
- * its foot's distance from the page's foot (where a page's list ends: clear of the bar; the side
- * inset without a bar), and its tallest (62% of the page, leaving room above it).
+ * Where More's and the agents' popup goes (MobileBottomNav) in a page `width` by `height` whose
+ * bar takes `barRoom` (mobileBarRoom()): the shared phone paper (lib/mobilePopup.ts), a small gap
+ * in from the page's sides and above the bar (the bar's room ends with that gap; without a bar,
+ * above the bottom inset), 62% of the page at most. `area` is the system's insets the page lies
+ * under (none of those Android's frame takes), `keyboard` the keyboard's height over its foot.
  */
-export function mobileSheetFrame(pageHeight: number, barRoom: number) {
-  const bottom = barRoom > 0 ? barRoom : BAR_SIDE;
-  const maxHeight = Math.max(120, Math.min(pageHeight * SHEET_MAX_SHARE, pageHeight - bottom - SHEET_TOP_ROOM));
-  return { side: BAR_SIDE, bottom, maxHeight };
+export function mobileSheetFrame(width: number, height: number, barRoom: number, area: Partial<Edges> = {}, keyboard = 0): MobilePopupFrame {
+  return mobilePopupFrame({ width, height, area, keyboard, below: barRoom, share: SHEET_MAX_SHARE });
 }
 
 /** The room the floating bar takes at the foot of the window, clearance included (0 while it is not shown). */

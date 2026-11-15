@@ -7,24 +7,21 @@
 // Not ported: the coloured overlay that marked command and skill tokens inside the text (a native
 // text field draws its own text; nothing can be laid exactly over it).
 import type { InputRef, JSX } from "nsh";
-import { batch, cleanup, createAnimatedValue, effect, Image, Keyboard, keyboardFrame, keymap, platform, signal, Text, token, untracked, View } from "nsh";
-import { Button as BaseButton, Input, Select } from "nsh/base";
+import { cleanup, createAnimatedValue, effect, Image, Keyboard, keymap, platform, signal, Text, token, untracked, View } from "nsh";
+import { Button as BaseButton, Input } from "nsh/base";
 import { BorderBeam } from "../motion/BorderBeam";
 import { motionMs } from "../motion/tokens";
 import { PopoverPicker } from "../shared/PopoverPicker";
 import { ICONS } from "../icons";
 import {
-  bottomSheetStyle,
   Button,
   BusyBeam,
   busyLook,
   CircleButton,
   circleButtonClass,
-  DropdownMenu,
   Icon,
   Tip,
   TipButton,
-  MENU_POPUP_STYLE,
   trackPopup,
   type CircleButtonVariant,
   type IconName,
@@ -40,7 +37,6 @@ import { COMPOSER_RADIUS, composerFieldBox, composerFrameClass, composerRowClass
 import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
 import { followComposerLayout, ONE_ROW, type ComposerLayout } from "./composerRows";
-import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheets";
 import { t } from "./i18n";
 import { AttachSourceSheet, type AttachSource, type AttachSourceLabels } from "./AttachSourceSheet";
 import { draftFilePillClass, fileIcon } from "./filePill";
@@ -429,9 +425,11 @@ export function ChatComposer(props: ChatComposerProps) {
 
   props.onReady?.({ focus, focused: () => untracked(focused), insertText, closeSuggestions });
 
-  // On touch screens the add menu and the model picker are sheets at the bottom of the screen, where
-  // the software keyboard is (composerSheets.ts): the keyboard goes down as one opens, as phones do
-  // for a sheet opened from a text field. The text and its caret stay; the field takes the focus
+  // On phones and touch screens the add menu and the model picker are the shared floating paper at
+  // the foot of the screen (PopoverPicker's `sheet`; design/mobile-popups.md), where the software
+  // keyboard is: on touch screens the keyboard goes down as one opens, as phones do for a popup
+  // opened from a text field (the model picker's filter can raise it again: the paper then stands
+  // on it). The text and its caret stay; the field takes the focus
   // back when the sheet closes without leading elsewhere (cancelled, a model chosen), so typing goes
   // on. Upload and Attach go on to a picker or a dialog, and leave the keyboard down. The desktops'
   // popups open at their trigger; the field takes the focus back after them too.
@@ -457,16 +455,8 @@ export function ChatComposer(props: ChatComposerProps) {
     action();
   }
 
-  // The model picker's search field raises the keyboard inside the sheet: the sheet then rises above
-  // it. Only once the keyboard the opening lowered is down, so the sheet does not come in tall.
   const profileSheetOpen = signal(false);
   trackPopup(profileSheetOpen);
-  const profileSheetLifts = signal(false);
-  effect(() => {
-    if (profileSheetOpen() && keyboardFrame().height === 0) untracked(() => profileSheetLifts.set(true));
-  });
-  // Above the navigation bar or gesture handle as every bottom sheet (bottomSheetStyle), and above
-  // the keyboard instead once it lifts: the keyboard covers that bar, so the two are never added.
   // The profile picker's and the add menu's lists open beyond the whole composer (as a dock's panel
   // over the dock): what they clear above and below their button is the frame around it
   // (PopoverPicker). Both sit at the frame's foot the same way, in both layouts.
@@ -475,17 +465,8 @@ export function ChatComposer(props: ChatComposerProps) {
     top: Math.max(0, frameHeight() - CONTROL_FROM_BOTTOM),
     bottom: CONTROL_FROM_BOTTOM - CONTROL_SIZE,
   });
-  const profileSheetStyle = () =>
-    bottomSheetStyle(PROFILE_SHEET_PADDING, {
-      contentMax: PROFILE_SHEET_MAX_HEIGHT,
-      keyboard: touchScreen() && profileSheetLifts() ? keyboardFrame().height : 0,
-      style: MENU_POPUP_STYLE,
-    });
   function profileSheetOpenChange(open: boolean) {
-    batch(() => {
-      profileSheetOpen.set(open);
-      profileSheetLifts.set(false);
-    });
+    profileSheetOpen.set(open);
     if (open) sheetOpened();
     else sheetClosed();
   }
@@ -547,25 +528,14 @@ export function ChatComposer(props: ChatComposerProps) {
         </View>
       }
     >
-      {/* Desktops: the shared popover beyond the composer (as the profile picker's), its tail to
-          the button; touch screens: the menu's sheet at the bottom. */}
-      <If
-        when={!touchScreen()}
-        else={
-          <DropdownMenu
-            trigger={addTrigger()}
-            items={addItems()}
-            placement="top"
-            align="start"
-            onOpenChange={(open) => (open ? sheetOpened() : sheetClosed())}
-          />
-        }
-      >
+      {/* The shared popover beyond the composer (as the profile picker's), its tail to the
+          button; on phones and touch screens its rows on the shared floating paper. */}
         <PopoverPicker
           items={addItems().map((item) => ({ value: item.id, title: item.label, icon: <Icon name={item.icon} size={16} color="subtle" /> }))}
           onChange={(id) => addItems().find((item) => item.id === id)?.onSelect()}
           trigger={() => addTrigger(false)}
           accessibilityLabel={props.addLabel ?? ""}
+          sheet={touchScreen() ? true : undefined}
           placement="top"
           align="start"
           clearance={composerClearance()}
@@ -579,7 +549,6 @@ export function ChatComposer(props: ChatComposerProps) {
           }}
           testID="chat-composer-add"
         />
-      </If>
     </If>
   );
 
@@ -697,49 +666,10 @@ export function ChatComposer(props: ChatComposerProps) {
     </View>
   );
 
-  // Touch screens: nsh's Select, a bottom sheet over the keyboard's place.
-  function ProfileSheet() {
-    return (
-      <Select
-        items={profiles().map((item) => ({ value: item.value, title: item.title }))}
-        value={String(selectedProfile()?.value ?? "")}
-        searchable
-        disabled={props.disabled}
-        accessibilityLabel={profileTitle()}
-        tooltip={<Tip text={profileTitle()} />}
-        onChange={({ value: next }) => next !== null && props.onLLMProfileChange?.(String(next).trim())}
-        onOpenChange={({ open }) => profileSheetOpenChange(open)}
-        testID="chat-composer-profile"
-        placement="top"
-        align="end"
-        class="rounded-full disabled:opacity-45"
-        popupClass="min-w-64 rounded-[16px] border border-line-faint bg-dialog p-2"
-        popupStyle={profileSheetStyle()}
-        itemClass="rounded-[10px] px-3 py-2 hover:bg-hover focus:bg-hover selected:bg-selection"
-        searchClass="mx-1 mb-2 rounded-full border border-input px-3 py-1.5 text-sm"
-        searchPlaceholder="Filter"
-        renderItem={(entry) => profileRow(profiles()[entry.index], entry.title)}
-        trigger={profilePill()}
-      />
-    );
-  }
-
-  /** A profile's row: its mark, its title, its model in mono under it. */
-  const profileRow = (profile: ComposerProfileItem | undefined, title: string) => (
-    <View class="flex-row items-center gap-2">
-      {profileGlyph(profile)}
-      <View class="flex-1">
-        <Text class="text-sm text-foreground">{title}</Text>
-        <If when={profile?.subtitle}>
-          <Text class="font-mono text-xs text-muted-foreground">{profile?.subtitle ?? ""}</Text>
-        </If>
-      </View>
-    </View>
-  );
-
   // Desktops: a popover beyond the composer, as the add menu opens (nsh's Select lays its list over
   // or under the trigger, as the system's drop-down does, whatever `placement` says): it clears the
-  // frame above the picker (below it where the room above is short), its tail to the pill.
+  // frame above the picker (below it where the room above is short), its tail to the pill. Phones
+  // and touch screens: the same rows on the shared floating paper.
   function ProfilePopover() {
     return (
       <PopoverPicker
@@ -756,6 +686,7 @@ export function ChatComposer(props: ChatComposerProps) {
         label={String(props.llmProfileLabel ?? "").trim()}
         filterPlaceholder="Filter"
         disabled={props.disabled}
+        sheet={touchScreen() ? true : undefined}
         placement="top"
         align="end"
         clearance={composerClearance()}
@@ -871,10 +802,8 @@ export function ChatComposer(props: ChatComposerProps) {
             <If when={profiles().length > 1}>
               {/* The profile picker: a 38pt pill as tall as the buttons beside it, the plain button's
                   hover and press, the whole of it the trigger. On desktops its list opens beyond the
-                  composer (ProfilePopover); on touch screens it is a bottom sheet (ProfileSheet). */}
-              <If when={!touchScreen()} else={<ProfileSheet />}>
-                <ProfilePopover />
-              </If>
+                  composer; on phones and touch screens on the shared floating paper. */}
+              <ProfilePopover />
             </If>
             {/* Voice and Send take turns in one place, the row's end (VoiceOrSend). */}
             <VoiceOrSend />

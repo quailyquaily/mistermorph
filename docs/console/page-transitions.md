@@ -71,7 +71,7 @@ Only `translateX` moves, natively; slides take 280 ms on the Console's easing cu
 - A new navigation during a slide drops the obsolete outgoing page at once; the page that was
   coming in turns round from where it is (no jump). A resize, a rotation, a switch between the
   phone and wide layouts, or reduced motion turned on ends a running slide where it ends.
-- Dialogs and sheets (`Modal`, `MessageDialog`, the bottom sheets, the phone's workspace sheet) are
+- Dialogs and sheets (`Modal`, `MessageDialog`, the phone's popups, the phone's workspace sheet) are
   not pages: they keep their own motion and are never moved by this.
 
 ## Checks

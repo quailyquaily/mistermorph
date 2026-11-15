@@ -7,9 +7,8 @@ import { expect, test } from "nsh/test";
 import { LayoutAnimation, signal } from "nsh";
 import { COMPOSER_LINE_HEIGHT } from "../components/chat/composerField";
 import { composerLayout, followComposerLayout, ONE_ROW, type ComposerLayout } from "../components/chat/composerRows";
-import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "../components/chat/composerSheets";
 import { softKeyboardUp } from "../lib/softKeyboard";
-import { bottomSheetInsets } from "../lib/systemInsets";
+import { mobilePopupFrame } from "../lib/mobilePopup";
 import { localEndpoint, openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
@@ -688,22 +687,25 @@ test("on the desktop Send leaves the field focused", async () => {
   expect(await fieldFocused(app)).toBe(true);
 });
 
-test("the model picker's sheet rises above a keyboard its search field raised, within the screen", () => {
-  const lift = (keyboard: number, area: { top: number; bottom: number }, height: number) =>
-    bottomSheetInsets(area, keyboard, height, PROFILE_SHEET_PADDING, PROFILE_SHEET_MAX_HEIGHT);
-  // Hidden, no bars: the sheet is as its classes draw it.
-  expect(lift(0, { top: 24, bottom: 0 }, 844)).toBeUndefined();
-  expect(lift(Number.NaN, { top: 24, bottom: 0 }, 844)).toBeUndefined();
-  // Hidden over a 16pt gesture handle: its 4pt padding above the handle, its list as tall as before.
-  expect(lift(0, { top: 24, bottom: 16 }, 844)).toEqual({ paddingBottom: 20, maxHeight: 336 });
-  // Up on a phone: the keyboard's height under the sheet (it covers the navigation bar: not both),
-  // its 4pt padding, the list as tall as on the desktops above it.
-  expect(lift(300, { top: 24, bottom: 0 }, 844)).toEqual({ paddingBottom: 304, maxHeight: 620 });
-  expect(lift(300, { top: 24, bottom: 16 }, 844)).toEqual({ paddingBottom: 304, maxHeight: 620 });
+test("the model picker's paper stands on a keyboard its filter raised, within the screen", () => {
+  // The composer's popups are the phone's floating paper (design/mobile-popups.md): lib/mobilePopup.ts
+  // places it, the gap above whatever covers the foot of the screen.
+  const place = (keyboard: number, area: { top: number; bottom: number }, height: number) => {
+    const { bottom, maxHeight } = mobilePopupFrame({ width: 390, height, area, keyboard });
+    return { bottom, maxHeight };
+  };
+  // Hidden, no bars: the gap alone under it.
+  expect(place(0, { top: 24, bottom: 0 }, 844)).toEqual({ bottom: 12, maxHeight: 796 });
+  expect(place(Number.NaN, { top: 24, bottom: 0 }, 844)).toEqual({ bottom: 12, maxHeight: 796 });
+  // Hidden over a 16pt gesture handle: the gap above the handle.
+  expect(place(0, { top: 24, bottom: 16 }, 844)).toEqual({ bottom: 28, maxHeight: 780 });
+  // Up on a phone: the keyboard's height under the paper (it covers the navigation bar: not both).
+  expect(place(300, { top: 24, bottom: 0 }, 844)).toEqual({ bottom: 312, maxHeight: 496 });
+  expect(place(300, { top: 24, bottom: 16 }, 844)).toEqual({ bottom: 312, maxHeight: 496 });
   // A phone on its side: the list keeps to the room between the status bar and the keyboard.
-  expect(lift(200, { top: 24, bottom: 16 }, 390)).toEqual({ paddingBottom: 204, maxHeight: 366 });
-  // No room at all: the list gets none rather than a negative height.
-  expect(lift(500, { top: 24, bottom: 16 }, 390)).toEqual({ paddingBottom: 504, maxHeight: 500 });
+  expect(place(200, { top: 24, bottom: 16 }, 390)).toEqual({ bottom: 212, maxHeight: 142 });
+  // No room at all: a few rows' height rather than a negative one (the list scrolls).
+  expect(place(500, { top: 24, bottom: 16 }, 390)).toEqual({ bottom: 512, maxHeight: 120 });
 });
 
 // The placeholder (components/chat/ComposerFieldSlot.tsx): the field draws none of its own, which

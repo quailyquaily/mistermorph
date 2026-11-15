@@ -8,11 +8,12 @@
 // per row under 720pt, two from 720, four from 1120; the weekly controls put the time beside the
 // weekdays above 680; the weekday chips run 7 to a row, 4 in a narrow form or window, 2 on a phone.
 import { signal, Text, View, windowSize } from "nsh";
-import { Button as BaseButton, DatePicker, Switch, TimeField } from "nsh/base";
+import { Button as BaseButton, Switch, TimeField } from "nsh/base";
+import { DateField } from "../shared/DateField";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { bottomSheetStyle, Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, Tabs, Tip } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, Tabs, Tip } from "../ui";
 import * as model from "./todo-model.js";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
@@ -93,7 +94,7 @@ function RunAtField(props: { task: TodoTask; disabled: boolean; onChange: (value
     };
   };
   return (
-    <DatePicker
+    <DateField
       value={model.atInputValue(props.task) || null}
       timePrecision="minute"
       disabled={props.disabled}
@@ -105,7 +106,7 @@ function RunAtField(props: { task: TodoTask; disabled: boolean; onChange: (value
       }}
       offset={4}
       popupClass="rounded-(--radius) border border-line-faint bg-dialog p-3"
-      popupStyle={bottomSheetStyle(12, { style: { boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)" } })}
+      popupStyle={{ boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)" }}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"
