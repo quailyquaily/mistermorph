@@ -3,11 +3,14 @@
 // in the frame's workbench, docked under the window (components/frame/Workbench.tsx). On phones (≤ 980 points) the topic list and the
 // conversation are separate views, and the workspace panel is the right sheet. The behaviour is in
 // chatController.
-import { signal, Text, untracked, View } from "nsh";
+import { signal, Text, token, untracked, View } from "nsh";
 import { BackButton, Fab, Icon, Kicker, MessageDialog, Page, PageBar, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
+import { COMPOSER_RADIUS } from "../../components/chat/composerField";
+import { barRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
+import { glassEnabled } from "../../lib/glass";
 import { ChatLoadError } from "../../components/chat/ChatLoadError";
 import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
@@ -24,7 +27,7 @@ import { ActivityDetailPanel } from "./ActivityDetailPanel";
 import { WorkspacePanel, WorkspaceSheet } from "./WorkspacePanel";
 import { useWorkbench } from "../../components/frame/Workbench";
 
-function Composer(props: { c: ChatController; landing?: boolean }) {
+function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (height: number) => void }) {
   const c = props.c;
   return (
     <ChatComposer
@@ -32,6 +35,7 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
       value={c.taskInput()}
       onChange={(value) => c.setTaskInput(value)}
       landing={props.landing}
+      onFootRoom={(height) => props.onFootRoom?.(height)}
       disabled={c.composerDisabled()}
       placeholder={c.composerPlaceholder()}
       sendDisabled={c.sendDisabled()}
@@ -204,8 +208,12 @@ function LoadError(props: { c: ChatController; compact?: boolean; testID: string
   );
 }
 
-function ChatMain(props: { c: ChatController }) {
+/** `underBar`: the phone's bar lies directly over it; where the bar is glass the history runs on under it. */
+function ChatMain(props: { c: ChatController; underBar?: boolean }) {
   const c = props.c;
+  // Not a failed load's panel, which is centred in the room under the bar.
+  const underGlassBar = () => Boolean(props.underBar) && !c.chatLoadErrorFull();
+  const barInset = () => (underGlassBar() ? barRoom() : 0);
   // A failed load with nothing to show takes the place of the landing (no topic) and the history.
   const placeholder = () => c.showChatPlaceholder() && !c.chatLoadErrorFull();
   const dockVisible = () =>
@@ -214,22 +222,33 @@ function ChatMain(props: { c: ChatController }) {
   // over it) as room under the newest message, so that message scrolls clear of both, and the room
   // follows the composer as it grows.
   const composerRoom = signal(0);
+  // Where the window draws glass the composer's frame is glass, and the conversation shows through
+  // it: the fade to the page is then solid only under the frame (the footer line stays readable
+  // over the paper) and ends behind the frame's lower corners, not across all of it.
+  const footRoom = signal(0);
+  const readonlyTopic = () => c.selectedTopicIsAgent() || c.selectedTopicIsCron();
+  const glassFloat = () => glassEnabled() && !readonlyTopic() && footRoom() > 0;
+  const floatFade = () => {
+    const paper = String(token("background"));
+    const solid = Math.round(footRoom());
+    return `linear-gradient(to top, ${paper} 0px, ${paper} ${solid}px, ${paper.slice(0, 7)}00 ${solid + COMPOSER_RADIUS}px)`;
+  };
   return (
     <View class="flex-1" testID="chat-main">
       <If
         when={placeholder()}
         else={
-          <View class="relative flex-1">
-            <If when={c.chatLoadErrorFull()} else={<History c={c} topInset={dockVisible() ? 64 : 20} endInset={composerRoom()} />}>
+          <View class="relative flex-1" style={underGlassBar() ? underBar() : undefined}>
+            <If when={c.chatLoadErrorFull()} else={<History c={c} topInset={(dockVisible() ? 64 : 20) + barInset()} endInset={composerRoom()} />}>
               <LoadError c={c} testID="chat-load-error" />
             </If>
             {/* Over the history's foot, fading from it to the page (what scrolls behind the footer
                 line stays readable); presses on the fade reach the history. */}
             <View
-              class="absolute bottom-0 left-0 right-0 bg-linear-to-b from-transparent to-background pt-6"
-              style={{ pointerEvents: "box-none" }}
+              class={`absolute bottom-0 left-0 right-0 pt-6 ${glassFloat() ? "" : "bg-linear-to-b from-transparent to-background"}`}
+              style={glassFloat() ? { pointerEvents: "box-none", backgroundImage: floatFade() } : { pointerEvents: "box-none" }}
               onLayout={({ bounds }) => composerRoom.set(bounds.size.height)}
-              testID="chat-composer-float"
+              testID={glassFloat() ? "chat-composer-float.glass" : "chat-composer-float"}
             >
               <View class="w-full max-w-[832px] self-center" style={{ paddingLeft: chatGutter(), paddingRight: chatGutter() }}>
                 <If when={c.chatLoadErrorKind() !== "" && !c.chatLoadErrorFull()}>
@@ -238,7 +257,7 @@ function ChatMain(props: { c: ChatController }) {
                 <If
                   when={c.selectedTopicIsAgent()}
                   else={
-                    <If when={c.selectedTopicIsCron()} else={<Composer c={c} />}>
+                    <If when={c.selectedTopicIsCron()} else={<Composer c={c} onFootRoom={(height) => footRoom.set(height)} />}>
                       <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
                         {t("chat_topic_cron_readonly", { name: c.deskTitle() })}
                       </Text>
@@ -342,6 +361,8 @@ export function ChatPage() {
       title={t("chat_title")}
       error={c.err()}
       scroll={false}
+      // The conversation runs on under the phone's bar (ChatMain).
+      glassBar
       // With topics, the phone's bar belongs to the conversation (it slides with it), below.
       hideBar={!c.mobileMode() || (c.chatReadonly() ? c.showTopicSidebar() : c.mobileTopicSplitEnabled())}
       leading={c.consoleTopicsEnabled() ? mobileLeading() : undefined}
@@ -376,9 +397,9 @@ export function ChatPage() {
               testID="chat-conversation-pane"
             >
               <If when={c.mobileMode() && c.mobileTopicSplitEnabled()}>
-                <PageBar leading={mobileLeading()} />
+                <PageBar leading={mobileLeading()} glass />
               </If>
-              <ChatMain c={c} />
+              <ChatMain c={c} underBar={c.mobileMode()} />
             </View>
           </If>
           <If when={c.desktopRightPanelVisible()}>

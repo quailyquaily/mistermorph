@@ -26,6 +26,7 @@ import { t } from "../../components/chat/i18n";
 import { ChatLoadError } from "../../components/chat/ChatLoadError";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
+import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { listTitleSize } from "../../components/frame/metrics";
 import { createPullSearch } from "../../components/shared/pullSearch";
@@ -427,8 +428,9 @@ export function TopicSidebar(props: {
           ending at the right inset, its icon centred over the rows' status marks. The search is
           the list's, on a phone and a desktop alike. The hairline under the head shows once topics
           have scrolled beneath, and sags softly under the view toggle that is on
-          (design/ui-refresh.html §1). */}
-      <View class="relative z-10">
+          (design/ui-refresh.html §1). Where the window draws glass the head is glass, and the
+          topics run on under it (components/frame/glassBar.tsx). */}
+      <View class={`relative z-10 ${glassBarClass()}`} style={glassBarStyle()}>
         <View
           ref={(node: ViewRef) => {
             headRow = node;
@@ -509,7 +511,7 @@ export function TopicSidebar(props: {
           drag.onViewportLayout(event);
         }}
         scrollEventThrottle={edges.handlers.scrollEventThrottle}
-        style={edges.style()}
+        style={{ ...edges.style(), ...underBar() }}
         contentClass="grow"
         scrollbar={SCROLLBAR}
         refreshIndicator={pull.indicator}
@@ -520,6 +522,8 @@ export function TopicSidebar(props: {
         onAccessibilityAction={pull.onAction}
       >
         <View class="grow" onLayout={edges.onContentLayout}>
+          {/* The head's room, inside the content the rows are placed in (the drag's `contentInset`). */}
+          <BarRoom />
           {/* The search (on a touch phone once pulled down): the list's first view, scrolling with
               it, at the head's foot while the list is at its top. It has its own gutter, so it sits
               outside the rows' one below. It stays while the topics load, fail or are none. */}

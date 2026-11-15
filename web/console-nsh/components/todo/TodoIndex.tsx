@@ -16,6 +16,7 @@ import { createAnimatedValue, effect, reduceMotion, Scroll, Text, untracked, Vie
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
+import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../frame/glassBar";
 import { gutterX, gutterY, listTitleSize } from "../frame/metrics";
 import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR } from "../motion";
 import { BAR_ICON_SIZE, CircleButton, Icon, StatusMark } from "../ui";
@@ -180,8 +181,10 @@ export function TodoIndex(props: {
   return (
     <View class="flex-1" accessibilityLabel={t("todo_nav_title")} testID="todo-index" {...parts.probe(() => "index")}>
       <View
-        class={`flex-row items-center border-b ${edges.scrolled() ? "border-line-soft/50" : "border-transparent"}`}
+        // Glass over the list, which runs on under it (components/frame/glassBar.tsx).
+        class={`flex-row items-center border-b ${edges.scrolled() ? "border-line-soft/50" : "border-transparent"} ${glassBarClass()}`}
         style={{
+          ...glassBarStyle(),
           height: TODO_HEAD_HEIGHT,
           paddingLeft: gutterX(),
           paddingRight: todoHeadPaddingRight(!!props.mobile),
@@ -207,7 +210,8 @@ export function TodoIndex(props: {
         </If>
       </View>
 
-      <Scroll class="flex-1" scrollbar={SCROLLBAR} {...edges.handlers} style={edges.style()}>
+      <Scroll class="flex-1" scrollbar={SCROLLBAR} {...edges.handlers} style={{ ...edges.style(), ...underBar(TODO_HEAD_HEIGHT) }}>
+        <BarRoom height={TODO_HEAD_HEIGHT} />
         <View
           onLayout={edges.onContentLayout}
           class="gap-3.5"

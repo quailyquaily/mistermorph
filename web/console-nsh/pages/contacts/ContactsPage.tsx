@@ -75,6 +75,7 @@ import {
   type LibraryMotion,
 } from "./ContactCard";
 import { createPartProbe, type PartLayoutListener } from "../../components/shared/partProbe";
+import { BarRoom, barRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { createPullSearch } from "../../components/shared/pullSearch";
 
@@ -709,7 +710,9 @@ export function ContactsPage(props: {
   function reveal(index: number) {
     const row = Math.floor(index / untracked(geometry).columns);
     const top = rowTop(row, untracked(geometry), untracked(headerHeight));
-    if (top < untracked(scrollY)) list?.scrollToIndex({ index, animated: true, viewPosition: 0, viewOffset: 6 });
+    // The head covers the list's top where it is glass (the header's BarRoom).
+    const covered = barRoom();
+    if (top < untracked(scrollY) + covered) list?.scrollToIndex({ index, animated: true, viewPosition: 0, viewOffset: 6 + covered });
     else if (top + untracked(geometry).height > untracked(scrollY) + untracked(viewHeight)) list?.scrollToIndex({ index, animated: true, viewPosition: 1, viewOffset: -8 });
   }
   // Whether the keys walk the grid: from the first arrow until a card is pressed or opened with
@@ -835,6 +838,8 @@ export function ContactsPage(props: {
         footer={MobileBarSpacer}
         header={() => (
           <View onLayout={({ bounds }) => headerHeight.set(bounds.size.height)}>
+            {/* The list runs on under the column's head where it is glass (IndexColumn). */}
+            <BarRoom />
             <If when={pull.shown()}>{filterField()}</If>
             <If when={!store.loading && err()}>
               <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
@@ -1155,8 +1160,9 @@ export function ContactsPage(props: {
             accessibilityElementsHidden={panes.hidden(1) || undefined}
             importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
           >
-            <MobileBar title={heldBarTitle()} backLabel={t("contacts_title")} onBack={panes.hidden(1) ? undefined : showIndexView} />
-            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow">
+            <MobileBar title={heldBarTitle()} backLabel={t("contacts_title")} onBack={panes.hidden(1) ? undefined : showIndexView} glass />
+            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow" style={underBar()}>
+              <BarRoom />
               <If when={shownContact()}>{(contact) => <ContactBody contact={contact()} />}</If>
               <MobileBarSpacer testID="contact-detail-bar-room" />
             </Scroll>

@@ -41,6 +41,7 @@ import { RuntimePanel } from "./RuntimePanel";
 import { SettingsAppPanel } from "../../components/settings/SettingsAppPanel";
 import { ShortcutsPanel } from "../../components/settings/ShortcutsPanel";
 import { SettingsCreditsPanel } from "../../components/settings/SettingsCreditsPanel";
+import { BarRoom, barRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 function routeSection() {
@@ -394,12 +395,16 @@ export function SettingsPage() {
       }}
       onLayout={panelEdges.handlers.onLayout}
       scrollEventThrottle={panelEdges.handlers.scrollEventThrottle}
-      style={panelEdges.style()}
+      // On a phone the section runs on under its bar where the bar is glass.
+      style={mobile() ? { ...panelEdges.style(), ...underBar() } : panelEdges.style()}
       class="flex-1"
       contentClass="grow"
       scrollbar={SCROLLBAR}
       testID="settings-panel"
     >
+      <If when={mobile()}>
+        <BarRoom />
+      </If>
       <View
         onLayout={panelEdges.onContentLayout}
         class={`grow gap-4 ${mobile() ? "px-3 pt-4" : "pl-0 pr-2 pt-2"} ${s.saveBarVisible() ? "pb-[88px]" : mobile() ? "pb-4" : "pb-2"}`}
@@ -414,6 +419,7 @@ export function SettingsPage() {
           onCancelForce={() => {
             s.restartState.tasksRunning = false;
           }}
+          topInset={mobile() ? barRoom() : 0}
         />
         <Each of={[panelKey()]} key={(id) => id}>
           {(key) =>
@@ -452,6 +458,7 @@ export function SettingsPage() {
                       >
                         <If when={mobile()}>
                           <PageBar
+                            glass
                             leading={
                               <View class="flex-1 flex-row items-center gap-2">
                                 <BackButton title={t("settings_title")} onPress={() => mobilePanelVisible.set(false)} testID="settings-back" />

@@ -35,6 +35,7 @@ import {
   composerTriggerContext,
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
+import { glassEnabled, glassStyle } from "../../lib/glass";
 import { isMobile } from "../../lib/shell";
 import { COMPOSER_RADIUS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
 import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
@@ -111,6 +112,9 @@ export interface ChatComposerProps {
   onLLMProfileChange?: (value: string) => void;
   footerText?: string;
   landing?: boolean;
+  /** Hears the height of what lies under the frame (the footer line and the padding): the room
+   *  the conversation's fade keeps solid under a glass frame (pages/chat/ChatPage.tsx). */
+  onFootRoom?: (height: number) => void;
   voiceAvailable?: boolean;
   voiceState?: "idle" | "recording" | "transcribing";
   voiceLabel?: string;
@@ -471,6 +475,13 @@ export function ChatComposer(props: ChatComposerProps) {
   // over the dock): what they clear above and below their button is the frame around it
   // (PopoverPicker). Both sit at the frame's foot the same way, in both layouts.
   const frameHeight = signal(0);
+  // The frame is glass over a conversation (not on the landing, where nothing scrolls behind it).
+  const glass = () => !props.landing && glassEnabled();
+  const boxHeight = signal(0);
+  effect(() => {
+    const below = boxHeight() > 0 && frameHeight() > 0 ? Math.max(0, boxHeight() - frameHeight()) : 0;
+    untracked(() => props.onFootRoom?.(below));
+  });
   const composerClearance = () => ({
     top: Math.max(0, frameHeight() - CONTROL_FROM_BOTTOM),
     bottom: CONTROL_FROM_BOTTOM - CONTROL_SIZE,
@@ -882,9 +893,15 @@ export function ChatComposer(props: ChatComposerProps) {
   );
 
   return (
-    <View class={`gap-2 ${props.landing ? "w-full" : "pb-2.5"}`} testID={props.testID}>
+    <View
+      class={`gap-2 ${props.landing ? "w-full" : "pb-2.5"}`}
+      testID={props.testID}
+      onLayout={({ bounds }) => boxHeight.set(bounds.size.height)}
+    >
       <View
-        class={composerFrameClass(isMobile())}
+        class={composerFrameClass(isMobile(), glass())}
+        style={glass() ? glassStyle() : undefined}
+        testID={glass() ? "chat-composer-frame.glass" : "chat-composer-frame"}
         onLayout={({ bounds }) => frameHeight.set(bounds.size.height)}
         onPress={() => focus({ preserveSelection: true })}
       >

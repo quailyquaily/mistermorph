@@ -103,6 +103,8 @@ export function SettingsRestartBanner(props: {
   error: string;
   onRestart: (force: boolean) => void;
   onCancelForce: () => void;
+  /** The room at the top of the panel's scroll that a bar covers (a phone's glass bar): the banner sticks below it. */
+  topInset?: number;
 }) {
   return (
     <If when={props.pending}>
@@ -112,7 +114,7 @@ export function SettingsRestartBanner(props: {
       <View
         testID="settings-restart-banner"
         class="flex-row flex-wrap items-center gap-3 border border-warn/45 px-3.5 py-2.5 shadow-[0_2px_8px_rgba(24,24,50,0.08)]"
-        style={{ position: "sticky", top: 8, zIndex: 5, backgroundColor: "color-mix(in srgb, #eea03e 10%, #f6faff)" }}
+        style={{ position: "sticky", top: 8 + (props.topInset ?? 0), zIndex: 5, backgroundColor: "color-mix(in srgb, #eea03e 10%, #f6faff)" }}
       >
         <View class={props.restarting ? "animate-spin" : ""} style={{ animationDuration: 800 }}>
           <Icon name="PhArrowClockwise" size={18} color="warn" />

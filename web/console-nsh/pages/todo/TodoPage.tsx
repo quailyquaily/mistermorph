@@ -18,6 +18,7 @@ import { Entrance, FadeText, SCROLLBAR } from "../../components/motion";
 import { TodoTaskEditor } from "../../components/todo/TodoTaskEditor";
 import { createTodoState, type TodoState, type TodoTask } from "../../components/todo/todo-state";
 import { TODO_TOPIC_ERROR, TODO_TOPIC_READY, TODO_TOPIC_UNAVAILABLE } from "../../lib/core/todo-topic.js";
+import { BarRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -128,7 +129,11 @@ function EditorPane(props: { state: TodoState; mobile?: boolean }) {
     props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8 };
   return (
     <If when={mode() !== "placeholder"} else={<Placeholder state={state} mobile={props.mobile} />}>
-      <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="min-h-full">
+      {/* On a phone the editor runs on under its bar where the bar is glass. */}
+      <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="min-h-full" style={props.mobile ? underBar() : undefined}>
+        <If when={props.mobile}>
+          <BarRoom />
+        </If>
         <Entrance watch={`${mode()}:${state.selectedTaskKey() ?? ""}:${state.selectedCalendarDate() ?? ""}`} class="flex-1" rise={4}>
           <View class="flex-1" style={margin()}>
             <If when={mode() === "heartbeat"}>
@@ -256,6 +261,7 @@ export function TodoPage() {
               importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
             >
               <PageBar
+                glass
                 leading={
                   <View class="flex-1 flex-row items-center gap-2">
                     <BackButton title={t("todo_nav_title")} testID="todo-back" onPress={state.showIndexView} />

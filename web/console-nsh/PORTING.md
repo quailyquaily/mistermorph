@@ -318,6 +318,19 @@ Headless tests prove behaviour, not the look.
   inside it: an `Icon` (a tinted mask) comes out as a solid square of its colour. The Contacts
   panel's avatar resolves through one (`PixelResolve`) with its kind badge kept outside it, over
   it. Headless tests draw no shaders (`shadersAvailable()` is false there): look in a browser.
+- A slot prop (`props.search`, `props.top`: JSX passed as a prop) is drawn again each time it is
+  read. A second read in the same component makes a second, unmounted copy whose `ref` and key
+  bindings replace the first one's (Settings' search lost its focus after Clear). Read a slot
+  once (`untracked(() => props.search)`) and use that.
+- Blurred glass (`lib/glass.ts`, `components/frame/glassBar.tsx`): `backdropFilter` blurs only
+  what is drawn behind the view, so a bar in a column above its scroller has nothing to blur. The
+  scroller is pulled up under the bar (`underBar()`, a negative top margin) and its content starts
+  with the bar's room (`BarRoom`); the bar goes above it with `relative z-10` (a static z-index:
+  one that changes moves the native view and drops the focus). GPUI draws no `backdropFilter`,
+  Android only from API 31, and nsh reports no "reduce transparency" setting: `glassEnabled()`
+  answers for all of them, and without glass nothing is pulled or padded. Headless Chrome at a
+  device scale of 2 leaves sharp ghost text under a 20px backdrop blur (plain HTML too): take
+  screenshots of glass at scale 1.
 
 ### Android (nsh 0.4.0)
 

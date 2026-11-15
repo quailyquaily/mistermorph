@@ -7,6 +7,8 @@
 // height still fixes the content box, so a line measured a little taller is not scrolled or clipped:
 // the extra goes below the line.
 
+import { glassFill } from "../../lib/glassPolicy";
+
 /** The Vue field: IBM Plex Mono at 14pt in 1.58 lines. */
 export const COMPOSER_LINE_HEIGHT = 22.12;
 /** The add button and Send: 38pt squares (`size-[38px]` in ChatComposer). */
@@ -54,9 +56,12 @@ export function composerFrameBorder(mobile: boolean): "border-line" | "border-in
  *  state: idle, focused, typing, sending, running (the beam rides it), after a send and with a kept
  *  draft. Focus shows as the shadow alone. A focus colour (it was `border-blue/45`) replaced the
  *  light border while the field had the focus, and the frame only got it back when it lost the
- *  focus. Only the shadow eases (`transition-shadow`), so the border never animates. */
-export function composerFrameClass(mobile: boolean): string {
-  return `relative rounded-[27px] border ${composerFrameBorder(mobile)} bg-field transition-shadow duration-[260ms] focus-within:shadow-md`;
+ *  focus. Only the shadow eases (`transition-shadow`), so the border never animates.
+ *  `glass`: over a conversation, where the window draws glass (lib/glass.ts), the frame's fill is
+ *  the glass tint and the conversation shows through it, blurred (the frame's style takes
+ *  `glassStyle()`); else it is the field's own fill. */
+export function composerFrameClass(mobile: boolean, glass = false): string {
+  return `relative rounded-[27px] border ${composerFrameBorder(mobile)} ${glassFill("composer", glass)} transition-shadow duration-[260ms] focus-within:shadow-md`;
 }
 
 /** The frame's corner radius: half the one-row height, so one row is a pill; its round controls
