@@ -20,6 +20,9 @@ type resumeState struct {
 
 	PlanRequired  bool `json:"plan_required"`
 	ParseFailures int  `json:"parse_failures"`
+	// FileWriteGuard keeps the requested-file completion guard's reminder counts across an
+	// approval pause. Absent in older states, which resume with a fresh budget.
+	FileWriteGuard fileWriteGuardState `json:"file_write_guard,omitzero"`
 
 	Messages    []llm.Message   `json:"messages"`
 	ExtraParams map[string]any  `json:"extra_params,omitempty"`

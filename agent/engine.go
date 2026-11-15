@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -504,24 +503,6 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		loopState.protectLastMessage()
 	}
 	return e.runLoop(ctx, loopState)
-}
-
-func missingFiles(paths []string) []string {
-	if len(paths) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		if _, err := os.Stat(p); err == nil {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
 }
 
 func sortedMapKeys(m map[string]any) []string {

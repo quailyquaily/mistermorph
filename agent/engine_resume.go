@@ -162,6 +162,7 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 		steerSource:             opts.SteerSource,
 		parseFailures:           rs.ParseFailures,
 		requestedWrites:         ExtractFileWritePaths(agentCtx.Task),
+		fileWrite:               cloneFileWriteGuardState(rs.FileWriteGuard),
 		pendingTool:             &rs.PendingTool,
 		approvedActionIdentity:  rs.PendingTool.ApprovalIdentity,
 		nextStep:                rs.Step,
