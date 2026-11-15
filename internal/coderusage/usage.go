@@ -159,36 +159,12 @@ func CodexTurnUsage(payload map[string]any) (ModelUsage, bool) {
 
 // ClaudeTaskUsage reads what one task used from the `result` line that ends it in a `claude -p`
 // stream session: `model_usage_since_last_result`, per model the tokens, the cache reads and
-// writes and the CLI's cost at list price. The line's `modelUsage` and `total_cost_usd` are running
-// totals of the process, never a task's usage. Only for a CLI that does not write
-// `model_usage_since_last_result` is the task's usage what `modelUsage` grew by since the totals
-// of the process's task before (before; nil for its first). It returns those totals for the next
-// task, and the line's `num_turns`.
-func ClaudeTaskUsage(payload map[string]any, before []ModelUsage) (task, totals []ModelUsage, turns int) {
-	turns = int(intField(payload, "num_turns"))
-	running, _ := payload["modelUsage"].(map[string]any)
-	totals = claudeModelUsage(running)
-	if since, ok := payload["model_usage_since_last_result"]; ok {
-		byModel, _ := since.(map[string]any)
-		return claudeModelUsage(byModel), totals, turns
-	}
-	earlier := make(map[string]ModelUsage, len(before))
-	for _, m := range before {
-		earlier[m.Model] = m
-	}
-	for _, m := range totals {
-		e := earlier[m.Model]
-		m.InputTokens = max(m.InputTokens-e.InputTokens, 0)
-		m.CachedInputTokens = max(m.CachedInputTokens-e.CachedInputTokens, 0)
-		m.CacheCreationInputTokens = max(m.CacheCreationInputTokens-e.CacheCreationInputTokens, 0)
-		m.OutputTokens = max(m.OutputTokens-e.OutputTokens, 0)
-		m.ReasoningTokens = max(m.ReasoningTokens-e.ReasoningTokens, 0)
-		m.CostUSD = max(m.CostUSD-e.CostUSD, 0)
-		if m.InputTokens > 0 || m.OutputTokens > 0 || m.CostUSD > 0 {
-			task = append(task, m)
-		}
-	}
-	return task, totals, turns
+// writes and the CLI's cost at list price, and the line's `num_turns`. The line's `modelUsage` and
+// `total_cost_usd` are running totals of the process, never a task's usage: a line without
+// `model_usage_since_last_result` gives no usage.
+func ClaudeTaskUsage(payload map[string]any) (task []ModelUsage, turns int) {
+	since, _ := payload["model_usage_since_last_result"].(map[string]any)
+	return claudeModelUsage(since), int(intField(payload, "num_turns"))
 }
 
 // claudeModelUsage reads a `result` line's usage by model, in the order of the models' names.

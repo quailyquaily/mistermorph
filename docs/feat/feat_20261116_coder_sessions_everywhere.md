@@ -185,7 +185,7 @@ The installed 2.1.325 accepts the command lines above (`--permission-mode defaul
 - **Progress** is a short label of what Claude Code is doing (`thinking`, `running a command`, `editing files`, …), said when it changes. **Notes** are what it said before going on working, and one line per tool use and tool result (cut at 1000 characters). A sub-agent's text (`parent_tool_use_id`) is neither the reply nor a note.
 - **Permissions.** In a Console session that asks, a `can_use_tool` request is a card with `Allow once` and `Deny`. A denial answers `deny` and the task goes on. In a bypassed session the flag keeps Claude Code from asking; a request that comes anyway is allowed.
 - **Questions.** `AskUserQuestion` is one card per question, with the options' labels as choices and room for an own answer, in a bypassed Console session too. In a run that cannot ask, the task fails with the question (and its options) as its error, and the process is closed.
-- **Usage** rows are the CLI's own list price per model, marked estimated, as the one-shot run's were. Only for a CLI that writes no `model_usage_since_last_result` is a task's usage what `modelUsage` grew by since the process's task before. A task that is cancelled, or whose process dies, has no `result` line: what it used is not recorded.
+- **Usage** rows are the CLI's own list price per model, marked estimated, as the one-shot run's were. A `result` line without `model_usage_since_last_result` records no usage: nothing is worked out from `modelUsage` or `total_cost_usd`. A task that is cancelled, or whose process dies, has no `result` line: what it used is not recorded.
 - **Quota** is the last `rate_limit_event` of the task. The refresh button keeps `claude -p /usage --output-format json --no-session-persistence` (`coderusage.ReadClaudeQuota`), a local command that calls no model. The status line command and `statusline.json` went with the terminal.
 - **Closing and reopening.** A cancelled or failed task, a dead process and a changed `bypass_approvals.claude` close the process (cancellation kills its process group; no interrupt is sent over the stream). The next task of the scope starts `--resume <uuid>` with the session id the `result` lines reported. A session Claude Code never replied in may not be on disk, and a reopened process that exits without a line could not open it: both start over with a new session id instead of failing every later task.
 - `--no-session-persistence` is not used for tasks: the session must be on disk for `--resume`. Sessions of runs outside the Console therefore stay in Claude Code's own session list.
@@ -223,7 +223,7 @@ With stand-in CLIs (`internal/codersessions`):
 Elsewhere:
 
 - `agent/coder_usage_test.go`: Claude Code through real sessions and a stand-in CLI: each task's usage and the quota in one report, the usage line of the result, and the rows in `usage.db` (the second task's row is its own usage, not the process's totals).
-- `internal/coderusage`: `ClaudeTaskUsage`, with and without `model_usage_since_last_result`.
+- `internal/coderusage`: `ClaudeTaskUsage`: `model_usage_since_last_result`, and no usage from `modelUsage` and `total_cost_usd` alone, over several tasks (also in `internal/codersessions`, on one process).
 - `internal/llmstats`: rows with pricing parts already in a file are priced again after a catalog change, beside a session's row that keeps the CLI's cost.
 
 Opt-in, against the installed CLIs (they use the signed-in account and its quota):

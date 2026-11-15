@@ -3,7 +3,6 @@ package coderusage
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -77,9 +76,9 @@ func TestClaudeRateLimitWithoutWindows(t *testing.T) {
 // A result line of a stream session: the task's usage is model_usage_since_last_result; modelUsage
 // and total_cost_usd are the process's running totals and are not the task's.
 func TestClaudeTaskUsage(t *testing.T) {
-	task, totals, turns := ClaudeTaskUsage(decode(t, claudeResult), nil)
-	if turns != 1 || len(task) != 1 || len(totals) != 1 {
-		t.Fatalf("task = %+v, totals = %+v, turns %d", task, totals, turns)
+	task, turns := ClaudeTaskUsage(decode(t, claudeResult))
+	if turns != 1 || len(task) != 1 {
+		t.Fatalf("task = %+v, turns %d", task, turns)
 	}
 	m := task[0]
 	// Input counts the cache reads and writes, as llmstats does for Anthropic.
@@ -87,53 +86,55 @@ func TestClaudeTaskUsage(t *testing.T) {
 		t.Fatalf("model usage = %+v", m)
 	}
 
-	second, totals, _ := ClaudeTaskUsage(decode(t, claudeSecondResult), totals)
+	second, turns := ClaudeTaskUsage(decode(t, claudeSecondResult))
 	want := []ModelUsage{
 		{Model: "claude-haiku-5-5", InputTokens: 300, OutputTokens: 20, CostUSD: 0.0004},
 		{Model: "claude-opus-5-5", InputTokens: 3 + 22856, CachedInputTokens: 22856, OutputTokens: 6, ReasoningTokens: 2, CostUSD: 0.0116},
 	}
-	if !reflect.DeepEqual(second, want) {
-		t.Fatalf("second task = %+v\nwant          %+v", second, want)
-	}
-	if len(totals) != 2 || totals[1].CostUSD != 0.10585 {
-		t.Fatalf("totals = %+v", totals)
+	if turns != 2 || !reflect.DeepEqual(second, want) {
+		t.Fatalf("second task = %+v, turns %d\nwant          %+v", second, turns, want)
 	}
 
 	// A task that called no model used nothing, whatever the running totals say.
 	payload := decode(t, claudeSecondResult)
 	payload["model_usage_since_last_result"] = map[string]any{}
-	if none, _, _ := ClaudeTaskUsage(payload, nil); len(none) != 0 {
+	if none, _ := ClaudeTaskUsage(payload); len(none) != 0 {
 		t.Fatalf("an empty task = %+v", none)
-	}
-
-	// A CLI without model_usage_since_last_result: what the running totals grew by.
-	older, newer := decode(t, claudeResult), decode(t, claudeSecondResult)
-	delete(older, "model_usage_since_last_result")
-	delete(newer, "model_usage_since_last_result")
-	task, totals, _ = ClaudeTaskUsage(older, nil)
-	if len(task) != 1 || task[0].InputTokens != 22858 || task[0].CostUSD != 0.09425 {
-		t.Fatalf("first task from totals = %+v", task)
-	}
-	task, _, _ = ClaudeTaskUsage(newer, totals)
-	if len(task) != 2 || task[0].Model != "claude-haiku-5-5" || task[0].InputTokens != 300 ||
-		task[1].InputTokens != 22859 || task[1].CachedInputTokens != 22856 || task[1].CacheCreationInputTokens != 0 || task[1].OutputTokens != 6 ||
-		math.Abs(task[1].CostUSD-0.0116) > 1e-9 {
-		t.Fatalf("second task from totals = %+v", task)
-	}
-	// The same totals again: nothing was used.
-	if task, _, _ = ClaudeTaskUsage(newer, claudeTotals(t, newer)); len(task) != 0 {
-		t.Fatalf("unchanged totals = %+v", task)
-	}
-	// No usage at all.
-	if task, totals, _ := ClaudeTaskUsage(map[string]any{"type": "result"}, nil); task != nil || totals != nil {
-		t.Fatalf("no usage = %+v %+v", task, totals)
 	}
 }
 
-func claudeTotals(t *testing.T, payload map[string]any) []ModelUsage {
-	t.Helper()
-	_, totals, _ := ClaudeTaskUsage(payload, nil)
-	return totals
+// modelUsage, usage and total_cost_usd alone are not a task's usage: a result line without
+// model_usage_since_last_result gives none, for the first task of a process and for the ones
+// after it, whose running totals have grown.
+func TestClaudeTaskUsageIsNotTheRunningTotals(t *testing.T) {
+	for i, line := range []string{claudeResult, claudeSecondResult} {
+		payload := decode(t, line)
+		if _, ok := payload["modelUsage"]; !ok || payload["total_cost_usd"] == nil {
+			t.Fatalf("task %d: the line has no running totals", i)
+		}
+		for name, since := range map[string]any{"absent": nil, "null": "null", "not an object": "0.5"} {
+			if since == nil {
+				delete(payload, "model_usage_since_last_result")
+			} else {
+				payload["model_usage_since_last_result"] = decode(t, `{"v":`+since.(string)+`}`)["v"]
+			}
+			task, turns := ClaudeTaskUsage(payload)
+			if len(task) != 0 {
+				t.Fatalf("task %d, %s: usage from the running totals = %+v", i, name, task)
+			}
+			if turns != i+1 {
+				t.Fatalf("task %d, %s: turns = %d", i, name, turns)
+			}
+			// Nothing to record: no row, no cost.
+			run := Run{Backend: BackendClaude, Models: task, Turns: turns}
+			if records := run.Records(context.Background(), time.Now()); len(records) != 0 || run.Total().CostUSD != 0 {
+				t.Fatalf("task %d, %s: records = %+v", i, name, records)
+			}
+		}
+	}
+	if task, turns := ClaudeTaskUsage(map[string]any{"type": "result"}); task != nil || turns != 0 {
+		t.Fatalf("no usage = %+v, %d", task, turns)
+	}
 }
 
 func TestCodexTurnUsageAndRun(t *testing.T) {
@@ -178,7 +179,7 @@ func TestRecordsAndQuotasInUsageDB(t *testing.T) {
 	recorder := NewRecorder(path, nil)
 	recorder.now = func() time.Time { return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC) }
 	ctx := llmstats.WithRunID(context.Background(), "run-1")
-	models, _, turns := ClaudeTaskUsage(decode(t, claudeResult), nil)
+	models, turns := ClaudeTaskUsage(decode(t, claudeResult))
 	recorder.RecordRun(ctx, Run{Backend: BackendClaude, Models: models, Turns: turns, DurationMs: 1200})
 	quota, _ := ParseClaudeRateLimit(decode(t, claudeRateLimitEvent)["rate_limit_info"].(map[string]any), time.Unix(1794550000, 0))
 	recorder.SaveQuota(ctx, quota)

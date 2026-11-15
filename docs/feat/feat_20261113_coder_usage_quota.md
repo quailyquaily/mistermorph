@@ -17,7 +17,7 @@ Only what the CLIs themselves report. MisterMorph never reads their credentials,
 | | Run usage | Quota |
 |---|---|---|
 | Codex (`codex exec --json`) | `turn.completed.usage`: input, cached input, cache write, output and reasoning tokens. No model name. | Not in the exec stream. Read from `codex app-server` (JSON-RPC over stdio): `initialize`, `initialized`, then `account/rateLimits/read`. Its `rateLimits` has `planType`, `primary`/`secondary` windows (`usedPercent`, `windowDurationMins`, `resetsAt`) and `rateLimitReachedType`. The read uses no quota. |
-| Claude Code (`claude -p --output-format stream-json`) | `result`: `modelUsage` per model (tokens, cache reads and writes, `costUSD`), `num_turns`; else `usage` and `total_cost_usd`. | `rate_limit_event` during the run: `rate_limit_info.status` and `unifiedWindows` (`five_hour`, `seven_day`, …, each `utilization` 0–1, `resetsAt`, `status`). |
+| Claude Code (`claude -p --output-format stream-json`) | `result`: `model_usage_since_last_result` per model (tokens, cache reads and writes, `costUSD`), `num_turns`. Since 2026-11-16 (`feat_20261116_coder_sessions_everywhere.md`) nothing else: `modelUsage`, `usage` and `total_cost_usd` are running totals of the process and are not a task's usage. | `rate_limit_event` during the run: `rate_limit_info.status` and `unifiedWindows` (`five_hour`, `seven_day`, …, each `utilization` 0–1, `resetsAt`, `status`). |
 
 Claude Code's cost is its list price (`costBasis: list`); on a subscription it is not what is billed, so the rows mark it estimated.
 

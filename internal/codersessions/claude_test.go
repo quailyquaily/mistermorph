@@ -59,8 +59,13 @@ func fakeClaude() {
 		if failed {
 			subtype = "error_during_execution"
 		}
-		write(map[string]any{"type": "result", "subtype": subtype, "is_error": failed, "result": text, "num_turns": 2, "session_id": session,
-			"total_cost_usd": 0.25 * float64(tasks), "modelUsage": usage(tasks), "model_usage_since_last_result": usage(1)})
+		line := map[string]any{"type": "result", "subtype": subtype, "is_error": failed, "result": text, "num_turns": 2, "session_id": session,
+			"total_cost_usd": 0.25 * float64(tasks), "modelUsage": usage(tasks), "model_usage_since_last_result": usage(1)}
+		// A result line with the process's running totals only.
+		if os.Getenv("MM_CLAUDE_USAGE") == "totals" {
+			delete(line, "model_usage_since_last_result")
+		}
+		write(line)
 	}
 	request := func(tool string, input map[string]any) {
 		write(map[string]any{"type": "control_request", "request_id": "req-1", "request": map[string]any{
@@ -212,6 +217,37 @@ func flagValue(args []string, name string) string {
 		return args[i+1]
 	}
 	return ""
+}
+
+// The process's running totals (modelUsage, total_cost_usd) are not a task's usage: result lines
+// without model_usage_since_last_result report no usage, for the first task and for the ones
+// after it, and no difference between two tasks' totals is made up.
+func TestClaudeRunningTotalsAreNotATasksUsage(t *testing.T) {
+	var sessions Sessions
+	defer sessions.Close()
+	req, _ := claudeRequest(t, "")
+	req.Env = append(req.Env, "MM_CLAUDE_USAGE=totals")
+	var runs []coderusage.Run
+	req.Report = func(r coderusage.Run, _ *coderusage.Quota) { runs = append(runs, r) }
+	var pids []int
+	req.Process = func(pid int) { pids = append(pids, pid) }
+	for i, task := range []string{"first", "second", "ok"} {
+		req.Task = task
+		if _, err := sessions.Run(context.Background(), "run", req); err != nil {
+			t.Fatalf("task %d: %v", i, err)
+		}
+	}
+	if len(pids) != 3 || pids[0] != pids[1] || pids[1] != pids[2] {
+		t.Fatalf("pids = %v, want one process", pids)
+	}
+	if len(runs) != 3 {
+		t.Fatalf("runs = %+v", runs)
+	}
+	for i, run := range runs {
+		if run.Backend != "claude" || run.Turns != 2 || len(run.Models) != 0 || run.Total().CostUSD != 0 || len(run.Records(context.Background(), time.Now())) != 0 {
+			t.Fatalf("run %d = %+v, want no usage", i, run)
+		}
+	}
 }
 
 func TestClaudeArgs(t *testing.T) {
@@ -501,7 +537,7 @@ func TestClaudeReopensAfterCancelFailureAndDeath(t *testing.T) {
 			if id == "" || flagValue(starts[1], "--resume") != id || flagValue(starts[1], "--session-id") != "" {
 				t.Fatalf("processes = %v", starts)
 			}
-			// The reopened process counts from zero: its first task's usage is its own.
+			// The reopened process's first task reports its own usage.
 			if len(runs) != 2 || len(runs[1].Models) != 1 || runs[1].Models[0].InputTokens != 100 {
 				t.Fatalf("runs = %+v", runs)
 			}

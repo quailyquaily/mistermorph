@@ -25,10 +25,8 @@ type session struct {
 	usage         *CodexUsageReader
 	protocolUsage bool
 	tokenTotal    int64
-	// Claude Code: whether the session is on disk (reopened with --resume), and the running
-	// totals its process last reported.
-	resumable    bool
-	claudeTotals []coderusage.ModelUsage
+	// Claude Code: whether the session is on disk (reopened with --resume).
+	resumable bool
 }
 type Sessions struct {
 	mu     sync.Mutex

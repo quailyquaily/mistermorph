@@ -73,8 +73,6 @@ func (s *session) claude(ctx context.Context, req Request) (output string, run c
 		if err != nil {
 			return
 		}
-		// modelUsage counts from the start of a process.
-		s.claudeTotals = nil
 		started = true
 	} else {
 		task.between()
@@ -283,7 +281,7 @@ func (t *claudeTask) rateLimit(p map[string]any) {
 
 // finish reads the task's result line: its answer, whether it failed, and what it used.
 func (t *claudeTask) finish(p map[string]any) {
-	t.models, t.s.claudeTotals, t.turns = coderusage.ClaudeTaskUsage(p, t.s.claudeTotals)
+	t.models, t.turns = coderusage.ClaudeTaskUsage(p)
 	if id := claudeString(p, "session_id"); id != "" {
 		t.s.id = id
 	}
