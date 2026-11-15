@@ -339,7 +339,15 @@ Headless tests prove behaviour, not the look.
   Android only from API 31, and nsh reports no "reduce transparency" setting: `glassEnabled()`
   answers for all of them, and without glass nothing is pulled or padded. Headless Chrome at a
   device scale of 2 leaves sharp ghost text under a 20px backdrop blur (plain HTML too): take
-  screenshots of glass at scale 1.
+  screenshots of glass at scale 1, or start Chrome with a GPU rasterizer (`--use-gl=angle
+  --use-angle=swiftshader --enable-unsafe-swiftshader`), which blurs at 2x and 3x as a device does.
+- A glass bar shows only what has contrast under it. A conversation's dense text reads as frosted
+  glass; single-line rows and pale cards on the paper (Topics, Contacts, Settings, Usage) blur to
+  almost the paper's own colour under the 78% tint, and the bar looks opaque although the list
+  does run on under it. To see whether a bar works, do not judge by eye: in a browser compare a
+  shot of the bar with one taken with its `backdrop-filter` off, and one with the bar hidden
+  (what lies under it); headless, `barRooms(app)` (tests/harness.ts) tells where each real page's
+  scroller starts under its bar (tests/glass-page-heads.test.tsx).
 
 ### Android (nsh 0.4.0)
 

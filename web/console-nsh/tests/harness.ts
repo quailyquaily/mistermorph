@@ -76,6 +76,11 @@ export interface ConsoleOptions {
   scrollProbe?: boolean;
   /** The window draws glass (tests/glassConsole.tsx): bars over the lists, a glass composer and navigation. */
   glass?: boolean;
+  /**
+   * The console reports where the content of each scroller under a bar starts
+   * (tests/barRoomConsole.tsx, with `glass` tests/glassBarRoomConsole.tsx): read them with `barRooms(app)`.
+   */
+  barRooms?: boolean;
 }
 
 /** Where the phone app keeps the console server's address and its last location (lib/mobileHost.ts). */
@@ -180,10 +185,14 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     ? "./slowSlidesConsole.tsx"
     : options.scrollProbe
       ? "./scrollProbeConsole.tsx"
-      : options.glass
-        ? "./glassConsole.tsx"
-        : "../App.tsx";
-  const probe = options.scrollProbe ? { "morph.fixture.scroll": null, "morph.fixture.saved": null } : {};
+      : options.barRooms
+        ? options.glass
+          ? "./glassBarRoomConsole.tsx"
+          : "./barRoomConsole.tsx"
+        : options.glass
+          ? "./glassConsole.tsx"
+          : "../App.tsx";
+  const probe: Record<string, null> = options.scrollProbe ? { "morph.fixture.scroll": null, "morph.fixture.saved": null } : options.barRooms ? { "morph.fixture.room": null } : {};
   if (options.platform === "android") {
     const app = await open(entry, {
       width: options.width ?? 390,
@@ -197,7 +206,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         "quail-language": "en",
         ...(options.kv || {}),
       },
-      host: options.host || options.scrollProbe ? { handlers: { ...probe, ...(options.host || {}) } } : null,
+      host: options.host || options.scrollProbe || options.barRooms ? { handlers: { ...probe, ...(options.host || {}) } } : null,
       clock: options.clock ? {} : null,
       network,
     });
@@ -251,6 +260,31 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     }
     return { status: 404, body: { error: `no stub for ${keysFor(request).at(-1)}` } };
   }
+}
+
+/** A scroller's content start under its bar, as a console opened with `barRooms` reports it (components/frame/glassBar.tsx `BarRoomFrame`). */
+export type BarRoomReport = { x: number; y: number; w: number; h: number; room: number };
+
+/** What a console opened with `barRooms` reports of the scrollers under its bars. */
+export function barRooms(app: App) {
+  const posts = () => app.host.posts().filter((post) => post.name === "morph.fixture.room");
+  let mark = 0;
+  return {
+    /** Forgets the reports so far (before going to another page). */
+    mark() {
+      mark = posts().length;
+    },
+    /** Every report since `mark()`, in order. */
+    all(): BarRoomReport[] {
+      return posts()
+        .slice(mark)
+        .map((post) => post.data as BarRoomReport);
+    },
+    /** The last report since `mark()` that is at least `minWidth` wide, `null` when there is none. */
+    last(minWidth = 1): BarRoomReport | null {
+      return this.all().filter((frame) => frame.w >= minWidth).at(-1) ?? null;
+    },
+  };
 }
 
 /** What a console opened with `scrollProbe` reports of its remembered scrollers (lib/scrollMemory.ts). */

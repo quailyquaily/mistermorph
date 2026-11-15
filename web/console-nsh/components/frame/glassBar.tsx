@@ -19,9 +19,22 @@
 //
 // Where the window draws no glass, all of these are nothing: no room, no pull, no fill, and the
 // column is laid out exactly as before.
+import type { ViewRef } from "nsh";
 import { View } from "nsh";
 import { glassClass, glassEnabled, glassStyle } from "../../lib/glass";
 import { CHROME_BAR_HEIGHT } from "./metrics";
+
+/** Where a scroller's content starts on the page, and the room it gives its bar there (0 without glass). */
+export type BarRoomFrame = { x: number; y: number; w: number; h: number; room: number };
+let roomWatcher: ((frame: BarRoomFrame) => void) | undefined;
+/**
+ * Tests hear where the content of each scroller under a bar starts (tests/barRoomConsole.tsx), on
+ * the real pages: with glass that is the bar's own top, the room as tall as the bar; without, the
+ * bar's foot. Set before the pages mount. Nobody listens in the app, and `BarRoom` is as it was.
+ */
+export function watchBarRooms(listener: ((frame: BarRoomFrame) => void) | undefined) {
+  roomWatcher = listener;
+}
 
 /** The room a glass bar takes over the scroller under it (0 where no glass is drawn). `height`: a bar that is not the page bar's 57pt. */
 export function barRoom(height: number = CHROME_BAR_HEIGHT): number {
@@ -50,9 +63,32 @@ export function underBar(height: number = CHROME_BAR_HEIGHT): { marginTop?: numb
  */
 export function BarRoom(props: { height?: number; gap?: number } = {}) {
   const room = () => barRoom(props?.height ?? CHROME_BAR_HEIGHT);
+  // A watched room tells its frame; without glass a mark of no height stands at the content's
+  // start in its place (out of the flow: it takes no gap and moves nothing).
+  const watcher = roomWatcher;
+  const watched = () => {
+    if (!watcher) return {};
+    let node: ViewRef | undefined;
+    return {
+      ref: (value: ViewRef) => {
+        node = value;
+      },
+      onLayout: () => {
+        node
+          ?.measure()
+          .then((m) => m && watcher({ x: m.pagePosition.x, y: m.pagePosition.y, w: m.bounds.size.width, h: m.bounds.size.height, room: room() }))
+          .catch(() => undefined);
+      },
+    };
+  };
   return (
-    <If when={room() > 0}>
-      <View accessibilityElementsHidden testID={`bar-room-${Math.round(room())}`} style={{ height: Math.max(0, room() - (props?.gap ?? 0)) }} />
+    <If when={room() > 0} else={watcher ? <View accessibilityElementsHidden class="absolute left-0 right-0 top-0 h-0" {...watched()} /> : undefined}>
+      <View
+        accessibilityElementsHidden
+        testID={`bar-room-${Math.round(room())}`}
+        style={{ height: Math.max(0, room() - (props?.gap ?? 0)) }}
+        {...watched()}
+      />
     </If>
   );
 }
