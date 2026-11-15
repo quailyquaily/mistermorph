@@ -150,9 +150,9 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 	var progress []string
 	reports := 0
 	tool := newCoderTool(coderToolDeps{
-		Runner:    &execDirectSubtaskRunner{},
-		PathExtra: []string{binDir},
-		Usage:     func() *coderusage.Recorder { return recorder },
+		Runner: &execDirectSubtaskRunner{},
+		Env:    shellenv.CoderEnv{PathExtra: []string{binDir}},
+		Usage:  func() *coderusage.Recorder { return recorder },
 		RunTerminal: func(_ context.Context, req CoderRequest) (string, error) {
 			used := 61.0
 			reports++

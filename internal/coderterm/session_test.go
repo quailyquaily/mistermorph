@@ -400,7 +400,7 @@ func TestSessionEnvironment(t *testing.T) {
 			t.Fatal(err)
 		}
 		b, _ := backendFor(name)
-		s, err := start(b, Request{Backend: name, Command: command, CWD: dir, Task: "test", LogRoot: dir, Env: env}, "")
+		s, err := start(b, Request{Backend: name, Command: command, CWD: dir, Task: "test", LogRoot: dir, Env: env}, resumePoint{})
 		if err != nil {
 			t.Fatal(err)
 		}
