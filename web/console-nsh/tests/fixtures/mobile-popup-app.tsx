@@ -41,11 +41,11 @@ const round = (n: number) => Math.round(n * 1000) / 1000;
 // starts: a step of the test only ends once the app is quiet, so the samples cannot wait for one).
 const motions: Record<string, Motion> = {};
 const sampling: Record<string, boolean> = {};
-function sample(name: string) {
+function sample(name: string, key = `${name}.motion`) {
   const motion = motions[name];
-  if (!motion || sampling[name]) return;
-  sampling[name] = true;
-  report.update(({ [`${name}.motion`]: _, ...rest }) => rest);
+  if (!motion || sampling[key]) return;
+  sampling[key] = true;
+  report.update(({ [key]: _, ...rest }) => rest);
   const series: { t: number; y: number; s: number; o: number }[] = [];
   const started = Date.now();
   const tick = async () => {
@@ -53,8 +53,8 @@ function sample(name: string) {
     series.push({ t: Date.now() - started, y: round(y), s: round(s), o: round(o) });
     if (Date.now() - started < 700) setTimeout(() => void tick(), 16);
     else {
-      sampling[name] = false;
-      put(`${name}.motion`, series);
+      sampling[key] = false;
+      put(key, series);
     }
   };
   void tick();
@@ -67,6 +67,8 @@ watchDialogs((name) => ({
   motion: (motion) => {
     motions[name] = motion;
   },
+  // Its way out, from the moment it is told to go (`<name>.exit`).
+  leave: () => sample(name, `${name}.exit`),
 }));
 
 const which = signal<string | null>(null);

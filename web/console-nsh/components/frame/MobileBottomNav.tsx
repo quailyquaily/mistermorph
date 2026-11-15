@@ -4,8 +4,8 @@
 // design/ui-refresh.html §4). A lighter pill behind the active slot slides to it, and its icon fills.
 // More and the agent open the same popup, over a scrim: the phone's floating paper
 // (design/mobile-popups.md, lib/mobilePopup.ts), which every other popup on phones follows: all
-// four corners round, a small gap in from the window's sides and above the bar, sliding in from
-// above the window's top edge; More's lists the other pages, the agent's the agents
+// four corners round, a small gap in from the window's sides and above the bar, sliding up from
+// below the window's bottom edge; More's lists the other pages, the agent's the agents
 // (AgentSwitcher's `AgentList`, the sidebar switcher's rows). Escape, Android's Back or a press
 // outside closes either.
 import type { JSX } from "nsh";
@@ -86,8 +86,8 @@ function navigateTo(item: NavItem) {
   goTo(item, false);
 }
 
-// The sheets slide down from above the window's top edge to float above the bar, and slide back
-// up (MOTION_SHEET_IN in, MOTION_SHEET_OUT out on MOTION_EXIT_EASE, as every popup on phones).
+// The sheets slide up from below the page's bottom edge to float above the bar, and slide back
+// down (MOTION_SHEET_IN in, MOTION_SHEET_OUT out on MOTION_EXIT_EASE, as every popup on phones).
 // Reopening one while it slides out turns it round from where it is, as the motion runs from the
 // animated value's current position. A closing sheet takes no presses; with reduced motion it
 // appears and goes at once.
@@ -104,10 +104,13 @@ function BottomSheet(props: {
   children: (contentMax: number) => JSX.Element;
   /** Hears the sheet's frame in the page (layout checks). */
   onFrame?: (frame: MobileNavFrame) => void;
+  /** For tests: the sheet's progress (0 out of sight below the page, 1 in its place), each time it
+   * is told to open or close. */
+  onProgress?: (progress: ReturnType<typeof createAnimatedValue>, open: boolean) => void;
 }) {
   const shown = signal(untracked(() => props.open));
   const closing = signal(false);
-  // 0 hidden above the window's top, 1 in its place; the scrim fades with it.
+  // 0 hidden below the page's bottom edge, 1 in its place; the scrim fades with it.
   const progress = createAnimatedValue(0);
   const box = signal({ y: 0, height: 0 });
   let generation = 0;
@@ -116,6 +119,7 @@ function BottomSheet(props: {
     const open = props.open;
     untracked(() => {
       const run = ++generation;
+      if (open || shown()) props.onProgress?.(progress, open);
       if (open) {
         closing.set(false);
         if (!shown()) shown.set(true);
@@ -193,7 +197,7 @@ function SheetLayer(props: {
         role="menu"
         accessibilityLabel={props.label}
         class="w-full overflow-hidden border border-line-faint bg-dialog"
-        // Until its first layout the sheet's place is unknown: it starts a page's height up.
+        // Until its first layout the sheet's place is unknown: it starts a page's height down.
         onLayout={({ bounds }) => {
           props.onBox({ y: bounds.origin.y, height: bounds.size.height });
           props.onFrame?.({
@@ -230,12 +234,20 @@ function SheetLayer(props: {
 
 /** The More and agent sheets over the page; put them last in the content area so they cover the
  * page, not the strip. `onSheetLayout` hears each sheet's frame in the page ("mobile-more",
- * "mobile-agents"; tests/mobile-bottom-nav.test.tsx). */
-export function MobileBottomMenus(props: { onSheetLayout?: (name: string, frame: MobileNavFrame) => void } = {}) {
+ * "mobile-agents"; tests/mobile-bottom-nav.test.tsx), `onSheetProgress` gets each sheet's progress
+ * (0 out of sight below the page, 1 in its place: it is `from * (1 - progress)` below its place) each time it is told to open or close. */
+export function MobileBottomMenus(
+  props: {
+    onSheetLayout?: (name: string, frame: MobileNavFrame) => void;
+    onSheetProgress?: (name: string, progress: ReturnType<typeof createAnimatedValue>, open: boolean) => void;
+  } = {},
+) {
   const BottomLeft = uiSlots["sidebar.bottom_left"];
   return (
     <>
-      <BottomSheet open={mobileMoreOpen()} label={t("nav_more")} onClose={closeMobileMore} testID="mobile-more" onFrame={(frame) => props.onSheetLayout?.("mobile-more", frame)}>
+      <BottomSheet open={mobileMoreOpen()} label={t("nav_more")} onClose={closeMobileMore} testID="mobile-more" onFrame={(frame) => props.onSheetLayout?.("mobile-more", frame)}
+        onProgress={(progress, open) => props.onSheetProgress?.("mobile-more", progress, open)}
+      >
         {() => (
           <View class="shrink">
             <NavList items={moreItems()} mobile onNavigate={navigateTo} testPrefix="mobile-more" />
@@ -249,6 +261,7 @@ export function MobileBottomMenus(props: { onSheetLayout?: (name: string, frame:
       </BottomSheet>
       <BottomSheet open={agentMenuOpen()} label={t("endpoint_switcher_title")} onClose={() => setAgentMenuOpen(false)} testID="mobile-agents"
         onFrame={(frame) => props.onSheetLayout?.("mobile-agents", frame)}
+        onProgress={(progress, open) => props.onSheetProgress?.("mobile-agents", progress, open)}
       >
         {(contentMax) => (
           <View class="p-2">
@@ -278,7 +291,7 @@ export function MobileBottomMenus(props: { onSheetLayout?: (name: string, frame:
 }
 
 /** A frame the strip reports for layout checks (tests/mobile-bottom-nav.test.tsx); a sheet's also
- * says where it slides in from (`from`: its translation while out of sight, above the page). */
+ * says where it slides in from (`from`: its translation while out of sight, below the page). */
 export type MobileNavFrame = { x: number; y: number; w: number; h: number; from?: number };
 
 /** The strip itself. `onSlotLayout` hears each slot's frame in the row (by its test id) and the

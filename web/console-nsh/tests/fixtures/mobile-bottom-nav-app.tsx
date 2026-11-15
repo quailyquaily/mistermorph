@@ -1,10 +1,14 @@
 // A test entry for tests/mobile-bottom-nav.test.tsx: the phone's bottom navigation (the real strip
 // and its sheets) over an empty page as wide as the window, with the frames its slots and active
 // pill lay out at read out beside it, with the sheets' frames. `host.params.agents` lists that many
-// connected agents (the console's own first, selected).
-import { host, mount, signal, Text, View } from "nsh";
+// connected agents (the console's own first, selected). Each time a sheet is told to open or close,
+// its progress (0 out of sight, 1 in its place) is sampled every frame for 500 ms and read out
+// too (`motion:{"<name>.in<n>": …, "<name>.out<n>": …}`); the `bounce-more` button closes More and opens it again 90 ms later, while it is going out.
+import { createAnimatedValue, host, mount, signal, Text, View } from "nsh";
 import { MobileBottomMenus, MobileBottomNav, type MobileNavFrame } from "../../components/frame/MobileBottomNav";
 import { endpointState } from "../../lib/core/context.js";
+import { closeMobileMore, setMobileMoreOpen } from "../../lib/shell";
+import { Button } from "../../components/ui";
 
 const agents = Number((host.params as { agents?: number }).agents ?? 0);
 if (agents > 0) {
@@ -22,12 +26,38 @@ if (agents > 0) {
 }
 
 const frames = signal<Record<string, MobileNavFrame>>({});
+const motion = signal<Record<string, { t: number; p: number }[]>>({});
+const turns: Record<string, number> = {};
+
+function sample(name: string, progress: ReturnType<typeof createAnimatedValue>, open: boolean) {
+  if (open) turns[name] = (turns[name] ?? 0) + 1;
+  const label = `${name}.${open ? "in" : "out"}${turns[name] ?? 0}`;
+  const series: { t: number; p: number }[] = [];
+  const started = Date.now();
+  const tick = async () => {
+    const p = await progress.getValue();
+    series.push({ t: Date.now() - started, p: Math.round(p * 1000) / 1000 });
+    if (Date.now() - started < 500) setTimeout(() => void tick(), 16);
+    else motion.update((all) => ({ ...all, [label]: series }));
+  };
+  void tick();
+}
 
 function Page() {
   return (
     <View class="relative flex-1 bg-background">
       <Text>{JSON.stringify(frames())}</Text>
-      <MobileBottomMenus onSheetLayout={(name, frame) => frames.update((all) => ({ ...all, [name]: frame }))} />
+      <Button
+        size="xs"
+        label="bounce"
+        onPress={() => {
+          closeMobileMore();
+          setTimeout(() => setMobileMoreOpen(true), 90);
+        }}
+        testID="bounce-more"
+      />
+      <Text class="text-[6px]">{`motion:${JSON.stringify(motion())}`}</Text>
+      <MobileBottomMenus onSheetLayout={(name, frame) => frames.update((all) => ({ ...all, [name]: frame }))} onSheetProgress={sample} />
       <MobileBottomNav onSlotLayout={(name, frame) => frames.update((all) => ({ ...all, [name]: frame }))} />
     </View>
   );
