@@ -6,7 +6,7 @@ import { batch, computed, effect, keymap, LayoutAnimation, reduceMotion, signal,
 import { Button as BaseButton, Sheet } from "nsh/base";
 import { Blocks, gutterX, gutterY, Note, ROW_TRANSITION, SearchField, t, WorkspaceTitle } from "../../components/knowledge/parts";
 import { EdgeScroll, MOTION_SLOW } from "../../components/motion";
-import { BackButton, Button, Icon, Page } from "../../components/ui";
+import { BackButton, Button, circleButtonClass, Icon, Page } from "../../components/ui";
 import { endpointApiFetch, endpointState, formatBytes, runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -218,7 +218,7 @@ export function SkillStorePage() {
                 onPress={backToSkills}
                 accessibilityLabel={t("skills_title")}
                 testID="store-back"
-                class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press"
+                class={circleButtonClass({ size: "sm" })}
                 style={ROW_TRANSITION}
               >
                 <Icon name="PhArrowLeft" size={13} color="subtle" />

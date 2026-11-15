@@ -16,6 +16,9 @@ const ALICE = {
 };
 const BOT = { contact_id: `mm:${AGENT_INSTANCE}`, nickname: "Helper", kind: "agent", channel: "console", status: "active" };
 const NAMELESS = { contact_id: "slack:T1:U99", kind: "human", channel: "slack", status: "inactive" };
+// More people, after Alice in the library (the same last interaction: by their ids).
+const CAROL = { ...ALICE, contact_id: "tg:1003", nickname: "Carol", tg_username: "carol", avatar_url: "" };
+const DAVE = { ...ALICE, contact_id: "tg:1004", nickname: "Dave", tg_username: "dave", avatar_url: "" };
 
 function list(items: unknown[]) {
   return { "GET /proxy:/contacts/list": () => ({ body: { items } }) };
@@ -68,6 +71,8 @@ test("an Agent Link contact shows its agent's avatar and no owner switch", async
     endpoints: [localEndpoint(), localEndpoint({ endpoint_ref: "ep_helper", name: "Helper", instance_id: AGENT_INSTANCE, avatar_url: PIXEL })],
     api: { ...list([{ ...BOT, avatar_url: "/contacts/avatar?contact_id=bot" }]), "GET /proxy:/memories": { body: { items: [] } } },
   });
+  // Agents have a tab of their own (tests/contacts-kinds.test.tsx).
+  await app.press("id:contacts-tab-agent");
   await app.press("id:contact-row:" + BOT.contact_id);
   await app.waitFor("id:contact-detail");
   expect(app.shows("text:AGENT · CONSOLE")).toBe(true);
@@ -225,49 +230,55 @@ test("on a phone the index and the card take turns", async () => {
 test("on a desktop the panel opens beside the library and closes with its close button and Escape", async () => {
   const { app } = await openConsole({
     location: "/e/default/contacts",
-    api: { ...list([{ ...ALICE, avatar_url: "" }, BOT]), "GET /proxy:/memories": { body: { items: [] } } },
+    api: { ...list([{ ...ALICE, avatar_url: "" }, BOT, CAROL]), "GET /proxy:/memories": { body: { items: [] } } },
   });
   await app.press("id:contact-row:tg:1001");
   await app.waitFor("id:contact-detail");
   // The library stays beside it, the picked card selected.
   expect(app.shows("id:contacts-list")).toBe(true);
-  expect(app.shows("id:contact-row:" + BOT.contact_id)).toBe(true);
+  expect(app.shows("id:contact-row:tg:1003")).toBe(true);
   await app.press("id:contact-close");
   await app.waitFor("id:contact-detail", { state: "gone" });
 
+  // An agent's, from its tab (tests/contacts-kinds.test.tsx).
+  await app.press("id:contacts-tab-agent");
   await app.press("id:contact-row:" + BOT.contact_id);
   await app.waitFor("text:AGENT · CONSOLE");
+  await app.press("id:contacts-tab-human");
+  await app.waitFor("id:contact-detail", { state: "gone" });
+  await app.press("id:contact-row:tg:1003");
+  await app.waitFor("id:contact-detail >> text:@carol");
   // Another card while it is open: the panel shows that contact.
   await app.press("id:contact-row:tg:1001");
-  await app.waitFor("text:HUMAN · TELEGRAM");
+  await app.waitFor("id:contact-detail >> text:@alice");
   await app.keyboard.press("escape");
   await app.waitFor("id:contact-detail", { state: "gone" });
 });
 
 test("on a desktop the arrows walk the cards and Enter opens one; with the panel open they open the next", async () => {
-  const CAROL = { ...ALICE, contact_id: "tg:1003", nickname: "Carol", tg_username: "carol", avatar_url: "" };
+  // The agent is on its own tab: the arrows walk the people.
   const { app } = await openConsole({
     location: "/e/default/contacts",
-    api: { ...list([{ ...ALICE, avatar_url: "" }, BOT, CAROL]), "GET /proxy:/memories": { body: { items: [] } } },
+    api: { ...list([{ ...ALICE, avatar_url: "" }, BOT, CAROL, DAVE]), "GET /proxy:/memories": { body: { items: [] } } },
   });
-  await app.waitFor("id:contact-row:tg:1003");
+  await app.waitFor("id:contact-row:tg:1004");
   // The first arrow stands on the first card; Enter opens it.
   await app.keyboard.press("right");
   expect(app.shows("id:contact-detail")).toBe(false);
   await app.keyboard.press("enter");
   await app.waitFor("text:HUMAN · TELEGRAM");
-  await app.waitFor("text:@alice");
+  await app.waitFor("id:contact-detail >> text:@alice");
   // Open, the arrows open the card they move to.
   await app.keyboard.press("right");
-  await app.waitFor("text:AGENT · CONSOLE");
+  await app.waitFor("id:contact-detail >> text:@carol");
   await app.keyboard.press("right");
-  await app.waitFor("text:@carol");
+  await app.waitFor("id:contact-detail >> text:@dave");
   // Past the last card it stays there.
   await app.keyboard.press("right");
   await app.wait(100);
-  expect(app.shows("text:@carol")).toBe(true);
+  expect(app.shows("id:contact-detail >> text:@dave")).toBe(true);
   await app.keyboard.press("left");
-  await app.waitFor("text:AGENT · CONSOLE");
+  await app.waitFor("id:contact-detail >> text:@carol");
 });
 
 test("Send message hands the message to the agent as a task and opens its topic; a refusal stays in the dialog", async () => {

@@ -15,6 +15,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
 const consoleEventTailMaxChars = 6000
@@ -121,9 +122,23 @@ func (s *consoleEventPreviewSink) HandleEvent(_ context.Context, event agent.Eve
 			}
 		case agent.EventKindToolDone, agent.EventKindSubtaskDone:
 			event.Summary = ""
+			if event.Kind == agent.EventKindToolDone && builtin.IsShellTool(event.ToolName) {
+				// A shell call's observation is complete once it is done, so it passes through
+				// Guard instead of being dropped: its exit code and output show why it failed.
+				event.Text, _ = s.outputGuard.RedactString(event.Text)
+				event.Error, _ = s.outputGuard.RedactString(event.Error)
+				break
+			}
 			event.Error = ""
 			// A spawn or coder result keeps only its status, which the worker roster needs.
 			event.Text = consoleResultStatusOnly(event.Text)
+		}
+		if cmd, ok := event.Args["cmd"].(string); ok && builtin.IsShellTool(event.ToolName) {
+			// The command shows whole (up to the engine's display bound), so it passes through
+			// Guard as well. Args belongs to the emitter: change a copy.
+			args := cloneConsoleArgs(event.Args)
+			args["cmd"], _ = s.outputGuard.RedactString(cmd)
+			event.Args = args
 		}
 	}
 	if status := formatConsoleRuntimeStatus(event); status != "" {

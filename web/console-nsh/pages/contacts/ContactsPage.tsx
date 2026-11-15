@@ -1,5 +1,6 @@
 // The agent's contacts (web/console/src/views/ContactsView.js) as a library: a grid of contact cards
-// (pages/contacts/ContactCard.tsx) with a filter, and the picked contact in a panel at the right,
+// (pages/contacts/ContactCard.tsx) with a filter, in two icon tabs, people and agents
+// (ContactKindTabs), each the latest interaction first, and the picked contact in a panel at the right,
 // the Skill Store's frame: its avatar, the owner switch, its connections (copyable handles), the
 // agent's memories about it, its activity, and its YAML for editing. On a phone the library and the
 // contact take turns, with a back button.
@@ -51,14 +52,30 @@ import {
   channelHandles,
   channelLabel,
   channelLogo,
+  contactsOfKind,
   displayName,
   isAgent,
   kindText,
   matchesFilter,
+  normalizeKind,
   relativeTime,
+  sortByLastInteraction,
   type Contact,
+  type ContactKind,
 } from "./contact-format";
-import { CARD_HEIGHT, cardPlace, ChannelMark, ContactCard, contactID, KindAvatar, type LibraryGeometry, type LibraryMotion } from "./ContactCard";
+import { ContactKindTabs } from "./ContactKindTabs";
+import {
+  CARD_HEIGHT,
+  cardPlace,
+  ChannelMark,
+  COMPACT_CARD_HEIGHT,
+  ContactCard,
+  contactID,
+  KindAvatar,
+  type LibraryGeometry,
+  type LibraryMotion,
+} from "./ContactCard";
+import { createPartProbe, type PartLayoutListener } from "../../components/shared/partProbe";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { createPullSearch } from "../../components/shared/pullSearch";
 
@@ -69,9 +86,30 @@ const PANEL_WIDTH = 404;
 const PANEL_INSET = 12;
 const PANEL_AVATAR = 88;
 const PANEL_SHADOW = "0 1px 2px rgba(24, 46, 72, 0.05), 0 18px 40px rgba(24, 46, 72, 0.10)";
-/** The cards' least width and the gaps between them: a desktop's, a phone's. */
+/** The cards' least width and the gaps between them: a desktop's, a phone's. A phone keeps at least
+ *  PHONE_COLUMNS cards a row: where they would be narrower than its least width they are the
+ *  compact cards (ContactCard.tsx), COMPACT_GAP apart. */
 const CARD_MIN = { desktop: 188, phone: 150 };
 const CARD_GAP = { desktop: 14, phone: 10 };
+const PHONE_COLUMNS = 3;
+const COMPACT_GAP = 8;
+
+/** The library's grid in a list `width` wide with `pad` at its sides. */
+export function libraryGeometry(width: number, pad: number, phone: boolean): LibraryGeometry {
+  const inner = Math.max(0, width - 2 * pad);
+  const fit = (gap: number, least: number) => Math.max(1, Math.floor((inner + gap) / (least + gap)));
+  const grid = (columns: number, gap: number, compact: boolean): LibraryGeometry => ({
+    columns,
+    cell: Math.max(0, (inner - gap * (columns - 1)) / columns),
+    pad,
+    gap,
+    height: compact ? COMPACT_CARD_HEIGHT : CARD_HEIGHT,
+    compact,
+  });
+  if (!phone) return grid(fit(CARD_GAP.desktop, CARD_MIN.desktop), CARD_GAP.desktop, false);
+  const columns = fit(CARD_GAP.phone, CARD_MIN.phone);
+  return columns >= PHONE_COLUMNS ? grid(columns, CARD_GAP.phone, false) : grid(PHONE_COLUMNS, COMPACT_GAP, true);
+}
 
 /** A section's head in the panel: the square mark in blue, the title as a mono label in brackets,
  *  and a hairline to the edge (design/DESIGN.md, Sections). */
@@ -137,11 +175,19 @@ function Rise(props: { order: number; class?: string; testID?: string; children?
   );
 }
 
-export function ContactsPage() {
+export function ContactsPage(props: {
+  /** For tests: where the library (`library`), its loading blocks (`block:<n>`) and the cards'
+   *  parts (ContactCard.tsx) lie on the page. */
+  onPartLayout?: PartLayoutListener;
+}) {
+  const parts = createPartProbe(() => props.onPartLayout);
   const notice = useNotice();
   const store = useContactsStore();
 
   const err = signal("");
+  // Which kind of contact the library shows (the head's tabs): people first, as the page always
+  // opened on them; the filter's text stays as the tabs change.
+  const kind = signal<ContactKind>("human");
   const filterText = signal("");
   // On a touch phone the filter hides until the library is pulled down from its top
   // (components/shared/pullSearch.ts), then heads it; once shown it stays while the page lives, the
@@ -195,7 +241,16 @@ export function ContactsPage() {
   cleanup(() => clearTimeout(filterTimer));
 
   const items = () => (store.items || []) as Contact[];
-  const filteredItems = () => items().filter((item) => matchesFilter(item, appliedFilter()));
+  const kindItems = computed(() => contactsOfKind(items(), kind()));
+  // The tab's contacts that match the filter, the one the agent last talked with first (only its
+  // recorded last interaction counts; none, or an unreadable one, last), sorted again on each load.
+  const filteredItems = computed(() => sortByLastInteraction(kindItems().filter((item) => matchesFilter(item, appliedFilter()))));
+  const emptyText = () =>
+    items().length === 0
+      ? t("contacts_empty")
+      : kindItems().length === 0
+        ? t(kind() === "agent" ? "contacts_empty_agents" : "contacts_empty_humans")
+        : t("contacts_empty_filtered");
   function applyFilter(next: string) {
     clearTimeout(filterTimer);
     batch(() => {
@@ -407,11 +462,26 @@ export function ContactsPage() {
     if (untracked(isMobile)) mobileEditorVisible.set(true);
   }
 
+  // The tabs: a contact of the other kind does not stay open (nor its editor) once its tab is left.
+  function showKind(next: ContactKind) {
+    if (next === untracked(kind)) return;
+    const contact = untracked(selectedContact);
+    batch(() => {
+      if (contact && normalizeKind(contact.kind) !== next) clearSelection();
+      // The keys stand on no card of the tab that was left.
+      highlightID.set("");
+      kind.set(next);
+    });
+  }
+
   async function load() {
     err.set("");
     try {
       await store.load({ force: true });
       if (untracked(selectedContactID) && !untracked(selectedContact)) clearSelection();
+      // A contact whose kind a save changed moves to its tab, and the open contact with it.
+      const contact = untracked(selectedContact);
+      if (contact && normalizeKind(contact.kind) !== untracked(kind)) kind.set(normalizeKind(contact.kind));
     } catch (e: any) {
       err.set(e?.message || t("msg_load_failed"));
     }
@@ -592,15 +662,7 @@ export function ContactsPage() {
   /* ---------- the grid ---------- */
 
   const listWidth = signal(0);
-  const geometry = computed<LibraryGeometry>(() => {
-    const phone = isMobile();
-    const pad = phone ? gutterX() : 16;
-    const gap = phone ? CARD_GAP.phone : CARD_GAP.desktop;
-    const least = phone ? CARD_MIN.phone : CARD_MIN.desktop;
-    const inner = Math.max(0, listWidth() - 2 * pad);
-    const columns = Math.max(1, Math.floor((inner + gap) / (least + gap)));
-    return { columns, cell: (inner - gap * (columns - 1)) / columns, pad, gap };
-  });
+  const geometry = computed<LibraryGeometry>(() => libraryGeometry(listWidth(), isMobile() ? gutterX() : 16, isMobile()));
 
   /* ---------- the selection (desktops) ---------- */
 
@@ -613,7 +675,7 @@ export function ContactsPage() {
   const scrollShift = scrollValue.interpolate({ inputRange: [0, 1], outputRange: [0, -1], extrapolate: "extend" });
   /** Where row `row` starts in the list's content: under its header, and the row gap the list
    *  keeps between the header and the first row as between rows. */
-  const rowTop = (row: number, grid: LibraryGeometry, header: number) => header + grid.gap + row * (CARD_HEIGHT + grid.gap);
+  const rowTop = (row: number, grid: LibraryGeometry, header: number) => header + grid.gap + row * (grid.height + grid.gap);
   let placed: { id: string; row: number } | null = null;
   effect(() => {
     const id = isMobile() ? "" : highlightID();
@@ -630,7 +692,7 @@ export function ContactsPage() {
         return;
       }
       const place = cardPlace(index, grid);
-      const box = { x: place.x, y: rowTop(place.row, grid, top), w: grid.cell, h: CARD_HEIGHT };
+      const box = { x: place.x, y: rowTop(place.row, grid, top), w: grid.cell, h: grid.height };
       // The grid making room: a card that stays in its row slides along it (ContactCard), and the
       // highlight glides with it; one that changes rows fades in there, and the highlight is there.
       const follow = libraryMotion() === "glide" && placed?.id === id && placed.row === place.row ? motionMs(300) : 0;
@@ -652,7 +714,7 @@ export function ContactsPage() {
     const row = Math.floor(index / untracked(geometry).columns);
     const top = rowTop(row, untracked(geometry), untracked(headerHeight));
     if (top < untracked(scrollY)) list?.scrollToIndex({ index, animated: true, viewPosition: 0, viewOffset: 6 });
-    else if (top + CARD_HEIGHT > untracked(scrollY) + untracked(viewHeight)) list?.scrollToIndex({ index, animated: true, viewPosition: 1, viewOffset: -8 });
+    else if (top + untracked(geometry).height > untracked(scrollY) + untracked(viewHeight)) list?.scrollToIndex({ index, animated: true, viewPosition: 1, viewOffset: -8 });
   }
   // Whether the keys walk the grid: from the first arrow until a card is pressed or opened with
   // Enter. Only then does Enter belong to the library; otherwise it stays the focused control's.
@@ -735,15 +797,35 @@ export function ContactsPage() {
   // blocks and the note are both always in it, one of them hidden: an `If` there stopped switching
   // once the list had hidden the element and shown it again, so a reload that left the list empty
   // (the last contact deleted) kept the blocks for good (tests/contacts-empty-reload.test.tsx).
+  // On a phone the loading blocks are a row of cards to come, in the grid's columns (the list's
+  // content already keeps the side padding).
   function Library() {
     const empty = (
       <View>
-        <View class={store.loading ? "flex-row flex-wrap" : "hidden"} style={{ paddingLeft: geometry().pad, paddingRight: geometry().pad, gap: geometry().gap }}>
-          <Blocks count={isMobile() ? 2 : 4} height={CARD_HEIGHT} class="flex-1" />
+        <View
+          class={store.loading && !isMobile() ? "flex-row flex-wrap" : "hidden"}
+          style={{ paddingLeft: geometry().pad, paddingRight: geometry().pad, gap: geometry().gap }}
+        >
+          <Blocks count={4} height={CARD_HEIGHT} class="flex-1" />
+        </View>
+        <View
+          class={store.loading && isMobile() ? "flex-row" : "hidden"}
+          style={{ gap: geometry().gap }}
+          testID="contacts-loading"
+        >
+          <Each of={Array.from({ length: geometry().columns }, (_, column) => column)} key={(column) => column}>
+            {(column) => (
+              <View
+                class="rounded-[16px] bg-muted"
+                style={{ width: geometry().cell, height: geometry().height }}
+                {...parts.probe(() => `block:${column()}`)}
+              />
+            )}
+          </Each>
         </View>
         <View class={store.loading ? "hidden" : ""}>
           <Note
-            text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
+            text={emptyText()}
             class="mt-1 leading-normal"
             testID="contacts-empty"
           />
@@ -751,7 +833,7 @@ export function ContactsPage() {
       </View>
     );
     return (
-      <View class="relative flex-1">
+      <View class="relative flex-1" {...parts.probe(() => "library")}>
       <List
         ref={(node: ListRef) => {
           list = node;
@@ -771,7 +853,7 @@ export function ContactsPage() {
         each={store.loading ? [] : filteredItems()}
         keyExtractor={(item) => contactID(item)}
         numColumns={geometry().columns}
-        estimatedItemSize={CARD_HEIGHT}
+        estimatedItemSize={geometry().height}
         contentStyle={{ paddingLeft: geometry().pad, paddingRight: geometry().pad, paddingBottom: 24, rowGap: geometry().gap, columnGap: geometry().gap }}
         class="flex-1"
         scrollbar={SCROLLBAR}
@@ -802,6 +884,7 @@ export function ContactsPage() {
             places={places}
             selected={!isMobile() && contactID(item()) === highlightID()}
             leaving={leavingIDs().has(contactID(item()))}
+            onPartLayout={props.onPartLayout}
             onPress={() => {
               walking.set(false);
               selectContact(item());
@@ -1039,6 +1122,7 @@ export function ContactsPage() {
         <If when={panes.shown(0, showIndexPane())}>
           <IndexColumn
             title={t("contacts_title")}
+            actions={<ContactKindTabs value={kind()} onChange={showKind} mobile={isMobile()} />}
             fill
             style={panes.style(0)}
             hidden={panes.hidden(0)}

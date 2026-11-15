@@ -33,8 +33,80 @@ export function normalizeStatus(raw: unknown) {
   return String(raw || "").trim().toLowerCase() === "inactive" ? "inactive" : "active";
 }
 
-export function normalizeKind(raw: unknown) {
+export type ContactKind = "human" | "agent";
+
+/** A contact's kind: `agent`, else (any other value, or none) `human`. */
+export function normalizeKind(raw: unknown): ContactKind {
   return String(raw || "").trim().toLowerCase() === "agent" ? "agent" : "human";
+}
+
+/** The contacts of one kind (the Contacts page's tabs), in the order given. */
+export function contactsOfKind<T extends Contact>(items: readonly T[], kind: ContactKind): T[] {
+  return items.filter((item) => normalizeKind(item?.kind) === kind);
+}
+
+// An RFC 3339 time as the API writes them (Go's time.Time: `2026-11-14T09:30:00.123456789+09:00`).
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
+
+// Go's zero time, which the API may write for "never".
+const GO_ZERO_TIME = (() => {
+  const zero = new Date(0);
+  zero.setUTCFullYear(1, 0, 1);
+  zero.setUTCHours(0, 0, 0, 0);
+  return zero.getTime();
+})();
+
+/**
+ * When the agent last interacted with the contact, in milliseconds since the epoch (with the
+ * sub-millisecond digits as a fraction), from its recorded `last_interaction_at` only; `null` when it
+ * has none, or one that is not a valid RFC 3339 time (a day or hour out of range included), or Go's
+ * zero time (`0001-01-01T00:00:00Z`, "never", as the backend reads it). Parsed by hand, not with
+ * `Date.parse`, so every runtime reads the same strings the same way. No other time stands in for it.
+ */
+export function lastInteractionTime(item: Contact | null | undefined): number | null {
+  const raw = item?.last_interaction_at;
+  if (typeof raw !== "string") return null;
+  const match = RFC3339.exec(raw.trim());
+  if (!match) return null;
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) return null;
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second, 0);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  let offsetMinutes = 0;
+  if (!match[8]) {
+    const offsetHours = Number(match[10]);
+    const offsetMins = Number(match[11]);
+    if (offsetHours > 23 || offsetMins > 59) return null;
+    offsetMinutes = (match[9] === "-" ? -1 : 1) * (offsetHours * 60 + offsetMins);
+  }
+  const fraction = match[7] ? Number(`0.${match[7]}`) * 1000 : 0;
+  const time = date.getTime() - offsetMinutes * 60_000 + fraction;
+  return time === GO_ZERO_TIME ? null : time;
+}
+
+const contactKey = (item: Contact | null | undefined) => String(item?.contact_id || "").trim();
+
+/**
+ * The contacts by their last interaction, the most recent first; those with none recorded (or an
+ * invalid one) after all the others. Equal times, and those with none, go by contact id (a plain
+ * string comparison, not the locale's, so the same on every runtime and in every language), then as
+ * they came. A new array: `items` stays as it is.
+ */
+export function sortByLastInteraction<T extends Contact>(items: readonly T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index, time: lastInteractionTime(item), key: contactKey(item) }))
+    .sort((a, b) => {
+      if (a.time !== b.time) {
+        if (a.time === null) return 1;
+        if (b.time === null) return -1;
+        return b.time - a.time;
+      }
+      if (a.key !== b.key) return a.key < b.key ? -1 : 1;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.item);
 }
 
 export function shortenIdentifier(raw: unknown) {
