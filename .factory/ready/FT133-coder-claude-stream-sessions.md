@@ -96,3 +96,18 @@ Tests: prerequisite go test ./... passed before further work. Manager independen
 Not checked: real Claude/Codex/agy task runs or approvals; real bypassed Claude questions, sub-agent usage and num_turns semantics. Opt-in contextual real-Claude test added but not run. UI changed (agy approval-toggle notes/settings); permission/question cards and settings were NOT looked at in a browser. Windows execution not tested (cross-build only).
 
 Recovery/process notes: numbering push initially failed because credential.useHttpPath was absent; retry with repository path succeeded. No base branch or tags pushed. Next: review the full prerequisite and implementation diff, especially protocol lifecycle and usage reporting.
+
+
+## factory · review · 2026-11-16 01:53
+head: acc8d33a4ffd30ac8d82d1ba30e62efb433f1464
+verdict: pass
+notes:
+- [P2] internal/codersessions/claude.go:91: a missing resumed session produces an error result, setting heard=true and resumable=true, so every later task resumes the same missing id. Clear the session identity when reopening fails before initialization. Example: Claude Code 2.1.325 emits error_during_execution with num_turns=0 and "No conversation found with session ID" for an unknown UUID; replaying it made three successive tasks resume that UUID and fail.
+- [P2] cmd/mistermorph/consolecmd/local_runtime.go:2910: CoderCanAsk=true also applies to non-chat Console triggers whose ask callback is nil, leaving approvals enabled but unanswerable. Set it from consoleAsksUser(job.Trigger), or require a nonnil callback. Example: CoderSessionRunner with canAsk=true and ask=nil makes approve tasks fail with "coder needs a user answer" for all three stand-ins; agy previously bypassed approvals.
+- [P3] internal/codersessions/codex.go:71: a quota-read response arriving after its ignored 15-second timeout is parsed as a method notification during the next task; empty Params cause unexpected end of JSON input and close the session. Ignore stale responses without a method. Example: a stand-in delaying the first quota response 16 seconds returned done 1 for task one and unexpected end of JSON input for task two.
+
+Review: Claude Code reviewed origin/master...HEAD, including both prerequisite commits. No P0/P1 findings; pass under factory policy, with the P2/P3 defects above retained for owner attention.
+
+Validation reported by reviewer: required gofmt gate, go vet ./..., go test ./... passed with an absolute throwaway HOME; nsh check passed; Console script passed all 125 files (four initial concurrent failures passed isolated retries). Three temporary probe tests reproduced the findings; removed afterward. Two signed-out real Claude protocol checks used an empty HOME and no model calls. No unpinned installs, no manifest changes, no commits or remaining tracked/untracked worktree edits; manager verified clean status and reviewed head.
+
+Residual risks: no real Claude/Codex/agy model task or live approvals; no browser visual check of usage chart/settings; Windows not executed. Late Claude lines after result, control_cancel_request, sub-agent usage and num_turns semantics remain unverified. Codex rollout-lag fallback loses per-model pricing for that session by design. No linked issue or PR in the item.
