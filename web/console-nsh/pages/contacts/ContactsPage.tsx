@@ -63,7 +63,7 @@ import {
   type Contact,
   type ContactKind,
 } from "./contact-format";
-import { ContactKindTabs } from "./ContactKindTabs";
+import { ContactKindTabs, contactKindSagCenter } from "./ContactKindTabs";
 import {
   CARD_HEIGHT,
   cardPlace,
@@ -177,8 +177,9 @@ function Rise(props: { order: number; class?: string; testID?: string; children?
 }
 
 export function ContactsPage(props: {
-  /** For tests: where the library (`library`), its loading blocks (`block:<n>`) and the cards'
-   *  parts (ContactCard.tsx) lie on the page. */
+  /** For tests: where the library (`library`), its loading blocks (`block:<n>`), the cards'
+   *  parts (ContactCard.tsx), the head's (IndexColumn: `head`, `head-rule`…) and its tabs'
+   *  (ContactKindTabs: `tab-<kind>`…) lie on the page. */
   onPartLayout?: PartLayoutListener;
 }) {
   const parts = createPartProbe(() => props.onPartLayout);
@@ -1129,7 +1130,9 @@ export function ContactsPage(props: {
         <If when={panes.shown(0, showIndexPane())}>
           <IndexColumn
             title={t("contacts_title")}
-            actions={<ContactKindTabs value={kind()} onChange={showKind} mobile={isMobile()} />}
+            actions={<ContactKindTabs value={kind()} onChange={showKind} mobile={isMobile()} onPartLayout={props.onPartLayout} />}
+            sag={() => contactKindSagCenter(kind(), isMobile())}
+            onPartLayout={props.onPartLayout}
             fill
             style={panes.style(0)}
             hidden={panes.hidden(0)}

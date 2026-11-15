@@ -1,22 +1,25 @@
 // The Contacts head's tabs between the agent's human contacts and its agent contacts: icons only, a
-// person and a robot, drawn as the app's tabs are (`Tabs`, components/ui.tsx; design/ui-refresh.html
-// §1): quiet 16pt icons (BAR_ICON_SIZE) on a hairline, the current one in ink with the hairline
-// dipping softly under it (SagRule), the dip gliding to the other tab when it changes. No fill, no
-// circle. Their names ("Humans", "Agents") are their accessible names and tooltips, never drawn.
+// person and a robot, drawn as the Topics head draws its view toggles (`ViewToggle`,
+// pages/chat/TopicSidebar.tsx): the standard round 38pt button (`circleButtonClass`) with a 16pt
+// icon (BAR_ICON_SIZE), the circles flush on a desktop; the current tab a blue icon on a blue tint
+// (`bg-blue/12`), the other a quiet icon with the plain button's hover and press fills. As in
+// Topics, nothing is drawn in the head's middle: the head's own bottom hairline dips under the
+// current tab (IndexColumn's `sag`, placed with `contactKindSagCenter`), the dip gliding to the
+// other tab when it changes. Their names ("Humans", "Agents") are their accessible names and
+// tooltips, never drawn.
 //
 // They are nsh/base's `Tabs` and `Tab` (ui.tsx's `Tabs` has no roving focus), so assistive tech hears
 // a tab list whose current tab is selected, and the keyboard works as WAI-ARIA's tab list pattern
 // says: the list is one Tab stop (at the current tab), Left/Right (and Up/Down, Home/End) move to
 // the other tab and select it, Space and Return press the focused one; a keyboard focus draws a blue
-// ring round the tab's 36pt box (the size of an icon option of `Tabs`). A tab is 38pt wide and tall
-// on a desktop (the head's controls' size) and takes a 44pt square of presses on a phone (a touch
-// target); the hairline lies where a 38pt tab's would on both, so the phone's larger targets move
-// nothing that is drawn but the tabs' spacing.
-import { token, View, type ViewRef } from "nsh";
+// ring round the tab's circle. A tab is its 38pt circle on a desktop; on a phone it takes a 44pt
+// square of presses (a touch target) with the same 38pt circle in its middle, so there the circles
+// are 6pt apart, and the strip is pulled 3pt into the head's gutter so the last circle still ends
+// where the Topics head's last button does.
+import { View, type ViewRef } from "nsh";
 import { Tab, Tabs } from "nsh/base";
 import { t } from "../../components/knowledge/parts";
-import { sagHalf, SagRule } from "../../components/motion/Sag";
-import { BAR_ICON_SIZE, Icon, Tip, type IconName } from "../../components/ui";
+import { BAR_ICON_SIZE, CIRCLE_BUTTON_ON_FILL, circleButtonClass, Icon, Tip, type IconName } from "../../components/ui";
 import { boundsFrame, createPartProbe, type PartFrame, type PartLayoutListener } from "../../components/shared/partProbe";
 import type { ContactKind } from "./contact-format";
 
@@ -26,30 +29,35 @@ export const CONTACT_KIND_TABS: { kind: ContactKind; icon: IconName; label: () =
   { kind: "agent", icon: "PhRobot", label: () => t("contacts_tab_agents") },
 ];
 
-/** A tab on a desktop: the head's controls' size. */
+/** A tab's circle, on a desktop and a phone: the head's round buttons' size (the Topics head's toggles'). */
 export const CONTACT_KIND_TAB_SIZE = 38;
 /** A tab's press target on a phone. */
 export const CONTACT_KIND_TAB_TOUCH = 44;
-/** The box the icon sits in, which the keyboard's focus ring is drawn round (an icon option of `Tabs`). */
-export const CONTACT_KIND_TAB_BOX = 36;
 
-/** A tab's box: its icon in the middle, nothing drawn but a ring while the keyboard is on the tab. */
-export const CONTACT_KIND_TAB_BOX_CLASS =
-  "size-9 items-center justify-center rounded-md border-2 border-transparent transition-colors duration-[180ms] group-focus-visible:border-blue";
+/**
+ * A tab's circle: the standard round button (`circleButtonClass`, 38pt, the plain button's hover
+ * and press fills) with its icon in the middle, the blue tint while its tab is selected, and a ring
+ * while the keyboard is on the tab. The fills follow the tab around it (`group-*`), which on a phone
+ * is larger than the circle.
+ */
+export const CONTACT_KIND_TAB_CIRCLE_CLASS = `${circleButtonClass()
+  .split(/\s+/)
+  .map((cls) => (/^(hover|active):/.test(cls) ? `group-${cls}` : cls))
+  .join(" ")} border-2 border-transparent group-selected:${CIRCLE_BUTTON_ON_FILL} group-focus-visible:border-blue`;
 
-/** The icons' colours, as `Tabs` draws its options: the current tab in ink, the other quiet. */
-export const CONTACT_KIND_TAB_ICON = { selected: "ink", idle: "muted-foreground" } as const;
+/** The icons' colours, as the Topics head's toggles': the current tab blue, the other quiet. */
+export const CONTACT_KIND_TAB_ICON = { selected: "blue", idle: "subtle" } as const;
 
-/** A tab's side: the press target on a phone. */
+/** A tab's side: its circle, or the press target on a phone. */
 export const contactKindTabSize = (mobile: boolean) => (mobile ? CONTACT_KIND_TAB_TOUCH : CONTACT_KIND_TAB_SIZE);
 
-/** How far the hairline runs past the tabs at each end, so a dip under an end tab rejoins the line on both sides. */
-export const CONTACT_KIND_RULE_OVERHANG = 8;
+/** How far a phone's strip reaches into the head's gutter, so its last circle ends at the gutter. */
+export const contactKindStripPull = (mobile: boolean) => (mobile ? (CONTACT_KIND_TAB_TOUCH - CONTACT_KIND_TAB_SIZE) / 2 : 0);
 
-/** Where the hairline dips: the x of the current tab's centre in the hairline (the tabs are flush, each `contactKindTabSize` wide). */
-export function contactKindDipCenter(kind: ContactKind, mobile: boolean) {
+/** Where the head's hairline dips: the x of the current tab's centre in the strip (the tabs are flush, each `contactKindTabSize` wide). */
+export function contactKindSagCenter(kind: ContactKind, mobile: boolean) {
   const size = contactKindTabSize(mobile);
-  return CONTACT_KIND_RULE_OVERHANG + Math.max(0, CONTACT_KIND_TABS.findIndex((tab) => tab.kind === kind)) * size + size / 2;
+  return Math.max(0, CONTACT_KIND_TABS.findIndex((tab) => tab.kind === kind)) * size + size / 2;
 }
 
 export function ContactKindTabs(props: {
@@ -57,12 +65,12 @@ export function ContactKindTabs(props: {
   onChange: (kind: ContactKind) => void;
   /** A phone: 44pt press targets. */
   mobile: boolean;
-  /** Hears where parts lie on the page (tests): `tab-<kind>` (its press target), `tab-<kind>-box`, `tab-<kind>-icon` and `rule` (the hairline's canvas). */
+  /** Hears where parts lie on the page (tests): `tab-<kind>` (its press target), `tab-<kind>-box` (its circle) and `tab-<kind>-icon`. */
   onPartLayout?: PartLayoutListener;
 }) {
   const parts = createPartProbe(() => props.onPartLayout);
   return (
-    <Tabs class="relative flex-row items-center" testID="contacts-kind-tabs">
+    <Tabs class="flex-row items-center" style={{ marginRight: -contactKindStripPull(props.mobile) }} testID="contacts-kind-tabs">
       <Each of={CONTACT_KIND_TABS} key={(tab) => tab.kind}>
         {(tab) => {
           const selected = () => props.value === tab().kind;
@@ -96,7 +104,7 @@ export function ContactKindTabs(props: {
                 class={`group items-center justify-center ${props.mobile ? "size-11" : "size-[38px]"}`}
               >
                 <View
-                  class={CONTACT_KIND_TAB_BOX_CLASS}
+                  class={CONTACT_KIND_TAB_CIRCLE_CLASS}
                   onLayout={(event) => {
                     box = boundsFrame(event);
                     report();
@@ -117,20 +125,6 @@ export function ContactKindTabs(props: {
           );
         }}
       </Each>
-      {/* The hairline, 1pt above the foot of a 38pt tab (as under `Tabs`): a phone's 44pt targets reach
-          3pt past it. It runs 8pt past the tabs at each end (CONTACT_KIND_RULE_OVERHANG), inside the head's gutter. */}
-      <View
-        class={`absolute -left-2 -right-2 h-[7px] ${props.mobile ? "-bottom-[3px]" : "-bottom-[6px]"}`}
-        style={{ pointerEvents: "none" }}
-        {...parts.probe(() => "rule")}
-      >
-        <SagRule
-          center={() => contactKindDipCenter(props.value, props.mobile)}
-          half={sagHalf(CONTACT_KIND_TAB_SIZE)}
-          color={String(token("line-soft"))}
-          class="h-[7px]"
-        />
-      </View>
     </Tabs>
   );
 }

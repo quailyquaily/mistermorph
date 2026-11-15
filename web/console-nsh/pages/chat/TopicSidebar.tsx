@@ -14,7 +14,7 @@
 // on a touch screen once a finger has rested on it (a swipe stays the list's scroll).
 import { Image, Scroll, signal, Text, token, View, type InputRef, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { BAR_ICON_SIZE, Button, circleButtonClass, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
+import { BAR_ICON_SIZE, Button, CIRCLE_BUTTON_ON_FILL, circleButtonClass, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
@@ -72,7 +72,7 @@ export function ViewToggle(props: {
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
-      class={`${circleButtonClass()} selected:bg-blue/12`}
+      class={`${circleButtonClass()} selected:${CIRCLE_BUTTON_ON_FILL}`}
     >
       {props.icon === "PhAlarm" ? (
         <AdjustingClock

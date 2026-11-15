@@ -162,10 +162,11 @@ Headless tests prove behaviour, not the look.
   at the selected tab, Left/Right/Up/Down/Home/End move the focus and select (each `Tab` reports
   `onPress`), `aria-selected` on the current one (seen in Chrome). A `Tab` takes no `hitSlop`: size
   it for touch. The Contacts tabs put their tooltips on a view around each tab, as `TipButton` does
-  for `Button`, style the keyboard's ring in the tab's children with `group-focus-visible:` under
-  `group` (`group-selected:` works the same way), and draw the look of `Tabs` (ui.tsx) themselves:
-  quiet icons, the current one in ink, over a `SagRule` laid in the base `Tabs` beside the tabs (the
-  list takes other children) (`pages/contacts/ContactKindTabs.tsx`).
+  for `Button`, and style the tab's children under `group`: `group-selected:`, `group-hover:`,
+  `group-active:` and `group-focus-visible:` all work (seen in Chrome). They draw the Topics head's
+  round toggles (`circleButtonClass`, the blue tint while selected) on a circle inside each tab, so
+  a phone's 44pt tab keeps a 38pt circle, and the column head's bottom hairline sags under the
+  current one (IndexColumn's `sag`) (`pages/contacts/ContactKindTabs.tsx`).
 - nsh/base's `Select` opens its list over the field on the web (`placement` is ignored there):
   `SelectField` is a `Menu` below the field, as Vue's dropdown; only the searchable one is a Select.
 - A `TextView` table can't be narrower than column floors nsh estimates from character counts

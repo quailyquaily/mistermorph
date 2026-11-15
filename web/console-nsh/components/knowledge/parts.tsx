@@ -10,8 +10,8 @@
 // padded 12/13/11/14. The selected row is a soft fill that glides between rows (one highlight,
 // components/motion's sliding selection); a row's hover fill comes in after 60 ms and goes at once,
 // so sweeping the pointer down a list does not flash every row it passes.
-import type { InputRef, JSX, ScrollRef } from "nsh";
-import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import type { InputRef, JSX, ScrollRef, ViewRef } from "nsh";
+import { cleanup, effect, keymap, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import type { ScrollMemory } from "../../lib/scrollMemory";
@@ -19,7 +19,8 @@ import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
 import { BackButton, BAR_ICON_SIZE, CircleButton, Icon, TextField, type IconName } from "../ui";
-import type { PartLayoutListener } from "../shared/partProbe";
+import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
+import { sagHalf, SagRule } from "../motion/Sag";
 import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../frame/glassBar";
 import { MobileBarSpacer } from "../frame/mobileBar";
 import { CHROME_BAR_HEIGHT, listTitleSize } from "../frame/metrics";
@@ -240,8 +241,25 @@ export function IndexColumn(props: {
   hidden?: boolean;
   /** Remembers where the list is scrolled across visits of the page (lib/scrollMemory.ts). */
   memory?: ScrollMemory;
+  /**
+   * The head's bottom hairline sags under one of the `actions` (tabs in the head), as the Topics
+   * head's does under its view toggle that is on (pages/chat/TopicSidebar.tsx): the x of that
+   * action's centre in the actions' box, or null for a straight line. The head then draws this
+   * line in place of its bottom border.
+   */
+  sag?: () => number | null;
+  /** Hears where the head's parts lie in the column (tests): `head` (the whole bar), `head-row`, `head-title`, `head-actions` and `head-rule` (the sag's canvas). */
+  onPartLayout?: PartLayoutListener;
 }) {
   const edges = createScrollEdges({ start: false });
+  const parts = createPartProbe(() => props.onPartLayout);
+  // Where the actions' box starts along the head, for the sag.
+  const actionsX = signal<number | null>(null);
+  const sagCenter = () => {
+    const at = props.sag?.() ?? null;
+    const x = actionsX();
+    return at === null || x === null ? null : x + at;
+  };
   // The slots, drawn once: reading a slot again draws it again, and a second search field takes
   // the first one's ref and keys.
   const top = untracked(() => props.top);
@@ -253,6 +271,8 @@ export function IndexColumn(props: {
   // head's own until then).
   const headHeight = signal(0);
   const headRoom = () => headHeight() || CHROME_BAR_HEIGHT;
+  let headNode: ViewRef | undefined;
+  let actionsNode: ViewRef | undefined;
   return (
     <View
       testID={props.testID}
@@ -262,9 +282,20 @@ export function IndexColumn(props: {
       accessibilityElementsHidden={props.hidden || undefined}
       importantForAccessibility={props.hidden ? "no-hide-descendants" : undefined}
     >
-      <View class={glassBarClass()} style={glassBarStyle()} onLayout={({ bounds }) => headHeight.set(bounds.size.height)}>
+      <View
+        class={`${props.sag ? "relative z-10" : ""} ${glassBarClass()}`}
+        style={glassBarStyle()}
+        ref={(node: ViewRef) => {
+          headNode = node;
+        }}
+        onLayout={({ bounds }) => {
+          headHeight.set(bounds.size.height);
+          parts.report("head", headNode);
+        }}
+      >
         <View
-          class="h-[57px] flex-row items-center justify-between gap-3 border-b"
+          class={`h-[57px] flex-row items-center justify-between gap-3 ${props.sag ? "" : "border-b"}`}
+          {...parts.probe(() => "head-row")}
           style={{
             paddingLeft: gutterX(),
             paddingRight: props.headRight === "none" && !props.fill ? 0 : gutterX(),
@@ -274,13 +305,36 @@ export function IndexColumn(props: {
             transitionTimingFunction: MOTION_EASE_CSS,
           }}
         >
-          <View class="flex-1">
+          <View class="flex-1" {...parts.probe(() => "head-title")}>
             <WorkspaceTitle text={props.title} />
           </View>
           <If when={props.actions}>
-            <View class="flex-row items-center gap-0.5">{props.actions}</View>
+            <View
+              class="flex-row items-center gap-0.5"
+              ref={(node: ViewRef) => {
+                actionsNode = node;
+              }}
+              onLayout={({ bounds }) => {
+                actionsX.set(bounds.origin.x);
+                parts.report("head-actions", actionsNode);
+              }}
+            >
+              {props.actions}
+            </View>
           </If>
         </View>
+        {/* The hairline on the head's bottom edge, as under the Topics head: shown once the list has
+            scrolled beneath, and dipping (in blue) under the action that is on. */}
+        <If when={props.sag}>
+          <View class="absolute -bottom-[6px] left-0 right-0 h-[7px]" style={{ pointerEvents: "none" }} {...parts.probe(() => "head-rule")}>
+            <SagRule
+              center={sagCenter}
+              half={sagHalf(38)}
+              color={edges.scrolled() ? String(token("line-faint")) : "rgba(0, 0, 0, 0)"}
+              class="h-[7px]"
+            />
+          </View>
+        </If>
         <If when={top}>
           <View class="px-4 pb-2 pt-3.5">{top}</View>
         </If>
