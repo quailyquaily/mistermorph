@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -58,45 +57,5 @@ func TestClaudeTranscriptNotesWhatIsSaidWhileWorking(t *testing.T) {
 	}
 	if notes := r.takeNotes(); len(notes) != 0 {
 		t.Fatalf("the reply was noted too: %q", notes)
-	}
-}
-
-func TestCodexTurnNotesItsCommentary(t *testing.T) {
-	message := func(turn, phase, text string) string {
-		return fmt.Sprintf(`{"type":"event_msg","payload":{"type":"item_completed","turn_id":%q,"item":{"type":"AgentMessage","phase":%q,"content":[{"type":"Text","text":%q}]}}}`+"\n", turn, phase, text)
-	}
-	root := t.TempDir()
-	day := filepath.Join(root, "2026", "11", "14")
-	if err := os.MkdirAll(day, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(day, "rollout-2026-11-14T00-00-00-p.jsonl")
-	rollout := message("t0", "commentary", "an earlier task's") +
-		`{"type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}` + "\n" +
-		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"task"}]}}` + "\n" +
-		message("t1", "commentary", "Starting the sub-agent, then returning.") +
-		message("t1", "commentary", strings.Repeat("长", noteMax)) +
-		message("t1", "final_answer", "started") +
-		`{"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","last_agent_message":"started"}}` + "\n"
-	if err := os.WriteFile(path, []byte(rollout), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	r := codexBackend{}.newTurn(path, 0, "task").(*codexTurn)
-	if err := r.read(); err != nil {
-		t.Fatal(err)
-	}
-	notes := r.takeNotes()
-	if len(notes) != 2 || notes[0] != "Starting the sub-agent, then returning." {
-		t.Fatalf("notes = %.80q", notes)
-	}
-	// A long one is cut between characters.
-	if len(notes[1]) > noteMax+8 || !strings.HasSuffix(notes[1], " …") || strings.ContainsRune(notes[1], '�') {
-		t.Fatalf("long note: %d bytes, ends %q", len(notes[1]), notes[1][len(notes[1])-8:])
-	}
-	if text, done, err := r.state(); err != nil || !done || text != "started" {
-		t.Fatalf("text=%q done=%v err=%v", text, done, err)
-	}
-	if again := r.takeNotes(); len(again) != 0 {
-		t.Fatalf("notes taken twice: %q", again)
 	}
 }

@@ -97,8 +97,6 @@ func backendFor(name string) (backend, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "claude":
 		return claudeBackend{}, nil
-	case "codex":
-		return codexBackend{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported coder terminal: %q", name)
 	}

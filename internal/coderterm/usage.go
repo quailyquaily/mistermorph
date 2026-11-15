@@ -516,26 +516,6 @@ func (r *codexUsage) line(line []byte, f *codexUsageFile, main bool) {
 	}
 }
 
-// CodexThreadUsage is what a Codex thread and its sub-agents used, read from their rollouts under
-// the sessions folder of the Codex config directory (CODEX_HOME in getenv, else home/.codex): a
-// headless run's, whose stream gives only each turn's sum and no model. ok is false when the
-// thread has no rollout there or it holds no usage.
-func CodexThreadUsage(getenv func(string) string, home, cwd, thread string) (usage Usage, ok bool) {
-	thread = strings.TrimSpace(thread)
-	if thread == "" {
-		return Usage{}, false
-	}
-	backend := codexBackend{}
-	path, err := backend.findTranscript(backend.transcriptRoot(getenv, home, cwd), thread)
-	if err != nil || path == "" {
-		return Usage{}, false
-	}
-	reader := &codexUsage{}
-	reader.read(path)
-	usage = reader.take()
-	return usage, len(usage.Models) > 0
-}
-
 // baselineUsage starts a reader at the end of what a reopened session's files already hold: those
 // lines were written, and counted or not, before this reader existed.
 func baselineUsage(r usageReader, path string) {
@@ -547,4 +527,31 @@ func baselineUsage(r usageReader, path string) {
 	}
 	r.read(path)
 	r.take()
+}
+
+// CodexUsageReader retains response offsets across tasks and process restarts. App-server
+// supplies execution events; rollouts supply model names and per-response pricing inputs.
+type CodexUsageReader struct {
+	reader codexUsage
+	path   string
+}
+
+func NewCodexUsageReader(getenv func(string) string, home, cwd, thread string, resumed bool) *CodexUsageReader {
+	b := codexBackend{}
+	path, _ := b.findTranscript(b.transcriptRoot(getenv, home, cwd), thread)
+	r := &CodexUsageReader{path: path}
+	if resumed && path != "" {
+		baselineUsage(&r.reader, path)
+	}
+	return r
+}
+func (r *CodexUsageReader) Take(getenv func(string) string, home, cwd, thread string) Usage {
+	if r.path == "" {
+		b := codexBackend{}
+		r.path, _ = b.findTranscript(b.transcriptRoot(getenv, home, cwd), thread)
+	}
+	if r.path != "" {
+		r.reader.read(r.path)
+	}
+	return r.reader.take()
 }

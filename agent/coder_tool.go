@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -28,17 +27,8 @@ const (
 	coderToolName      = "coder"
 	coderBackendCodex  = "codex"
 	coderBackendClaude = "claude"
-	// The Antigravity CLI, Google's terminal agent. It runs one-shot everywhere: there is no
-	// terminal session for it, so no approval prompts either.
+	// The Antigravity CLI, Google's terminal agent.
 	coderBackendAgy = coderusage.BackendAgy
-
-	coderStderrTailBytes = 4 * 1024
-	coderLineMaxBytes    = 4 * 1024 * 1024
-	coderOutputMaxBytes  = 64 * 1024
-	// After the CLI exits, a process it left in the background can keep its output open.
-	coderWaitDelay = time.Second
-	// Diagnostics directories kept under file_cache_dir/coder, including the new one.
-	coderDiagnosticsKeep = 20
 )
 
 type coderTool struct {
@@ -68,15 +58,6 @@ type CoderRequest struct {
 	Report func(run coderusage.Run, quota *coderusage.Quota)
 }
 
-type coderCLICommand struct {
-	Command string
-	Args    []string
-	Stdin   string
-	Dir     string
-}
-
-type coderCLIRunFunc func(ctx context.Context, req CoderRequest, emit func(string)) (string, error)
-
 func newCoderTool(deps coderToolDeps) *coderTool {
 	return &coderTool{deps: deps}
 }
@@ -84,24 +65,14 @@ func newCoderTool(deps coderToolDeps) *coderTool {
 func (t *coderTool) Name() string { return coderToolName }
 
 func (t *coderTool) Description() string {
+	claude := "Claude Code runs each task non-interactively with approvals bypassed."
 	if t.deps.RunTerminal != nil {
-		approvals := "asks the user to approve actions when needed"
-		switch codex, claude := t.deps.BypassApprovals[coderBackendCodex], t.deps.BypassApprovals[coderBackendClaude]; {
-		case codex && claude:
-			approvals = "runs actions without asking the user"
-		case codex:
-			approvals = "asks the user to approve actions when needed (Codex runs actions without asking)"
-		case claude:
-			approvals = "asks the user to approve actions when needed (Claude Code runs actions without asking)"
+		claude = "Claude Code keeps a terminal session for this conversation and working directory, and asks the user to approve actions when needed."
+		if t.deps.BypassApprovals[coderBackendClaude] {
+			claude = "Claude Code keeps a terminal session and runs actions without asking the user."
 		}
-		return "Delegate a repository coding task to local Codex, Claude Code (cc) or the Antigravity CLI (agy) when the user asks for them. " +
-			"Codex and Claude Code each keep a terminal session for this conversation and working directory, and " + approvals + ". " +
-			"agy has no session: each task is a fresh non-interactive run that remembers nothing of the last, and it runs every action without asking the user. " +
-			"Returns a SubtaskResult envelope. " + coderUsageNote
 	}
-	return "Delegate a repository coding task to the local Codex, Claude Code or Antigravity (agy) CLI. " +
-		"Use this when the user explicitly asks for Codex, Claude Code, cc, Antigravity, or agy to handle code edits, review fixes, tests, or file generation. " +
-		"The child coder runs non-interactively with approvals bypassed and returns a SubtaskResult envelope. " + coderUsageNote
+	return "Delegate a repository coding task to local Codex, Claude Code (cc), or Antigravity (agy) when the user explicitly asks for that CLI. Codex and agy keep sessions within this run or Console conversation; only Console sessions ask approvals and questions. " + claude + " Returns a SubtaskResult envelope. " + coderUsageNote
 }
 
 // coderUsageNote tells the model what the result's usage line is for.
@@ -160,26 +131,8 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 	if runner == nil {
 		return "", fmt.Errorf("subtask runner unavailable")
 	}
-	runCLI := t.deps.RunCLI
-	if runCLI == nil {
-		runCLI = runCoderCLI
-	}
-	// agy has no terminal session: it runs one-shot in the Console too.
-	if t.deps.RunTerminal != nil && req.Backend != coderBackendAgy {
-		runCLI = func(ctx context.Context, req CoderRequest, emit func(string)) (string, error) {
-			// The backend name is also the CLI's command name.
-			command, env, err := req.CoderEnv.Command(req.Backend)
-			if err != nil {
-				return "", err
-			}
-			req.Command, req.Env = command, env
-			output, err := t.deps.RunTerminal(ctx, req)
-			if output != "" {
-				// A line of its own: the usage line that may follow starts on the next.
-				emit(strings.TrimRight(output, "\n") + "\n")
-			}
-			return output, err
-		}
+	if req.Backend != coderBackendClaude && t.deps.RunSessions == nil {
+		return "", fmt.Errorf("coder sessions unavailable")
 	}
 
 	result, err := runner.RunSubtask(ctx, SubtaskRequest{
@@ -194,19 +147,35 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 					Text: text, Summary: summary, Progress: step, Status: "running",
 				})
 			}
-			output, runErr := runCLI(runCtx, req, func(text string) {
-				text = strings.TrimRight(text, "\x00")
-				if text == "" {
-					return
+			var output string
+			var runErr error
+			if req.Backend == coderBackendClaude && t.deps.RunTerminal == nil {
+				runCLI := t.deps.RunCLI
+				if runCLI == nil {
+					runCLI = runCoderCLI
 				}
-				EmitEvent(runCtx, nil, Event{
-					Kind:     EventKindToolOutput,
-					ToolName: coderToolName,
-					Stream:   req.Backend,
-					Text:     text,
-					Status:   "running",
+				output, runErr = runCLI(runCtx, req, func(text string) {
+					text = strings.TrimRight(text, "\x00")
+					if text != "" {
+						req.Progress("", text, "")
+					}
 				})
-			})
+			} else {
+				command, env, err := req.CoderEnv.Command(req.Backend)
+				runErr = err
+				if err == nil {
+					req.Command, req.Env = command, env
+					if req.Backend == coderBackendClaude {
+						output, runErr = t.deps.RunTerminal(runCtx, req)
+					} else {
+						output, runErr = t.deps.RunSessions(runCtx, req)
+					}
+				}
+				if output != "" {
+					req.Progress("", strings.TrimRight(output, "\n")+"\n", "")
+				}
+			}
+
 			usage := t.reportUsage(runCtx, req, run, quota)
 			if runErr != nil {
 				out := FailedSubtaskResult("", runErr)
@@ -251,11 +220,6 @@ func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coder
 	}
 	run.Backend = req.Backend
 	recorder.RecordRun(ctx, run)
-	if quota == nil && req.Backend == coderBackendCodex && t.deps.ReadCodexQuota != nil {
-		if read, err := t.deps.ReadCodexQuota(context.WithoutCancel(ctx), req.CoderEnv); err == nil {
-			quota = &read
-		}
-	}
 	// A run that found no sign-in has no quota to read (and the read would meet the same prompt).
 	if quota == nil && req.Backend == coderBackendAgy && t.deps.ReadAgyQuota != nil && !run.NotSignedIn {
 		if read, err := t.deps.ReadAgyQuota(context.WithoutCancel(ctx), req.CoderEnv); err == nil {
@@ -280,15 +244,6 @@ func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coder
 		req.Progress(line, line, "")
 	}
 	return text
-}
-
-// readCodexQuota reads Codex's quota from its app server, finding codex as the coder tool does.
-func readCodexQuota(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error) {
-	command, env, err := coderEnv.Command(coderBackendCodex)
-	if err != nil {
-		return coderusage.Quota{}, err
-	}
-	return coderusage.ReadCodexQuota(ctx, command, env)
 }
 
 // readAgyQuota reads the Antigravity CLI's quota from its /usage, finding agy as the coder tool does.
@@ -413,22 +368,34 @@ func resolveCoderAliasedCWD(roots pathroots.PathRoots, alias string, rest string
 	return candAbs, nil
 }
 
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+type coderCLICommand struct {
+	Command string
+	Args    []string
+	Stdin   string
+	Dir     string
+}
+
+type coderCLIRunFunc func(ctx context.Context, req CoderRequest, emit func(string)) (string, error)
+
+const (
+	coderStderrTailBytes = 4 * 1024
+	coderLineMaxBytes    = 4 * 1024 * 1024
+	coderOutputMaxBytes  = 64 * 1024
+	coderWaitDelay       = time.Second
+	coderDiagnosticsKeep = 20
+)
+
 func buildCoderCLICommand(req CoderRequest) coderCLICommand {
 	switch strings.TrimSpace(req.Backend) {
-	case coderBackendCodex:
-		return coderCLICommand{
-			Command: "codex",
-			Args: []string{
-				"exec",
-				"--dangerously-bypass-approvals-and-sandbox",
-				"--json",
-				"-C",
-				strings.TrimSpace(req.CWD),
-				"-",
-			},
-			Stdin: req.Task,
-			Dir:   strings.TrimSpace(req.CWD),
-		}
 	case coderBackendClaude:
 		return coderCLICommand{
 			Command: "claude",
@@ -440,21 +407,6 @@ func buildCoderCLICommand(req CoderRequest) coderCLICommand {
 				"--verbose",
 				"--include-partial-messages",
 				"--no-session-persistence",
-				"--dangerously-skip-permissions",
-			},
-			Stdin: req.Task,
-			Dir:   strings.TrimSpace(req.CWD),
-		}
-	case coderBackendAgy:
-		return coderCLICommand{
-			Command: "agy",
-			// The task goes on stdin, which agy reads as its prompt when -p is not given: as -p's
-			// value it would be in the process list, and bounded by the argument size. stream-json
-			// on its own is headless; without the permission bypass a headless run cannot ask and
-			// denies every action that needs approval.
-			Args: []string{
-				"--output-format",
-				"stream-json",
 				"--dangerously-skip-permissions",
 			},
 			Stdin: req.Task,
@@ -544,11 +496,7 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 		detail += "; diagnostics: " + diagnosticDir
 		runErr = fmt.Errorf("%s: %w", detail, runErr)
 	}()
-	// stop ends the CLI early: agy waiting at its sign-in prompt.
-	procCtx, stop := context.WithCancel(ctx)
-	defer stop()
-	var needsSignIn atomic.Bool
-	cmd := exec.CommandContext(procCtx, commandPath, spec.Args...)
+	cmd := exec.CommandContext(ctx, commandPath, spec.Args...)
 	configureCoderProcess(cmd)
 	if env != nil {
 		cmd.Env = env
@@ -563,18 +511,7 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	// even when a process the CLI left in the background still holds the pipes.
 	stdoutLines := &coderLineWriter{handle: func(line []byte) { _ = collector.ConsumeLine(line) }}
 	stderrLines := &coderLineWriter{handle: func(line []byte) {
-		if req.Backend == coderBackendAgy {
-			// Not signed in, agy prints a sign-in link and waits a minute for it. Nobody can
-			// answer here: stop it now, and keep the link out of the progress and the result.
-			if needsSignIn.Load() {
-				return
-			}
-			if coderusage.IsAgyAuthPrompt(string(line)) {
-				needsSignIn.Store(true)
-				stop()
-				return
-			}
-		}
+
 		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
 	}}
 	stdoutLines.overflow = func() {
@@ -603,23 +540,14 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	waitErr := cmd.Wait()
 	stdoutLines.Flush()
 	stderrLines.Flush()
-	signIn := needsSignIn.Load() || (req.Backend == coderBackendAgy && coderusage.IsAgyAuthError(collector.Error()))
 	if req.Report != nil {
 		run := collector.Run()
-		if req.Backend == coderBackendCodex {
-			run = codexSessionRun(run, collector.codexThread, env, spec.Dir)
-		}
+
 		run.Backend = req.Backend
 		run.DurationMs = time.Since(started).Milliseconds()
-		run.NotSignedIn = signIn
 		req.Report(run, collector.quota)
 	}
 	output = capCoderOutput(collector.Output(), diagnosticDir)
-	if signIn {
-		// The stderr tail holds the sign-in link: it is not part of the error.
-		stderrTail.Reset()
-		return output, coderusage.ErrAgySignIn
-	}
 	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
 		line := fmt.Sprintf("[%s] exited; stopped reading output still held by a background process\n", req.Backend)
 		progress(line, line, "")
@@ -629,24 +557,15 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 		if ctx.Err() != nil {
 			return output, ctx.Err()
 		}
-		if errText := collector.Error(); errText != "" && req.Backend == coderBackendAgy {
-			// agy exits 1 after a result that says why.
-			return output, fmt.Errorf("agy failed: %s (%v)", errText, coderExitError(req.Backend, waitErr))
-		}
+
 		return output, coderExitError(req.Backend, waitErr)
 	}
 	if errText := collector.Error(); errText != "" {
 		return output, fmt.Errorf("%s failed: %s", req.Backend, errText)
 	}
-	if req.Backend == coderBackendAgy && !collector.agy.resultSeen {
-		// Exit 0 without a result is not a finished run: the answer would be a guess.
-		return output, fmt.Errorf("agy ended without a result event")
-	}
 	return output, nil
 }
 
-// coderLineWriter hands each complete line to handle. A line longer than coderLineMaxBytes
-// is dropped, and overflow is called once for it.
 type coderLineWriter struct {
 	handle   func(line []byte)
 	overflow func()
@@ -749,41 +668,18 @@ func coderExitError(backend string, err error) error {
 }
 
 type coderStreamCollector struct {
-	backend  string
-	emit     func(string)
-	progress func(summary, text, step string)
-
-	emitted       strings.Builder
-	final         string
-	errText       string
-	lastActivity  string
-	step          string
-	itemOutputLen map[string]int
-	// run is what the run used, as its events said; quota the subscription quota it reported.
-	run   coderusage.Run
-	quota *coderusage.Quota
-	// codexThread is the Codex run's thread, whose rollout names the model and tells the
-	// responses apart.
-	codexThread string
-	// agy is what the Antigravity CLI's stream needs kept.
-	agy agyStreamState
+	backend                            string
+	emit                               func(string)
+	progress                           func(summary, text, step string)
+	emitted                            strings.Builder
+	final, errText, lastActivity, step string
+	run                                coderusage.Run
+	quota                              *coderusage.Quota
 }
 
-// Run is what the run used.
-func (c *coderStreamCollector) Run() coderusage.Run {
-	if c.backend == coderBackendAgy {
-		return c.agyRun()
-	}
-	return c.run
-}
-
+func (c *coderStreamCollector) Run() coderusage.Run { return c.run }
 func newCoderStreamCollector(backend string, emit func(string)) *coderStreamCollector {
-	return &coderStreamCollector{
-		backend:       strings.ToLower(strings.TrimSpace(backend)),
-		emit:          emit,
-		itemOutputLen: map[string]int{},
-		agy:           agyStreamState{lastStep: -1, textStep: -1},
-	}
+	return &coderStreamCollector{backend: backend, emit: emit}
 }
 
 func (c *coderStreamCollector) ConsumeLine(line []byte) error {
@@ -796,22 +692,11 @@ func (c *coderStreamCollector) ConsumeLine(line []byte) error {
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(line, &payload); err != nil {
-		if c.backend == coderBackendAgy {
-			// agy's stream is JSON lines only: anything else is a broken stream, not an answer.
-			c.agyMalformedLine(line)
-			return nil
-		}
+
 		c.addDelta(string(line) + "\n")
 		return nil
 	}
-	switch c.backend {
-	case coderBackendClaude:
-		c.consumeClaude(payload)
-	case coderBackendAgy:
-		c.consumeAgy(payload)
-	default:
-		c.consumeCodex(payload)
-	}
+	c.consumeClaude(payload)
 	return nil
 }
 
@@ -828,9 +713,6 @@ func (c *coderStreamCollector) Output() string {
 func (c *coderStreamCollector) Error() string {
 	if c == nil {
 		return ""
-	}
-	if c.backend == coderBackendAgy {
-		return c.agyError()
 	}
 	return strings.TrimSpace(c.errText)
 }
@@ -959,152 +841,6 @@ func (c *coderStreamCollector) emitActivity(summary string, details ...string) {
 	}
 }
 
-func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
-	typ := stringField(payload, "type")
-	switch typ {
-	case "thread.started", "turn.started", "turn.completed":
-		switch typ {
-		case "thread.started":
-			c.step = coderStepStarting
-			c.codexThread = strings.TrimSpace(stringField(payload, "thread_id"))
-		case "turn.started":
-			c.step = coderStepThinking
-		case "turn.completed":
-			c.errText = ""
-			c.addCodexTurn(payload)
-		}
-		c.emitActivity("[codex] " + typ)
-	case "error":
-		c.emitActivity("[codex] error", firstNonEmptyString(stringField(payload, "message"), stringField(payload, "error")))
-	case "turn.failed":
-		if failure, ok := mapField(payload, "error"); ok {
-			c.errText = stringField(failure, "message")
-		} else {
-			c.errText = stringField(payload, "error")
-		}
-		if c.errText == "" {
-			c.errText = "turn failed"
-		}
-		c.emitActivity("[codex] turn.failed", c.errText)
-		return
-	}
-	if strings.Contains(strings.ToLower(typ), "delta") {
-		if text := firstNonEmptyString(stringField(payload, "delta"), stringField(payload, "text")); text != "" {
-			c.addDelta(text)
-			return
-		}
-	}
-	if item, ok := mapField(payload, "item"); ok && isAssistantCoderItem(item) {
-		if text := firstNonEmptyString(stringField(item, "text"), textFromValue(item["content"])); text != "" {
-			c.setAssistantText(text)
-			return
-		}
-	}
-	if item, ok := mapField(payload, "item"); ok && strings.HasPrefix(typ, "item.") {
-		// An item that finishes hands control back to the model.
-		if typ == "item.completed" {
-			c.step = coderStepThinking
-		} else if step := codexItemStep(stringField(item, "type")); step != "" {
-			c.step = step
-		}
-	}
-	if item, ok := mapField(payload, "item"); ok && strings.TrimSpace(stringField(item, "type")) == "command_execution" {
-		c.consumeCodexCommandItem(item)
-		return
-	}
-	if item, ok := mapField(payload, "item"); ok && strings.HasPrefix(typ, "item.") {
-		if kind := stringField(item, "type"); kind != "" {
-			c.emitActivity(fmt.Sprintf("[codex] %s %s (%s)", kind, strings.TrimPrefix(typ, "item."), stringField(item, "id")))
-		}
-	}
-	if text := firstNonEmptyString(stringField(payload, "output"), stringField(payload, "result"), stringField(payload, "final")); text != "" {
-		c.final = text
-	}
-	if errText := firstNonEmptyString(stringField(payload, "error"), stringField(payload, "message")); errText != "" && strings.Contains(strings.ToLower(typ), "error") {
-		c.errText = errText
-	}
-}
-
-// codexSessionRun is a Codex run's usage as its thread's rollout has it: under the model's own
-// name and response by response, which the pricing catalog needs (a list price goes by the single
-// request), and with its sub-agents' threads. The stream gives only each turn's sum and no model;
-// that stays the run's usage (model "codex", no price) when the rollout cannot be read, as for a
-// run that keeps no session. env is the CLI's environment, nil for this process's.
-func codexSessionRun(run coderusage.Run, thread string, env []string, cwd string) coderusage.Run {
-	getenv := os.Getenv
-	if env != nil {
-		getenv = func(key string) string {
-			value := ""
-			for _, entry := range env {
-				if name, v, ok := strings.Cut(entry, "="); ok && name == key {
-					value = v // the last one wins, as for the process
-				}
-			}
-			return value
-		}
-	}
-	home := getenv("HOME")
-	if home == "" {
-		home, _ = os.UserHomeDir()
-	}
-	usage, ok := coderterm.CodexThreadUsage(getenv, home, cwd, thread)
-	if !ok {
-		return run
-	}
-	run.Models = CoderModelsFromSessionUsage(usage)
-	if run.Turns == 0 {
-		run.Turns = usage.Turns
-	}
-	return run
-}
-
-// CoderModelsFromSessionUsage turns what a CLI's session files recorded into a run's models. The
-// responses go along one by one: the rows are priced by them, not by their sum.
-func CoderModelsFromSessionUsage(usage coderterm.Usage) []coderusage.ModelUsage {
-	var models []coderusage.ModelUsage
-	for _, m := range usage.Models {
-		model := coderusage.ModelUsage{
-			Model:                    m.Model,
-			InputTokens:              m.InputTokens,
-			CachedInputTokens:        m.CachedInputTokens,
-			CacheCreationInputTokens: m.CacheCreationInputTokens,
-			OutputTokens:             m.OutputTokens,
-			ReasoningTokens:          m.ReasoningTokens,
-			CacheDetails:             m.CacheCreation,
-		}
-		for _, response := range m.Responses {
-			model.Requests = append(model.Requests, coderusage.RequestUsage{
-				InputTokens:              response.InputTokens,
-				CachedInputTokens:        response.CachedInputTokens,
-				CacheCreationInputTokens: response.CacheCreationInputTokens,
-				OutputTokens:             response.OutputTokens,
-				CacheDetails:             response.CacheCreation,
-				Count:                    response.Count,
-			})
-		}
-		models = append(models, model)
-	}
-	return models
-}
-
-// addCodexTurn adds a Codex turn's usage to the run's: one model, the turns summed.
-func (c *coderStreamCollector) addCodexTurn(payload map[string]any) {
-	usage, ok := coderusage.CodexTurnUsage(payload)
-	if !ok {
-		return
-	}
-	c.run.Turns++
-	if len(c.run.Models) == 0 {
-		c.run.Models = []coderusage.ModelUsage{{Model: usage.Model}}
-	}
-	total := &c.run.Models[0]
-	total.InputTokens += usage.InputTokens
-	total.CachedInputTokens += usage.CachedInputTokens
-	total.CacheCreationInputTokens += usage.CacheCreationInputTokens
-	total.OutputTokens += usage.OutputTokens
-	total.ReasoningTokens += usage.ReasoningTokens
-}
-
 func claudeStreamDelta(value any) string {
 	event, ok := value.(map[string]any)
 	if !ok {
@@ -1118,19 +854,6 @@ func claudeStreamDelta(value any) string {
 	return ""
 }
 
-const (
-	coderStepStarting = "starting up"
-	coderStepThinking = "thinking"
-	coderStepCommand  = "running a command"
-	coderStepEdit     = "editing files"
-	coderStepRead     = "reading code"
-	coderStepWeb      = "searching the web"
-	coderStepTool     = "calling a tool"
-	coderStepPlan     = "planning"
-	coderStepSubagent = "running a subagent"
-)
-
-// claudeToolStep names a Claude Code tool by what it does. Unknown tools keep their name.
 func claudeToolStep(name string) string {
 	switch name {
 	case "":
@@ -1152,53 +875,6 @@ func claudeToolStep(name string) string {
 		return coderStepTool
 	}
 	return "using " + name
-}
-
-// codexItemStep names a Codex item type by what it does, or returns "" for items that are not steps.
-func codexItemStep(kind string) string {
-	switch kind {
-	case "command_execution":
-		return coderStepCommand
-	case "file_change":
-		return coderStepEdit
-	case "mcp_tool_call":
-		return coderStepTool
-	case "web_search":
-		return coderStepWeb
-	case "todo_list":
-		return coderStepPlan
-	case "reasoning":
-		return coderStepThinking
-	}
-	return ""
-}
-
-func isAssistantCoderItem(item map[string]any) bool {
-	role := strings.ToLower(strings.TrimSpace(stringField(item, "role")))
-	typ := strings.ToLower(strings.TrimSpace(stringField(item, "type")))
-	return role == "assistant" || typ == "message" || typ == "assistant_message" || typ == "agent_message"
-}
-
-func (c *coderStreamCollector) consumeCodexCommandItem(item map[string]any) {
-	id := strings.TrimSpace(stringField(item, "id"))
-	command := strings.TrimSpace(stringField(item, "command"))
-	status := strings.TrimSpace(stringField(item, "status"))
-	output := stringField(item, "aggregated_output")
-	emittedLen := c.itemOutputLen[id]
-	runes := []rune(output)
-	if emittedLen > len(runes) {
-		emittedLen = 0
-	}
-	details := string(runes[emittedLen:])
-	c.itemOutputLen[id] = len(runes)
-	if command != "" {
-		details = "$ " + command + "\n" + details
-	}
-	summary := fmt.Sprintf("[codex] command_execution %s (%s)", status, id)
-	if code, ok := item["exit_code"]; ok && code != nil {
-		summary += fmt.Sprintf(" exit=%v", code)
-	}
-	c.emitActivity(summary, details)
 }
 
 func textFromValue(value any) string {
@@ -1255,15 +931,6 @@ func boolField(m map[string]any, key string) bool {
 	return ok && b
 }
 
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 type coderTailBuffer struct {
 	Limit int
 	buf   []byte
@@ -1292,4 +959,43 @@ func (b *coderTailBuffer) String() string {
 		return ""
 	}
 	return string(bytes.ToValidUTF8(b.buf, []byte("\n[non-utf8 output]\n")))
+}
+
+const (
+	coderStepStarting = "starting up"
+	coderStepThinking = "thinking"
+	coderStepCommand  = "running a command"
+	coderStepEdit     = "editing files"
+	coderStepRead     = "reading code"
+	coderStepWeb      = "searching the web"
+	coderStepTool     = "calling a tool"
+	coderStepPlan     = "planning"
+	coderStepSubagent = "running a subagent"
+)
+
+func CoderModelsFromSessionUsage(usage coderterm.Usage) []coderusage.ModelUsage {
+	var models []coderusage.ModelUsage
+	for _, m := range usage.Models {
+		model := coderusage.ModelUsage{
+			Model:                    m.Model,
+			InputTokens:              m.InputTokens,
+			CachedInputTokens:        m.CachedInputTokens,
+			CacheCreationInputTokens: m.CacheCreationInputTokens,
+			OutputTokens:             m.OutputTokens,
+			ReasoningTokens:          m.ReasoningTokens,
+			CacheDetails:             m.CacheCreation,
+		}
+		for _, response := range m.Responses {
+			model.Requests = append(model.Requests, coderusage.RequestUsage{
+				InputTokens:              response.InputTokens,
+				CachedInputTokens:        response.CachedInputTokens,
+				CacheCreationInputTokens: response.CacheCreationInputTokens,
+				OutputTokens:             response.OutputTokens,
+				CacheDetails:             response.CacheCreation,
+				Count:                    response.Count,
+			})
+		}
+		models = append(models, model)
+	}
+	return models
 }

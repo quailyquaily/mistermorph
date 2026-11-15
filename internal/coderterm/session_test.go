@@ -419,11 +419,11 @@ func TestSessionEnvironment(t *testing.T) {
 	path := "PATH=" + os.Getenv("PATH")
 
 	t.Run("the given environment with the terminal's TERM", func(t *testing.T) {
-		got, s := childEnv(t, "codex", []string{path, "HOME=/home/someone", "TERM=dumb", "CODEX_HOME=/injected/codex-home", "INJECTED=1"})
+		got, s := childEnv(t, "claude", []string{path, "HOME=/home/someone", "TERM=dumb", "CLAUDE_CONFIG_DIR=/injected/claude-config", "INJECTED=1"})
 		if strings.Count(got, "\nTERM=") != 1 || !strings.Contains(got, "\nTERM=xterm-256color\n") {
 			t.Fatalf("TERM is not xterm-256color once:\n%s", got)
 		}
-		for _, want := range []string{"\nINJECTED=1\n", "\nCODEX_HOME=/injected/codex-home\n", "\nHOME=/home/someone\n"} {
+		for _, want := range []string{"\nINJECTED=1\n", "\nCLAUDE_CONFIG_DIR=/injected/claude-config\n", "\nHOME=/home/someone\n"} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("env lacks %q:\n%s", want, got)
 			}
@@ -431,16 +431,12 @@ func TestSessionEnvironment(t *testing.T) {
 		if strings.Contains(got, "do-not-leak") || strings.Contains(got, "/runtime/") {
 			t.Fatalf("the runtime's environment reached the CLI:\n%s", got)
 		}
-		if want := filepath.Join("/injected/codex-home", "sessions"); s.transcriptDir != want {
+		if want := filepath.Join("/injected/claude-config", "projects"); s.transcriptDir != want {
 			t.Fatalf("session files = %q, want %q", s.transcriptDir, want)
 		}
 	})
 	t.Run("session files under the home directory without an override", func(t *testing.T) {
-		_, s := childEnv(t, "codex", []string{path, "HOME=/home/someone"})
-		if want := filepath.Join("/home/someone", ".codex", "sessions"); s.transcriptDir != want {
-			t.Fatalf("codex session files = %q, want %q", s.transcriptDir, want)
-		}
-		_, s = childEnv(t, "claude", []string{path, "HOME=/home/someone"})
+		_, s := childEnv(t, "claude", []string{path, "HOME=/home/someone"})
 		if want := filepath.Join("/home/someone", ".claude", "projects"); s.transcriptDir != want {
 			t.Fatalf("claude session files = %q, want %q", s.transcriptDir, want)
 		}

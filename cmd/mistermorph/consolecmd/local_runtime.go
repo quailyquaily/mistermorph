@@ -1320,6 +1320,7 @@ func (r *consoleLocalRuntime) deleteTopic(id string) (bool, error) {
 		checkpointRoot = generation.paths.CheckpointRoot
 		if generation.bundle != nil && generation.bundle.taskRuntime != nil {
 			generation.bundle.taskRuntime.CoderSessions.Reset(conversationKey)
+			generation.bundle.taskRuntime.CoderProtocolSessions.Reset(conversationKey)
 		}
 		if generation.logger != nil {
 			logger = generation.logger
@@ -2758,6 +2759,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 			return nil, nil, err
 		}
 		generation.bundle.taskRuntime.CoderSessions.Reset(conversationKey)
+		generation.bundle.taskRuntime.CoderProtocolSessions.Reset(conversationKey)
 		return &agent.Final{Output: "Session reset."}, nil, nil
 	}
 	projectGuide := command == "/init" || command == "/update"
@@ -2907,6 +2909,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	}
 	runReq := taskruntime.RunRequest{
 		CoderConversation:       conversationKey,
+		CoderCanAsk:             true,
 		Task:                    task,
 		Model:                   model,
 		Route:                   &selectedRoute,

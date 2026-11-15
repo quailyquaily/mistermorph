@@ -11,12 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/audience"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
+	"github.com/quailyquaily/mistermorph/internal/codersessions"
 	"github.com/quailyquaily/mistermorph/internal/coderterm"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
@@ -110,6 +112,7 @@ func (owners *runtimeClientOwners) resources() []any {
 
 type Runtime struct {
 	CoderSessions         coderterm.Sessions
+	CoderProtocolSessions codersessions.Sessions
 	commonDeps            depsutil.CommonDependencies
 	bootstrapClientOwners *runtimeClientOwners
 	closeOnce             sync.Once
@@ -141,8 +144,11 @@ type Runtime struct {
 type PromptAugmentFunc func(spec *agent.PromptSpec, reg *tools.Registry)
 
 type RunRequest struct {
-	// CoderConversation enables persistent coder terminals for this Console conversation.
+	// CoderConversation enables persistent coder sessions for this Console conversation.
+	// Empty scopes Codex/agy sessions to the run; Claude keeps its one-shot path.
 	CoderConversation string
+	// CoderCanAsk is set only by the local Console runtime, independently of question channels.
+	CoderCanAsk bool
 	// SessionID overrides the conversation scope used for provider caching.
 	SessionID                string
 	Task                     string
@@ -339,6 +345,7 @@ func (rt *Runtime) Close() error {
 	}
 	rt.closeOnce.Do(func() {
 		rt.CoderSessions.Close()
+		rt.CoderProtocolSessions.Close()
 		clientErr := closeRuntimeClientScope(rt.Logger, rt.bootstrapClientOwners, rt.PlanClient, rt.BootstrapMainClient)
 		var guardErr error
 		if rt.SharedGuard != nil {
@@ -578,10 +585,17 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	closeTaskMCP := func() error { return nil }
 	closeToolSearch := func() error { return nil }
 	var memoryStore *memories.Store
+	coderScope := req.CoderConversation
+	if coderScope == "" {
+		coderScope = "run:" + uuid.NewString()
+	}
 	var cleanupOnce sync.Once
 	var cleanupErr error
 	cleanup := func() error {
 		cleanupOnce.Do(func() {
+			if req.CoderConversation == "" {
+				rt.CoderProtocolSessions.Reset(coderScope)
+			}
 			cleanupErr = errors.Join(closeToolSearch(), closeTaskMCP(), memoryStore.Close(), closeRuntimeClientScope(logger, runClientOwners, ownedImageClient))
 		})
 		return cleanupErr
@@ -789,6 +803,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		agent.WithSubtaskRunner(boundSubtaskRunner{runtime: rt, route: mainRoute}),
 		agent.WithEngineToolsConfig(engineToolsConfig),
 	}
+	engineOpts = append(engineOpts, agent.WithCoderSessions(CoderSessionRunner(&rt.CoderProtocolSessions, coderScope, req.CoderCanAsk, userQuestionsFromContext(ctx))))
 	if req.CoderConversation != "" && coderterm.Supported {
 		ask := userQuestionsFromContext(ctx)
 		engineOpts = append(engineOpts, agent.WithCoderTerminal(func(runCtx context.Context, request agent.CoderRequest) (string, error) {
@@ -830,6 +845,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			return output, err
 		}))
 	}
+
 	if engineToolsConfig.SpawnEnabled || engineToolsConfig.ToolTriggers["spawn"] {
 		if lister := ModelProfileLister(rt.commonDeps, mainRoute.Profile); lister != nil {
 			engineOpts = append(engineOpts, agent.WithModelProfiles(lister))

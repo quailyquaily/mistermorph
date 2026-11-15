@@ -175,25 +175,25 @@ func TestCodexUsageKeepsResponsesUnderTheTurnsModel(t *testing.T) {
 	}
 }
 
-// A headless run's thread is read from its rollout under the Codex config directory's sessions.
-func TestCodexThreadUsage(t *testing.T) {
+// A persistent reader counts only new responses, and a reopened process retains its offset.
+func TestCodexUsageReaderAcrossTasks(t *testing.T) {
 	home := t.TempDir()
 	env := func(string) string { return "" }
-	if _, ok := CodexThreadUsage(env, home, home, codexUsageParent); ok {
-		t.Fatal("usage of a thread without a rollout")
+	r := NewCodexUsageReader(env, home, home, codexUsageParent, false)
+	if got := r.Take(env, home, home, codexUsageParent); len(got.Models) != 0 {
+		t.Fatalf("unexpected usage: %+v", got)
 	}
 	path := codexUsagePath(filepath.Join(home, ".codex", "sessions"), codexUsageParent)
 	writeUsageFile(t, path, `{"type":"turn_context","payload":{"model":"gpt-6.1-sol"}}`+"\n"+codexUsageRollout)
-	got, ok := CodexThreadUsage(env, home, home, codexUsageParent)
-	if !ok || len(got.Models) != 1 || got.Models[0].Model != "gpt-6.1-sol" || got.Models[0].InputTokens != 3000 || len(got.Models[0].Responses) != 2 || got.Turns != 1 {
-		t.Fatalf("usage = %+v, %v", got, ok)
+	got := r.Take(env, home, home, codexUsageParent)
+	if len(got.Models) != 1 || got.Models[0].Model != "gpt-6.1-sol" || got.Models[0].InputTokens != 3000 {
+		t.Fatalf("usage: %+v", got)
 	}
-	// CODEX_HOME moves it.
-	other := t.TempDir()
-	if _, ok := CodexThreadUsage(func(key string) string { return map[string]string{"CODEX_HOME": other}[key] }, home, home, codexUsageParent); ok {
-		t.Fatal("usage read outside CODEX_HOME")
+	if got := r.Take(env, home, home, codexUsageParent); len(got.Models) != 0 {
+		t.Fatalf("counted again: %+v", got)
 	}
-	if _, ok := CodexThreadUsage(env, home, home, " "); ok {
-		t.Fatal("usage of no thread")
+	resumed := NewCodexUsageReader(env, home, home, codexUsageParent, true)
+	if got := resumed.Take(env, home, home, codexUsageParent); len(got.Models) != 0 {
+		t.Fatalf("counted history on resume: %+v", got)
 	}
 }

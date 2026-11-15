@@ -18,8 +18,8 @@ type EngineToolsConfig struct {
 	// bash tool's environment (the PowerShell tool's on Windows) with tools.coder.path_extra in
 	// front of its PATH (shellenv.CoderEnvFromConfig).
 	CoderEnv shellenv.CoderEnv
-	// CoderBypassApprovals names the backends ("codex", "claude") whose terminal sessions start
-	// without approval prompts or sandbox. One-shot CLI runs bypass them anyway.
+	// CoderBypassApprovals names the backends ("codex", "claude", "agy") whose Console sessions start
+	// without approval prompts or sandbox. Other runtimes bypass them regardless.
 	CoderBypassApprovals map[string]bool
 	// WorkerNameSet is the name set (see WorkerNameSets) a task started by this engine names
 	// its spawn and coder workers from; empty or unknown means the scientists. Nested runs and
@@ -39,11 +39,10 @@ type spawnToolDeps struct {
 }
 
 type coderToolDeps struct {
-	Runner SubtaskRunner
-	RunCLI coderCLIRunFunc
-	// RunTerminal runs Codex and Claude Code in persistent terminal sessions when set; agy always
-	// runs one-shot.
+	Runner      SubtaskRunner
+	RunCLI      coderCLIRunFunc
 	RunTerminal func(context.Context, CoderRequest) (string, error)
+	RunSessions func(context.Context, CoderRequest) (string, error)
 	Roots       pathroots.PathRoots
 	// Env is EngineToolsConfig.CoderEnv.
 	Env shellenv.CoderEnv
@@ -53,8 +52,6 @@ type coderToolDeps struct {
 	BypassApprovals map[string]bool
 	// Usage gives the recorder of runs' usage and quotas (usage.db); nil records nothing.
 	Usage func() *coderusage.Recorder
-	// ReadCodexQuota reads Codex's quota after a Codex run; nil reads none.
-	ReadCodexQuota func(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error)
 	// ReadAgyQuota reads the Antigravity CLI's quota after an agy run; nil reads none.
 	ReadAgyQuota func(ctx context.Context, coderEnv shellenv.CoderEnv) (coderusage.Quota, error)
 }

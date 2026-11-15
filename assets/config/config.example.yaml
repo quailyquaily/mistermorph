@@ -349,12 +349,10 @@ tools:
     enabled: true
   coder:
     # Enable the coder tool.
-    # In Console, Codex and Claude Code run in persistent terminal sessions (one per conversation and
-    # working directory) and ask the user to approve actions. Elsewhere they run as one-shot CLI
-    # subtasks with approval and permission prompts bypassed.
-    # The Antigravity CLI (coder=agy) always runs one-shot with every action approved
-    # (--dangerously-skip-permissions), in Console too: it has no terminal session and no approval
-    # prompts. Sign in first by running `agy` once in a terminal.
+    # Codex uses app-server sessions and Antigravity uses ACP sessions in every runtime.
+    # Console sessions last for the conversation; other protocol sessions close with each run.
+    # Claude Code keeps its existing behavior: PTY sessions in Console on Unix; one-shot
+    # claude -p elsewhere, including Windows. Outside Console approvals are bypassed.
     enabled: false
     # codex / claude / agy start in the bash tool's environment (the powershell tool's on Windows), not
     # in the service's: its allowlist of variables (HOME, LANG, TERM, USER, ...), plus
@@ -377,15 +375,17 @@ tools:
     # path_extra:
     #   - "/opt/coder/bin"
     path_extra: []
-    # Console only: start the terminal sessions without approval prompts or sandbox, so the CLI
+    # Console only: start the sessions without approval prompts or sandbox, so the CLI
     # runs every command and edit on its own. Dangerous: a task (or text it reads) can then run
     # anything the service user can. A running session is reopened with the new setting before
     # its next task.
     bypass_approvals:
-      # Codex yolo mode (--dangerously-bypass-approvals-and-sandbox).
+      # Codex approvalPolicy=never, sandbox=danger-full-access.
       codex: false
       # Claude Code --dangerously-skip-permissions.
       claude: false
+      # Antigravity ACP permissions.
+      agy: false
   # The names new spawn subagents and coder workers get, shared by both tools:
   # "scientists" (Einstein, Curie, ...), "musicians" (Bach, Mozart, ...) or "artists"
   # (Leonardo, Michelangelo, ...). A missing or unknown value means "scientists". Changing it
