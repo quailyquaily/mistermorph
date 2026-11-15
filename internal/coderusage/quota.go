@@ -132,47 +132,6 @@ func ParseClaudeRateLimit(info map[string]any, now time.Time) (Quota, bool) {
 	return q, true
 }
 
-// claudeStatusLine is the part of the status JSON Claude Code gives a status line command that is
-// read here: the subscription's windows, each its share used (0–100) and when it resets (Unix
-// seconds). Claude Code includes a window only while its reset has not passed.
-type claudeStatusLine struct {
-	RateLimits map[string]*struct {
-		UsedPercentage *float64 `json:"used_percentage"`
-		ResetsAt       float64  `json:"resets_at"`
-	} `json:"rate_limits"`
-}
-
-// ParseClaudeStatusLine reads the quota from Claude Code's status line JSON (a terminal session's
-// StatusLineFile): its `rate_limits` five_hour and seven_day windows. A gateway's spend_limit is
-// not a subscription window and is left out. It reports false when there is no window.
-func ParseClaudeStatusLine(data []byte, now time.Time) (Quota, bool) {
-	var parsed claudeStatusLine
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return Quota{}, false
-	}
-	q := Quota{Backend: BackendClaude, ObservedAt: now.UTC().Format(time.RFC3339), Source: SourceRun}
-	for kind, window := range parsed.RateLimits {
-		minutes, known := claudeWindowMinutes[kind]
-		if window == nil || !known {
-			continue
-		}
-		w := Window{Kind: kind, WindowMinutes: minutes, ResetsAt: unixTime(window.ResetsAt), Status: StatusAllowed}
-		if window.UsedPercentage != nil {
-			w.UsedPercent = percent(*window.UsedPercentage)
-			if *window.UsedPercentage >= 100 {
-				w.Status = StatusRejected
-			}
-		}
-		q.Windows = append(q.Windows, w)
-	}
-	if len(q.Windows) == 0 {
-		return Quota{}, false
-	}
-	sortWindows(q.Windows)
-	q.Status = worstStatus(q.Windows)
-	return q, true
-}
-
 // codexRateLimits is the part of the Codex app server's `account/rateLimits/read` result read here.
 type codexRateLimits struct {
 	OrdinaryUsageAllowed *bool `json:"ordinaryUsageAllowed"`

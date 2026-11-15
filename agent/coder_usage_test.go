@@ -9,50 +9,88 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/codersessions"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
-// A Claude Code run as 2.1.323 streams it: the quota during the run, the cost and tokens per model
-// at the end.
-const fakeClaudeUsageStream = `{"type":"system","subtype":"init"}
+// Two tasks of one `claude -p` stream session, as 2.1.325 writes them: the quota during a task, and
+// a result line per task. modelUsage and total_cost_usd are the process's running totals; what a
+// task used is model_usage_since_last_result.
+const fakeClaudeSessionScript = `n=0
+while IFS= read -r line; do
+  n=$((n+1))
+  if [ "$n" = 1 ]; then cat <<'JSON'
+{"type":"system","subtype":"init","session_id":"00000000-0000-4000-8000-000000000001"}
 {"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":0.92,"resetsAt":4102444800,"status":"allowed_warning"},"seven_day":{"utilization":0.3,"resetsAt":4102444800,"status":"allowed"}}}}
-{"type":"result","subtype":"success","result":"fixed","num_turns":3,"total_cost_usd":0.5,"modelUsage":{"claude-opus-5-5":{"inputTokens":100,"outputTokens":40,"cacheReadInputTokens":2000,"cacheCreationInputTokens":500,"costUSD":0.5}}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"fixed"}]},"parent_tool_use_id":null}
+{"type":"result","subtype":"success","is_error":false,"result":"fixed","num_turns":3,"total_cost_usd":0.5,"modelUsage":{"claude-opus-5-5":{"inputTokens":100,"outputTokens":40,"cacheReadInputTokens":2000,"cacheCreationInputTokens":500,"costUSD":0.5}},"model_usage_since_last_result":{"claude-opus-5-5":{"inputTokens":100,"outputTokens":40,"cacheReadInputTokens":2000,"cacheCreationInputTokens":500,"costUSD":0.5}}}
+JSON
+  else cat <<'JSON'
+{"type":"assistant","message":{"content":[{"type":"text","text":"and tested"}]},"parent_tool_use_id":null}
+{"type":"result","subtype":"success","is_error":false,"result":"and tested","num_turns":1,"total_cost_usd":0.8,"modelUsage":{"claude-opus-5-5":{"inputTokens":200,"outputTokens":60,"cacheReadInputTokens":5000,"cacheCreationInputTokens":500,"costUSD":0.8}},"model_usage_since_last_result":{"claude-opus-5-5":{"inputTokens":100,"outputTokens":20,"cacheReadInputTokens":3000,"cacheCreationInputTokens":0,"costUSD":0.3}}}
+JSON
+  fi
+done
 `
 
+// coderSessionRunner runs the coder tool's tasks in real sessions under one scope, as a runtime's
+// runner does (taskruntime.CoderSessionRunner) for a run that cannot ask.
+func coderSessionRunner(sessions *codersessions.Sessions) func(context.Context, CoderRequest) (string, error) {
+	return func(ctx context.Context, request CoderRequest) (string, error) {
+		return sessions.Run(ctx, "run", codersessions.Request{
+			Backend: request.Backend, Command: request.Command, Env: request.Env, CWD: request.CWD, Task: request.Task,
+			BypassApprovals: true, Process: request.Process, Report: request.Report,
+			Progress: func(status string) { request.Progress(status, status+"\n", status) },
+			Note:     func(text string) { request.Progress("", text+"\n", "") },
+		})
+	}
+}
+
+// Claude Code through the session path: each task's usage and the quota arrive in one report, are
+// said with the result, and become rows in usage.db with the CLI's list price. The second task of
+// the process records what it used itself, not the process's running totals.
 func TestCoderToolRecordsClaudeUsageAndQuota(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake shell executable uses /bin/sh")
 	}
 	binDir := t.TempDir()
-	writeFakeCoderExecutable(t, binDir, "claude", "cat >/dev/null\ncat <<'JSON'\n"+fakeClaudeUsageStream+"JSON\n")
+	writeFakeCoderExecutable(t, binDir, "claude", fakeClaudeSessionScript)
 	usagePath := filepath.Join(t.TempDir(), "usage.db")
 	recorder := coderusage.NewRecorder(usagePath, nil)
+	var sessions codersessions.Sessions
+	defer sessions.Close()
 	var progress []string
 	tool := newCoderTool(coderToolDeps{
-		Runner: &execDirectSubtaskRunner{},
-		RunCLI: runCoderCLI,
-		Env:    shellenv.CoderEnv{PathExtra: []string{binDir}},
-		Usage:  func() *coderusage.Recorder { return recorder },
+		Runner:      &execDirectSubtaskRunner{},
+		RunSessions: coderSessionRunner(&sessions),
+		Env:         shellenv.CoderEnv{PathExtra: []string{binDir}},
+		Usage:       func() *coderusage.Recorder { return recorder },
 	})
 	ctx := WithEventSinkContext(llmstats.WithRunID(context.Background(), "run-7"), EventSinkFunc(func(_ context.Context, event Event) {
 		if event.Summary != "" {
 			progress = append(progress, event.Summary)
 		}
 	}))
-	raw, err := tool.Execute(ctx, map[string]any{"coder": "claude", "task": "fix it", "cwd": t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
+	cwd := t.TempDir()
+	run := func(task string) SubtaskResult {
+		t.Helper()
+		raw, err := tool.Execute(ctx, map[string]any{"coder": "claude", "task": task, "cwd": cwd})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result SubtaskResult
+		if err := json.Unmarshal([]byte(raw), &result); err != nil {
+			t.Fatal(err)
+		}
+		return result
 	}
-	var result SubtaskResult
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		t.Fatal(err)
-	}
+	result := run("fix it")
 	if result.Status != SubtaskStatusDone || result.Output != "fixed" {
 		t.Fatalf("result = %+v", result)
 	}
-	// The result tells the agent what the run used and what is left.
+	// The result tells the agent what the task used and what is left.
 	for _, want := range []string{"claude run: 2.6k in (2.0k cached) · 40 out · $0.50 at list price · 3 turns", "claude quota: 5h 92% used", "7d 30% used"} {
 		if !strings.Contains(result.Usage, want) {
 			t.Fatalf("usage = %q, want %q", result.Usage, want)
@@ -63,17 +101,33 @@ func TestCoderToolRecordsClaudeUsageAndQuota(t *testing.T) {
 		t.Fatalf("last progress = %q (all: %q)", last, progress)
 	}
 
+	// The same process takes the next task, and reports what that one used: $0.30, not the $0.80
+	// the process has used by then.
+	second := run("test it")
+	if second.Status != SubtaskStatusDone || second.Output != "and tested" {
+		t.Fatalf("second result = %+v", second)
+	}
+	if want := "claude run: 3.1k in (3.0k cached) · 20 out · $0.30 at list price · 1 turn"; second.Usage != want {
+		t.Fatalf("second usage = %q, want %q", second.Usage, want)
+	}
+
 	store, err := llmstats.OpenUsageStore(ctx, usagePath, llmstats.UsageStoreOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
 	records, err := store.Records(ctx, 10)
-	if err != nil || len(records) != 1 {
+	if err != nil || len(records) != 2 {
 		t.Fatalf("records = %+v, %v", records, err)
 	}
-	if rec := records[0]; rec.APIHost != "claude-code" || rec.Model != "claude-opus-5-5" || rec.RunID != "run-7" || rec.InputTokens != 2600 || rec.TotalCost != 0.5 {
+	if rec := records[0]; rec.APIHost != "claude-code" || rec.Model != "claude-opus-5-5" || rec.RunID != "run-7" || rec.InputTokens != 2600 ||
+		rec.CachedInputTokens != 2000 || rec.CacheCreationInputTokens != 500 || rec.OutputTokens != 40 ||
+		rec.TotalCost != 0.5 || !rec.CostEstimated || rec.CostCurrency != "USD" || len(rec.PricingParts) != 0 {
 		t.Fatalf("record = %+v", rec)
+	}
+	if rec := records[1]; rec.Model != "claude-opus-5-5" || rec.InputTokens != 3100 || rec.CachedInputTokens != 3000 || rec.CacheCreationInputTokens != 0 ||
+		rec.OutputTokens != 20 || rec.TotalCost != 0.3 || !rec.CostEstimated {
+		t.Fatalf("second record = %+v", rec)
 	}
 	quotas, err := coderusage.LoadQuotas(ctx, store)
 	if err != nil || len(quotas) != 1 || quotas[0].Backend != "claude" || quotas[0].Status != coderusage.StatusWarning {
@@ -101,9 +155,10 @@ func TestCoderToolWithoutUsageRecorderStillReports(t *testing.T) {
 	}
 }
 
-// A terminal run (a Console chat) reports what its session files record and Claude Code's quota
-// in one call: both are saved, and the rows are priced from the catalog, as the files carry no cost.
-func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
+// A report that carries no cost of the CLI's but the single requests (Codex's rollout files; a
+// Claude Code terminal session before the stream sessions) is saved with its quota in one call,
+// and the rows are priced from the catalog, request by request.
+func TestCoderToolPricesAReportsRequestsFromTheCatalog(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake shell executable uses /bin/sh")
 	}
@@ -117,7 +172,7 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 		Runner: &execDirectSubtaskRunner{},
 		Env:    shellenv.CoderEnv{PathExtra: []string{binDir}},
 		Usage:  func() *coderusage.Recorder { return recorder },
-		RunTerminal: func(_ context.Context, req CoderRequest) (string, error) {
+		RunSessions: func(_ context.Context, req CoderRequest) (string, error) {
 			used := 61.0
 			reports++
 			req.Report(coderusage.Run{Turns: 2, Models: []coderusage.ModelUsage{
@@ -133,7 +188,7 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 					}},
 			}}, &coderusage.Quota{Backend: "claude", Status: coderusage.StatusAllowed, ObservedAt: "2026-11-15T09:00:00Z",
 				Windows: []coderusage.Window{{Kind: "five_hour", WindowMinutes: 300, UsedPercent: &used, Status: coderusage.StatusAllowed}}})
-			return "fixed in the terminal", nil
+			return "fixed in the session", nil
 		},
 	})
 	ctx := WithEventSinkContext(llmstats.WithRunID(context.Background(), "run-9"), EventSinkFunc(func(_ context.Context, event Event) {
@@ -149,7 +204,7 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatal(err)
 	}
-	if reports != 1 || result.Status != SubtaskStatusDone || result.Output != "fixed in the terminal" {
+	if reports != 1 || result.Status != SubtaskStatusDone || result.Output != "fixed in the session" {
 		t.Fatalf("reports = %d, result = %+v", reports, result)
 	}
 	for _, want := range []string{"claude run: 1.2M in (496.0k cached) · 23.0k out · 2 turns", "claude quota: 5h 61% used"} {
@@ -199,11 +254,8 @@ func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
 }
 
 func TestCoderSessionsReportAllBackends(t *testing.T) {
-	for _, backend := range []string{"codex", "agy"} {
+	for _, backend := range []string{"codex", "claude", "agy"} {
 		t.Run(backend, func(t *testing.T) {
-			if runtime.GOOS == "windows" && backend == "claude" {
-				t.Skip("Claude is unavailable on Windows")
-			}
 			reports := 0
 			quotaReads := 0
 			used := 25.0

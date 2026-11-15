@@ -195,12 +195,8 @@ func WithEngineToolsConfig(cfg EngineToolsConfig) Option {
 	}
 }
 
-// WithCoderTerminal runs Claude Code tasks in runtime-owned terminal sessions when available.
-func WithCoderTerminal(run func(context.Context, CoderRequest) (string, error)) Option {
-	return func(e *Engine) { e.coderTerminal = run }
-}
-
-// WithCoderSessions runs Codex and Antigravity tasks in runtime-owned protocol sessions.
+// WithCoderSessions runs the coder tool's tasks (Codex, Claude Code, Antigravity) in
+// runtime-owned sessions. Without it the coder tool reports that sessions are unavailable.
 func WithCoderSessions(run func(context.Context, CoderRequest) (string, error)) Option {
 	return func(e *Engine) { e.coderSessions = run }
 }
@@ -226,7 +222,6 @@ type Engine struct {
 
 	engineToolsConfig EngineToolsConfig
 	coderSessions     func(context.Context, CoderRequest) (string, error)
-	coderTerminal     func(context.Context, CoderRequest) (string, error)
 
 	systemPromptCacheControl *llm.CacheControl
 	// runContext adds notes to each fresh run, after the metadata (WithRunContext).
@@ -311,7 +306,6 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 		coderToolDeps{
 			Runner:       e.subtaskRunner,
 			RunSessions:  e.coderSessions,
-			RunTerminal:  e.coderTerminal,
 			LookupTool:   e.registry.Get,
 			Usage:        coderusage.Default,
 			ReadAgyQuota: readAgyQuota,

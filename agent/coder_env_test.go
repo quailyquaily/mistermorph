@@ -28,7 +28,7 @@ func (t *fakeShellTool) ShellInjectedEnvVars() []shellenv.InjectedEnvVar {
 	return shellenv.CloneInjectedEnvVars(t.injected)
 }
 
-func TestCoderTerminalRequestGetsTheCoderEnvironment(t *testing.T) {
+func TestCoderSessionRequestGetsTheCoderEnvironment(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake shell executable uses /bin/sh")
 	}
@@ -53,7 +53,7 @@ func TestCoderTerminalRequestGetsTheCoderEnvironment(t *testing.T) {
 	newTool := func(env shellenv.CoderEnv) *coderTool {
 		env.Injected = injected
 		env.DefaultDirs = func() []string { return []string{defaultDir} }
-		return newTestCoderTool(coderToolDeps{
+		return newCoderTool(coderToolDeps{
 			Runner: &execDirectSubtaskRunner{},
 			Env:    env,
 			RunSessions: func(_ context.Context, req CoderRequest) (string, error) {
@@ -73,11 +73,11 @@ func TestCoderTerminalRequestGetsTheCoderEnvironment(t *testing.T) {
 	want := shellenv.BashEnv(injected(), []string{"/bash/extra"})
 	want[0] = "PATH=" + coderDir + ":/bash/extra:/usr/bin:/bin"
 	if strings.Join(got.Env, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("terminal env = %v\nwant %v", got.Env, want)
+		t.Fatalf("session env = %v\nwant %v", got.Env, want)
 	}
 	joined := "\n" + strings.Join(got.Env, "\n") + "\n"
 	if strings.Contains(joined, "do-not-leak") || !strings.Contains(joined, "\nCLAUDE_CONFIG_DIR="+filepath.Join(root, "claude-config")+"\n") {
-		t.Fatalf("terminal env:\n%s", joined)
+		t.Fatalf("session env:\n%s", joined)
 	}
 	// tools.coder.path_extra is set: the default install location is not searched.
 	got = CoderRequest{}

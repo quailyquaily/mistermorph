@@ -1,13 +1,16 @@
-// Package codersessions owns Codex and Antigravity stdio sessions.
+// Package codersessions owns the coding CLIs' sessions: one process per session, talking JSON
+// lines over stdin and stdout (`codex app-server`, `agy acp`, `claude -p` with JSON streams).
+// It reads no screen: only what the CLIs report over an interface made for a host program, and
+// Codex's rollout files for its usage.
 package codersessions
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/coderterm"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 )
 
@@ -19,9 +22,13 @@ type session struct {
 	cancel         context.CancelFunc
 	finished       chan struct{}
 	// Codex's usage reader survives a server restart and counts only new responses.
-	usage         *coderterm.CodexUsageReader
+	usage         *CodexUsageReader
 	protocolUsage bool
 	tokenTotal    int64
+	// Claude Code: whether the session is on disk (reopened with --resume), and the running
+	// totals its process last reported.
+	resumable    bool
+	claudeTotals []coderusage.ModelUsage
 }
 type Sessions struct {
 	mu     sync.Mutex
@@ -30,7 +37,7 @@ type Sessions struct {
 }
 
 func (m *Sessions) Run(ctx context.Context, scope string, req Request) (output string, err error) {
-	if req.Backend != "codex" && req.Backend != "agy" {
+	if req.Backend != "codex" && req.Backend != "agy" && req.Backend != "claude" {
 		return "", fmt.Errorf("unsupported coder: %s", req.Backend)
 	}
 	if scope == "" {
@@ -91,9 +98,12 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (output s
 			s.rpc = nil
 		}
 	}()
-	if req.Backend == "codex" {
+	switch req.Backend {
+	case "codex":
 		output, run, quota, err = s.codex(ctx, req)
-	} else {
+	case "claude":
+		output, run, quota, err = s.claude(ctx, req)
+	default:
 		output, run, err = s.agy(ctx, req)
 	}
 	return
@@ -126,9 +136,13 @@ func (m *Sessions) stop(scope string, all bool) {
 		<-done
 	}
 }
-func ask(ctx context.Context, req Request, q coderterm.Question) (coderterm.Answer, error) {
+func ask(ctx context.Context, req Request, q Question) (Answer, error) {
 	if !req.CanAsk || req.Ask == nil {
-		return coderterm.Answer{}, fmt.Errorf("coder needs a user answer: %s", q.Text)
+		text := q.Text
+		if len(q.Options) > 0 && !q.ChoicesOnly {
+			text += " (options: " + strings.Join(q.Options, "; ") + ")"
+		}
+		return Answer{}, fmt.Errorf("coder needs a user answer: %s", text)
 	}
 	return req.Ask(ctx, q)
 }

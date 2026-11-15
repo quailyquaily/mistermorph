@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/coderterm"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 )
 
@@ -16,6 +15,7 @@ const agySignIn = "agy is not signed in: run agy once in a terminal and sign in 
 func (s *session) agy(ctx context.Context, req Request) (string, coderusage.Run, error) {
 	run := coderusage.Run{Backend: "agy"}
 	var answer strings.Builder
+	noted := 0 // how much of the answer was handed over as notes
 	handle := func(m message) error {
 		if m.Method == "session/update" {
 			var p struct {
@@ -39,8 +39,11 @@ func (s *session) agy(ctx context.Context, req Request) (string, coderusage.Run,
 			switch p.Update.Kind {
 			case "agent_message_chunk":
 				answer.WriteString(p.Update.Content.Text)
-				note(req, p.Update.Content.Text)
 			case "tool_call", "tool_call_update":
+				// What agy wrote before it went on working is a note of its own, whole, not
+				// the chunks it arrived in.
+				note(req, strings.TrimSpace(answer.String()[noted:]))
+				noted = answer.Len()
 				progress(req, p.Update.KindTool+": "+p.Update.Title)
 			case "plan":
 				progress(req, "planning")
@@ -77,7 +80,7 @@ func (s *session) agy(ctx context.Context, req Request) (string, coderusage.Run,
 				}
 			}
 		} else {
-			q := coderterm.Question{Text: p.ToolCall.Title, ChoicesOnly: true}
+			q := Question{Text: p.ToolCall.Title, ChoicesOnly: true}
 			for _, o := range p.Options {
 				q.Options = append(q.Options, o.Name)
 			}

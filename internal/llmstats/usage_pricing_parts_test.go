@@ -296,3 +296,63 @@ func TestUsageAddsThePricingPartsColumn(t *testing.T) {
 		t.Fatalf("records = %+v, %v", records, err)
 	}
 }
+
+// A usage.db that holds rows of Claude Code's terminal sessions, written before its stream
+// sessions: they carry no cost of the CLI's but their requests (one of them a correction of an
+// earlier task's, Count -1). Nothing writes such rows for Claude Code any more, and they are
+// still priced again, request by request, when a later build opens the file with another
+// catalog. A stream session's row beside them keeps the CLI's own cost.
+func TestUsageRepricesTerminalRowsAlreadyInAFile(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "usage.db")
+	store := openTestStore(t, path, tieredPricing(t, "tiers-1", 1))
+	part := PricingPart{InputTokens: 50_000, CachedInputTokens: 48_000, CacheCreationInputTokens: 1000, OutputTokens: 1000,
+		CacheDetails: map[string]int64{"ephemeral_1h_input_tokens": 1000}}
+	terminal := coderRecord("tier-model")
+	terminal.InputTokens, terminal.CachedInputTokens, terminal.CacheCreationInputTokens, terminal.OutputTokens = 150_000, 144_000, 3000, 3000
+	terminal.CacheDetails = map[string]int64{"ephemeral_1h_input_tokens": 3000}
+	terminal.PricingParts = []PricingPart{part, part, part}
+	corrected := coderRecord("tier-model")
+	corrected.InputTokens, corrected.OutputTokens = 3000, 1056
+	corrected.PricingParts = []PricingPart{
+		{InputTokens: 120_000, OutputTokens: 4, Count: -1},
+		{InputTokens: 120_000, OutputTokens: 60},
+		{InputTokens: 3000, OutputTokens: 1000},
+	}
+	for _, rec := range []RequestRecord{terminal, corrected} {
+		if err := store.Append(rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	legacy := func(scale float64) []costRow {
+		return []costRow{
+			{Input: scale * 0.003, Cached: scale * 0.0144, Write: scale * 0.006, Output: scale * 0.015, Total: scale * 0.0384, Source: "catalog", Estimated: true},
+			{Input: scale * 0.003, Output: scale * (0.0028 + 0.005), Total: scale * 0.0108, Source: "catalog", Estimated: true},
+		}
+	}
+	checkCosts(t, "written", costRows(t, store), legacy(1))
+	_ = store.Close()
+
+	// The file as a later build finds it: the parts are in their column, the catalog is another.
+	store = openTestStore(t, path, tieredPricing(t, "tiers-4", 4))
+	records, err := store.Records(ctx, 0)
+	if err != nil || len(records) != 2 || !reflect.DeepEqual(records[0].PricingParts, terminal.PricingParts) ||
+		!reflect.DeepEqual(records[1].PricingParts, corrected.PricingParts) {
+		t.Fatalf("records = %+v, %v", records, err)
+	}
+	checkCosts(t, "opened with another catalog", costRows(t, store), legacy(4))
+
+	// A stream session's row: the CLI's list price, no parts.
+	session := coderRecord("tier-model")
+	session.InputTokens, session.CachedInputTokens, session.OutputTokens = 150_000, 144_000, 3000
+	session.CostCurrency, session.CostEstimated, session.TotalCost = "USD", true, 0.42
+	if err := store.Append(session); err != nil {
+		t.Fatal(err)
+	}
+	catalog, digest, _ := tieredPricing(t, "tiers-2", 2)()
+	if err := store.SetPricing(ctx, catalog, digest); err != nil {
+		t.Fatal(err)
+	}
+	checkCosts(t, "repriced beside a session's row", costRows(t, store),
+		append(legacy(2), costRow{Total: 0.42, Source: "provider", Estimated: true}))
+}

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/coderterm"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 )
 
@@ -81,10 +80,12 @@ func (s *session) codex(ctx context.Context, req Request) (output string, run co
 		switch m.Method {
 		case "item/agentMessage/delta":
 			deltas.WriteString(p.Delta)
-			note(req, p.Delta)
 		case "item/started", "item/completed":
 			progress(req, codexItemStep(p.Item.Type))
 			if m.Method == "item/completed" && p.Item.Type == "agentMessage" {
+				// A message before the last one is what Codex said while working: a note of
+				// its own, whole, not the chunks it arrived in.
+				note(req, output)
 				output = p.Item.Text
 			}
 		case "turn/plan/updated":
@@ -169,7 +170,7 @@ func (s *session) codex(ctx context.Context, req Request) (output string, run co
 			return
 		}
 		if s.usage == nil {
-			s.usage = coderterm.NewCodexUsageReader(getenv, home, req.CWD, s.id, resumed)
+			s.usage = NewCodexUsageReader(getenv, home, req.CWD, s.id, resumed)
 		}
 	}
 	fallback.Model = s.model
@@ -256,7 +257,7 @@ func (s *session) codexQuestion(ctx context.Context, req Request, m message) err
 		}
 		answers := map[string]any{}
 		for _, q := range p.Questions {
-			question := coderterm.Question{Text: q.Question}
+			question := Question{Text: q.Question}
 			for _, o := range q.Options {
 				question.Options = append(question.Options, o.Label)
 			}
@@ -282,7 +283,7 @@ func (s *session) codexQuestion(ctx context.Context, req Request, m message) err
 	}
 	allow := req.BypassApprovals
 	if !allow {
-		a, err := ask(ctx, req, coderterm.Question{Text: m.Method + "\n" + string(m.Params), Options: []string{"Allow once", "Deny"}, ChoicesOnly: true})
+		a, err := ask(ctx, req, Question{Text: m.Method + "\n" + string(m.Params), Options: []string{"Allow once", "Deny"}, ChoicesOnly: true})
 		if err != nil {
 			return err
 		}
@@ -335,7 +336,7 @@ func codexItemStep(kind string) string {
 }
 
 // ModelsFromUsage preserves individual requests for catalog pricing.
-func ModelsFromUsage(usage coderterm.Usage) []coderusage.ModelUsage {
+func ModelsFromUsage(usage Usage) []coderusage.ModelUsage {
 	var models []coderusage.ModelUsage
 	for _, m := range usage.Models {
 		model := coderusage.ModelUsage{Model: m.Model, InputTokens: m.InputTokens, CachedInputTokens: m.CachedInputTokens, CacheCreationInputTokens: m.CacheCreationInputTokens, OutputTokens: m.OutputTokens, ReasoningTokens: m.ReasoningTokens, CacheDetails: m.CacheCreation}

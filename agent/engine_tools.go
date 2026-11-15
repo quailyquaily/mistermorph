@@ -14,7 +14,7 @@ type EngineToolsConfig struct {
 	CoderEnabled bool
 	ToolTriggers map[string]bool
 	PathRoots    pathroots.PathRoots
-	// CoderEnv builds the environment Codex and Claude Code start in and finds them in it: the
+	// CoderEnv builds the environment the coding CLIs start in and finds them in it: the
 	// bash tool's environment (the PowerShell tool's on Windows) with tools.coder.path_extra in
 	// front of its PATH (shellenv.CoderEnvFromConfig).
 	CoderEnv shellenv.CoderEnv
@@ -39,9 +39,8 @@ type spawnToolDeps struct {
 }
 
 type coderToolDeps struct {
-	Runner      SubtaskRunner
-	RunCLI      coderCLIRunFunc
-	RunTerminal func(context.Context, CoderRequest) (string, error)
+	Runner SubtaskRunner
+	// RunSessions runs a task in the runtime's session for the coder (internal/codersessions).
 	RunSessions func(context.Context, CoderRequest) (string, error)
 	Roots       pathroots.PathRoots
 	// Env is EngineToolsConfig.CoderEnv.

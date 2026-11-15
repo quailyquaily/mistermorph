@@ -27,8 +27,8 @@ const (
 const OperationCoder = "coder"
 
 // catalogPriced reports whether rows of the operation that report no cost are priced from the
-// pricing catalog: the agent's chat calls, and coder runs (a terminal run's session files carry
-// tokens and no cost).
+// pricing catalog: the agent's chat calls, and coder runs whose CLI gives no cost (Codex's rollout
+// files carry tokens only; so did the rows of Claude Code's terminal sessions of earlier builds).
 func catalogPriced(operation string) bool {
 	return operation == operationChat || operation == OperationCoder
 }

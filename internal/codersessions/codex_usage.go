@@ -1,13 +1,11 @@
-package coderterm
+package codersessions
 
 import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
-	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,11 +21,10 @@ type ModelUsage struct {
 	CacheCreationInputTokens int64
 	OutputTokens             int64
 	ReasoningTokens          int64
-	// CacheCreation splits CacheCreationInputTokens by the cache's lifetime, under the CLI's own
-	// names (Claude Code: ephemeral_5m_input_tokens, ephemeral_1h_input_tokens), when it says.
+	// CacheCreation splits CacheCreationInputTokens by the cache's lifetime, when the CLI says.
 	CacheCreation map[string]int64
-	// Responses are the model's responses the usage sums, when the CLI's files tell them apart
-	// (Claude Code): a list price goes by the single request, so the sum alone cannot be priced.
+	// Responses are the model's responses the usage sums: a list price goes by the single
+	// request, so the sum alone cannot be priced.
 	Responses []ResponseUsage
 }
 
@@ -38,27 +35,12 @@ type ResponseUsage struct {
 	CacheCreationInputTokens int64
 	OutputTokens             int64
 	CacheCreation            map[string]int64
-	// Count is 1, or -1 for a response an earlier task of the session reported with these
-	// numbers and this task reports again with corrected ones.
+	// Count is how many such responses.
 	Count int64
-}
-
-func (u ResponseUsage) same(o ResponseUsage) bool {
-	return u.InputTokens == o.InputTokens && u.CachedInputTokens == o.CachedInputTokens &&
-		u.CacheCreationInputTokens == o.CacheCreationInputTokens && u.OutputTokens == o.OutputTokens &&
-		maps.Equal(u.CacheCreation, o.CacheCreation)
 }
 
 func (u ResponseUsage) zero() bool {
 	return u.InputTokens <= 0 && u.OutputTokens <= 0
-}
-
-func (u *ModelUsage) add(o ModelUsage) {
-	u.InputTokens += o.InputTokens
-	u.CachedInputTokens += o.CachedInputTokens
-	u.CacheCreationInputTokens += o.CacheCreationInputTokens
-	u.OutputTokens += o.OutputTokens
-	u.ReasoningTokens += o.ReasoningTokens
 }
 
 func (u ModelUsage) zero() bool {
@@ -70,18 +52,6 @@ func (u ModelUsage) zero() bool {
 type Usage struct {
 	Models []ModelUsage
 	Turns  int
-}
-
-// usageReader counts the usage a session's files record. It keeps its own offset per file, apart
-// from the turn reader's, so each line is counted once over the tasks of a session and what the
-// CLI wrote between two tasks is counted with the later one. It never fails a task: a file it
-// cannot read, or a line it cannot parse, is left out.
-type usageReader interface {
-	// read counts what the session's file at path, and its sub-agents' files, hold past their
-	// offsets. Only complete lines are taken; a partial last line waits for the next read.
-	read(path string)
-	// take returns what was counted since the last take.
-	take() Usage
 }
 
 // usageFile is how far one file was counted.
@@ -145,13 +115,6 @@ func (t *usageTotals) response(model string, usage ResponseUsage) int {
 	return len(m.Responses) - 1
 }
 
-// replace puts a response's later numbers in place of the ones response kept at index.
-func (t *usageTotals) replace(model string, index int, usage ResponseUsage) {
-	if m := t.models[model]; m != nil && index < len(m.Responses) {
-		m.Responses[index] = usage
-	}
-}
-
 func (t *usageTotals) take() Usage {
 	out := Usage{Turns: t.turns}
 	for _, m := range t.models {
@@ -197,170 +160,6 @@ func (t *usageTotals) take() Usage {
 	return out
 }
 
-// claudeUsage reads Claude Code's transcript and its sub-agents' files
-// (<session id>/subagents/agent-*.jsonl beside it). Every assistant line carries its response's
-// usage, and one response is written as several lines (one per content block) with the same
-// message ID: a response counts once, by its last line. The responses are kept apart, not only
-// summed, since each is priced as the request it was.
-type claudeUsage struct {
-	files  map[string]*usageFile
-	seen   map[string]claudeCounted // by message ID, over all the session's files
-	ended  map[string]bool          // messages a turn ended on
-	task   int                      // counts the takes: which task a response was counted in
-	totals usageTotals
-}
-
-type claudeCounted struct {
-	model string
-	usage ResponseUsage
-	task  int // the task that counted it
-	index int // where that task's totals keep it
-}
-
-func (claudeBackend) newUsage() usageReader { return &claudeUsage{} }
-
-func (r *claudeUsage) take() Usage {
-	r.task++
-	return r.totals.take()
-}
-
-func (r *claudeUsage) file(path string) *usageFile {
-	if r.files == nil {
-		r.files = map[string]*usageFile{}
-	}
-	f := r.files[path]
-	if f == nil {
-		f = &usageFile{}
-		r.files[path] = f
-	}
-	return f
-}
-
-func (r *claudeUsage) read(path string) {
-	if path == "" {
-		return
-	}
-	usageLines(path, r.file(path), func(line []byte) { r.line(line, true) })
-	agents := filepath.Join(strings.TrimSuffix(path, ".jsonl"), "subagents")
-	var files []string
-	_ = filepath.WalkDir(agents, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if d != nil && d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if name := d.Name(); !d.IsDir() && strings.HasPrefix(name, "agent-") && strings.HasSuffix(name, ".jsonl") {
-			files = append(files, p)
-		}
-		return nil
-	})
-	sort.Strings(files)
-	for _, p := range files {
-		usageLines(p, r.file(p), func(line []byte) { r.line(line, false) })
-	}
-}
-
-func (r *claudeUsage) line(line []byte, main bool) {
-	var entry struct {
-		Type      string `json:"type"`
-		Sidechain bool   `json:"isSidechain"`
-		Message   struct {
-			ID         string `json:"id"`
-			Model      string `json:"model"`
-			StopReason string `json:"stop_reason"`
-			Usage      *struct {
-				Input      int64 `json:"input_tokens"`
-				CacheRead  int64 `json:"cache_read_input_tokens"`
-				CacheWrite int64 `json:"cache_creation_input_tokens"`
-				Output     int64 `json:"output_tokens"`
-				// The cache writes by lifetime: ephemeral_5m_input_tokens and
-				// ephemeral_1h_input_tokens, which have different prices.
-				CacheCreation map[string]any `json:"cache_creation"`
-			} `json:"usage"`
-		} `json:"message"`
-	}
-	if json.Unmarshal(line, &entry) != nil || entry.Type != "assistant" {
-		return
-	}
-	m := entry.Message
-	if main && !entry.Sidechain && (m.StopReason == "end_turn" || m.StopReason == "stop_sequence") {
-		if m.ID == "" {
-			r.totals.turns++
-		} else if !r.ended[m.ID] {
-			if r.ended == nil {
-				r.ended = map[string]bool{}
-			}
-			r.ended[m.ID] = true
-			r.totals.turns++
-		}
-	}
-	model := strings.TrimSpace(m.Model)
-	// Claude Code writes its own notices (an API error) as messages of the model "<synthetic>".
-	if m.Usage == nil || model == "" || strings.HasPrefix(model, "<") {
-		return
-	}
-	read, write := max(m.Usage.CacheRead, 0), max(m.Usage.CacheWrite, 0)
-	usage := ResponseUsage{
-		InputTokens:              max(m.Usage.Input, 0) + read + write,
-		CachedInputTokens:        read,
-		CacheCreationInputTokens: write,
-		OutputTokens:             max(m.Usage.Output, 0),
-		CacheCreation:            claudeCacheCreation(m.Usage.CacheCreation, write),
-		Count:                    1,
-	}
-	if m.ID == "" {
-		r.totals.response(model, usage)
-		return
-	}
-	before, counted := r.seen[m.ID]
-	switch {
-	case !counted:
-		before = claudeCounted{index: r.totals.response(model, usage)}
-	case before.model == model && before.usage.same(usage):
-		// Another content block of the response, or its copy in another file.
-		return
-	case before.task == r.task && before.model == model:
-		r.totals.replace(model, before.index, usage)
-	case before.task == r.task:
-		r.totals.replace(before.model, before.index, ResponseUsage{})
-		before.index = r.totals.response(model, usage)
-	default:
-		// An earlier task reported the response with other numbers: this one takes those back
-		// and counts the corrected response, so the two tasks together count it once.
-		taken := before.usage
-		taken.Count = -1
-		r.totals.response(before.model, taken)
-		before.index = r.totals.response(model, usage)
-	}
-	if r.seen == nil {
-		r.seen = map[string]claudeCounted{}
-	}
-	r.seen[m.ID] = claudeCounted{model: model, usage: usage, task: r.task, index: before.index}
-}
-
-// claudeCacheCreation reads a usage's cache_creation object: its counts by lifetime. A split
-// that does not fit in the cache writes it splits is left out.
-func claudeCacheCreation(raw map[string]any, write int64) map[string]int64 {
-	var out map[string]int64
-	var sum int64
-	for key, value := range raw {
-		tokens, ok := value.(float64)
-		if key = strings.TrimSpace(key); !ok || tokens < 1 || key == "" {
-			continue
-		}
-		if out == nil {
-			out = map[string]int64{}
-		}
-		out[key] = int64(tokens)
-		sum += int64(tokens)
-	}
-	if sum > write {
-		return nil
-	}
-	return out
-}
-
 // codexUsageModel is the model Codex usage is recorded under when its rollout named none before
 // the response (a rollout of a Codex that writes no turn_context).
 const codexUsageModel = "codex"
@@ -391,8 +190,6 @@ type codexTokens struct {
 	Output     int64 `json:"output_tokens"`
 	Reasoning  int64 `json:"reasoning_output_tokens"`
 }
-
-func (codexBackend) newUsage() usageReader { return &codexUsage{} }
 
 func (r *codexUsage) take() Usage { return r.totals.take() }
 
@@ -435,7 +232,7 @@ func (r *codexUsage) read(path string) {
 		f := r.files[id]
 		if f.path == "" {
 			// Codex may create a sub-agent's rollout late, or never: look again at each read.
-			found, err := codexBackend{}.findTranscript(root, id)
+			found, err := findCodexRollout(root, id)
 			if err != nil || found == "" {
 				continue
 			}
@@ -516,19 +313,6 @@ func (r *codexUsage) line(line []byte, f *codexUsageFile, main bool) {
 	}
 }
 
-// baselineUsage starts a reader at the end of what a reopened session's files already hold: those
-// lines were written, and counted or not, before this reader existed.
-func baselineUsage(r usageReader, path string) {
-	if r == nil || path == "" {
-		return
-	}
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return
-	}
-	r.read(path)
-	r.take()
-}
-
 // CodexUsageReader retains response offsets across tasks and process restarts. App-server
 // supplies execution events; rollouts supply model names and per-response pricing inputs.
 type CodexUsageReader struct {
@@ -537,21 +321,75 @@ type CodexUsageReader struct {
 }
 
 func NewCodexUsageReader(getenv func(string) string, home, cwd, thread string, resumed bool) *CodexUsageReader {
-	b := codexBackend{}
-	path, _ := b.findTranscript(b.transcriptRoot(getenv, home, cwd), thread)
+	path, _ := findCodexRollout(codexRolloutRoot(getenv, home, cwd), thread)
 	r := &CodexUsageReader{path: path}
 	if resumed && path != "" {
-		baselineUsage(&r.reader, path)
+		// A reopened thread's rollouts already hold lines written, and counted or not, before
+		// this reader existed: it starts at their end.
+		r.reader.read(path)
+		r.reader.take()
 	}
 	return r
 }
+
+// Take returns what the thread's rollouts record since the last Take.
 func (r *CodexUsageReader) Take(getenv func(string) string, home, cwd, thread string) Usage {
 	if r.path == "" {
-		b := codexBackend{}
-		r.path, _ = b.findTranscript(b.transcriptRoot(getenv, home, cwd), thread)
+		r.path, _ = findCodexRollout(codexRolloutRoot(getenv, home, cwd), thread)
 	}
 	if r.path != "" {
 		r.reader.read(r.path)
 	}
 	return r.reader.take()
+}
+
+// codexRolloutRoot is Codex's sessions folder: under CODEX_HOME, else ~/.codex.
+func codexRolloutRoot(getenv func(string) string, home, cwd string) string {
+	dir := getenv("CODEX_HOME")
+	if dir == "" {
+		dir = filepath.Join(home, ".codex")
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(cwd, dir)
+	}
+	return filepath.Join(dir, "sessions")
+}
+
+func findCodexRollout(root, id string) (string, error) {
+	matches, err := filepath.Glob(filepath.Join(root, "*", "*", "*", "rollout-*-"+id+".jsonl"))
+	if err != nil || len(matches) == 0 {
+		return "", err
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("Codex has %d session files for %s", len(matches), id)
+	}
+	return matches[0], nil
+}
+
+type codexAgentActivity struct {
+	Agent string `json:"agent_thread_id"`
+}
+type codexEntry struct {
+	Type    string `json:"type"`
+	Payload struct {
+		Type string `json:"type"`
+		codexAgentActivity
+		Item struct {
+			Type string `json:"type"`
+			codexAgentActivity
+		} `json:"item"`
+	} `json:"payload"`
+}
+
+func (e codexEntry) agentActivity() (codexAgentActivity, bool) {
+	p := e.Payload
+	if e.Type == "event_msg" {
+		if p.Type == "sub_agent_activity" {
+			return p.codexAgentActivity, true
+		}
+		if p.Type == "item_completed" && p.Item.Type == "SubAgentActivity" {
+			return p.Item.codexAgentActivity, true
+		}
+	}
+	return codexAgentActivity{}, false
 }

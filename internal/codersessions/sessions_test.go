@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/coderterm"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 )
 
@@ -22,6 +21,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 func fakeServer() {
+	if len(os.Args) > 1 && os.Args[1] == "-p" {
+		fakeClaude()
+		return
+	}
 	scan := bufio.NewScanner(os.Stdin)
 	write := func(v any) { b, _ := json.Marshal(v); fmt.Println(string(b)) }
 	reply := func(id json.RawMessage, v any) { write(map[string]any{"id": id, "result": v}) }
@@ -134,7 +137,7 @@ func fakeRequest(t *testing.T, backend, task string) Request {
 	return Request{Backend: backend, Command: os.Args[0], Env: append(os.Environ(), "MM_CODER_TEST_SERVER=1", "CODEX_HOME="+t.TempDir()), CWD: t.TempDir(), Task: task, BypassApprovals: true}
 }
 func TestSessionReuseUsageAndScope(t *testing.T) {
-	for _, backend := range []string{"codex", "agy"} {
+	for _, backend := range []string{"codex", "agy", "claude"} {
 		t.Run(backend, func(t *testing.T) {
 			var sessions Sessions
 			defer sessions.Close()
@@ -175,7 +178,7 @@ func TestSessionReuseUsageAndScope(t *testing.T) {
 	}
 }
 func TestSessionQuestionsFailureAndCancel(t *testing.T) {
-	for _, backend := range []string{"codex", "agy"} {
+	for _, backend := range []string{"codex", "agy", "claude"} {
 		t.Run(backend, func(t *testing.T) {
 			for _, task := range []string{"approve", "question", "wait", "fail", "interrupt"} {
 				if backend == "agy" && (task == "fail" || task == "interrupt") {
@@ -204,7 +207,7 @@ func TestSessionQuestionsFailureAndCancel(t *testing.T) {
 	}
 }
 func TestConsolePermissionAndResume(t *testing.T) {
-	for _, backend := range []string{"codex", "agy"} {
+	for _, backend := range []string{"codex", "agy", "claude"} {
 		t.Run(backend, func(t *testing.T) {
 			var sessions Sessions
 			defer sessions.Close()
@@ -212,9 +215,9 @@ func TestConsolePermissionAndResume(t *testing.T) {
 			req.CanAsk = true
 			req.BypassApprovals = false
 			asked := 0
-			req.Ask = func(context.Context, coderterm.Question) (coderterm.Answer, error) {
+			req.Ask = func(context.Context, Question) (Answer, error) {
 				asked++
-				return coderterm.Answer{Option: 0}, nil
+				return Answer{Option: 0}, nil
 			}
 			if _, err := sessions.Run(context.Background(), "chat", req); err != nil {
 				t.Fatal(err)
@@ -224,7 +227,7 @@ func TestConsolePermissionAndResume(t *testing.T) {
 			if _, err := sessions.Run(context.Background(), "chat", req); err != nil {
 				t.Fatal(err)
 			}
-			if asked != 2 || s.id != "s1" {
+			if asked != 2 || (backend != "claude" && s.id != "s1") {
 				t.Fatalf("asked=%d id=%s", asked, s.id)
 			}
 		})
@@ -243,21 +246,25 @@ func TestAgyNotSignedIn(t *testing.T) {
 	}
 }
 func TestResetCancelsBusySession(t *testing.T) {
-	var sessions Sessions
-	defer sessions.Close()
-	req := fakeRequest(t, "codex", "wait")
-	started := make(chan struct{})
-	req.Process = func(int) { close(started) }
-	done := make(chan error, 1)
-	go func() { _, err := sessions.Run(context.Background(), "run", req); done <- err }()
-	<-started
-	sessions.Reset("run")
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("expected cancellation")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("reset did not stop the session")
+	for _, backend := range []string{"codex", "claude"} {
+		t.Run(backend, func(t *testing.T) {
+			var sessions Sessions
+			defer sessions.Close()
+			req := fakeRequest(t, backend, "wait")
+			started := make(chan struct{})
+			req.Process = func(int) { close(started) }
+			done := make(chan error, 1)
+			go func() { _, err := sessions.Run(context.Background(), "run", req); done <- err }()
+			<-started
+			sessions.Reset("run")
+			select {
+			case err := <-done:
+				if err == nil {
+					t.Fatal("expected cancellation")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("reset did not stop the session")
+			}
+		})
 	}
 }

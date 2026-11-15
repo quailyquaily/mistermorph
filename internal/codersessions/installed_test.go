@@ -73,7 +73,7 @@ func TestInstalledCoderSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := Request{Backend: backend, Command: command, Env: env, CWD: t.TempDir(), LogRoot: t.TempDir(), Task: "Reply with exactly OK. Do not use tools or change files.", BypassApprovals: true}
+	req := Request{Backend: backend, Command: command, Env: env, CWD: t.TempDir(), Task: "Reply with exactly OK. Do not use tools or change files.", BypassApprovals: true}
 	var run coderusage.Run
 	req.Report = func(r coderusage.Run, _ *coderusage.Quota) { run = r }
 	var sessions Sessions
