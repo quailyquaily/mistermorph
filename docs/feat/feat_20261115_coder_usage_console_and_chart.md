@@ -22,6 +22,8 @@ Not in this change: the summary at the top of the Usage page and the Overview pa
 
 ## Part 1: usage of terminal runs
 
+> Superseded by [`feat_20261116_coder_sessions_everywhere.md`](feat_20261116_coder_sessions_everywhere.md) (2026-11-16): the terminal sessions are gone. Claude Code's usage now comes from its stream session's `result` line (`model_usage_since_last_result`, with the CLI's own list price), and its transcript reader was removed. What remains of this part: Codex's usage is still read from its rollout files (now in `internal/codersessions`), and `llm_requests.pricing_parts` with the pricing by requests stays, for Codex's rows and for the Claude Code rows already written.
+
 ### Source
 
 The terminal session already follows each CLI's own session file to know when a task is done (`claude_transcript.go`, `codex.go`). The same files carry the usage. Checked against Claude Code 2.1.325 and the Codex CLI's rollouts of 2026-11-14.

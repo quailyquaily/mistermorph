@@ -349,10 +349,11 @@ tools:
     enabled: true
   coder:
     # Enable the coder tool.
-    # Codex uses app-server sessions and Antigravity uses ACP sessions in every runtime.
-    # Console sessions last for the conversation; other protocol sessions close with each run.
-    # Claude Code keeps its existing behavior: PTY sessions in Console on Unix; one-shot
-    # claude -p elsewhere, including Windows. Outside Console approvals are bypassed.
+    # Each CLI runs as a session over stdio, the same way in every runtime: Codex on
+    # `codex app-server`, Claude Code on `claude -p` with JSON streams, Antigravity on `agy acp`.
+    # No terminal is involved and no CLI screen is read.
+    # A Console conversation keeps its sessions between tasks and asks the user to approve
+    # actions; every other run has its own sessions, closed when it ends, with approvals bypassed.
     enabled: false
     # codex / claude / agy start in the bash tool's environment (the powershell tool's on Windows), not
     # in the service's: its allowlist of variables (HOME, LANG, TERM, USER, ...), plus
@@ -378,13 +379,13 @@ tools:
     # Console only: start the sessions without approval prompts or sandbox, so the CLI
     # runs every command and edit on its own. Dangerous: a task (or text it reads) can then run
     # anything the service user can. A running session is reopened with the new setting before
-    # its next task.
+    # its next task. A question the CLI itself asks is still shown.
     bypass_approvals:
       # Codex approvalPolicy=never, sandbox=danger-full-access.
       codex: false
-      # Claude Code --dangerously-skip-permissions.
+      # Claude Code --dangerously-skip-permissions (instead of --permission-mode default).
       claude: false
-      # Antigravity ACP permissions.
+      # Antigravity `agy acp --dangerously-skip-permissions`.
       agy: false
   # The names new spawn subagents and coder workers get, shared by both tools:
   # "scientists" (Einstein, Curie, ...), "musicians" (Bach, Mozart, ...) or "artists"

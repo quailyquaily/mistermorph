@@ -1,7 +1,7 @@
 ---
 date: 2026-11-16
 title: "Coder: one session path per CLI, in every runtime, and no terminal"
-status: in_progress
+status: implemented
 ---
 
 # Coder: one session path per CLI, in every runtime, and no terminal
@@ -14,13 +14,15 @@ Follows `feat_20260616_coder_tool_direct_cli.md` (the one-shot runs), `feat_2026
 |---|---|---|
 | Codex | `codex app-server` | built |
 | Antigravity CLI (`agy`) | `agy acp` | built |
-| Claude Code | `claude -p` with JSON streams | **not built**: it still has the Console PTY and the one-shot run |
+| Claude Code | `claude -p` with JSON streams | built |
 
-The shared session code, the scopes and the approval rule are built with the first two. What is left is in [Remaining work](#remaining-work).
+All three coders go through one path, `Sessions.Run` in `internal/codersessions`, in every runtime. The terminal sessions and the one-shot runs are removed, with `internal/coderterm` and its PTY and terminal emulator dependencies. Nothing reads a CLI's screen.
+
+Checked with stand-in CLIs that replay the lines of real runs. The installed CLIs are checked only by opt-in tests; see [Tests](#tests) for what was not checked against a real CLI.
 
 ## Problem
 
-The `coder` tool ran each CLI in two ways, and which one a task got depended on where it came from.
+Before this change the `coder` tool ran each CLI in two ways, and which one a task got depended on where it came from.
 
 | | Console chat (macOS, Linux) | Everything else (channels, cron, heartbeat, `run`, Windows) |
 |---|---|---|
@@ -73,7 +75,7 @@ scope + backend + cwd ──► open or reuse a session ──► run(task) ─�
                                                         └─ questions (when the run can ask)
 ```
 
-- `internal/codersessions` owns the sessions: `Sessions.Run(ctx, scope, Request)`, `Reset(scope)`, `Close()`. A session is one CLI process talking JSON lines over stdin and stdout (`rpc.go`), with a backend per CLI (`codex.go`, `agy.go`).
+- `internal/codersessions` owns the sessions: `Sessions.Run(ctx, scope, Request)`, `Reset(scope)`, `Close()`. A session is one CLI process talking JSON lines over stdin and stdout (`rpc.go`), with a backend per CLI (`codex.go`, `agy.go`, `claude.go`).
 - `agent.WithCoderSessions` hands the runner to the engine; `taskruntime.CoderSessionRunner` binds a run's scope and whether it may ask. The runtime owns the sessions and closes them with itself.
 - `codersessions.Request` carries the task, the folder, the command and environment (from the coder environment builder, as before), `Ask`, `Progress`, `Note`, `Process` and `Report` (the run's usage and quota).
 
@@ -96,7 +98,7 @@ scope + backend + cwd ──► open or reuse a session ──► run(task) ─�
 |---|---|---|
 | Codex | approval policy `on-request`, sandbox `workspace-write`; requests become question cards | policy `never`, sandbox `danger-full-access` |
 | agy | permission requests become question cards | `--dangerously-skip-permissions` |
-| Claude Code (to build) | permission requests become question cards | `--dangerously-skip-permissions` |
+| Claude Code | `--permission-mode default`; permission requests become question cards | `--dangerously-skip-permissions` |
 
 - `tools.coder.bypass_approvals.codex`, `.claude` and the new `.agy` turn approvals off in the Console too. Outside the Console they change nothing.
 - Whether a run asks is set by the Console's local runtime (`CoderCanAsk`). It does not follow from the run having a question channel: Telegram and Slack have one and are bypassed.
@@ -116,7 +118,7 @@ One `codex app-server` process per session, JSON-RPC over stdio. Built against C
 | The CLI's own question | `item/tool/requestUserInput` |
 | Quota | `account/rateLimits/read`, asked of the session's own server after a task |
 
-- **Usage** is still read from the thread's rollout files, by an incremental reader that stays with the session over a process restart (`coderterm.CodexUsageReader`). The reason: rows are priced from the catalog by the model each response actually used, response by response, sub-agents included, and the app server's token events give only the thread's totals. Those events are the fallback when the rollouts cannot be read; a session that fell back stays on them, so a late file write is not counted twice.
+- **Usage** is still read from the thread's rollout files, by an incremental reader that stays with the session over a process restart (`codersessions.CodexUsageReader`, moved from `coderterm`). The reason: rows are priced from the catalog by the model each response actually used, response by response, sub-agents included, and the app server's token events give only the thread's totals. Those events are the fallback when the rollouts cannot be read; a session that fell back stays on them, so a late file write is not counted twice.
 - The refresh button keeps its short-lived server (`coderusage.ReadCodexQuota`), since no session may be open.
 
 Removed: the Codex PTY backend (`coderterm/codex.go`: the `/status` read, the screen parser, the rollout turn reader) and the `codex exec` run with its stream parsing.
@@ -142,35 +144,32 @@ Removed: `agent/coder_agy.go`, the one-shot run and its stream parsing.
 
 ## Claude Code
 
-**Not built yet.** Today the Console still runs it in a PTY (`internal/coderterm`, through `agent.WithCoderTerminal`) and every other run uses the one-shot `claude -p <task>`.
-
-### Target
-
-One `claude -p` process per session, JSON lines in and out, as a third backend in `internal/codersessions`:
+One `claude -p` process per session, JSON lines in and out (`internal/codersessions/claude.go`). Built against Claude Code 2.1.325.
 
 ```text
 claude -p --input-format stream-json --output-format stream-json --verbose \
   --include-partial-messages --permission-prompt-tool stdio \
-  --session-id <uuid> --permission-mode default           # Console
-  --session-id <uuid> --dangerously-skip-permissions      # every other run
+  --session-id <uuid> --permission-mode default           # a Console session that asks
+  --session-id <uuid> --dangerously-skip-permissions      # every other run, and bypass_approvals.claude
   --resume <uuid> …                                       # reopened
 ```
 
+| Need | Stream |
+|---|---|
+| Send a task | `{"type":"user","message":{"role":"user","content":"…"}}` on stdin; the process stays up for the next |
+| Answer | the task's `result` line (`result`); when it has no text, the last message Claude Code wrote in the task |
+| Progress | `system`, `stream_event`, `tool_progress`, and the tool uses and tool results of `assistant` and `user` messages |
+| End of a task | its `result` line (`subtype`, `is_error`, `num_turns`) |
+| Approvals | a `control_request` with `request.subtype` `can_use_tool` (`tool_name`, `input`, `description`, `tool_use_id`) |
+| Answer to it | `{"type":"control_response","response":{"subtype":"success","request_id":"…","response":{"behavior":"allow","updatedInput":{…}}}}`, or `{"behavior":"deny","message":"…"}` |
+| The CLI's own question | the same request with `tool_name` `AskUserQuestion` and `input.questions` (question, header, options); answered with `allow` and `updatedInput.answers` (`{question: answer}`) |
+| Usage of a task | `result.model_usage_since_last_result`: per model the tokens, cache reads and writes, and `costUSD` |
+| Quota | `rate_limit_event` |
+| Reopen | `--resume <uuid>` |
+
 ### What a real run showed
 
-Checked against Claude Code 2.1.325 on 2026-11-16 with four small tasks.
-
-| Need | Stream | Seen |
-|---|---|---|
-| Send a task | `{"type":"user","message":{"role":"user","content":"…"}}` on stdin; the process stays up for the next | yes, two tasks on one process |
-| Answer, progress | `assistant` messages and their tool uses, as the one-shot run reads them | yes |
-| End of a task | a `result` line per task (`subtype`, `is_error`, `result`, `num_turns`) | yes |
-| Approvals | a `control_request` with `request.subtype` `can_use_tool` (`tool_name`, `input`, `description`, `tool_use_id`) | yes |
-| Answer to it | `{"type":"control_response","response":{"subtype":"success","request_id":"…","response":{"behavior":"allow","updatedInput":{…}}}}`, or `{"behavior":"deny","message":"…"}` | yes, both |
-| The CLI's own question | the same request with `tool_name` `AskUserQuestion`, `input.questions` (question, header, options) and `requires_user_interaction`; answered with `allow` and `updatedInput.answers` (`{question: answer}`) | yes |
-| Usage of a task | `result.model_usage_since_last_result`: per model the tokens, cache reads and writes, and `costUSD` | yes |
-| Quota | `rate_limit_event`, as in the one-shot run | yes |
-| Reopen | `--resume <uuid>` with `-p` goes on in the same session and has its context | yes |
+Checked against Claude Code 2.1.325 on 2026-11-16 with four small tasks, before the backend was written: two tasks on one process, a permission allowed and denied, the `AskUserQuestion` request and its answer, `model_usage_since_last_result`, `rate_limit_event`, and `--resume` going on in the same session with its context.
 
 Three things to know:
 
@@ -178,41 +177,72 @@ Three things to know:
 - `result.modelUsage` and `total_cost_usd` are running totals of the process. A task's usage is `model_usage_since_last_result`.
 - A denied action does not end the task: Claude Code goes on and says what it could not do. The `result` lists it in `permission_denials`.
 
-Not seen yet: an interrupt of a running task (until it is, a cancelled task closes the process and the session is reopened, as for the other two), a question in a bypassed session, and a sub-agent's usage in `model_usage_since_last_result`.
+The installed 2.1.325 accepts the command lines above (`--permission-mode default` is not in its `--help` list of choices, and is accepted), and writes nothing before its first task.
 
-### What follows from it
+### How it behaves
 
-- Usage rows are as a one-shot run's: the CLI's own list price per model, marked estimated. The transcript reader and the pricing by responses are no longer fed by new rows.
-- Quota: `rate_limit_event` during a task. The refresh button keeps `claude -p /usage --output-format json --no-session-persistence` (`coderusage.ReadClaudeQuota`), a local command that calls no model. The status line command and `statusline.json` go with the terminal.
-- `--no-session-persistence` goes from task runs: the session must be on disk for `--resume`.
-- Claude Code works as a coder on Windows again in the Console, as it does outside it.
+- **A task's lines are its own.** The answer, the progress and the usage are collected per task. A task without a text reply answers `Claude Code finished this task without a text reply.`, never the text of the task before. Lines the process wrote after the previous task's result are taken off before the next task is sent; a quota among them is kept.
+- **Progress** is a short label of what Claude Code is doing (`thinking`, `running a command`, `editing files`, …), said when it changes. **Notes** are what it said before going on working, and one line per tool use and tool result (cut at 1000 characters). A sub-agent's text (`parent_tool_use_id`) is neither the reply nor a note.
+- **Permissions.** In a Console session that asks, a `can_use_tool` request is a card with `Allow once` and `Deny`. A denial answers `deny` and the task goes on. In a bypassed session the flag keeps Claude Code from asking; a request that comes anyway is allowed.
+- **Questions.** `AskUserQuestion` is one card per question, with the options' labels as choices and room for an own answer, in a bypassed Console session too. In a run that cannot ask, the task fails with the question (and its options) as its error, and the process is closed.
+- **Usage** rows are the CLI's own list price per model, marked estimated, as the one-shot run's were. Only for a CLI that writes no `model_usage_since_last_result` is a task's usage what `modelUsage` grew by since the process's task before. A task that is cancelled, or whose process dies, has no `result` line: what it used is not recorded.
+- **Quota** is the last `rate_limit_event` of the task. The refresh button keeps `claude -p /usage --output-format json --no-session-persistence` (`coderusage.ReadClaudeQuota`), a local command that calls no model. The status line command and `statusline.json` went with the terminal.
+- **Closing and reopening.** A cancelled or failed task, a dead process and a changed `bypass_approvals.claude` close the process (cancellation kills its process group; no interrupt is sent over the stream). The next task of the scope starts `--resume <uuid>` with the session id the `result` lines reported. A session Claude Code never replied in may not be on disk, and a reopened process that exits without a line could not open it: both start over with a new session id instead of failing every later task.
+- `--no-session-persistence` is not used for tasks: the session must be on disk for `--resume`. Sessions of runs outside the Console therefore stay in Claude Code's own session list.
+- A process's last words on stderr are added to the error when it dies.
+- Claude Code works as a coder on Windows again in the Console, as it does outside it (not checked, see below).
+
+Removed with it: the Console PTY (`internal/coderterm`: the session, Claude Code's screen parser, transcript reader and transcript usage), the one-shot run (`runCoderCLI`, its stream collector and its diagnostics folders under `file_cache_dir/coder`), `agent.WithCoderTerminal`, and `coderusage.ParseClaudeStatusLine`. `creack/pty`, `charmbracelet/x/vt` and the `screen` files of the ultraviolet replacement are gone from the module.
+
+## What stays for old rows
+
+`llm_requests.pricing_parts` and `llmstats.catalogCost`'s pricing by parts stay. Codex's rows still use them. Claude Code's terminal sessions no longer write such rows, and the ones already in a `usage.db` are still priced again, request by request, when the catalog changes.
+
+## What changed for users
+
+- Claude Code in a Console chat no longer shows its terminal's status; it shows the same progress labels and notes as the other two coders, and approval cards come from its permission requests.
+- The diagnostics folders of one-shot runs (`file_cache_dir/coder/claude-*`) are no longer written. Existing ones are left where they are.
+- A program that embeds the engine without `agent.WithCoderSessions` gets `coder sessions unavailable` for Claude Code too; before, Claude Code fell back to the one-shot run.
+- The Console's settings show the Antigravity toggle of `tools.coder.bypass_approvals` beside the other two.
 
 ## Remaining work
 
-1. **Claude Code backend** in `internal/codersessions`: the process and its lines, the stream parsing moved from `coderStreamCollector.consumeClaude` (reset per task), permissions and questions through `Ask`, usage from `model_usage_since_last_result`, the quota from `rate_limit_event`.
-2. **Remove Claude Code's two old paths:**
-   - `agent.WithCoderTerminal`, `coderToolDeps.RunTerminal` and `RunCLI`, `runCoderCLI`, `buildCoderCLICommand` and the one-shot diagnostics in `agent/coder_tool.go`; the Claude Code branch in `coderTool.Execute`, so that all three go through `RunSessions`.
-   - `taskruntime`: `CoderSessions` (the terminal ones), `coderTerminalReport` and the `coderterm.Supported` condition.
-   - `internal/coderterm`: the PTY session, the Claude Code backend, its screen parser and transcript reader, and the Claude Code half of `usage.go`.
-3. **What is left of `coderterm`** is Codex's rollout usage reader and the `Question` / `Answer` types `codersessions` uses. Move them to `codersessions` and delete the package, with the `creack/pty` and `charmbracelet/x/vt` dependencies and the `screen` files added to the ultraviolet replacement, if nothing else uses them.
-4. **Keep for old rows:** `llm_requests.pricing_parts` and `llmstats.catalogCost`'s pricing by parts. Rows already written are still repriced when the catalog changes.
-5. **Docs and config:** `docs/tools.md` (the Claude Code sentences of the `coder` paragraphs), `assets/config/config.example.yaml` (the comments on terminal sessions), the tool description. Mark `feat_20261031_claude_controlled_terminal.md` and Part 1 of `feat_20261115_coder_usage_console_and_chart.md` as superseded.
+The five items this section listed are done: the Claude Code backend, the removal of its two old paths, the move of what was left of `coderterm`, the kept pricing by parts, and the docs and config. What is open:
+
+1. Run the opt-in test against the installed Claude Code and settle the three points listed under [Tests](#tests) as not checked.
+2. The items of [Not in this change](#not-in-this-change).
 
 ## Tests
 
-Built, with stand-in servers (`internal/codersessions/sessions_test.go`): reuse of a session, permissions, questions, cancellation, failures, resume, usage and quota for Codex and agy. `installed_test.go` checks the installed Codex's schema and sends a minimal real request through each client (opt-in).
+With stand-in CLIs (`internal/codersessions`):
 
-Not covered: a real permission denial through Codex or agy (the stand-ins exercise the answers).
+- `sessions_test.go`: reuse of a session, permissions, questions, cancellation, failures, resume, usage and quota, for all three backends.
+- `claude_test.go`, a stand-in `claude` that writes the lines above: two tasks on one process with each one's answer, usage and quota, and a third without a reply; progress, notes and the reply from the last message; lines after a result; a permission allowed and denied; the question tool; a bypassed Console session's flags, a permission and a question in it; a question in a run that cannot ask; a cancelled task, a failed one and a process that died, each followed by the resume; a session that cannot be reopened; a changed approval setting.
+- `codex_usage_test.go`: Codex's rollout usage reader, moved with it.
 
-To add with Claude Code:
+Elsewhere:
 
-- A stand-in `claude` replaying the captured lines: two tasks on one process with each one's answer and usage, a permission allowed and denied, the question tool, a bypassed session's flags and a question in it, a cancelled task, a process that died and the resume, the quota.
-- `agent/coder_usage_test.go`: Claude Code's usage and quota arrive in one report and the rows in `usage.db`, through the session path.
-- `internal/llmstats`: rows with pricing parts already in a file are still repriced after a catalog change.
-- An opt-in run against the installed CLI: a task in a bypassed run-scoped session, and a second task that needs the first one's context.
+- `agent/coder_usage_test.go`: Claude Code through real sessions and a stand-in CLI: each task's usage and the quota in one report, the usage line of the result, and the rows in `usage.db` (the second task's row is its own usage, not the process's totals).
+- `internal/coderusage`: `ClaudeTaskUsage`, with and without `model_usage_since_last_result`.
+- `internal/llmstats`: rows with pricing parts already in a file are priced again after a catalog change, beside a session's row that keeps the CLI's cost.
+
+Opt-in, against the installed CLIs (they use the signed-in account and its quota):
+
+- `MISTERMORPH_TEST_CLAUDE=1 go test ./internal/codersessions -run TestInstalledClaudeSession`: a task in a bypassed run-scoped session, and a second task that needs the first one's context.
+- `MISTER_MORPH_CODER_SESSION_TEST=codex` or `agy`: one minimal task through that backend; `MISTER_MORPH_CODEX_SCHEMA_TEST=1`: the installed Codex's app-server schema, without a model request (`installed_test.go`).
+
+Not checked against a real CLI:
+
+- The Claude Code backend as built. The lines it reads are the ones the real run above wrote, and the installed CLI accepts its command lines; the opt-in test was not run in this change.
+- A question in a bypassed Claude Code session, a sub-agent's usage in `model_usage_since_last_result`, and whether `num_turns` counts a task or the process.
+- A real permission denial through Codex or agy (the stand-ins exercise the answers).
+- The Console's cards for Claude Code's permissions and questions, in a browser.
+- Any backend on Windows.
 
 ## Not in this change
 
 - Sessions kept per Telegram or Slack chat, and approvals there.
 - Checking the three backends on Windows.
 - Backfilling or changing rows already in `usage.db`.
+- An interrupt of a running Claude Code task over the stream: a cancelled task closes the process, and the session is reopened.
+- Recording what a cancelled Claude Code task used.

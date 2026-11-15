@@ -161,8 +161,9 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
     title: "coder",
     fields: [
       { path: "tools.coder.path_extra", label: "Coder PATH additions", type: "string_list", wide: true, editor: "rows", placeholder: "/opt/tools/bin", addLabel: "Add directory" },
-      { path: "tools.coder.bypass_approvals.codex", label: "Codex yolo mode", type: "bool", note: "Codex runs every command without asking and without a sandbox (--dangerously-bypass-approvals-and-sandbox). Dangerous." },
-      { path: "tools.coder.bypass_approvals.claude", label: "Claude Code skip permissions", type: "bool", note: "Claude Code runs every tool without asking (--dangerously-skip-permissions). Dangerous." },
+      { path: "tools.coder.bypass_approvals.codex", label: "Codex yolo mode", type: "bool", note: "In Console conversations, Codex runs every command without asking and without a sandbox (approval policy never, sandbox danger-full-access). Dangerous." },
+      { path: "tools.coder.bypass_approvals.claude", label: "Claude Code skip permissions", type: "bool", note: "In Console conversations, Claude Code runs every tool without asking (--dangerously-skip-permissions). Dangerous." },
+      { path: "tools.coder.bypass_approvals.agy", label: "Antigravity skip permissions", type: "bool", note: "In Console conversations, agy runs every tool without asking (--dangerously-skip-permissions). Dangerous." },
     ],
   }],
   plan_create: [{
