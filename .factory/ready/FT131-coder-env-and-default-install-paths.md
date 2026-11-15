@@ -71,3 +71,15 @@ Tests: manager independently verified test -z "$(gofmt -l .)" && go vet ./... &&
 Not checked: real Windows execution; Console UI or quota routes in a running mistermorph binary; full LLM-agent end-to-end coder invocation; real proxy/custom CODEX_HOME/CLAUDE_CONFIG_DIR/API-key billing setups. Routes and environment overrides have deterministic test coverage. Console source UI unchanged; no UI inspection, nsh check or Console test run performed.
 
 Push recovery: initial credential lookup lacked a repository path; retried successfully with per-command credential.useHttpPath=true and gh credential helper. No credential configuration or user settings changed.
+
+## factory · review · 2026-11-15 21:10
+head: c5b437eccbe1e627c6c6a83ec5515529275f6df5
+verdict: pass
+notes:
+- [P3] internal/coderterm/sessions.go:88: a running terminal session is reused without comparing req.Env or the command, so a newly injected variable does not reach that process. Verified with fake claude: a second request adding HTTPS_PROXY=http://proxy.invalid reused the same process and the variable remained absent. This unchanged reuse check conflicts with the new promise of invocation-time environment updates. Restart sessions when environment/command changes, or document that existing sessions retain their startup environment.
+
+Claude Code reviewed all 38 changed files on origin/master...HEAD against the request, clarifications and plan. No P0/P1 findings. Reviewed shared allowlists, secret exclusion, executable resolution, PATH/default precedence, dynamic injections, headless/terminal/quota paths and runtime/subtask wiring. Branch merges cleanly with origin/master. Moved review/ → ready/.
+
+Validation: required test `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (exit 0; 163 packages ok) with an absolute throwaway HOME and TMPDIR. Reviewer also reports Windows/macOS cross-builds and touched-package vet passed. Fake-CLI probes only; worktree remains clean. Installs: none. Initial review call timed out; a second Claude Code call completed and reran the required gate successfully.
+
+Not checked: real Windows/macOS execution, real CLI sign-in/subscription/quota under the restricted environment, running-binary quota routes or a full model-to-coder run. Console source UI unchanged; no UI inspection or Console test run. External embedders using removed CoderPathExtra/PathExtra fields need migration to CoderEnv.PathExtra. Existing allowlist/injection edge cases were not introduced here. Breaking environment restriction from the build report still requires explicit proxy/custom-config/provider-key injections; preserve that release note at ship.
