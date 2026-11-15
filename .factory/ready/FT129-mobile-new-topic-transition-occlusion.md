@@ -38,3 +38,13 @@ Visual checks: headless Chrome, stubbed API and 14 topics, slowed push/pop for n
 Not checked: real Android device/emulator; loading/error visual states; narrow screenshots not visually inspected. Mid-slide real-page behaviour checked in Chrome, held-frame headless regression uses PaneStack fixture. Existing suite covers loading/error. Settled new-topic text antialiasing differs with opaque surface. Existing plus/nav over return pane and first Back only blurring composer remain unchanged from base.
 Push initially failed because credential helper lacked repository path; command-local credential.useHttpPath=true retry succeeded. No settings were changed.
 Owner/reviewer: inspect intermediate mobile transition frames and verify on Android.
+
+## factory · review · 2026-11-15 16:34
+head: 1f78f30dada3c748142283d8eed8c316efc705fa
+verdict: pass
+Review scope: origin/master...HEAD, seven changed files; Claude Code found no verified actionable defects. Branch merges cleanly with current base; source worktree remains clean.
+Validation: required gofmt check, go vet ./... and go test ./... passed with throwaway HOME. nsh check passed. Required Console scripts/test.sh passed: 123 files, zero failures, 193 seconds; no solo reruns needed.
+Visual validation: headless Chrome with stubbed API and 14 topics, slowed push/pop and existing-topic open at 390×844 and 320×568. Viewed intermediate screenshots at both widths; covered list content is hidden and uncovered strip remains visible. Sampled pane background rgb(246,250,255), opacity 1; pop removes the pane and restores list x=0.
+Installs: nsh check downloaded TypeScript 7.0.2 into temporary cache; no dependency manifests changed. Existing pinned nsh runtime, browser and Playwright reused.
+Residual risks: real Android device/emulator and loading/error mid-slide states not visually checked. Desktop and reduced motion covered by passing suite, not re-screenshotted. Both themes currently use the same background palette. Base visual comparison not repeated. First Back blurring composer and plus/navigation overlay during pop reported unchanged by builder, not independently compared against base; changed code does not alter these handlers/stacking.
+Move: review/ → ready/. Owner should verify the transition on Android before shipping.
