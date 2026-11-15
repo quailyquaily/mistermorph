@@ -27,16 +27,18 @@ type engineLoopState struct {
 	log       *slog.Logger
 	toolLog   *slog.Logger
 
-	messages                   []llm.Message
-	agentCtx                   *Context
-	extraParams                map[string]any
-	tools                      []llm.Tool
-	planRequired               bool
-	reasoningDetails           bool
-	onStream                   llm.StreamHandler
-	steerSource                SteerSource
-	parseFailures              int
-	requestedWrites            []string
+	messages         []llm.Message
+	agentCtx         *Context
+	extraParams      map[string]any
+	tools            []llm.Tool
+	planRequired     bool
+	reasoningDetails bool
+	onStream         llm.StreamHandler
+	steerSource      SteerSource
+	parseFailures    int
+	requestedWrites  []string
+	// fileWrite is the completion guard's count of reminders for requestedWrites.
+	fileWrite                  fileWriteGuardState
 	disableToolsForFormatRetry bool
 	// reacted is set once message_react succeeds; the run may then end with an empty final.
 	reacted bool
@@ -369,44 +371,17 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 					CompleteAllPlanSteps(st.agentCtx.Plan)
 				}
 
-				if len(st.requestedWrites) > 0 {
-					missing := missingFiles(st.requestedWrites)
-					if len(missing) > 0 {
-						shellToolNames := availableShellToolNames(e.registry)
-						if _, ok := e.registry.Get("write_file"); ok {
-							nextStep := "Next, call the write_file tool (preferred)"
-							if len(shellToolNames) > 0 {
-								nextStep += fmt.Sprintf(" or one of the available shell tools (%s)", strings.Join(shellToolNames, ", "))
-							}
-							nextStep += " to create/update them."
-							log.Info("file_write_required", "step", step, "paths", strings.Join(missing, ", "))
-							st.messages = append(st.messages,
-								llm.Message{Role: "assistant", Content: result.Text},
-								llm.Message{Role: "user", Content: fmt.Sprintf("You must write the requested file(s) before finishing: %s. %s The file content should be the final markdown/report (do not include meta text like 'Writing to ...').", strings.Join(missing, ", "), nextStep)},
-							)
-							st.protectLastMessage()
-							continue
-						}
-						if len(shellToolNames) == 1 {
-							log.Info("file_write_required", "step", step, "paths", strings.Join(missing, ", "))
-							st.messages = append(st.messages,
-								llm.Message{Role: "assistant", Content: result.Text},
-								llm.Message{Role: "user", Content: fmt.Sprintf("You must write the requested file(s) before finishing: %s. Next, call the %s tool to create/update them. The file content should be the final markdown/report (do not include meta text like 'Writing to ...').", strings.Join(missing, ", "), shellToolNames[0])},
-							)
-							st.protectLastMessage()
-							continue
-						}
-						if len(shellToolNames) > 1 {
-							log.Info("file_write_required", "step", step, "paths", strings.Join(missing, ", "))
-							st.messages = append(st.messages,
-								llm.Message{Role: "assistant", Content: result.Text},
-								llm.Message{Role: "user", Content: fmt.Sprintf("You must write the requested file(s) before finishing: %s. Next, call one of the available shell tools (%s) to create/update them. The file content should be the final markdown/report (do not include meta text like 'Writing to ...').", strings.Join(missing, ", "), strings.Join(shellToolNames, ", "))},
-							)
-							st.protectLastMessage()
-							continue
-						}
-						log.Warn("file_write_unavailable", "paths", strings.Join(missing, ", "))
-					}
+				reminder, writeErr := e.checkRequestedWrites(ctx, st, step)
+				if writeErr != nil {
+					return nil, st.agentCtx, writeErr
+				}
+				if reminder != "" {
+					st.messages = append(st.messages,
+						llm.Message{Role: "assistant", Content: result.Text},
+						llm.Message{Role: "user", Content: reminder},
+					)
+					st.protectLastMessage()
+					continue
 				}
 
 				fp, err = e.finalEgress(ctx, st, step, fp, resp.RawFinalAnswer)
@@ -1010,6 +985,7 @@ func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, s
 		Step:                    step,
 		PlanRequired:            st.planRequired,
 		ParseFailures:           st.parseFailures,
+		FileWriteGuard:          cloneFileWriteGuardState(st.fileWrite),
 		Messages:                st.messages,
 		ExtraParams:             st.extraParams,
 		AgentCtx:                snapshotFromContext(st.agentCtx),

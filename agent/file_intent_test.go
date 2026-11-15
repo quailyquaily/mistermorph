@@ -1,0 +1,98 @@
+package agent
+
+import (
+	"slices"
+	"testing"
+)
+
+func TestExtractFileWritePaths(t *testing.T) {
+	cases := []struct {
+		name string
+		task string
+		want []string
+	}{
+		{name: "empty", task: "   ", want: nil},
+		{name: "no write request", task: "Summarize this repo.", want: nil},
+		{
+			// The reported run: the old pattern read this as a file named "the de".
+			name: "prose before a directory",
+			task: "Define the shared popup presentation. Write down to the design/ folder.",
+			want: nil,
+		},
+		{name: "prose article only", task: "write to the folder", want: nil},
+		{name: "prose noun", task: "Save it to disk when done", want: nil},
+		{name: "directory with trailing slash", task: "write to design/", want: nil},
+		{name: "directory then word", task: "Write down to design/ folder", want: nil},
+		{name: "directory in backticks", task: "save it to `design/`", want: nil},
+		{name: "directory without extension", task: "output to docs/design", want: nil},
+		{name: "quoted prose", task: `save it to "the design folder"`, want: nil},
+		{name: "windows directory", task: `write to design\`, want: nil},
+		{name: "url", task: "output to https://example.com/hook.json", want: nil},
+		{name: "abbreviation", task: "write to e.g. the docs folder", want: nil},
+		{name: "dot dirs", task: "save it to ./ and write to ..", want: nil},
+		{name: "unterminated quote", task: "save it to \"design/mobile popups.md\nthen stop", want: nil},
+		{name: "unterminated backtick", task: "write to `design/notes.md", want: nil},
+		{name: "empty quotes", task: `write to ""`, want: nil},
+		{name: "bare relative path without extension", task: "save it to build/output", want: nil},
+		{name: "prose with a slash", task: "write to the/disk", want: nil},
+		{name: "known name in other case is prose", task: "save it to notice", want: nil},
+		{name: "absolute directory", task: "save it to /tmp/out/", want: nil},
+		{name: "absolute path called a directory", task: "save it to /tmp/out directory", want: nil},
+		{name: "relative path called a folder", task: "write to ./build/output folder.", want: nil},
+		{name: "quoted name called a folder", task: "save it to `build` folder", want: nil},
+		{name: "quoted name called a directory", task: `write into "My Notes" directory`, want: nil},
+		{name: "quoted directory", task: "save it to 'build/'", want: nil},
+		{name: "quoted url", task: `output to "https://example.com/hook"`, want: nil},
+		{name: "home directory", task: "save it to ~/", want: nil},
+		{name: "no-break space ends an unquoted path", task: "write to the\u00a0notes.md", want: nil},
+
+		{name: "backticked Makefile", task: "Write to `Makefile`.", want: []string{"Makefile"}},
+		{name: "quoted LICENSE", task: `save it to "LICENSE"`, want: []string{"LICENSE"}},
+		{name: "quoted name without extension", task: "output to 'build/output'", want: []string{"build/output"}},
+		{name: "quoted name with spaces and no extension", task: `write to "My Notes/final report" now`, want: []string{"My Notes/final report"}},
+		{name: "absolute path without extension", task: "Save it to /tmp/out", want: []string{"/tmp/out"}},
+		{name: "absolute path then prose", task: "save it to /tmp/out, then stop", want: []string{"/tmp/out"}},
+		{name: "dot relative path without extension", task: "write to ./build/output.", want: []string{"./build/output"}},
+		{name: "parent relative path without extension", task: "output to ../out/result", want: []string{"../out/result"}},
+		{name: "home path without extension", task: "save it to ~/notes/today", want: []string{"~/notes/today"}},
+		{name: "windows path without extension", task: `save to C:\out\result`, want: []string{`C:\out\result`}},
+		{name: "bare Makefile", task: "write to Makefile and stop", want: []string{"Makefile"}},
+		{name: "bare Dockerfile in a directory", task: "save it to docker/Dockerfile", want: []string{"docker/Dockerfile"}},
+		{name: "bare LICENSE", task: "Output to LICENSE.", want: []string{"LICENSE"}},
+		{name: "ideographic space ends an unquoted path", task: "write to notes.md\u3000then stop", want: []string{"notes.md"}},
+		{name: "no-break space ends an unquoted path after a file", task: "write to /tmp/out\u00a0then stop", want: []string{"/tmp/out"}},
+
+		{name: "relative file", task: "Write to design/mobile-popups.md", want: []string{"design/mobile-popups.md"}},
+		{name: "write down", task: "write down to design/mobile-popups.md please", want: []string{"design/mobile-popups.md"}},
+		{name: "names with s", task: "save it to results/status-summaries.md", want: []string{"results/status-summaries.md"}},
+		{name: "s only name", task: "output to sss.css", want: []string{"sss.css"}},
+		{name: "whitespace ends an unquoted path", task: "write to notes.md and then stop", want: []string{"notes.md"}},
+		{name: "tab ends an unquoted path", task: "write to notes.md\tthen stop", want: []string{"notes.md"}},
+		{name: "newline ends an unquoted path", task: "write to notes.md\nthen stop", want: []string{"notes.md"}},
+		{name: "sentence punctuation", task: "Save it to out/report.md.", want: []string{"out/report.md"}},
+		{name: "parentheses", task: "write to (out/report.md), then stop", want: []string{"out/report.md"}},
+		{name: "backticks", task: "write to `design/mobile-popups.md`.", want: []string{"design/mobile-popups.md"}},
+		{name: "backticks with spaces", task: "save it to `design/mobile popups.md` now", want: []string{"design/mobile popups.md"}},
+		{name: "double quotes with spaces", task: `Output to "My Notes/final report.md".`, want: []string{"My Notes/final report.md"}},
+		{name: "single quotes with spaces", task: "write into 'status reports/week s.txt'", want: []string{"status reports/week s.txt"}},
+		{name: "absolute path", task: "save to /tmp/out/result.json", want: []string{"/tmp/out/result.json"}},
+		{name: "windows path", task: `save to C:\Users\me\notes.txt`, want: []string{`C:\Users\me\notes.txt`}},
+		{name: "dotfile", task: "write to .env", want: []string{".env"}},
+		{name: "double extension", task: "output to dist/site.tar.gz", want: []string{"dist/site.tar.gz"}},
+		{name: "case is kept", task: "Write to Docs/README.md and save it to docs/readme.md", want: []string{"Docs/README.md", "docs/readme.md"}},
+		{name: "duplicates", task: "write to a.md. Again: write to a.md", want: []string{"a.md"}},
+		{
+			name: "file after a directory request",
+			task: "Write down to the design/ folder. Then save it to design/index.md",
+			want: []string{"design/index.md"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ExtractFileWritePaths(tc.task)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("ExtractFileWritePaths(%q) = %q, want %q", tc.task, got, tc.want)
+			}
+		})
+	}
+}
