@@ -19,12 +19,16 @@ const (
 	OperationCoder = "coder"
 	hostCodex      = "codex-cli"
 	hostClaude     = "claude-code"
+	hostAgy        = "antigravity-cli"
 )
 
 // Host is the usage host a coder's runs are recorded under.
 func Host(backend string) string {
-	if backend == BackendClaude {
+	switch backend {
+	case BackendClaude:
 		return hostClaude
+	case BackendAgy:
+		return hostAgy
 	}
 	return hostCodex
 }

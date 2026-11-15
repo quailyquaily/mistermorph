@@ -144,6 +144,12 @@ func TestCoderProgressText(t *testing.T) {
 			want: "Codex is still working (9 min so far; no new activity for 6 min). Last step: running a command.",
 		},
 		{
+			name: "active agy",
+			run:  coderProgressRun{backend: "agy", started: start, lastActive: start.Add(4*time.Minute + 50*time.Second), step: "running a command"},
+			now:  start.Add(5 * time.Minute),
+			want: "Antigravity CLI is still working (5 min so far). Now: running a command.",
+		},
+		{
 			name: "no step yet",
 			run:  coderProgressRun{backend: "claude", started: start, lastActive: start.Add(time.Minute)},
 			now:  start.Add(2 * time.Minute),

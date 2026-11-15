@@ -352,8 +352,12 @@ tools:
     # In Console, Codex and Claude Code run in persistent terminal sessions (one per conversation and
     # working directory) and ask the user to approve actions. Elsewhere they run as one-shot CLI
     # subtasks with approval and permission prompts bypassed.
+    # The Antigravity CLI (coder=agy) always runs one-shot with every action approved
+    # (--dangerously-skip-permissions), in Console too: it has no terminal session and no approval
+    # prompts. Sign in first by running `agy` once in a terminal.
     enabled: false
-    # Extra directories prepended to PATH when launching codex / claude for the coder tool.
+    # Extra directories prepended to PATH when launching codex / claude / agy for the coder tool.
+    # (The Antigravity installer puts agy in ~/.local/bin, on Windows %LOCALAPPDATA%\agy\bin.)
     # Use this when those CLIs are installed outside the service manager's PATH.
     # path_extra:
     #   - "/opt/coder/bin"

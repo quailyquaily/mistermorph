@@ -308,6 +308,7 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			RunTerminal:    e.coderTerminal,
 			Usage:          coderusage.Default,
 			ReadCodexQuota: readCodexQuota,
+			ReadAgyQuota:   readAgyQuota,
 		},
 		e.modelProfiles,
 	)
