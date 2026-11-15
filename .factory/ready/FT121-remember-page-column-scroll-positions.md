@@ -33,3 +33,15 @@ Verification: manager independently ran gofmt cleanliness, go vet ./... and go t
 Visual inspection: coder checked built web Console in Chrome at desktop and phone sizes with stubbed API; restored lists and conversation held through mobile transitions; no storage keys written and reload starts fresh.
 Not checked: native GPUI desktop, physical Android device, Safari or Firefox. Silent browser-reset fix has no direct automated reproduction. Content arriving after the bounded retry window without a ready flag can settle at the reachable offset. Phone bottom-navigation integration specifically tested Topics and Contacts; other pages rely on helper coverage.
 Moved new/ → review/ for independent review. Branch push initially lacked credential path; succeeded on the permitted retry using per-command credential.useHttpPath=true.
+
+## factory · review · 2026-11-15 09:42
+head: 2545280119221334e6b83fd92ae32133da95f194
+verdict: pass
+notes:
+- Claude Code independently reviewed origin/master...HEAD (25 files); no qualifying P0/P1/P2/P3 findings.
+- Merged origin/master at 137458ce in 52a3607f; resolved the ui.tsx import conflict preserving both changes. Integration fix 25452801 keys Contacts library scroll by its People/Agents tab, with regression coverage.
+- Required gofmt cleanliness, go vet ./... and go test ./... passed (163 packages); manager independently reran the Go gate successfully. nsh check passed; required Console scripts/test.sh passed 121 files, 0 failed (159s). Tests used throwaway HOME.
+- Additional out-of-tree probes passed repeated Topics/Contacts round trips, remounted detail scrollers, selection resets and leaving during pending restoration. Worktree remained clean.
+- Installs: no unpinned installs; only the pinned nsh check toolchain cache was restored.
+- Residual risks: no new browser/device run; native desktop, physical Android, Safari and Firefox unverified. Silent browser resets rely on the build's prior Chrome inspection. Slow content beyond the bounded retry window without ready gating and anchors in unloaded older conversation history do not retain their place. Audit offsets are file-keyed rather than cursor-page-keyed; paging was not exercised. TODO, Memories, Skills, Usage and Audit integration was inspected but not page-tested.
+- No linked GitHub issue or PR in the item; no review comments required. Moved review/ → ready/; owner should inspect the documented restoration limits and device behavior before shipping.
