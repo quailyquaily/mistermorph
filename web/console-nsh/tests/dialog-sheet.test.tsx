@@ -1,14 +1,15 @@
-// Dialogs that are sheets at the bottom of the screen on phones (components/ui.tsx DialogLayer, under
-// Modal, MessageDialog and SettingDialog): the sheet's paper reaches the bottom edge and fills the
-// room under its last row (the navigation bar, gesture handle or home indicator; the keyboard
-// instead while it is up), taken once (`dialogSheetInsets`, lib/systemInsets.ts); exactly two
-// footer actions share the row's width while other counts, and every desktop dialog, keep their
-// own; the sheet slides up from the bottom edge and back down, its contents mounted until it is
+// Dialogs on phones (components/ui.tsx DialogLayer, under Modal, MessageDialog and SettingDialog):
+// the floating paper of More and the agent switcher (design/mobile-popups.md, lib/mobilePopup.ts).
+// It keeps a small gap from the window's sides and from the bottom, above the room the system
+// takes there (the navigation bar, gesture handle or home indicator; the keyboard instead while it
+// is up), which the layer takes once: the paper is no taller for it. Exactly two footer actions
+// share the row's width while other counts, and every desktop dialog, keep their own; the paper
+// slides in from above the window's top edge and back out there, its contents mounted until it is
 // out, and lands at once with reduced motion. Frames and motion come from
-// tests/fixtures/dialog-sheet-app.tsx.
+// tests/fixtures/dialog-sheet-app.tsx; the other popups are in tests/mobile-popup.test.tsx.
 import type { Platform, SafeArea } from "nsh/test";
 import { expect, open, test } from "nsh/test";
-import { dialogSheetInsets } from "../lib/systemInsets";
+import { mobilePopupEntrance, mobilePopupFrame, POPUP_GAP } from "../lib/mobilePopup";
 
 type Frame = { y: number; h: number; w: number };
 type Sample = { t: number; y: number; s: number; o: number; alive: boolean };
@@ -54,29 +55,14 @@ async function openFixture(options: { platform?: Platform; width?: number; safeA
   return { app, report, frame, width, samples, show, closed, dismiss };
 }
 
-test("a sheet's bottom: the inset or the keyboard, never both, inside the sheet", () => {
-  // Nothing to clear: the sheet is as its classes draw it.
-  expect(dialogSheetInsets({}, 0, 844)).toBeUndefined();
-  expect(dialogSheetInsets({ top: 24, bottom: 0 }, 0, 844)).toBeUndefined();
-  expect(dialogSheetInsets({ top: 24, bottom: Number.NaN }, Number.NaN, 844)).toBeUndefined();
-  // A navigation bar: its 48pt, and 90 % of the room between the status bar and that bar.
-  expect(dialogSheetInsets(BUTTONS, 0, 844)).toEqual({ clear: 48, maxHeight: 48 + 694.8 });
-  expect(dialogSheetInsets(GESTURE, 0, 844)).toEqual({ clear: 16, maxHeight: 16 + 723.6 });
-  expect(dialogSheetInsets(HOME_INDICATOR, 0, 844)).toEqual({ clear: 34, maxHeight: 34 + 686.7 });
-  // The keyboard covers the navigation bar: its height replaces the inset, not both.
-  expect(dialogSheetInsets(BUTTONS, 300, 844)).toEqual({ clear: 300, maxHeight: 300 + 468 });
-  expect(dialogSheetInsets({ top: 24, bottom: 0 }, 300, 844)).toEqual({ clear: 300, maxHeight: 300 + 468 });
-  // A keyboard lower than the bar (a floating one): the bar still.
-  expect(dialogSheetInsets(BUTTONS, 20, 844)?.clear).toBe(48);
-  // A keyboard taller than the room: the sheet keeps its clearance, never a negative height.
-  expect(dialogSheetInsets(BUTTONS, 900, 844)).toEqual({ clear: 900, maxHeight: 900 });
-});
+/** How far up a paper is out of sight (lib/mobilePopup.ts): what it slides by. */
+const away = (panel: Frame) => mobilePopupEntrance(panel.y, panel.h, HEIGHT);
 
 for (const [name, platform, safeArea, inset] of [
   ["Android, three-button navigation", "android", BUTTONS, 48],
   ["iOS, a home indicator", "ios", HOME_INDICATOR, 34],
 ] as const) {
-  test(`on ${name} each dialog's sheet fills the bottom inset once, its actions above it`, async () => {
+  test(`on ${name} each dialog's paper floats above the bottom inset, a gap under it and at its sides`, async () => {
     const bare = await openFixture({ platform, safeArea: null });
     const withInset = await openFixture({ platform, safeArea });
     for (const kind of ["two", "message2", "setting", "bare"]) {
@@ -87,33 +73,35 @@ for (const [name, platform, safeArea, inset] of [
       }
       const plain = bare.frame(`${kind}.panel`);
       const sheet = withInset.frame(`${kind}.panel`);
-      // The paper reaches the bottom edge, taller by the inset alone: the room is taken once
-      // (the layer under it adds none, and SettingDialog's footer takes it in place of the panel).
-      expect(plain.y + plain.h).toBe(HEIGHT);
-      expect(sheet.y + sheet.h).toBe(HEIGHT);
-      expect(sheet.h - plain.h).toBe(inset);
-      expect(sheet.w).toBe(390);
+      // The paper ends a gap above the bottom edge, and above the inset where there is one: the
+      // layer takes the room once, so the paper is no taller for it (nothing is padded twice, and
+      // its own bottom edge, with its round corners, shows above the inset).
+      expect(plain.y + plain.h).toBe(HEIGHT - POPUP_GAP);
+      expect(sheet.y + sheet.h).toBe(HEIGHT - inset - POPUP_GAP);
+      expect(sheet.h).toBe(plain.h);
+      // The same gap at each side.
+      expect(sheet.w).toBe(390 - 2 * POPUP_GAP);
       // Below the status bar.
-      expect(sheet.y).toBeGreaterThanOrEqual(safeArea.top);
+      expect(sheet.y).toBeGreaterThanOrEqual(safeArea.top + POPUP_GAP);
     }
-    // The footer's row sits on the inset: a sheet has no border at the bottom edge, only the
-    // inset under it.
+    // The footer's row is the paper's last, inside its hairline.
     const footer = withInset.frame("two.footer");
-    expect(footer.y + footer.h).toBe(HEIGHT - inset);
+    expect(footer.y + footer.h).toBe(HEIGHT - inset - POPUP_GAP - 1);
     bare.app.dispose();
     withInset.app.dispose();
   });
 }
 
-test("a long sheet keeps its body to the room above the inset, its actions in view", async () => {
+test("a long dialog keeps its body to the room above the inset, its actions in view", async () => {
   const { app, frame, show, closed } = await openFixture({ safeArea: BUTTONS });
   await show("long");
   const panel = frame("long.panel");
-  expect(panel.y + panel.h).toBe(HEIGHT);
-  // 90 % of the room between the status bar and the navigation bar, plus that bar.
-  expect(Math.abs(panel.h - dialogSheetInsets(BUTTONS, 0, HEIGHT)!.maxHeight)).toBeLessThanOrEqual(1);
+  expect(panel.y + panel.h).toBe(HEIGHT - 48 - POPUP_GAP);
+  // The room between the status bar and the navigation bar, less the gap at each end.
+  expect(panel.h).toBe(mobilePopupFrame({ width: 390, height: HEIGHT, area: BUTTONS }).maxHeight);
+  expect(panel.y).toBe(BUTTONS.top + POPUP_GAP);
   const footer = frame("long.footer");
-  expect(footer.y + footer.h).toBe(HEIGHT - 48);
+  expect(footer.y + footer.h).toBe(HEIGHT - 48 - POPUP_GAP - 1);
   // The body still scrolls under the title bar, the footer staying where it is.
   await app.scroll("id:row-0", 1200);
   await app.wait(100);
@@ -131,7 +119,7 @@ test("on a phone two footer actions share the row equally; one, three and the de
   const b0 = phone.width("two.b0");
   const b1 = phone.width("two.b1");
   expect(b0).toBe(b1);
-  // The row's whole width between its 16pt sides, less the 8pt gap.
+  // The row's whole width (the paper's, inside its hairlines) between its 16pt sides, less the 8pt gap.
   expect(b0 + b1 + 8 + 32).toBe(phone.frame("two.footer").w);
   await phone.app.press("id:two-action-0");
   await phone.closed("two");
@@ -174,15 +162,17 @@ test("on a phone two footer actions share the row equally; one, three and the de
 /** The samples from the first one in which the panel can be seen. */
 const drawn = (samples: Sample[]) => samples.slice(Math.max(0, samples.findIndex((s) => s.o > 0)));
 
-function expectSlideIn(samples: Sample[], height: number) {
+function expectSlideIn(samples: Sample[], panel: Frame) {
   const shown = drawn(samples);
-  // Until its first layout it waits further down, out of sight; then it starts at its own height
-  // below where it rests (just out of sight): the first frame in sight is near that (samples come
-  // every 16ms or so), not part way up.
-  const inSight = shown.filter((s) => s.y < height);
-  expect(inSight[0].y).toBeGreaterThan(height * 0.8);
-  expect(shown.some((s) => s.y > 0 && s.y < height)).toBe(true);
-  for (let i = 1; i < shown.length; i++) expect(shown[i].y).toBeLessThanOrEqual(shown[i - 1].y);
+  const out = away(panel);
+  // Until its first layout it waits further up, out of sight; then it starts just out of sight
+  // above the window's top edge (its own frame up): the first frame in sight is near that (samples
+  // come every 16ms or so), not part way down. It is never below its place.
+  const inSight = shown.filter((s) => s.y > out);
+  expect(inSight[0].y).toBeLessThan(out * 0.8);
+  expect(shown.some((s) => s.y < 0 && s.y > out)).toBe(true);
+  for (let i = 1; i < shown.length; i++) expect(shown[i].y).toBeGreaterThanOrEqual(shown[i - 1].y);
+  for (const s of shown) expect(s.y).toBeLessThanOrEqual(0);
   expect(shown[shown.length - 1].y).toBe(0);
   // Sliding, not fading or growing.
   for (const s of shown) {
@@ -191,65 +181,66 @@ function expectSlideIn(samples: Sample[], height: number) {
   }
 }
 
-function expectSlideOut(samples: Sample[], height: number, body = true) {
-  for (let i = 1; i < samples.length; i++) expect(samples[i].y).toBeGreaterThanOrEqual(samples[i - 1].y);
-  // On the way down its contents stay mounted, and they go once it is out of sight.
-  const moving = samples.filter((s) => s.y > 0 && s.y < height);
+function expectSlideOut(samples: Sample[], panel: Frame, body = true) {
+  const out = away(panel);
+  for (let i = 1; i < samples.length; i++) expect(samples[i].y).toBeLessThanOrEqual(samples[i - 1].y);
+  // On the way up its contents stay mounted, and they go once it is out of sight.
+  const moving = samples.filter((s) => s.y < 0 && s.y > out);
   expect(moving.length).toBeGreaterThan(2);
   for (const s of moving) {
     if (body) expect(s.alive).toBe(true);
     expect(s.o).toBe(1);
   }
-  expect(samples[samples.length - 1].y).toBe(height);
+  expect(samples[samples.length - 1].y).toBe(out);
   expect(samples[samples.length - 1].alive).toBe(false);
 }
 
 // The slide is the same code on both phones; the insets above are what differ between them.
 for (const [name, platform, safeArea] of [["an Android phone", "android", BUTTONS]] as const) {
-  test(`on ${name} a sheet slides up from the bottom edge and back down, the same each time it opens`, async () => {
+  test(`on ${name} a dialog slides in from above the top edge and back out there, the same each time it opens`, async () => {
     const { app, frame, show, closed, dismiss } = await openFixture({ platform, safeArea });
     for (const kind of ["two", "message2", "setting", "bare"]) {
       const first = await show(kind);
-      const height = frame(`${kind}.panel`).h;
-      expectSlideIn(first, height);
+      const panel = frame(`${kind}.panel`);
+      expectSlideIn(first, panel);
       await dismiss();
-      expectSlideOut(await closed(kind), height, kind !== "bare");
+      expectSlideOut(await closed(kind), panel, kind !== "bare");
       expect(app.count(`id:body-${kind}`)).toBe(0);
       // Again: the same entrance, the same frame.
-      expectSlideIn(await show(kind, 2), height);
-      expect(frame(`${kind}.panel`).h).toBe(height);
+      expectSlideIn(await show(kind, 2), panel);
+      expect(frame(`${kind}.panel`)).toEqual(panel);
       await dismiss();
-      expectSlideOut(await closed(kind, 2), height, kind !== "bare");
+      expectSlideOut(await closed(kind, 2), panel, kind !== "bare");
     }
     app.dispose();
   });
 }
 
-test("a sheet opened again while it goes out turns back from where it is, its contents never unmounted", async () => {
+test("a dialog opened again while it goes out turns back from where it is, its contents never unmounted", async () => {
   const { app, frame, show, closed, samples, report } = await openFixture({ safeArea: BUTTONS });
   await show("two");
-  const height = frame("two.panel").h;
+  const out = away(frame("two.panel"));
   await app.press("id:bounce-two");
   await closed("two");
   await app.waitUntil(() => report()["two.in2"] !== undefined);
   const back = samples("two.in2");
-  // Part way down when it turned (the lowest point; values read a frame late): it never went out
-  // of sight, nor jumped back to the bottom, and from there it only rises.
-  const lowest = back.reduce((at, s, i) => (s.y > back[at].y ? i : at), 0);
-  expect(back[lowest].y).toBeGreaterThan(0);
-  expect(back[lowest].y).toBeLessThan(height * 0.95);
-  for (let i = lowest + 1; i < back.length; i++) expect(back[i].y).toBeLessThanOrEqual(back[i - 1].y);
+  // Part way up when it turned (the highest point; values read a frame late): it never went out
+  // of sight, nor jumped back to the top, and from there it only comes down.
+  const highest = back.reduce((at, s, i) => (s.y < back[at].y ? i : at), 0);
+  expect(back[highest].y).toBeLessThan(0);
+  expect(back[highest].y).toBeGreaterThan(out * 0.95);
+  for (let i = highest + 1; i < back.length; i++) expect(back[i].y).toBeGreaterThanOrEqual(back[i - 1].y);
   expect(back[back.length - 1].y).toBe(0);
   for (const s of [...samples("two.out1").filter((s) => s.t < 90), ...back]) expect(s.alive).toBe(true);
   expect(app.count("id:body-two")).toBe(1);
   app.dispose();
 });
 
-test("a sheet that lost its body and footer still opens, slides and closes (close button and back)", async () => {
+test("a dialog that lost its body and footer still opens, slides and closes (close button and back)", async () => {
   const { app, frame, show, closed } = await openFixture({ safeArea: GESTURE });
-  expectSlideIn(await show("bare"), frame("bare.panel").h);
+  expectSlideIn(await show("bare"), frame("bare.panel"));
   await app.press("id:dialog-bare-close");
-  expectSlideOut(await closed("bare"), frame("bare.panel").h, false);
+  expectSlideOut(await closed("bare"), frame("bare.panel"), false);
   await show("bare", 2);
   await app.back();
   await closed("bare", 2);
@@ -257,7 +248,7 @@ test("a sheet that lost its body and footer still opens, slides and closes (clos
   app.dispose();
 });
 
-test("with reduced motion a sheet is in place at once and goes at once", async () => {
+test("with reduced motion a dialog is in place at once and goes at once", async () => {
   const { app, show, closed } = await openFixture({ safeArea: BUTTONS, reducedMotion: true });
   for (const kind of ["two", "setting"]) {
     const entrance = drawn(await show(kind));
@@ -297,18 +288,18 @@ function run(samples: Sample[], started: (s: Sample) => boolean, ended: (s: Samp
   return { ms: samples[last].t - samples[first].t, middle: nearest };
 }
 
-test("a sheet goes out quicker than it came in (280ms, 200ms), leaving fast as the phone's other sheets do", async () => {
+test("a dialog goes out quicker than it came in (280ms, 200ms), leaving fast as the phone's other popups do", async () => {
   const { app, frame, show, closed, dismiss } = await openFixture({ safeArea: BUTTONS });
   const entrance = drawn(await show("two"));
-  const height = frame("two.panel").h;
+  const out = away(frame("two.panel"));
   await dismiss();
   const exit = await closed("two");
-  const coming = run(entrance, (s) => s.y < height, (s) => s.y === 0);
-  const going = run(exit, (s) => s.y > 0, (s) => s.y === height);
+  const coming = run(entrance, (s) => s.y > out, (s) => s.y === 0);
+  const going = run(exit, (s) => s.y < 0, (s) => s.y === out);
   // 80ms quicker, give or take a sampled frame either side.
   expect(going.ms).toBeLessThan(coming.ms - 32);
   // MOTION_EXIT_EASE starts slow: half way through its time it has gone less than half the way.
-  expect(going.middle.y).toBeLessThan(height * 0.5);
+  expect(going.middle.y).toBeGreaterThan(out * 0.5);
   app.dispose();
 });
 

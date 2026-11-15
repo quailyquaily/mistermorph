@@ -11,7 +11,7 @@ exploration rounds, is at <https://claude.ai/artifact/6TyRi4ba7hmnEWbw75BuhM> (p
 | Path | Contents |
 |---|---|
 | `DESIGN.md` | The design language and its rules |
-| `mobile-popups.md` | Shared mobile popup appearance, motion, safe areas, and interaction rules (FT123) |
+| `mobile-popups.md` | The shared mobile popup: all four corners round, gaps at the left, right and bottom, the entrance from the top, safe areas, and the inventory of popups that follow it (FT123) |
 | `brand/icons/<colourway>/icon-<size>.{svg,png}` | The app icon in seven colourways, each drawn separately at six optical sizes |
 | `brand/icons/<colourway>/icon-circle-<size>.{svg,png}` | The circle alternative: a round panel, no field texture, the ghost at one proportion for every size |
 | `brand/marks/` | The mark without a background: `mark.svg` (five lines, `currentColor`), `mark-16.svg` (three lines), `mark-suimen.svg` (cyan and magenta split) |

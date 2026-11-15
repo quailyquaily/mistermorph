@@ -23,6 +23,7 @@ import {
 } from "nsh/base";
 import { dismissNotice, noticeState, pushNotice } from "../lib/core/notices.js";
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
+import { PickerList, type PickerItem } from "./shared/PickerList";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
 import { RunningMark } from "./motion/RunningMark";
 import { sagHalf, SagRule } from "./motion/Sag";
@@ -31,7 +32,8 @@ import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
 import { BarRoom, glassBarClass, glassBarStyle, underBar } from "./frame/glassBar";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
-import { bottomSheetInsets, dialogLayerInsets, dialogSheetInsets } from "../lib/systemInsets";
+import { dialogLayerInsets } from "../lib/systemInsets";
+import { mobilePopupEntrance, mobilePopupFrame } from "../lib/mobilePopup";
 import {
   MOTION_EASE,
   MOTION_EASE_CSS,
@@ -46,7 +48,7 @@ import {
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 import { boundsFrame, createPartProbe, type PartFrame, type PartLayoutListener } from "./shared/partProbe";
 import type { ScrollMemory } from "../lib/scrollMemory";
-import { isMobile } from "../lib/shell";
+import { isMobile, MOBILE_BREAKPOINT } from "../lib/shell";
 
 export type { IconName };
 
@@ -866,16 +868,39 @@ export function SelectField(props: {
   // Disabled, the list goes without saying it closed.
   trackPopup(() => open() && !props.disabled);
   const triggerWidth = signal(0);
+  // Phones and touch screens: the list is the shared floating paper (`PopupList`); the base
+  // dropdown stays shut there (`open` held false) and only says when its trigger asks to open.
+  const sheetOpen = signal(false);
+  const openChange = (next: boolean) => {
+    if (untracked(popupSheets)) {
+      if (next) sheetOpen.set(true);
+      return;
+    }
+    open.set(next);
+  };
+  const sheet = () => (
+    <PopupList
+      open={sheetOpen() && !props.disabled}
+      onClose={() => sheetOpen.set(false)}
+      label={props.label || props.placeholder}
+      items={props.items.map((item) => ({ value: item.value, title: item.label, note: item.description, disabled: item.disabled }))}
+      value={props.value ?? ""}
+      onChoose={(value) => props.onChange?.(value)}
+      filterPlaceholder={props.searchable ? props.placeholder || props.label || "Filter" : undefined}
+      partID={props.testID ? `${props.testID}-popup` : undefined}
+    />
+  );
   const plain = () => (
     <Menu
+      open={popupSheets() ? false : undefined}
       placement="bottom"
       // .q-menu is the field's width and at least 220pt, overflowing to the left: its right
       // edge is the field's.
       align="end"
       offset={8}
-      onOpenChange={({ open: next }) => open.set(next)}
+      onOpenChange={({ open: next }) => openChange(next)}
       popupClass={`${MENU_POPUP} max-h-80`}
-      popupStyle={bottomSheetStyle(8, { style: { ...MENU_POPUP_STYLE, minWidth: Math.max(220, triggerWidth()) }, contentMax: 320 })}
+      popupStyle={{ ...MENU_POPUP_STYLE, minWidth: Math.max(220, triggerWidth()) }}
       popupStartingClass={MENU_STARTING}
       popupEndingClass="opacity-0"
       trigger={
@@ -896,8 +921,7 @@ export function SelectField(props: {
         </View>
       }
     >
-      {/* nsh's Menu does not scroll: its rows past max-h-80 would run off the popup, and off the
-          sheet into the bottom inset on touch screens. */}
+      {/* nsh's Menu does not scroll: its rows past max-h-80 would run off the popup. */}
       <Scroll class="shrink">
       <Each of={props.items} key={(item) => item.value}>
         {(item) => (
@@ -932,11 +956,12 @@ export function SelectField(props: {
       <Select
         items={props.items.map((item) => ({ value: item.value, title: item.label, disabled: item.disabled }))}
         value={props.value}
+        open={popupSheets() ? false : undefined}
         disabled={props.disabled}
         searchable={props.searchable}
         accessibilityLabel={props.label || props.placeholder}
         onChange={({ value }) => value !== null && props.onChange?.(value)}
-        onOpenChange={({ open: next }) => open.set(next)}
+        onOpenChange={({ open: next }) => openChange(next)}
         testID={props.testID}
         class={`${height()} flex-row items-center justify-between gap-2 rounded-(--radius) border border-input bg-field ${
           props.size === "xs" ? "pl-[9.6px]" : "pl-[12.8px]"
@@ -945,7 +970,7 @@ export function SelectField(props: {
         align="start"
         offset={4}
         popupClass={MENU_POPUP}
-        popupStyle={bottomSheetStyle(8, { style: MENU_POPUP_STYLE })}
+        popupStyle={MENU_POPUP_STYLE}
         itemClass="px-4 py-2 text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-selection"
         searchClass="mx-2 mb-1 rounded-(--radius) border border-input px-2 py-1 text-sm"
         trigger={
@@ -961,6 +986,7 @@ export function SelectField(props: {
       <If when={props.hint}>
         <Text class="text-xs text-muted-foreground">{props.hint}</Text>
       </If>
+      {sheet()}
     </View>
   );
 }
@@ -993,27 +1019,10 @@ export const MENU_POPUP_STYLE = {
 export const MENU_STARTING = "opacity-0 -translate-y-1";
 /**
  * The large corners of the console's floating paper: the popover bubbles (PopoverPicker's
- * `rounded-[16px]`), the phone's bottom sheets (MobileBottomNav) and the dialogs (DialogLayer: all
- * four corners, or a sheet's top two).
+ * `rounded-[16px]`), the dialogs, and every popup on phones (More and the agents in
+ * MobileBottomNav, `DialogLayer`'s floating paper, `PopupSheet`): all four corners, always.
  */
 export const POPUP_RADIUS = 16;
-
-/**
- * A dropdown's `popupStyle` on touch screens, where nsh/base's `Menu`, `Select` and `DatePicker`
- * are sheets at the bottom of the screen: `style` with the room for the navigation bar or gesture
- * handle under its last row (`bottomSheetInsets`, lib/systemInsets.ts). `padding` is the bottom
- * padding its `popupClass` gives (`py-2`: 8), `contentMax` its `max-h-*` in points, if any;
- * `keyboard` the keyboard's height for a sheet that rises above it. The desktops' popups, and
- * sheets with no inset to clear, keep `style` as it is. Read it in a binding: it follows the insets.
- */
-export function bottomSheetStyle<S extends object>(
-  padding: number,
-  options: { style?: S; contentMax?: number; keyboard?: number } = {},
-): (S & Partial<{ paddingBottom: number; maxHeight: number }>) | S | undefined {
-  if (platform.desktop) return options.style;
-  const insets = bottomSheetInsets(safeArea(), options.keyboard ?? 0, windowSize().height, padding, options.contentMax);
-  return insets ? { ...(options.style ?? ({} as S)), ...insets } : options.style;
-}
 
 /**
  * A menu of commands opened from a trigger (the Vue console's AppMenu and dropdown menus).
@@ -1032,23 +1041,58 @@ export function DropdownMenu(props: {
   onOpenChange?: (open: boolean) => void;
   /** The trigger does not open the menu (while its page saves or loads). */
   disabled?: boolean;
+  /** What the menu is of, over its rows on phones (the paper's title, as More's) and for screen readers there. */
+  label?: string;
   class?: string;
 }) {
   const shown = signal(false);
-  trackPopup(() => (props.open ?? shown()) && !props.disabled);
+  const isOpen = () => (props.open ?? shown()) && !props.disabled;
+  trackPopup(isOpen);
+  const setOpen = (open: boolean) => {
+    shown.set(open);
+    props.onOpenChange?.(open);
+  };
+  // Phones and touch screens: the commands are rows of the shared floating paper (`PopupList`);
+  // the base menu stays shut there (`open` held false) and only says when its trigger asks to open.
+  const rows = (): PickerItem[] =>
+    props.items.flatMap((item, index, all) =>
+      item.separator
+        ? []
+        : [
+            {
+              value: item.id,
+              title: item.label ?? "",
+              note: item.description,
+              danger: item.danger,
+              disabled: item.disabled,
+              separated: index > 0 && !!all[index - 1].separator,
+              icon: item.icon ? <Icon name={item.icon} size={16} color={item.danger ? "danger" : "subtle"} /> : undefined,
+              trailing: item.checked ? <Icon name="PhCheck" size={14} color="blue" /> : undefined,
+            },
+          ],
+    );
   return (
     <If when={!props.disabled} else={<View class="opacity-45">{props.trigger}</View>}>
+    <PopupList
+      open={popupSheets() && isOpen()}
+      onClose={() => setOpen(false)}
+      label={props.label}
+      role="menu"
+      items={rows()}
+      onChoose={(id) => props.items.find((item) => item.id === id)?.onSelect?.()}
+    />
     <Menu
       trigger={props.trigger}
       placement={props.placement ?? "bottom"}
       align={props.align ?? "end"}
-      open={props.open}
+      open={popupSheets() ? false : props.open}
       onOpenChange={({ open }) => {
-        shown.set(open);
-        props.onOpenChange?.(open);
+        // Shut as it is on phones, it has nothing to close: the paper closes itself.
+        if (untracked(popupSheets) && !open) return;
+        setOpen(open);
       }}
       popupClass={`${MENU_POPUP} ${props.class ?? ""}`}
-      popupStyle={bottomSheetStyle(8, { style: MENU_POPUP_STYLE })}
+      popupStyle={MENU_POPUP_STYLE}
       popupStartingClass={MENU_STARTING}
       popupEndingClass="opacity-0"
     >
@@ -1102,6 +1146,124 @@ export function MenuIconTrigger(props: { icon?: IconName; label: string; testID?
     >
       <Icon name={props.icon ?? "PhDotsThree"} size={16} color="subtle" />
     </View>
+  );
+}
+
+/* ---------- popups on phones ---------- */
+
+/** The title row of a phone's popup (More's and the agents'): min-h-9.5 and its hairline. */
+export const POPUP_TITLE_HEIGHT = 39;
+
+/** A phone popup's title row: a square mark and the name in spaced mono capitals, over a hairline. */
+export function PopupTitle(props: { label: string }) {
+  return (
+    <View class="min-h-9.5 flex-row items-center gap-2 border-b border-line-soft px-4">
+      <View class="size-1.5 bg-muted-foreground" accessibilityElementsHidden />
+      <Text class="shrink font-mono text-xs uppercase tracking-widest text-muted-foreground" style={{ numberOfLines: 1 }}>
+        {props.label}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * A popup on a phone (design/mobile-popups.md): what is a dropdown or a bubble at its trigger on
+ * the desktops (a menu, a select, a date picker, a picker) is here the floating paper of More and
+ * the agent switcher, over their scrim: all four corners round, a small gap from the window's left,
+ * right and bottom outside the system's insets and the keyboard, never wider than POPUP_MAX_WIDTH,
+ * sliding in from above the window's top edge. It is `DialogLayer`'s paper, so it is modal as a
+ * dialog is: the focus stays inside it and goes back to what had it, and Escape, Android's Back
+ * and a press on the scrim close it (`onClose`). `children` gets the tallest its content may be
+ * (a getter: it follows the keyboard and the window), and scrolls what is taller itself.
+ */
+export function PopupSheet(props: {
+  open: boolean;
+  onClose: () => void;
+  /** The paper's title row, and its name for screen readers. */
+  label?: string;
+  testID?: string;
+  children: (contentMax: () => number) => JSX.Element;
+  /** For tests: the paper's frame and motion. */
+  probe?: DialogProbe;
+}) {
+  // The paper's hairlines (2) and its title row.
+  const contentMax = () => popupFrame().maxHeight - 2 - (props.label ? POPUP_TITLE_HEIGHT : 0);
+  return (
+    // Out of the flow: the layer is the window's, and where it is declared (a field's column, a
+    // row of controls) it must take no room and no gap, open or shut.
+    <View class="absolute left-0 top-0 size-0" style={{ pointerEvents: "box-none" }}>
+      <DialogLayer
+        open={props.open}
+        onClose={props.onClose}
+        testID={props.testID}
+        label={props.label}
+        sheet
+        panelClass="w-full max-w-[560px]"
+        probe={props.probe}
+      >
+        <If when={props.label}>
+          <PopupTitle label={props.label ?? ""} />
+        </If>
+        {untracked(() => props.children(contentMax))}
+      </DialogLayer>
+    </View>
+  );
+}
+
+/**
+ * Choices on a phone's popup: the rows of the agent switcher (`PickerList`: an icon, a title, a
+ * second line, a mark; 44pt for a finger), an optional filter over them, in a `PopupSheet`. A row
+ * pressed is `onChoose`, and the paper closes. The filter takes the focus (and raises the
+ * keyboard) only once it is pressed.
+ */
+export function PopupList(props: {
+  open: boolean;
+  onClose: () => void;
+  label?: string;
+  items: PickerItem[];
+  /** The chosen item's value, marked in the list; none for a menu of commands. */
+  value?: string;
+  onChoose: (value: string) => void;
+  filterPlaceholder?: string;
+  emptyText?: string;
+  /** Rows under the list, after a hairline: never filtered out. */
+  footer?: PickerItem[];
+  /** What the rows are for screen readers: a `listbox` of `option`s (default), or a `menu` of `menuitem`s. */
+  role?: "listbox" | "menu";
+  /** What the parts' test ids start with (`-list`, `-filter`, `-option-<value>`). */
+  partID?: string;
+  /** The layer's test id (default `partID`). */
+  layerID?: string;
+  probe?: DialogProbe;
+}) {
+  return (
+    <PopupSheet open={props.open} onClose={props.onClose} label={props.label} testID={props.layerID ?? props.partID} probe={props.probe}>
+      {(contentMax) => (
+        <View class="shrink p-2">
+          <PickerList
+            items={props.items}
+            value={props.value}
+            onChoose={(value) => {
+              props.onChoose(value);
+              props.onClose();
+            }}
+            open={props.open}
+            accessibilityLabel={props.label ?? ""}
+            role={props.role}
+            filterPlaceholder={props.filterPlaceholder}
+            filterAutoFocus={false}
+            emptyText={props.emptyText}
+            footer={props.footer}
+            rowClass="min-h-11 justify-center"
+            // The paper's padding (p-2) round it.
+            maxHeight={contentMax() - 16}
+            class="gap-1"
+            testID={props.partID ? `${props.partID}-list` : undefined}
+            part={(name) => (props.partID ? `${props.partID}-${name}` : undefined)}
+          />
+        </View>
+      )}
+    </PopupSheet>
   );
 }
 
@@ -1482,36 +1644,75 @@ export function Tabs(props: {
 //
 // Motion (styles/base.css, core/dialog-origin.js): it settles in from 98 % as it fades, and when a
 // press opened it (within 900 ms) it grows out of that point from 90 % instead, and goes back into
-// it on close. A sheet slides up from the bottom edge instead, and back down on close. The panel has
-// the popups' large corners (POPUP_RADIUS): all four on a dialog, the top two on a sheet, whose
-// bottom edge is the screen's; it clips what it holds to them (a title bar, a painted footer). The
+// it on close. On phones (`mobilePopups`) it is the shared floating paper instead
+// (design/mobile-popups.md, lib/mobilePopup.ts): a small gap from the window's left, right and
+// bottom, outside the system's insets and the keyboard, sliding in from above the window's top edge
+// and back out there. The panel has the popups' large corners (POPUP_RADIUS), all four of them,
+// on phones too; it clips what it holds to them (a title bar, a painted footer). The
 // backdrop
 // and the panel are drawn here (the base Dialog is only the layer), so both can move, natively, on
 // opacity and transform alone; the panel stays drawn until it is out.
 const DIALOG_SHADOW = "0 12px 24px rgba(20, 24, 32, 0.14)";
 
-/** Below this window width a dialog is a sheet at the bottom of the screen. */
+/** Below this window width every popup takes the phone's presentation, whatever points at it. */
 export const DIALOG_SHEET_WIDTH = 720;
 
-/** Whether dialogs are sheets at the bottom of the screen (phones, narrow windows). Reactive. */
-export function dialogIsSheet() {
-  return windowSize().width < DIALOG_SHEET_WIDTH;
+/**
+ * Whether popups take the phone's presentation (design/mobile-popups.md): the floating paper of
+ * More and the agent switcher, for every dialog, menu, select, date picker and picker bubble. A
+ * window narrower than DIALOG_SHEET_WIDTH (a phone upright, a narrow browser window), or a touch
+ * screen within the phone layout's width (a phone on its side: lib/shell.ts MOBILE_BREAKPOINT).
+ * Wider windows keep the desktops' dialogs and dropdowns. Reactive.
+ */
+export function mobilePopups() {
+  const width = windowSize().width;
+  return width < DIALOG_SHEET_WIDTH || (!platform.desktop && width <= MOBILE_BREAKPOINT);
 }
 
 /**
- * The room a sheet keeps under its last row (the navigation bar's or gesture handle's inset, or
- * the keyboard's height while it is up; lib/systemInsets.ts `dialogSheetInsets`), 0 for a dialog
- * that is not a sheet. A dialog whose last strip is painted a colour of its own (SettingDialog's
- * footer) takes it there, with `DialogLayer`'s `bottomInset="content"`. Reactive.
+ * Whether a dropdown (a menu, a select, a date picker) is a `PopupSheet`: on phones, and on every
+ * other touch screen, where nsh/base cannot anchor it to its trigger and would draw a sheet flush
+ * with the screen's bottom edge, sliding up. Reactive.
  */
-export function dialogSheetClearance() {
-  return dialogIsSheet() ? (dialogSheetInsets(safeArea(), keyboardFrame().height, windowSize().height)?.clear ?? 0) : 0;
+export function popupSheets() {
+  return !platform.desktop || mobilePopups();
+}
+
+/** Whether dialogs are the phone's floating paper (`mobilePopups`). Reactive. */
+export function dialogIsSheet() {
+  return mobilePopups();
+}
+
+// Headless tests draw no software keyboard: a fixture stands one in (its height over the foot of
+// the window), and every phone paper then stands on it as on a real one.
+const keyboardStandIn = signal<number | null>(null);
+
+/** For tests: a software keyboard `height` tall over the foot of the window (null: the real one). */
+export function standInKeyboard(height: number | null) {
+  keyboardStandIn.set(height);
+}
+
+/** The phone paper's place in the window: the layer's padding round it, and its tallest. Reactive. */
+export function popupFrame() {
+  const { width, height } = windowSize();
+  return mobilePopupFrame({ width, height, area: safeArea(), keyboard: keyboardStandIn() ?? keyboardFrame().height });
 }
 
 /** What a test reads of a dialog's panel: its frame in the layer, and its motion. */
 export interface DialogProbe {
   layout?: (bounds: Bounds) => void;
   motion?: (motion: Motion) => void;
+}
+
+let dialogWatcher: ((name: string) => DialogProbe | undefined) | null = null;
+
+/**
+ * For tests: a probe for every dialog layer made from now on that has none of its own, by its
+ * test id or else its label (the papers under `DropdownMenu`, `SelectField` and the pickers take
+ * no `probe` prop). null stops it.
+ */
+export function watchDialogs(watcher: ((name: string) => DialogProbe | undefined) | null) {
+  dialogWatcher = watcher;
 }
 
 /** The dialog layer under `Modal` and `MessageDialog` (scrim, panel, the motion from the pressing control): for a dialog with a panel of its own. */
@@ -1525,10 +1726,8 @@ export function DialogLayer(props: {
   /** The panel's classes (width, padding, gap). */
   panelClass: string;
   panelStyle?: { maxWidth?: number };
-  /** The panel classes' own bottom padding in points (MessageDialog's pb-4: 16): a sheet keeps it above the room it takes under its last row. */
-  panelPaddingBottom?: number;
-  /** On a sheet, who fills the room under the last row: the panel (default), or its last strip, painted a colour of its own, which pads itself by `dialogSheetClearance()`. */
-  bottomInset?: "panel" | "content";
+  /** The phone's floating paper whatever the window's width (`PopupSheet`: a dropdown on a wide touch screen). */
+  sheet?: boolean;
   label?: string;
   /** For tests: the panel's frame and motion. */
   probe?: DialogProbe;
@@ -1537,17 +1736,21 @@ export function DialogLayer(props: {
   const shown = signal(untracked(() => props.open));
   trackPopup(() => props.open);
   const panel = createMotion({ initial: { opacity: 0 } });
-  props.probe?.motion?.(panel);
+  const probe = untracked(() => props.probe ?? dialogWatcher?.(props.testID ?? props.label ?? ""));
+  probe?.motion?.(panel);
   const scrim = createAnimatedValue(0);
   const origin = signal<[number, number] | null>(null);
   let press: { x: number; y: number } | null = null;
   let pendingEnter = false;
   let closing = false;
-  // Whether the sheet came in from out of sight (a first opening, or after it went out): it slides
-  // in from its own height below the bottom edge; reopened while going out, from where it is.
-  let fromBelow = true;
-  const narrow = dialogIsSheet;
-  // A sheet slides the whole way in and out, as the phone's other sheets do (MobileBottomNav): a
+  // Whether the paper came in from out of sight (a first opening, or after it went out): it slides
+  // in from above the window's top edge; reopened while going out, from where it is.
+  let fromAbove = true;
+  const narrow = () => !!props.sheet || dialogIsSheet();
+  /** How far up the paper is out of sight: its own frame above the layer's top edge. */
+  const away = (bounds?: Bounds | null) =>
+    mobilePopupEntrance(bounds?.origin.y ?? 0, bounds?.size.height ?? 0, untracked(() => windowSize().height));
+  // The paper slides the whole way in and out, as the phone's other popups do (MobileBottomNav): a
   // little longer than a dialog's settle. Going out is quicker than coming in, on an easing that
   // starts slow and leaves fast (MOTION_EXIT_EASE), so it gets out of the way.
   const duration = (sheet: boolean) => motionMs(sheet ? MOTION_SHEET_IN : MOTION_NORMAL);
@@ -1563,12 +1766,11 @@ export function DialogLayer(props: {
       origin.set(null);
       panel.opacity.set(1);
       panel.scale.set(1);
-      const height = bounds?.size.height ?? panelBox?.size.height ?? untracked(() => windowSize().height);
       if (ms <= 0) {
         panel.translateY.set(0);
         return;
       }
-      if (fromBelow) panel.translateY.set(height);
+      if (fromAbove) panel.translateY.set(away(bounds ?? panelBox));
       void panel.translateY.timing(0, { duration: ms, easing: MOTION_EASE });
       return;
     }
@@ -1589,16 +1791,16 @@ export function DialogLayer(props: {
     const open = props.open;
     untracked(() => {
       if (open) {
-        fromBelow = !closing;
+        fromAbove = !closing;
         closing = false;
         press = recentPress();
         pendingEnter = true;
         if (narrow()) {
-          // Out of sight below the bottom edge until its first layout says how tall it is; reopened
-          // while going out, it turns back from where it is.
-          if (fromBelow) {
+          // Out of sight above the top edge until its first layout says where it is and how tall;
+          // reopened while going out, it turns back from where it is.
+          if (fromAbove) {
             panel.opacity.set(1);
-            panel.translateY.set(windowSize().height);
+            panel.translateY.set(away());
           }
         } else panel.opacity.set(0);
         if (!shown()) shown.set(true);
@@ -1617,7 +1819,7 @@ export function DialogLayer(props: {
         void scrim.timing(0, { duration: ms, easing: MOTION_EXIT_EASE });
         // The panel stays drawn (and its contents mounted) while it goes out.
         const out = sheet
-          ? panel.translateY.timing(panelBox?.size.height ?? windowSize().height, { duration: ms, easing: MOTION_EXIT_EASE })
+          ? panel.translateY.timing(away(panelBox), { duration: ms, easing: MOTION_EXIT_EASE })
           : panel.play({
               duration: ms,
               keyframes: {
@@ -1632,23 +1834,14 @@ export function DialogLayer(props: {
     });
   });
 
-  // A sheet's bottom: the room under its last row, inside its paper (lib/systemInsets.ts).
-  const sheetInsets = () =>
-    narrow() ? dialogSheetInsets(safeArea(), keyboardFrame().height, windowSize().height) : undefined;
-  const panelInsetStyle = () => {
-    const insets = sheetInsets();
-    if (!insets) return {};
-    const own = props.bottomInset === "content" ? {} : { paddingBottom: (props.panelPaddingBottom ?? 0) + insets.clear };
-    return { ...own, maxHeight: insets.maxHeight };
-  };
-
   // The panel's frame in the layer, which the scrim covers from its origin.
-  let panelBox: { origin: { x: number; y: number }; size: { width: number; height: number } } | null = null;
+  let panelBox: Bounds | null = null;
   // The scrim and the panel, in whichever layer holds them.
   const layer = () => [
     <View
       accessibilityElementsHidden
-      class="absolute inset-0 bg-dialog-scrim"
+      // On phones the backdrop of More and the agent switcher.
+      class={`absolute inset-0 ${narrow() ? "bg-scrim" : "bg-dialog-scrim"}`}
       style={{ opacity: scrim }}
       // Android hands a touch that nothing in the panel takes (its padding, a label) to the views
       // behind it, so the scrim hears presses on the panel too: only those outside it close.
@@ -1664,19 +1857,19 @@ export function DialogLayer(props: {
       accessibilityLabel={props.label}
       onLayout={(event) => {
         panelBox = event.bounds;
-        props.probe?.layout?.(event.bounds);
+        probe?.layout?.(event.bounds);
         enter(event.bounds);
       }}
-      class={`max-h-[90%] overflow-hidden border border-dialog-line bg-dialog ${narrow() ? "w-full border-b-0" : ""} ${props.panelClass}`}
+      // On phones the paper of More and the agent switcher: their hairline and shadow, as tall as
+      // the window leaves it (lib/mobilePopup.ts); what does not fit scrolls inside it.
+      class={`overflow-hidden border bg-dialog ${narrow() ? "w-full border-line-faint" : "max-h-[90%] border-dialog-line"} ${props.panelClass}`}
       style={{
         ...(props.panelStyle ?? {}),
-        ...panelInsetStyle(),
-        ...(narrow()
-          ? { borderTopLeftRadius: POPUP_RADIUS, borderTopRightRadius: POPUP_RADIUS }
-          : { borderRadius: POPUP_RADIUS }),
-        // Not on Android, as the bottom sheets: a shadow there would not follow the corners, and
+        ...(narrow() ? { maxHeight: popupFrame().maxHeight } : {}),
+        borderRadius: POPUP_RADIUS,
+        // Not on Android, as the bottom bar: a shadow there would not follow the corners, and
         // a view that clips and casts one moves its children into a box of their own (PORTING.md).
-        boxShadow: platform.os === "android" ? undefined : DIALOG_SHADOW,
+        boxShadow: platform.os === "android" ? undefined : narrow() ? MENU_POPUP_STYLE.boxShadow : DIALOG_SHADOW,
         transformOrigin: origin() ?? "center",
         ...panel.style,
       }}
@@ -1686,17 +1879,23 @@ export function DialogLayer(props: {
   ];
   const layerClass = () =>
     `absolute inset-0 items-center ${narrow() ? "justify-end" : `justify-center ${OVERLAY_DIALOGS ? "" : "p-4"}`}`;
-  // On phones the panel is a sheet at the bottom, and it takes the room under its last row itself
-  // (the navigation bar or gesture handle, or the software keyboard, which the layer does not
-  // shrink for): its paper reaches the bottom edge and fills that room. A number, not
-  // `env(keyboard-inset-height)`: the env value moves the sheet natively but not in nsh's layout,
-  // where presses are matched. Android's Overlay covers the whole surface, status and navigation
-  // bars included, so there the layer keeps the panel out from under the status bar and the side
-  // insets (lib/systemInsets.ts), and wide windows keep it inside every inset, with a 16pt margin.
+  // On phones the panel floats at the foot of the layer, which keeps it a small gap in from the
+  // left, the right and the bottom, outside the room the system takes there (a notch, the
+  // navigation bar or gesture handle, or the software keyboard, which the layer does not shrink
+  // for) and below the status bar (lib/mobilePopup.ts): the layer's padding, on every platform, so
+  // the paper's own bottom edge and corners show above the inset. Numbers, not
+  // `env(keyboard-inset-height)`: the env value moves a view natively but not in nsh's layout,
+  // where presses are matched. Wide windows: Android's Overlay covers the whole surface, status
+  // and navigation bars included, so there the layer keeps the panel inside every inset
+  // (lib/systemInsets.ts), with a 16pt margin.
   const layerStyle = () => {
+    if (narrow()) {
+      const frame = popupFrame();
+      return { paddingTop: frame.top, paddingRight: frame.right, paddingBottom: frame.bottom, paddingLeft: frame.left };
+    }
     if (!OVERLAY_DIALOGS) return undefined;
-    const insets = dialogLayerInsets(safeArea(), 0, narrow() ? 0 : 16);
-    return { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: narrow() ? 0 : insets.bottom, paddingLeft: insets.left };
+    const insets = dialogLayerInsets(safeArea(), 0, 16);
+    return { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left };
   };
 
   return (
@@ -1897,7 +2096,6 @@ export function MessageDialog(props: {
       testID={props.testID}
       label={props.title}
       panelClass="w-full max-w-[500px] items-stretch px-4 pb-4 pt-6"
-      panelPaddingBottom={16}
       probe={props.probe}
     >
       <If when={props.icon}>

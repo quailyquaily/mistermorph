@@ -346,23 +346,32 @@ Headless tests prove behaviour, not the look.
 - Android gives a touch that no view takes to the views behind it: the dialog's scrim heard presses on
   the panel's padding. The scrim ignores presses inside the panel's frame.
 - Neither the surface nor a dialog shrinks when the software keyboard opens. The app's root adds
-  `keyboardFrame().height` as bottom padding, and so does a dialog that is a sheet at the bottom
-  (phones), inside its own panel. Not `env(keyboard-inset-height)`: it moves views natively but not
-  in the layout presses are matched against.
-- On touch screens nsh/base's `Menu` and `Select` are sheets at the bottom of the screen (their
-  `placement` is the desktops'), and opening one does not take the focus from a text field: a
-  sheet opened from beside a focused field lies under its keyboard. The composer's add menu and
-  model picker call `Keyboard.dismiss()` as they open and focus the field again as they close
-  (`components/chat/ChatComposer.tsx`); a sheet with a field of its own rises by
-  `keyboardFrame().height` (`bottomSheetStyle`'s `keyboard`).
-- Those sheets (`Menu`, `Select` and `DatePicker`'s calendar; not `Popover`, which stays at its
-  trigger) cover the surface down to its bottom edge, and nsh pads them with nothing: their last
-  row lies under the navigation bar or gesture handle (iOS's home indicator too). Give every such
-  `popupStyle` `bottomSheetStyle(padding, { style, contentMax })` (`components/ui.tsx`): the bottom
-  inset under the popup class's own bottom padding (an inline `paddingBottom` replaces it, so pass
-  it), its `max-h-*` grown by the inset, the keyboard's height instead of the inset for a sheet
-  that rises, and the desktops' popups unchanged. nsh's `Menu` sheet does not scroll: a long menu
-  needs a `Scroll` of its own (`AgentSwitcher`, `SelectField`).
+  `keyboardFrame().height` as bottom padding, and so does the layer of a phone's popups
+  (`DialogLayer`, lib/mobilePopup.ts), so their paper stands on the keyboard. Not
+  `env(keyboard-inset-height)`: it moves views natively but not in the layout presses are matched
+  against.
+- On touch screens nsh/base's `Menu`, `Select` and `DatePicker` are sheets flush with the bottom of
+  the screen (their `placement` is the desktops'), padded with nothing (their last row lies under
+  the navigation bar or gesture handle), sliding up from the bottom edge, and nothing in their
+  props changes that motion. The console does not show them there: on phones and on every touch
+  screen (`popupSheets()`, components/ui.tsx) a dropdown is the shared floating paper
+  (`PopupSheet`, `PopupList`; design/mobile-popups.md). The base component stays mounted for its
+  trigger (its press, keys and accessibility), held shut with `open={false}`: its `onOpenChange`
+  still says when the trigger asks to open, and the paper opens instead (`SelectField`,
+  `DropdownMenu`, `SettingMenu`, `TodoSelect`, `DateField`). A new dropdown does the same, or uses
+  one of those; never give a base popup a `popupStyle` for the touch sheet. `Popover` stays at its
+  trigger on touch screens; `PopoverPicker` moves its rows to the paper on phones (`sheet`).
+- A popup declared beside other controls must take no room there: `PopupSheet` wraps its layer in
+  an absolute, zero-size view (a `Dialog` in a `gap-*` column would add a gap).
+- Opening a popup does not take the focus from a text field: one opened from beside a focused
+  field would lie under its keyboard. The composer's add menu and model picker call
+  `Keyboard.dismiss()` as they open and focus the field again as they close
+  (`components/chat/ChatComposer.tsx`); a paper with a field of its own (a filter) stands on the
+  keyboard that field raises.
+- Headless tests draw no software keyboard: `standInKeyboard(height)` (components/ui.tsx) stands
+  one in for the phone's popups, and `watchDialogs` gives a fixture every paper's frame and motion
+  (tests/fixtures/mobile-popup-app.tsx). A step of a test ends only once the app is quiet, so an
+  entrance is sampled from the paper's first layout, not from a button pressed before it.
 - Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
   closes the dialog.
 - A phone bar's back arrow does not hide the keyboard by itself: the chat's arrow calls
@@ -381,14 +390,14 @@ Headless tests prove behaviour, not the look.
   `safeArea()` has their sizes). The app's frame takes them once (`lib/systemInsets.ts`): pages and
   their 57pt bars need no inset of their own, and `env(safe-area-inset-*)` must not be added inside
   the frame on Android. Overlays cover the whole surface and take the insets themselves.
-- A dialog on a phone is a sheet at the bottom (`DialogLayer`, windows under 720pt): its layer
-  takes the top and side insets, and the sheet's own panel the bottom one (or the keyboard's
-  height instead), so its paper fills the room under its last row, taken once
-  (`dialogSheetInsets`, lib/systemInsets.ts; iOS and the web too). A dialog whose last strip is
-  painted a colour of its own takes that room in the strip (`bottomInset="content"` +
-  `dialogSheetClearance()`, as `SettingDialog` does). Its footer's buttons go in `DialogActions`
-  (Modal's footer and SettingDialog's are): exactly two share the row's width on a sheet; put
-  them in the row itself, not each in a column of its own (`flex-1` would grow it down).
+- A dialog on a phone is the floating paper too (`DialogLayer`, `mobilePopups()`: windows under
+  720pt, and touch screens up to the phone layout's 980pt, a phone on its side): its layer takes
+  every inset, the keyboard's height in place of the bottom one, and a 12pt gap at the left, the
+  right and the bottom (lib/mobilePopup.ts; iOS and the web too), so the panel pads nothing for
+  the system and its own bottom edge shows above the inset. It slides in from above the window's
+  top edge. Its footer's buttons go in `DialogActions` (Modal's footer and SettingDialog's are):
+  exactly two share the row's width there; put them in the row itself, not each in a column of
+  its own (`flex-1` would grow it down).
 - nsh/base's `Sheet` is such an overlay: the frame's padding does not reach it, and its panel runs
   under the status bar unless it is padded. The chat's phone panel (`WorkspaceSheet`) pads its
   popup with `rightSheetInsets` (`lib/systemInsets.ts`); a new sheet at a side does the same, never

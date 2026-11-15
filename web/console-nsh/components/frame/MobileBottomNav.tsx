@@ -2,12 +2,14 @@
 // AppMobileAgentSwitcher): icons at the foot of the window, the primary pages, More, and the agent,
 // in a capsule that floats on the page (the layout of Telegram's tab bar, without its labels;
 // design/ui-refresh.html §4). A lighter pill behind the active slot slides to it, and its icon fills.
-// More and the agent open the same sheet, over a scrim: a card as wide as the window less the bar's
-// side margins, floating above the bar, that slides up from the window's foot; More's lists the
-// other pages, the agent's the agents (AgentSwitcher's `AgentList`, the sidebar switcher's rows).
-// Escape, Android's Back or a press outside closes either.
+// More and the agent open the same popup, over a scrim: the phone's floating paper
+// (design/mobile-popups.md, lib/mobilePopup.ts), which every other popup on phones follows: all
+// four corners round, a small gap in from the window's sides and above the bar, sliding in from
+// above the window's top edge; More's lists the other pages, the agent's the agents
+// (AgentSwitcher's `AgentList`, the sidebar switcher's rows). Escape, Android's Back or a press
+// outside closes either.
 import type { JSX } from "nsh";
-import { computed, createAnimatedValue, effect, keymap, platform, signal, Text, untracked, View, windowSize } from "nsh";
+import { computed, createAnimatedValue, effect, keyboardFrame, keymap, platform, safeArea, signal, untracked, View, windowSize } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import {
   closeMobileMore,
@@ -23,13 +25,15 @@ import {
   switchEndpoint,
   phoneWorkbenchOpen,
   systemInsets,
+  EDGE_TO_EDGE,
   type NavItem,
 } from "../../lib/shell";
 import { glassClass, glassEnabled, glassStyle } from "../../lib/glass";
 import { onSystemBack } from "../../lib/systemBack";
 import { MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SHEET_OUT, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
-import { Icon, MENU_POPUP_STYLE, POPUP_RADIUS, Tip, TipButton, type IconName } from "../ui";
+import { mobilePopupEntrance } from "../../lib/mobilePopup";
+import { Icon, MENU_POPUP_STYLE, POPUP_RADIUS, POPUP_TITLE_HEIGHT, PopupTitle, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
@@ -82,13 +86,13 @@ function navigateTo(item: NavItem) {
   goTo(item, false);
 }
 
-// The sheets slide up from the window's foot, behind the bar, to float above it, and slide back
-// down (MOTION_SHEET_IN in, MOTION_SHEET_OUT out on MOTION_EXIT_EASE, as dialogs on phones).
+// The sheets slide down from above the window's top edge to float above the bar, and slide back
+// up (MOTION_SHEET_IN in, MOTION_SHEET_OUT out on MOTION_EXIT_EASE, as every popup on phones).
 // Reopening one while it slides out turns it round from where it is, as the motion runs from the
 // animated value's current position. A closing sheet takes no presses; with reduced motion it
 // appears and goes at once.
 /** The sheet's title row (min-h-9.5) and its hairline. */
-const SHEET_HEADER = 39;
+const SHEET_HEADER = POPUP_TITLE_HEIGHT;
 
 /** A sheet floating above the bar, over a scrim; kept until it has slid out. `children` gets the
  * tallest its content may be. */
@@ -103,9 +107,9 @@ function BottomSheet(props: {
 }) {
   const shown = signal(untracked(() => props.open));
   const closing = signal(false);
-  // 0 hidden below the window's foot, 1 fully risen; the scrim fades with it.
+  // 0 hidden above the window's top, 1 in its place; the scrim fades with it.
   const progress = createAnimatedValue(0);
-  const height = signal(0);
+  const box = signal({ y: 0, height: 0 });
   let generation = 0;
 
   effect(() => {
@@ -130,7 +134,7 @@ function BottomSheet(props: {
 
   return (
     <If when={shown()}>
-      <SheetLayer {...props} closing={closing()} progress={progress} height={height()} onHeight={(value) => height.set(value)} />
+      <SheetLayer {...props} closing={closing()} progress={progress} box={box()} onBox={(value) => box.set(value)} />
     </If>
   );
 }
@@ -143,24 +147,40 @@ function SheetLayer(props: {
   onFrame?: (frame: MobileNavFrame) => void;
   closing: boolean;
   progress: ReturnType<typeof createAnimatedValue>;
-  /** The sheet's height, which it slides by. */
-  height: number;
-  onHeight: (height: number) => void;
+  /** The sheet's top in the layer and its height: what it slides by. */
+  box: { y: number; height: number };
+  onBox: (box: { y: number; height: number }) => void;
 }) {
   keymap.bind("escape", () => props.onClose());
   // Android's Back closes the sheet before it leaves the page.
   onSystemBack(() => !props.closing, () => props.onClose());
-  // The page's height (the layer covers it), the window's until the layer's first layout.
-  const room = signal(0);
-  const frame = () => mobileSheetFrame(room() || windowSize().height, mobileBarRoom());
-  const bottom = () => frame().bottom;
+  // The page's size (the layer covers it), the window's until the layer's first layout.
+  const room = signal({ width: 0, height: 0 });
+  const layerHeight = () => room().height || windowSize().height;
+  // The insets the page lies under: Android's frame takes the top and the sides (and stands on the
+  // keyboard), so only the bar's room is left there (lib/systemInsets.ts).
+  const frame = () =>
+    mobileSheetFrame(
+      room().width || windowSize().width,
+      layerHeight(),
+      mobileBarRoom(),
+      EDGE_TO_EDGE ? {} : safeArea(),
+      EDGE_TO_EDGE ? 0 : keyboardFrame().height,
+    );
   const sheetMax = () => frame().maxHeight;
   return (
     <View
-      class="absolute inset-0 z-40"
+      // The paper at the foot of the layer, centred, inside the layer's padding (the frame).
+      class="absolute inset-0 z-40 items-center justify-end"
       testID={props.closing ? undefined : props.testID}
-      onLayout={({ bounds }) => room.set(bounds.size.height)}
-      style={props.closing ? { pointerEvents: "none" } : undefined}
+      onLayout={({ bounds }) => room.set({ width: bounds.size.width, height: bounds.size.height })}
+      style={{
+        paddingTop: frame().top,
+        paddingRight: frame().right,
+        paddingBottom: frame().bottom,
+        paddingLeft: frame().left,
+        pointerEvents: props.closing ? "none" : undefined,
+      }}
     >
       <View
         class="absolute inset-0 bg-scrim"
@@ -172,17 +192,21 @@ function SheetLayer(props: {
       <View
         role="menu"
         accessibilityLabel={props.label}
-        class="absolute overflow-hidden border border-line-faint bg-dialog"
-        // Until its first layout the sheet's height is unknown: it starts far below, not at 0.
+        class="w-full overflow-hidden border border-line-faint bg-dialog"
+        // Until its first layout the sheet's place is unknown: it starts a page's height up.
         onLayout={({ bounds }) => {
-          props.onHeight(bounds.size.height);
-          props.onFrame?.({ x: bounds.origin.x, y: bounds.origin.y, w: bounds.size.width, h: bounds.size.height });
+          props.onBox({ y: bounds.origin.y, height: bounds.size.height });
+          props.onFrame?.({
+            x: bounds.origin.x,
+            y: bounds.origin.y,
+            w: bounds.size.width,
+            h: bounds.size.height,
+            from: mobilePopupEntrance(bounds.origin.y, bounds.size.height, untracked(layerHeight)),
+          });
         }}
         testID={props.testID && !props.closing ? `${props.testID}-sheet` : undefined}
         style={{
-          left: frame().side,
-          right: frame().side,
-          bottom: bottom(),
+          maxWidth: frame().maxWidth,
           maxHeight: sheetMax(),
           borderRadius: POPUP_RADIUS,
           // As the bar: no outer shadow on Android, where it would not follow the corners.
@@ -191,16 +215,13 @@ function SheetLayer(props: {
             {
               translateY: props.progress.interpolate({
                 inputRange: [0, 1],
-                outputRange: [props.height > 0 ? props.height + bottom() + 1 : 4000, 0],
+                outputRange: [mobilePopupEntrance(props.box.y, props.box.height, layerHeight()), 0],
               }),
             },
           ],
         }}
       >
-        <View class="min-h-9.5 flex-row items-center gap-2 border-b border-line-soft px-4">
-          <View class="size-1.5 bg-muted-foreground" />
-          <Text class="font-mono text-xs uppercase tracking-widest text-muted-foreground">{props.label}</Text>
-        </View>
+        <PopupTitle label={props.label} />
         {props.children(sheetMax() - SHEET_HEADER - 2)}
       </View>
     </View>
@@ -256,8 +277,9 @@ export function MobileBottomMenus(props: { onSheetLayout?: (name: string, frame:
   );
 }
 
-/** A frame the strip reports for layout checks (tests/mobile-bottom-nav.test.tsx). */
-export type MobileNavFrame = { x: number; y: number; w: number; h: number };
+/** A frame the strip reports for layout checks (tests/mobile-bottom-nav.test.tsx); a sheet's also
+ * says where it slides in from (`from`: its translation while out of sight, above the page). */
+export type MobileNavFrame = { x: number; y: number; w: number; h: number; from?: number };
 
 /** The strip itself. `onSlotLayout` hears each slot's frame in the row (by its test id) and the
  * active pill's ("highlight", where its slide puts it). */

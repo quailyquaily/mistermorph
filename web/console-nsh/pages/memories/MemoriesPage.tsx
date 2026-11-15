@@ -5,7 +5,8 @@
 // with a back button.
 import type { JSX } from "nsh";
 import { batch, computed, effect, signal, Text, untracked, View } from "nsh";
-import { Button as BaseButton, DatePicker } from "nsh/base";
+import { Button as BaseButton } from "nsh/base";
+import { DateField } from "../../components/shared/DateField";
 import {
   Blocks,
   DetailCard,
@@ -23,7 +24,7 @@ import {
   TurnCaret,
 } from "../../components/knowledge/parts";
 import { createSlidingSelection, EdgeScroll, MOTION_EASE_CSS, MOTION_NORMAL, motionMs } from "../../components/motion";
-import { bottomSheetStyle, Button, Icon, MessageDialog, Modal, Page, SelectField, TextField, type IconName } from "../../components/ui";
+import { Button, Icon, MessageDialog, Modal, Page, SelectField, TextField, type IconName } from "../../components/ui";
 import { currentLocale, endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -1085,7 +1086,7 @@ function MemoryRow(props: {
 /** The journal's "since" date (an <input type="date"> on the Vue page): a date picker that clears. */
 function SinceField(props: { value: string; onChange: (value: string) => void }) {
   return (
-    <DatePicker
+    <DateField
       value={props.value || null}
       cleanable
       accessibilityLabel={t("memories_journal_since")}
@@ -1093,7 +1094,6 @@ function SinceField(props: { value: string; onChange: (value: string) => void })
       onChange={({ value }) => props.onChange(typeof value === "string" ? value.slice(0, 10) : "")}
       offset={4}
       popupClass="rounded-(--radius) border border-border bg-popover p-3 shadow-md"
-      popupStyle={bottomSheetStyle(12)}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"

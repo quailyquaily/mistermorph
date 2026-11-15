@@ -10,7 +10,7 @@
 import type { JSX } from "nsh";
 import { Scroll, Text, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
-import { Button, DialogActions, DialogLayer, dialogSheetClearance, type DialogProbe, type ModalSize } from "../ui";
+import { Button, DialogActions, DialogLayer, type DialogProbe, type ModalSize } from "../ui";
 import { SCROLLBAR } from "../motion";
 import { isMobile } from "../../lib/shell";
 
@@ -53,9 +53,6 @@ export function SettingDialog(props: SettingDialogProps) {
       testID={props.testID}
       label={props.title}
       panelClass={WIDTHS[props.size ?? "lg"]}
-      // The actions' strip is paper, not the dialog's white: on a sheet it reaches down over the
-      // room under it (the navigation bar, gesture handle or keyboard) itself.
-      bottomInset="content"
       probe={props.probe}
     >
       {/* SettingDialog.css: a 44pt title bar, a 20pt body (16 on phones), and the actions in a 60pt
@@ -70,8 +67,6 @@ export function SettingDialog(props: SettingDialogProps) {
       </Scroll>
       <DialogActions
         class={`min-h-15 flex-row items-center justify-between gap-3 border-t border-line bg-paper py-2 ${isMobile() ? "px-4" : "px-5"}`}
-        // py-2's 8pt under the buttons, above the sheet's room under its last row.
-        style={dialogSheetClearance() > 0 ? { paddingBottom: 8 + dialogSheetClearance() } : undefined}
         testID={props.testID ? `${props.testID}-footer` : undefined}
       >
         <Button variant="outlined" size="md" label={t("action_cancel")} disabled={props.saving} onPress={cancel} />

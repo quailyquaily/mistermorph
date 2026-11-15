@@ -3,10 +3,10 @@
 // filter. Built here because SelectField in ui.tsx draws plain titles only. Metrics are the Vue
 // page's `.todo-dropdown` (views/TodoView.css): a 44pt trigger with the name in text-1 at 500, the
 // value at 400; in the list, logos and icons sit on 24pt round plates and two-line rows are 52pt.
-import { Image, Text, View } from "nsh";
+import { Image, signal, Text, untracked, View } from "nsh";
 import { Select } from "nsh/base";
 import { FadeText } from "../motion";
-import { bottomSheetStyle, Icon, type IconName, MENU_POPUP, MENU_POPUP_STYLE } from "../ui";
+import { Icon, type IconName, MENU_POPUP, MENU_POPUP_STYLE, PopupList, popupSheets } from "../ui";
 import { FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, Prepend } from "./TodoFields";
 import type { TodoMenuItem } from "./todo-state";
 
@@ -47,8 +47,32 @@ export function TodoSelect(props: {
   class?: string;
 }) {
   const byValue = () => new Map(props.items.map((item) => [item.value, item]));
+  // Phones and touch screens: the list is the shared floating paper (`PopupList`); the base list
+  // stays shut there (`open` held false) and only says when its trigger asks to open.
+  const sheetOpen = signal(false);
   return (
+    <>
+    <PopupList
+      open={popupSheets() && sheetOpen() && !props.disabled}
+      onClose={() => sheetOpen.set(false)}
+      label={props.label}
+      items={props.items.map((item) => ({
+        value: item.value,
+        title: item.title,
+        note: item.subtitle,
+        icon: item.image || item.icon ? <ItemMedia item={item} /> : undefined,
+      }))}
+      value={props.current?.value ?? ""}
+      onChoose={(value) => props.onChange?.(value)}
+      filterPlaceholder={props.searchable ? props.placeholder || props.label : undefined}
+      emptyText={props.placeholder}
+      partID={props.testID ? `${props.testID}-popup` : undefined}
+    />
     <Select
+      open={popupSheets() ? false : undefined}
+      onOpenChange={({ open }) => {
+        if (open && untracked(popupSheets)) sheetOpen.set(true);
+      }}
       items={props.items.map((item) => ({ value: item.value, title: item.title }))}
       value={props.current?.value ?? null}
       disabled={props.disabled}
@@ -64,7 +88,7 @@ export function TodoSelect(props: {
       }`}
       style={FIELD_TRANSITION}
       popupClass={`${MENU_POPUP} max-h-100`}
-      popupStyle={bottomSheetStyle(8, { style: MENU_POPUP_STYLE, contentMax: 400 })}
+      popupStyle={MENU_POPUP_STYLE}
       itemClass="min-h-10 justify-center px-4 py-2 hover:bg-hover focus:bg-hover selected:bg-selection"
       searchClass="mx-2 mb-2 h-9.5 rounded-(--radius) border border-input bg-field px-3 text-sm text-foreground"
       empty={
@@ -97,5 +121,6 @@ export function TodoSelect(props: {
         </View>
       }
     />
+    </>
   );
 }
