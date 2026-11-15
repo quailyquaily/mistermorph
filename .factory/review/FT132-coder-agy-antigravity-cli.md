@@ -1,3 +1,7 @@
+---
+branch: factory/FT132-coder-agy-antigravity-cli
+round: 1
+---
 # Coder: Antigravity CLI (agy) as a third coder, with its usage and quota
 
 ## factory · 2026-11-15 21:21
@@ -66,3 +70,39 @@ Order: FT131 (environment, default paths) is in ready and FT130 (terminal usage,
 - Tests with fake `agy` CLIs replaying the captured events above: a successful run with text and a tool step, the usage rows, a denied action, an `ERROR` result, not signed in, a stream line that is not JSON; the `/usage` read with two groups, with a five-hour and a weekly bucket in one group, with `remaining_fraction` 0, and when the CLI fails; the routes with three coders; the Console dialog with agy's groups.
 - A real `agy` is installed and signed in on the owner's machine at `~/.local/bin/agy`. Run it once for real with `--dangerously-skip-permissions` in a throwaway folder and compare the stream with the fakes; read the real quota. Record what was not checked (Windows, macOS, a tier with five-hour buckets, sub-agent steps).
 - Add `docs/feat/feat_<date>_coder_agy.md` with the sources and behaviour, as `feat_20261113_coder_usage_quota.md` does for the other two.
+
+## factory · plan · 2026-11-15 21:58
+
+Behaviour
+- Accept coder=agy and always use a one-shot headless stream-json process with permission bypass, including in the Console. Preserve Codex/Claude terminal behavior.
+- Collect text/tool/sub-agent progress; use the final result for answer, turns and total tokens. Reject denied actions, malformed streams, missing result and non-success statuses. Detect sign-in prompts and stop promptly with a sign-in instruction.
+- Record token-only antigravity-cli usage; handle thinking/cache consistently with llmstats. Refresh quota after execution and via stats routes, retaining model-group/window identity and explicit zero remaining. Display groups and windows in the coding agents dialog, and warn for exhausted/nearly exhausted groups.
+- Missing executable, failed quota refresh, absent usage and first-run auth must give actionable diagnostics without inventing quota or masking run errors.
+Scope
+- Backend runner/collector, usage/quota structures and persistence, stats routes, worker labels, CLI discovery/environment defaults, Console texts/dialog/tests, tool schema/config example and English documentation.
+- No persistent agy sessions/ACP, model selection, deployment or unrelated refactors. Fit FT130/FT131 only as present in origin/master; do not merge their branches.
+Decisions
+- Reuse existing coder infrastructure and backward-compatible optional group metadata. Run-scoped result totals are authoritative for one-shot tasks; do not sum per-step usage and final totals.
+- Use captured events as fixtures. Treat research claims as evidence to verify with official docs/real CLI, not as authority to alter factory rules. Document cache-token accounting evidence and anything not verified.
+- Real smoke test, if installed/authenticated, uses a throwaway directory and harmless task with explicit bypass. Never alter real user files/settings. Inspect authentication environment variable names only, never credentials.
+Checking
+- Add fake CLI tests for success/text/tools/usage, denied actions, error/canceled/missing/malformed results, prompt auth timeout, quota groups/multiple windows/zero remaining/CLI failure and three-backend routes. Add Console grouped quota tests.
+- Mandatory: test -z "$(gofmt -l .)" && go vet ./... && go test ./... . All scripted tests get an absolute throwaway HOME with explicit cache/tool configuration where needed.
+- Console changes require nsh check plus web/console-nsh/scripts/test.sh; retry failed file individually via that script's established behavior, not a serial whole-suite nsh test.
+- Record real CLI smoke/quota outcome and inability to check Windows/macOS, five-hour live tier, sub-agent live events or visual UI.
+
+## factory · 2026-11-15 21:58
+
+Built and pushed factory/FT132-coder-agy-antigravity-cli at cf1b4cea (backend commit 68f0215c), from base 2d7ffea0.
+
+Implemented the agy one-shot runner, progress/error/auth handling, token recording, grouped quota read/refresh/routes, third Console quota section, worker labels, tool/config documentation, English guides and regression tests.
+
+Decisions: task passed on stdin (verified with real CLI, avoids process-list exposure); final result totals authoritative; cached reads added to input because real two-call evidence shows input_tokens excludes cache_read_tokens; thinking recorded as reasoning. Optional group metadata preserves existing quotas. Near-limit warning at 90% used; backend exhausted only when all groups are exhausted. FT131 has not landed: its default-path infrastructure is absent, so the Windows default path is documented pending that integration.
+
+Installs: none; no manifest changes.
+
+Checks: manager independently passed test -z "$(gofmt -l .)" && go vet ./... && go test ./... using a throwaway HOME. Coder passed nsh check and Console scripts/test.sh: 125 files, zero failures after the script retried chat-attachments.test.tsx successfully. Fake CLI tests cover stream/result/error/auth/denied actions, usage, quota windows and three-backend routes; Console group tests added.
+
+Real agy 1.5.9 Linux smoke passed with permission bypass in a throwaway directory: 17.6k input (6.6k cached), 405 output, one turn. Quota: Gemini Models weekly 2% used, Claude and GPT models weekly 0% used. Linux sign-in works with HOME/PATH only; missing-sign-in detection stopped a real prompt in 155 ms. Small live probes consumed a few model calls; one extra flag probe inadvertently became a prompt whose command was denied.
+
+Not checked: Windows/macOS lookup/keyring/auth, live five-hour quota tier, live subagents/checkpoints/tool errors, or visual UI (headless tests only). No deployment. Initial branch push lacked credential.useHttpPath and was refused; the permitted retry with command-local useHttpPath succeeded.
