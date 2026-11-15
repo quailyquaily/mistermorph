@@ -10,10 +10,11 @@
 // padded 12/13/11/14. The selected row is a soft fill that glides between rows (one highlight,
 // components/motion's sliding selection); a row's hover fill comes in after 60 ms and goes at once,
 // so sweeping the pointer down a list does not flash every row it passes.
-import type { InputRef, JSX } from "nsh";
+import type { InputRef, JSX, ScrollRef } from "nsh";
 import { cleanup, effect, keymap, Scroll, signal, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
+import type { ScrollMemory } from "../../lib/scrollMemory";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
@@ -235,6 +236,8 @@ export function IndexColumn(props: {
   /** Its motion as a phone's pane (components/motion/PaneStack.tsx), and whether it is going out. */
   style?: Record<string, unknown>;
   hidden?: boolean;
+  /** Remembers where the list is scrolled across visits of the page (lib/scrollMemory.ts). */
+  memory?: ScrollMemory;
 }) {
   const edges = createScrollEdges({ start: false });
   const hasTop = () => Boolean(props.top || props.search);
@@ -275,7 +278,11 @@ export function IndexColumn(props: {
           class="flex-1"
           scrollbar={SCROLLBAR}
           contentClass="grow"
-          onScroll={edges.handlers.onScroll}
+          ref={(node: ScrollRef) => props.memory?.ref(node)}
+          onScroll={(event) => {
+            edges.handlers.onScroll(event);
+            props.memory?.onScroll(event);
+          }}
           onLayout={edges.handlers.onLayout}
           scrollEventThrottle={edges.handlers.scrollEventThrottle}
           style={edges.style()}

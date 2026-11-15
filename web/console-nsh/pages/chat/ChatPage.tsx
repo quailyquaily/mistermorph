@@ -13,6 +13,7 @@ import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { onSystemBack } from "../../lib/systemBack";
+import { scrollAreaKey } from "../../lib/scrollMemory";
 import { markMobileDetail } from "../../lib/shell";
 import { provideShortcut } from "../../lib/shortcuts";
 import { createChatController, type ChatController } from "./chatController";
@@ -159,6 +160,8 @@ function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string
 
 function History(props: { c: ChatController; topInset: number; endInset: number }) {
   const c = props.c;
+  // Where the conversation was left scrolled up, across visits of the page.
+  const memoryKey = scrollAreaKey(3, "history");
   return (
     <ChatHistoryList
       items={c.chatHistoryItems()}
@@ -171,6 +174,7 @@ function History(props: { c: ChatController; topInset: number; endInset: number 
       onLoadOlder={() => void c.loadOlderHistory()}
       ctx={c.rowContext}
       onListRef={(list) => c.setHistoryList(list)}
+      memoryKey={memoryKey}
       onScrollFromEnd={(distance, viewport) => c.setHistoryScroll(distance, viewport)}
       // The same room at the top whether the panel is open or not, so opening it never moves the
       // conversation down or up.

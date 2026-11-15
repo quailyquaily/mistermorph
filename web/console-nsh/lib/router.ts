@@ -379,6 +379,14 @@ export const currentRoute = () => {
   const own = PageRouteContext();
   return (own ? own() : current()) as Route;
 };
+/**
+ * A page instance's identity: its kind and, for an agent's pages, the agent. The page host builds
+ * a page per key (pages/routes.tsx), and what a page remembers in memory is kept under it
+ * (lib/scrollMemory.ts).
+ */
+export function pageInstanceKey(route: Route) {
+  return `${route.page}\u0000${route.meta.endpointScoped ? endpointRefFromRouteParam(route.params.endpoint_ref) : ""}`;
+}
 /** The path being opened while its guard runs, else the current path: the nav selects it at once. */
 export const currentPath = computed(() => pending() || current()?.path || "");
 

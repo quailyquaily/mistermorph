@@ -15,6 +15,7 @@
 import { createAnimatedValue, effect, reduceMotion, Scroll, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
 import { gutterX, gutterY, listTitleSize } from "../frame/metrics";
 import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR } from "../motion";
@@ -175,6 +176,8 @@ export function TodoIndex(props: {
   const heartbeatSelection = createSlidingSelection(() => (!props.mobile && state.heartbeatSelected() ? "heartbeat" : null));
   const taskSelection = createSlidingSelection(() => (props.mobile ? null : state.selectedTaskKey() || null));
   const edges = createScrollEdges({ start: false });
+  // Where the list is scrolled, across visits of the page.
+  const memory = useScrollMemory({ column: 2, area: "index", ready: () => !props.state.loading() });
   return (
     <View class="flex-1" accessibilityLabel={t("todo_nav_title")} testID="todo-index" {...parts.probe(() => "index")}>
       <View
@@ -211,7 +214,17 @@ export function TodoIndex(props: {
         </If>
       </View>
 
-      <Scroll class="flex-1" scrollbar={SCROLLBAR} {...edges.handlers} style={edges.style()}>
+      <Scroll
+        class="flex-1"
+        scrollbar={SCROLLBAR}
+        {...edges.handlers}
+        ref={memory.ref}
+        onScroll={(event) => {
+          edges.handlers.onScroll(event);
+          memory.onScroll(event);
+        }}
+        style={edges.style()}
+      >
         <View
           onLayout={edges.onContentLayout}
           class="gap-3.5"

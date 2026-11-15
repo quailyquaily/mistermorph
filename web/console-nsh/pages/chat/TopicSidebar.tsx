@@ -31,6 +31,7 @@ import { listTitleSize } from "../../components/frame/metrics";
 import { createPullSearch } from "../../components/shared/pullSearch";
 import { createTopicDrag } from "./topicDrag";
 import { provideShortcut, shortcutLabel } from "../../lib/shortcuts";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../../components/shared/partProbe";
 
 // A view toggle in the head: the standard round icon button (circleButtonClass, 38pt) with a 16pt
@@ -186,6 +187,8 @@ export function TopicSidebar(props: {
   const view = () => c.topicSidebarView();
   const toggle = (next: SidebarView) => c.setTopicSidebarView(view() === next ? "date" : next);
   const edges = createScrollEdges({ start: false });
+  // Where the list is scrolled, across visits of the page.
+  const memory = useScrollMemory({ column: 2, area: "topics", ready: () => !(props.c.topicsLoading() && props.c.topicRows().length === 0) });
   // Where each view toggle sits along the head, for the sag under the one that is on.
   const toggleCenters = signal<Partial<Record<SidebarView, number>>>({});
   const placeToggle = (key: SidebarView) => (x: number) => {
@@ -500,9 +503,11 @@ export function TopicSidebar(props: {
       <Scroll
         class={`flex-1 ${c.topicsLoading() ? "opacity-70" : ""}`}
         testID="chat-topic-list"
+        ref={memory.ref}
         onScroll={(event) => {
           edges.handlers.onScroll(event);
           drag.onScroll(event);
+          memory.onScroll(event);
         }}
         onLayout={(event) => {
           edges.handlers.onLayout(event);

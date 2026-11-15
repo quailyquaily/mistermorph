@@ -38,6 +38,7 @@ import {
 } from "../../lib/core/memories-view.js";
 import { currentRoute, navigate } from "../../lib/router";
 import { createPaneStack } from "../../components/motion/PaneStack";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -588,6 +589,9 @@ export function MemoriesPage() {
     return indexItems().find((row) => row.active)?.key ?? null;
   };
   const sliding = createSlidingSelection(activeIndexKey);
+  // Where the index and the open memory are scrolled, across visits of the page.
+  const indexMemory = useScrollMemory({ column: 2, area: "index", ready: () => !(loading() && !loaded()) });
+  const mainMemory = useScrollMemory({ column: 3, area: "main", selection: () => activeIndexKey() ?? "" });
 
   return (
     <Page hideBar scroll={false} testID="memories-page">
@@ -600,6 +604,7 @@ export function MemoriesPage() {
             style={panes.style(0)}
             hidden={panes.hidden(0)}
             testID="memories-index"
+            memory={indexMemory}
             top={
               <SearchField
                 value={query()}
@@ -659,6 +664,8 @@ export function MemoriesPage() {
                     { paddingRight: gutterX(), paddingTop: 18 }
               }
               testID="memories-main"
+              ref={mainMemory.ref}
+              onScroll={mainMemory.onScroll}
             >
               <If when={err()}>
                 <InlineNotice type="error" text={err()} testID="memories-error" />

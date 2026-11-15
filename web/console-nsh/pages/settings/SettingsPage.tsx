@@ -10,6 +10,7 @@ import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { buildSettingsSearchIndex, searchSettings } from "../../lib/core/settings-search.js";
 import { previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
+import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
@@ -244,6 +245,9 @@ export function SettingsPage() {
   const activeResultID = signal("");
   let scrollRef: ScrollRef | undefined;
   let scrollOffset = 0;
+  // Where the section list and the open section are scrolled, across visits of the page.
+  const indexMemory = useScrollMemory({ column: 2, area: "index" });
+  const sectionMemory = useScrollMemory({ column: 3, area: "section", selection: () => sectionID() });
   let revealSeq = 0;
 
   function openSearchDialog(dialog: string) {
@@ -312,6 +316,7 @@ export function SettingsPage() {
       style={panes.style(0)}
       hidden={panes.hidden(0)}
       testID="settings-index"
+      memory={indexMemory}
       search={
         <IndexSearch
           value={query()}
@@ -387,10 +392,12 @@ export function SettingsPage() {
     <Scroll
       ref={(node: ScrollRef) => {
         scrollRef = node;
+        sectionMemory.ref(node);
       }}
       onScroll={(event) => {
         scrollOffset = event.offset.y;
         panelEdges.handlers.onScroll(event);
+        sectionMemory.onScroll(event);
       }}
       onLayout={panelEdges.handlers.onLayout}
       scrollEventThrottle={panelEdges.handlers.scrollEventThrottle}

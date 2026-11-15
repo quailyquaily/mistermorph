@@ -69,6 +69,11 @@ export interface ConsoleOptions {
   clock?: boolean;
   /** Page and pane slides last a minute (tests/slowSlidesConsole.tsx): steps act during one. */
   slowSlides?: boolean;
+  /**
+   * The console reports where its pages' remembered scrollers are (tests/scrollProbeConsole.tsx):
+   * read them with `scrollProbe(app)`.
+   */
+  scrollProbe?: boolean;
 }
 
 /** Where the phone app keeps the console server's address and its last location (lib/mobileHost.ts). */
@@ -169,7 +174,8 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
   const routes = { ...defaults(options), ...(options.api || {}) };
   // A bare "*" is a GET of any URL; each method needs its own catch-all.
   const network = Object.fromEntries(["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => [`${method} *`, answer]));
-  const entry = options.slowSlides ? "./slowSlidesConsole.tsx" : "../App.tsx";
+  const entry = options.slowSlides ? "./slowSlidesConsole.tsx" : options.scrollProbe ? "./scrollProbeConsole.tsx" : "../App.tsx";
+  const probe = options.scrollProbe ? { "morph.fixture.scroll": null, "morph.fixture.saved": null } : {};
   if (options.platform === "android") {
     const app = await open(entry, {
       width: options.width ?? 390,
@@ -183,7 +189,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         "quail-language": "en",
         ...(options.kv || {}),
       },
-      host: options.host ? { handlers: options.host } : null,
+      host: options.host || options.scrollProbe ? { handlers: { ...probe, ...(options.host || {}) } } : null,
       clock: options.clock ? {} : null,
       network,
     });
@@ -218,6 +224,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         "morph.language": null,
         "morph.notify.state": "default",
         "morph.desktop.ready": null,
+        ...probe,
         ...(options.host || {}),
       },
     },
@@ -236,4 +243,32 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     }
     return { status: 404, body: { error: `no stub for ${keysFor(request).at(-1)}` } };
   }
+}
+
+/** What a console opened with `scrollProbe` reports of its remembered scrollers (lib/scrollMemory.ts). */
+export function scrollProbe(app: App) {
+  const posts = (name: string) => app.host.posts().filter((post) => post.name === name);
+  let mark = 0;
+  return {
+    /** Forgets the offsets reported so far: what `live` gives after is reported from now on. */
+    mark() {
+      mark = posts("morph.fixture.scroll").length;
+    },
+    /** An area's last reported offset since `mark()`, `null` when it reported none. */
+    live(key: string): number | null {
+      const own = posts("morph.fixture.scroll")
+        .slice(mark)
+        .map((post) => post.data as { key: string; y: number })
+        .filter((data) => data.key === key);
+      return own.length ? own[own.length - 1].y : null;
+    },
+    /** What is remembered now, by area. */
+    async saved(): Promise<Record<string, { y: number; selection: string; anchor?: { id: string; offset: number } }>> {
+      const before = posts("morph.fixture.saved").length;
+      await app.host.send("morph.fixture.saved");
+      await app.waitUntil(() => posts("morph.fixture.saved").length > before);
+      const all = posts("morph.fixture.saved");
+      return all[all.length - 1].data as never;
+    },
+  };
 }

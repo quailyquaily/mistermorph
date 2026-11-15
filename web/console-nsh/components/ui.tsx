@@ -44,6 +44,7 @@ import {
 } from "./motion/tokens";
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 import { createPartProbe, type PartLayoutListener } from "./shared/partProbe";
+import type { ScrollMemory } from "../lib/scrollMemory";
 import { isMobile } from "../lib/shell";
 
 export type { IconName };
@@ -2055,6 +2056,8 @@ export function Page(props: {
   children?: JSX.Element;
   bodyClass?: string;
   testID?: string;
+  /** Remembers where the body is scrolled across visits of the page (lib/scrollMemory.ts). */
+  memory?: ScrollMemory;
 }) {
   usePageError(() => props.error ?? "");
   return (
@@ -2063,7 +2066,7 @@ export function Page(props: {
         <PageBar title={props.title} leading={props.leading} actions={props.actions} />
       </If>
       <If when={props.scroll !== false} else={<View class={`flex-1 ${props.bodyClass ?? ""}`}>{props.children}</View>}>
-        <EdgeScroll class="flex-1" start={false}>
+        <EdgeScroll class="flex-1" start={false} ref={(node) => props.memory?.ref(node)} onScroll={(event) => props.memory?.onScroll(event)}>
           <View
             class={props.bodyClass ?? ""}
             style={{ gap: pageGap(), paddingTop: pageTop(), paddingHorizontal: gutterX(), paddingBottom: gutterY() }}
