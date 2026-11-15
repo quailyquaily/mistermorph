@@ -361,14 +361,16 @@ func claudeCacheCreation(raw map[string]any, write int64) map[string]int64 {
 	return out
 }
 
-// codexUsageModel is the model Codex usage is recorded under, as a headless run's is: its rollout
-// names no model per response.
+// codexUsageModel is the model Codex usage is recorded under when its rollout named none before
+// the response (a rollout of a Codex that writes no turn_context).
 const codexUsageModel = "codex"
 
 // codexUsage reads Codex's rollout and its sub-agents' rollouts under the same sessions folder.
 // Each token_count line carries the thread's running total and what the last response used; the
-// last ones are summed. Codex repeats a token_count when only its rate limits changed, so a line
-// whose running total is the one before it is not counted.
+// last ones are kept one by one, as a list price goes by the single request. Codex repeats a
+// token_count when only its rate limits changed, so a line whose running total is the one before
+// it is not counted. A response's model is the one of the thread's last turn_context line, which
+// Codex writes at the start of each turn (the model can change between turns).
 type codexUsage struct {
 	files  map[string]*codexUsageFile // by thread ID
 	order  []string                   // thread IDs, in the order they were found
@@ -379,6 +381,7 @@ type codexUsageFile struct {
 	usageFile
 	path  string
 	total codexTokens // the running total last seen
+	model string      // the model of the thread's last turn_context
 }
 
 type codexTokens struct {
@@ -443,6 +446,20 @@ func (r *codexUsage) read(path string) {
 }
 
 func (r *codexUsage) line(line []byte, f *codexUsageFile, main bool) {
+	if bytes.Contains(line, []byte(`"turn_context"`)) {
+		var context struct {
+			Type    string `json:"type"`
+			Payload struct {
+				Model string `json:"model"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(line, &context) == nil && context.Type == "turn_context" {
+			if model := strings.TrimSpace(context.Payload.Model); model != "" {
+				f.model = model
+			}
+			return
+		}
+	}
 	if !bytes.Contains(line, []byte(`"event_msg"`)) {
 		return
 	}
@@ -484,14 +501,39 @@ func (r *codexUsage) line(line []byte, f *codexUsageFile, main bool) {
 			}
 		}
 		last := info.Last
-		r.totals.model(codexUsageModel).add(ModelUsage{
+		model := f.model
+		if model == "" {
+			model = codexUsageModel
+		}
+		r.totals.response(model, ResponseUsage{
 			InputTokens:              max(last.Input, 0),
 			CachedInputTokens:        max(last.Cached, 0),
 			CacheCreationInputTokens: max(last.CacheWrite, 0),
 			OutputTokens:             max(last.Output, 0),
-			ReasoningTokens:          max(last.Reasoning, 0),
+			Count:                    1,
 		})
+		r.totals.model(model).ReasoningTokens += max(last.Reasoning, 0)
 	}
+}
+
+// CodexThreadUsage is what a Codex thread and its sub-agents used, read from their rollouts under
+// the sessions folder of the Codex config directory (CODEX_HOME in getenv, else home/.codex): a
+// headless run's, whose stream gives only each turn's sum and no model. ok is false when the
+// thread has no rollout there or it holds no usage.
+func CodexThreadUsage(getenv func(string) string, home, cwd, thread string) (usage Usage, ok bool) {
+	thread = strings.TrimSpace(thread)
+	if thread == "" {
+		return Usage{}, false
+	}
+	backend := codexBackend{}
+	path, err := backend.findTranscript(backend.transcriptRoot(getenv, home, cwd), thread)
+	if err != nil || path == "" {
+		return Usage{}, false
+	}
+	reader := &codexUsage{}
+	reader.read(path)
+	usage = reader.take()
+	return usage, len(usage.Models) > 0
 }
 
 // baselineUsage starts a reader at the end of what a reopened session's files already hold: those

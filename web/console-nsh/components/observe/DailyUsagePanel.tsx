@@ -5,10 +5,9 @@
 // hovered day; pressing a legend entry shows only that model.
 //
 // When the range has coder runs (Codex, Claude Code) and the agent reports the usage by source,
-// the agent's own calls are drawn above the base line and the coder's below it, on one scale and
-// in the same colours: a day stays one column at every range. The plot piles a stack's signed
-// values on one running end, so an unpainted bar between the two halves takes it back to the base
-// (PORTING.md).
+// each day is two bars side by side on one scale: the agent's own calls at the left, the coder's
+// at the right in a lighter tone of the same colours. Each is a stack of its own; the plot stands
+// stacks side by side in a band.
 import { batch, cleanup, computed, effect, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Bar, Grid, Plot, PlotAxis } from "nsh/base/plot";
 import { endpointState, runtimeApiFetch } from "../../lib/core/context.js";
@@ -40,17 +39,20 @@ const CACHE_PART_KEYS: Record<string, string> = {
 // The series' colors, by segment: model slots 1 to 4, Other, and the cache split. Each has the
 // fill class its bar paints with, the background class of its swatch, and the same colour as a
 // theme token and the share of it (`tone`), which today's hatch is drawn in.
-const SERIES: Record<string, { fill: string; swatch: string; tone: [Parameters<typeof token>[0], number] }> = {
-  s0: { fill: "fill-chart-1", swatch: "bg-chart-1", tone: ["chart-1", 100] },
-  s1: { fill: "fill-chart-2", swatch: "bg-chart-2", tone: ["chart-2", 100] },
-  s2: { fill: "fill-chart-3", swatch: "bg-chart-3", tone: ["chart-3", 100] },
-  s3: { fill: "fill-chart-4", swatch: "bg-chart-4", tone: ["chart-4", 100] },
-  other: { fill: "fill-muted-foreground/40", swatch: "bg-muted-foreground/40", tone: ["muted-foreground", 40] },
+// `coderFill` is the coder's bar of the same series: the colour at half its share.
+const SERIES: Record<string, { fill: string; coderFill: string; swatch: string; tone: [Parameters<typeof token>[0], number] }> = {
+  s0: { fill: "fill-chart-1", coderFill: "fill-chart-1/50", swatch: "bg-chart-1", tone: ["chart-1", 100] },
+  s1: { fill: "fill-chart-2", coderFill: "fill-chart-2/50", swatch: "bg-chart-2", tone: ["chart-2", 100] },
+  s2: { fill: "fill-chart-3", coderFill: "fill-chart-3/50", swatch: "bg-chart-3", tone: ["chart-3", 100] },
+  s3: { fill: "fill-chart-4", coderFill: "fill-chart-4/50", swatch: "bg-chart-4", tone: ["chart-4", 100] },
+  other: { fill: "fill-muted-foreground/40", coderFill: "fill-muted-foreground/20", swatch: "bg-muted-foreground/40", tone: ["muted-foreground", 40] },
   // Cache split: one hue (Vue's --stats-accent), darkest for what the cache served.
-  hits: { fill: "fill-ink", swatch: "bg-ink", tone: ["ink", 100] },
-  writes: { fill: "fill-ink/50", swatch: "bg-ink/50", tone: ["ink", 50] },
-  uncached: { fill: "fill-ink/20", swatch: "bg-ink/20", tone: ["ink", 20] },
+  hits: { fill: "fill-ink", coderFill: "fill-ink/50", swatch: "bg-ink", tone: ["ink", 100] },
+  writes: { fill: "fill-ink/50", coderFill: "fill-ink/25", swatch: "bg-ink/50", tone: ["ink", 50] },
+  uncached: { fill: "fill-ink/20", coderFill: "fill-ink/10", swatch: "bg-ink/20", tone: ["ink", 20] },
 };
+// The coder's bar is its series' colour at this share of the agent's.
+const CODER_TONE = 0.5;
 const STACK_FIELDS = ["s0", "s1", "s2", "s3", "other", "hits", "writes", "uncached"] as const;
 // Today is still filling up, so its segments are hatched instead of solid (Vue
 // .stats-daily-bar.is-today .stats-daily-segment): a 1px ring inside each segment in its colour,
@@ -58,14 +60,13 @@ const STACK_FIELDS = ["s0", "s1", "s2", "s3", "other", "hits", "writes", "uncach
 // value (the series itself then has none that day), stacked right after it, whose bar is painted
 // by its background part: the ring as four 1px edge gradients, then the stripes.
 const TODAY_SUFFIX = ":today";
-// The coder's half of a day: the same fields, drawn below the base line.
+// The coder's bar of a day: the same fields, in a stack of its own beside the agent's.
 const CODER_PREFIX = "coder:";
-// The unpainted bar that takes the stack from the top of the agent's half back to the base.
-const RETURN_FIELD = "return";
 type Source = "agent" | "coder";
 const SOURCE_KEYS: Record<Source, string> = { agent: "stats_daily_source_agent", coder: "stats_daily_source_coder" };
-const todayHatch = (field: string) => {
-  const [name, share] = SERIES[field].tone;
+const todayHatch = (field: string, tone = 1) => {
+  const [name, full] = SERIES[field].tone;
+  const share = full * tone;
   const c = share === 100 ? String(token(name)) : `color-mix(in srgb, ${token(name)} ${share}%, transparent)`;
   const edge = (side: string) => `linear-gradient(to ${side}, ${c} 0 1px, transparent 1px)`;
   return [edge("right"), edge("left"), edge("bottom"), edge("top"), `repeating-linear-gradient(135deg, ${c} 0 2px, transparent 2px 5px)`].join(", ");
@@ -134,9 +135,7 @@ export function DailyUsagePanel() {
   const exactCost = (value: unknown) => exactCostText(value, series().currency);
   const metricValue = (value: unknown) => (series().metric === "cost" ? cost(value) : compactNumber(value));
   const metricExact = (value: unknown) => (series().metric === "cost" ? exactCost(value) : exactNumber(value));
-  const axisValue = (signed: number) => {
-    // The coder's half reads as the agent's does: no minus signs.
-    const value = Math.abs(signed);
+  const axisValue = (value: number) => {
     if (series().metric !== "cost") return compactNumber(value);
     if (value === 0) return "0";
     const currency = series().currency === "MIXED" ? "USD" : series().currency;
@@ -171,8 +170,7 @@ export function DailyUsagePanel() {
         row[CODER_PREFIX + field + TODAY_SUFFIX] = null;
       }
       for (const segment of day.sources.agent.segments as Segment[]) row[seriesField(segment) + suffix] = segment.value;
-      row[RETURN_FIELD] = day.sources.agent.value > 0 ? -day.sources.agent.value : null;
-      for (const segment of day.sources.coder.segments as Segment[]) row[CODER_PREFIX + seriesField(segment) + suffix] = -segment.value;
+      for (const segment of day.sources.coder.segments as Segment[]) row[CODER_PREFIX + seriesField(segment) + suffix] = segment.value;
       return row;
     }),
   );
@@ -186,15 +184,12 @@ export function DailyUsagePanel() {
     if (split() || isCache() || !hasRequests() || average <= 0 || max <= 0) return null;
     return average;
   };
-  // Each half has its own average line, the average of its own source.
-  const sourceAverageLines = () => {
+  // Each source has its own average line, the coder's lighter as its bars are.
+  const sourceAverageLine = (source: Source) => {
     const { scaleMax: max } = series();
     const sources = series().sources as Record<Source, { average: number }> | null;
-    if (!sources || isCache() || max <= 0) return [];
-    const lines: number[] = [];
-    if (sources.agent.average > 0) lines.push(sources.agent.average);
-    if (sources.coder.average > 0) lines.push(-sources.coder.average);
-    return lines;
+    if (!sources || isCache() || max <= 0 || sources[source].average <= 0) return null;
+    return sources[source].average;
   };
   const sourceName = (source: Source) => t(SOURCE_KEYS[source]);
 
@@ -572,7 +567,7 @@ export function DailyUsagePanel() {
         <Plot
           data={rows()}
           xScale={{ type: "band", paddingInner: series().days.length > 31 ? 0.15 : 0.38, paddingOuter: 0.19 }}
-          yScale={{ type: "linear", domain: [split() ? -scaleMax() : 0, scaleMax()] }}
+          yScale={{ type: "linear", domain: [0, scaleMax()] }}
           accessibilityLabel={`${t("stats_daily_title")}: ${t(METRIC_TITLE_KEYS[metric()])}`}
           accessibilityValue={{ text: focusedDay() ? barLabel(focusedDay()) : "" }}
           appearGeneration={`${generation()}:${metric()}`}
@@ -620,26 +615,25 @@ export function DailyUsagePanel() {
           }
           onHoverChange={({ index }) => hovered.set(index)}
           class="mb-4.75 ml-13.5"
-          style={{ height: split() ? (phone() ? 210 : 260) : phone() ? 150 : 184 }}
+          style={{ height: phone() ? 150 : 184 }}
           testID="stats-daily-plot"
         >
           {/* A dashed rule at each tick above the base (Vue draws them from the same ticks). */}
           <Grid y={(series().ticks as number[]).filter((value) => value !== 0)} class="stroke-line-soft" style={{ strokeDasharray: "3 3" }} />
 
           <Grid y={[0]} class="stroke-line" />
-          {/* One list, so the bars join the stack in this order: the agent's half upward, the
-              unpainted bar back to the base, then the coder's half downward. Without coder runs
-              the last two have no values and draw nothing. */}
-          {[
-            ...stackBars(""),
-            <Bar value={(row: Record<string, number | string | null>) => row[RETURN_FIELD] as number} stack="day" class="fill-transparent" />,
-            ...stackBars(CODER_PREFIX),
-          ]}
+          {/* The agent's stack, and beside it the coder's when the two are drawn apart (a stack
+              without values would still take its place in the band). */}
+          {stackBars("agent")}
+          <If when={split()}>{stackBars("coder")}</If>
           <If when={averageLine() !== null}>
             <Grid y={[averageLine() ?? 0]} class="stroke-foreground/45" style={{ strokeDasharray: "3 3" }} />
           </If>
-          <If when={sourceAverageLines().length > 0}>
-            <Grid y={sourceAverageLines()} class="stroke-foreground/45" style={{ strokeDasharray: "3 3" }} />
+          <If when={sourceAverageLine("agent") !== null}>
+            <Grid y={[sourceAverageLine("agent") ?? 0]} class="stroke-foreground/45" style={{ strokeDasharray: "3 3" }} />
+          </If>
+          <If when={sourceAverageLine("coder") !== null}>
+            <Grid y={[sourceAverageLine("coder") ?? 0]} class="stroke-foreground/25" style={{ strokeDasharray: "3 3" }} />
           </If>
           <PlotAxis
             placement="left"
@@ -653,15 +647,6 @@ export function DailyUsagePanel() {
             labelClass="pt-1.5 font-mono text-[11px] leading-[13.2px] tabular-nums text-subtle"
           />
         </Plot>
-        {/* Which half is whose, at the two ends of the value axis. */}
-        <If when={split()}>
-          <Text class={`absolute left-0 w-11 text-right ${AXIS_END}`} style={{ top: 13, pointerEvents: "none" }} testID="stats-daily-axis-agent">
-            {sourceName("agent")}
-          </Text>
-          <Text class={`absolute left-0 w-11 text-right ${AXIS_END}`} style={{ bottom: 32, pointerEvents: "none" }} testID="stats-daily-axis-coder">
-            {sourceName("coder")}
-          </Text>
-        </If>
         <If when={emptyMessage()}>
           <View class="absolute inset-0 items-center justify-center px-6" style={{ pointerEvents: "none" }}>
             <Text class={`text-center ${MONO} uppercase tracking-[0.12em] text-subtle`}>{emptyMessage()}</Text>
@@ -690,6 +675,17 @@ export function DailyUsagePanel() {
               </TipButton>
             )}
           </Each>
+          {/* Which bar of a day is whose: the agent's in full tone, the coder's lighter. */}
+          <If when={split()}>
+            <View class="min-h-6.5 flex-row items-center gap-1.75 px-2 py-0.5" testID="stats-daily-key-agent">
+              <View class="size-2 bg-foreground" />
+              <Text class={`${MONO} uppercase tracking-[0.12em] text-subtle`}>{sourceName("agent")}</Text>
+            </View>
+            <View class="min-h-6.5 flex-row items-center gap-1.75 px-2 py-0.5" testID="stats-daily-key-coder">
+              <View class="size-2 bg-foreground/50" />
+              <Text class={`${MONO} uppercase tracking-[0.12em] text-subtle`}>{sourceName("coder")}</Text>
+            </View>
+          </If>
         </View>
       </If>
 
@@ -703,7 +699,7 @@ export function DailyUsagePanel() {
                   <View class={`flex-1 gap-0.75 pt-2.5 ${index() > 0 ? "border-l border-dashed border-line-soft px-3" : "pr-3"}`}>
                     <View class="flex-row items-center">
                       <If when={item().key === "avg" || item().key.endsWith("-avg")}>
-                        <View class="mr-1.5 w-3.5 border-t border-dashed border-foreground/55" />
+                        <View class={`mr-1.5 w-3.5 border-t border-dashed ${item().key === "coder-avg" ? "border-foreground/30" : "border-foreground/55"}`} />
                       </If>
                       <Text class={`${MONO} uppercase tracking-[0.12em] text-subtle line-clamp-1`}>{item().label}</Text>
                     </View>
@@ -727,25 +723,25 @@ export function DailyUsagePanel() {
 
 // Vue's .stats-daily-key/.stats-daily-value face: mono label size.
 const MONO = "font-mono text-[11px] leading-[15.4px] tabular-nums";
-// The source names at the ends of the value axis: smaller than its tick labels, in caps.
-const AXIS_END = "font-mono text-[9px] leading-[11px] uppercase tracking-[0.1em] text-subtle";
 
-// A bar per series, and its hatched twin for today, for one half of the stack.
-function stackBars(prefix: string) {
+// A bar per series, and its hatched twin for today, for one source's stack.
+function stackBars(source: Source) {
+  const coder = source === "coder";
+  const prefix = coder ? CODER_PREFIX : "";
   return STACK_FIELDS.flatMap((field) => [
     <Bar
       value={(row: Record<string, number | string | null>) => row[prefix + field] as number}
-      stack="day"
+      stack={source}
       stagger={0.5}
       inactiveOpacity={0.55}
-      class={SERIES[field].fill}
+      class={coder ? SERIES[field].coderFill : SERIES[field].fill}
     />,
     <Bar
       value={(row: Record<string, number | string | null>) => row[prefix + field + TODAY_SUFFIX] as number}
-      stack="day"
+      stack={source}
       stagger={0.5}
       inactiveOpacity={0.55}
-      backgroundStyle={{ backgroundImage: todayHatch(field) }}
+      backgroundStyle={{ backgroundImage: todayHatch(field, coder ? CODER_TONE : 1) }}
     />,
   ]);
 }

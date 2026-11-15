@@ -138,15 +138,62 @@ func TestClaudeUsageReplacesAResponseWithinATask(t *testing.T) {
 	}
 }
 
-// Codex's rollouts name no model and its rows have no list price: its usage stays a sum.
-func TestCodexUsageHasNoResponses(t *testing.T) {
+// A Codex rollout names the model at the start of each turn (turn_context); its responses are kept
+// one by one under it, as a list price goes by the single request. The model can change between
+// turns, and a response before any turn_context is recorded under "codex".
+func TestCodexUsageKeepsResponsesUnderTheTurnsModel(t *testing.T) {
+	const context = `{"timestamp":"2026-11-14T09:59:59Z","type":"turn_context","payload":{"turn_id":"t1","cwd":"/work","model":%q,"effort":"medium"}}` + "\n"
+	const response = `{"timestamp":"2026-11-14T10:02:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%d,"output_tokens":90},"last_token_usage":{"input_tokens":%d,"output_tokens":7}}}}` + "\n"
 	root := t.TempDir()
 	path := codexUsagePath(root, codexUsageParent)
-	writeUsageFile(t, path, codexUsageRollout)
+	writeUsageFile(t, path, fmt.Sprintf(context, "gpt-6.1-sol")+codexUsageRollout+
+		fmt.Sprintf(context, "gpt-6.1-terra")+fmt.Sprintf(response, 3300, 300))
 	r := codexBackend{}.newUsage()
 	r.read(path)
 	got := r.take()
-	if len(got.Models) != 1 || got.Models[0].Responses != nil || got.Models[0].CacheCreation != nil {
-		t.Fatalf("usage = %+v", got)
+	want := Usage{Turns: 1, Models: []ModelUsage{
+		{
+			Model: "gpt-6.1-sol", InputTokens: 3000, CachedInputTokens: 1600, CacheCreationInputTokens: 100, OutputTokens: 80, ReasoningTokens: 20,
+			Responses: []ResponseUsage{
+				{InputTokens: 1000, CachedInputTokens: 600, CacheCreationInputTokens: 100, OutputTokens: 50, Count: 1},
+				{InputTokens: 2000, CachedInputTokens: 1000, OutputTokens: 30, Count: 1},
+			},
+		},
+		{Model: "gpt-6.1-terra", InputTokens: 300, OutputTokens: 7, Responses: []ResponseUsage{{InputTokens: 300, OutputTokens: 7, Count: 1}}},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("usage = %+v\nwant   %+v", got, want)
+	}
+
+	// Without a turn_context the model is not known.
+	bare := codexUsagePath(root, "44444444-4444-4444-8444-444444444444")
+	writeUsageFile(t, bare, fmt.Sprintf(response, 300, 300))
+	r = codexBackend{}.newUsage()
+	r.read(bare)
+	if got := r.take(); len(got.Models) != 1 || got.Models[0].Model != "codex" || got.Models[0].InputTokens != 300 {
+		t.Fatalf("usage without a model = %+v", got)
+	}
+}
+
+// A headless run's thread is read from its rollout under the Codex config directory's sessions.
+func TestCodexThreadUsage(t *testing.T) {
+	home := t.TempDir()
+	env := func(string) string { return "" }
+	if _, ok := CodexThreadUsage(env, home, home, codexUsageParent); ok {
+		t.Fatal("usage of a thread without a rollout")
+	}
+	path := codexUsagePath(filepath.Join(home, ".codex", "sessions"), codexUsageParent)
+	writeUsageFile(t, path, `{"type":"turn_context","payload":{"model":"gpt-6.1-sol"}}`+"\n"+codexUsageRollout)
+	got, ok := CodexThreadUsage(env, home, home, codexUsageParent)
+	if !ok || len(got.Models) != 1 || got.Models[0].Model != "gpt-6.1-sol" || got.Models[0].InputTokens != 3000 || len(got.Models[0].Responses) != 2 || got.Turns != 1 {
+		t.Fatalf("usage = %+v, %v", got, ok)
+	}
+	// CODEX_HOME moves it.
+	other := t.TempDir()
+	if _, ok := CodexThreadUsage(func(key string) string { return map[string]string{"CODEX_HOME": other}[key] }, home, home, codexUsageParent); ok {
+		t.Fatal("usage read outside CODEX_HOME")
+	}
+	if _, ok := CodexThreadUsage(env, home, home, " "); ok {
+		t.Fatal("usage of no thread")
 	}
 }

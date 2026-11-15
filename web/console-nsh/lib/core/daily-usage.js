@@ -1,7 +1,7 @@
 // Shapes a /stats/llm/daily response into what the Stats page's daily chart draws: one stacked
 // bar per day for the chosen metric, a rounded axis, a legend and the range figures. When the
 // response splits the usage by source (`sources`) and the range has coder runs, each day also has
-// its two halves: the agent's own calls, drawn above the base line, and the coder's, below it.
+// its two sources: the agent's own calls and the coder's, drawn as two bars side by side.
 import { cacheCostDelta, cacheRate } from "./cache-cost.js";
 
 export const DAILY_RANGES = [7, 30, 90];
@@ -176,7 +176,7 @@ function rangeFigures(days, valueOf) {
   return { total, average: days.length > 0 ? total / days.length : 0, peak, today };
 }
 
-// One source's half of a day: its totals row with its models.
+// One source's bar of a day: its totals row with its models.
 function sourceHalf(day, source, key, slots, isolate) {
   const entry = object(object(day?.sources)[source]);
   const row = { ...object(entry.totals), models: Array.isArray(entry.models) ? entry.models : [] };
@@ -242,7 +242,7 @@ export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
   });
 
   const { total, average, peak, today } = rangeFigures(days, (day) => day.value);
-  // Both halves are on one scale, so a day's coder use reads against its agent use.
+  // Both bars are on one scale, so a day's coder use reads against its agent use.
   let sources = null;
   let highest = peak ? peak.value : 0;
   if (split) {
@@ -272,7 +272,7 @@ export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
     });
   }
 
-  // One legend for both halves: a model is one colour above and below the base line.
+  // One legend for both sources: a model is one hue in the agent's bar and the coder's.
   let legend;
   if (key === "cache") {
     legend = CACHE_PARTS.map((part) => ({ key: part, slot: null, value: rangeCache[part] }));
@@ -280,11 +280,7 @@ export function summarizeDailyUsage(payload, metric = "cost", options = {}) {
     legend = modelSegments({ ...summary, models: payload?.models }, key, slots);
   }
 
-  let ticks = scaleMax > 0 ? [scaleMax, scaleMax / 2, 0] : [0];
-  if (split && scaleMax > 0) {
-    // The coder's half mirrors the agent's below the base line.
-    ticks = [scaleMax, scaleMax / 2, 0, -scaleMax / 2, -scaleMax];
-  }
+  const ticks = scaleMax > 0 ? [scaleMax, scaleMax / 2, 0] : [0];
 
   return {
     metric: key,

@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/quailyquaily/mistermorph/internal/coderterm"
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
@@ -605,6 +606,9 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	signIn := needsSignIn.Load() || (req.Backend == coderBackendAgy && coderusage.IsAgyAuthError(collector.Error()))
 	if req.Report != nil {
 		run := collector.Run()
+		if req.Backend == coderBackendCodex {
+			run = codexSessionRun(run, collector.codexThread, env, spec.Dir)
+		}
 		run.Backend = req.Backend
 		run.DurationMs = time.Since(started).Milliseconds()
 		run.NotSignedIn = signIn
@@ -758,6 +762,9 @@ type coderStreamCollector struct {
 	// run is what the run used, as its events said; quota the subscription quota it reported.
 	run   coderusage.Run
 	quota *coderusage.Quota
+	// codexThread is the Codex run's thread, whose rollout names the model and tells the
+	// responses apart.
+	codexThread string
 	// agy is what the Antigravity CLI's stream needs kept.
 	agy agyStreamState
 }
@@ -959,6 +966,7 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 		switch typ {
 		case "thread.started":
 			c.step = coderStepStarting
+			c.codexThread = strings.TrimSpace(stringField(payload, "thread_id"))
 		case "turn.started":
 			c.step = coderStepThinking
 		case "turn.completed":
@@ -1015,6 +1023,68 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 	if errText := firstNonEmptyString(stringField(payload, "error"), stringField(payload, "message")); errText != "" && strings.Contains(strings.ToLower(typ), "error") {
 		c.errText = errText
 	}
+}
+
+// codexSessionRun is a Codex run's usage as its thread's rollout has it: under the model's own
+// name and response by response, which the pricing catalog needs (a list price goes by the single
+// request), and with its sub-agents' threads. The stream gives only each turn's sum and no model;
+// that stays the run's usage (model "codex", no price) when the rollout cannot be read, as for a
+// run that keeps no session. env is the CLI's environment, nil for this process's.
+func codexSessionRun(run coderusage.Run, thread string, env []string, cwd string) coderusage.Run {
+	getenv := os.Getenv
+	if env != nil {
+		getenv = func(key string) string {
+			value := ""
+			for _, entry := range env {
+				if name, v, ok := strings.Cut(entry, "="); ok && name == key {
+					value = v // the last one wins, as for the process
+				}
+			}
+			return value
+		}
+	}
+	home := getenv("HOME")
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	usage, ok := coderterm.CodexThreadUsage(getenv, home, cwd, thread)
+	if !ok {
+		return run
+	}
+	run.Models = CoderModelsFromSessionUsage(usage)
+	if run.Turns == 0 {
+		run.Turns = usage.Turns
+	}
+	return run
+}
+
+// CoderModelsFromSessionUsage turns what a CLI's session files recorded into a run's models. The
+// responses go along one by one: the rows are priced by them, not by their sum.
+func CoderModelsFromSessionUsage(usage coderterm.Usage) []coderusage.ModelUsage {
+	var models []coderusage.ModelUsage
+	for _, m := range usage.Models {
+		model := coderusage.ModelUsage{
+			Model:                    m.Model,
+			InputTokens:              m.InputTokens,
+			CachedInputTokens:        m.CachedInputTokens,
+			CacheCreationInputTokens: m.CacheCreationInputTokens,
+			OutputTokens:             m.OutputTokens,
+			ReasoningTokens:          m.ReasoningTokens,
+			CacheDetails:             m.CacheCreation,
+		}
+		for _, response := range m.Responses {
+			model.Requests = append(model.Requests, coderusage.RequestUsage{
+				InputTokens:              response.InputTokens,
+				CachedInputTokens:        response.CachedInputTokens,
+				CacheCreationInputTokens: response.CacheCreationInputTokens,
+				OutputTokens:             response.OutputTokens,
+				CacheDetails:             response.CacheCreation,
+				Count:                    response.Count,
+			})
+		}
+		models = append(models, model)
+	}
+	return models
 }
 
 // addCodexTurn adds a Codex turn's usage to the run's: one model, the turns summed.

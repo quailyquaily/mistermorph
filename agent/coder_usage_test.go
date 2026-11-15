@@ -3,7 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -115,6 +118,70 @@ func TestCoderToolReadsCodexQuotaAfterACodexRun(t *testing.T) {
 	}
 	if len(readWith) != 1 || readWith[0] != binDir {
 		t.Fatalf("read with %q", readWith)
+	}
+}
+
+// A headless Codex run's stream gives each turn's sum and no model; its thread's rollout names the
+// model and tells the responses apart, so the row is the model's and is priced from the catalog.
+func TestCoderToolRecordsACodexRunUnderItsModelFromTheRollout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
+	const thread = "01a1d984-e368-7ad2-85e6-6ff5b9eaefb4"
+	rollout := filepath.Join(home, ".codex", "sessions", "2026", "11", "14", "rollout-2026-11-14T19-05-27-"+thread+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(rollout), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Two responses of 200,000 input tokens each: apart they are below gpt-6.1-sol's 272,000 token
+	// tier, summed they would be priced above it.
+	response := func(total, last int) string {
+		return fmt.Sprintf(`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%d,"cached_input_tokens":0,"output_tokens":%d},"last_token_usage":{"input_tokens":%d,"cached_input_tokens":0,"output_tokens":1000}}}}`+"\n", total, total/200, last)
+	}
+	if err := os.WriteFile(rollout, []byte(`{"type":"turn_context","payload":{"model":"gpt-6.1-sol","effort":"medium"}}`+"\n"+
+		response(200_000, 200_000)+response(400_000, 200_000)+
+		`{"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	binDir := t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "codex", "cat >/dev/null\nprintf '%s\\n' '{\"type\":\"thread.started\",\"thread_id\":\""+thread+"\"}' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"ok\"}}' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":400000,\"cached_input_tokens\":0,\"output_tokens\":2000}}'\n")
+	usagePath := filepath.Join(t.TempDir(), "usage.db")
+	recorder := coderusage.NewRecorder(usagePath, nil)
+	tool := newCoderTool(coderToolDeps{
+		Runner: &execDirectSubtaskRunner{},
+		RunCLI: runCoderCLI,
+		Env:    shellenv.CoderEnv{PathExtra: []string{binDir}},
+		Usage:  func() *coderusage.Recorder { return recorder },
+		ReadCodexQuota: func(context.Context, shellenv.CoderEnv) (coderusage.Quota, error) {
+			return coderusage.Quota{}, errors.New("no quota")
+		},
+	})
+	ctx := context.Background()
+	raw, err := tool.Execute(ctx, map[string]any{"coder": "codex", "task": "check", "cwd": t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result SubtaskResult
+	_ = json.Unmarshal([]byte(raw), &result)
+	if !strings.Contains(result.Usage, "codex run: 400.0k in · 2.0k out · 1 turn") {
+		t.Fatalf("usage = %q", result.Usage)
+	}
+	store, err := llmstats.OpenUsageStore(ctx, usagePath, llmstats.UsageStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	records, err := store.Records(ctx, 10)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records = %+v, %v", records, err)
+	}
+	// $2.00 a million input tokens and $10.00 a million output tokens, each response on its own.
+	wantCost := 2 * (200_000*2.00 + 1000*10.00) / 1e6
+	if rec := records[0]; rec.APIHost != "codex-cli" || rec.Model != "gpt-6.1-sol" || rec.InputTokens != 400_000 || rec.OutputTokens != 2000 ||
+		len(rec.PricingParts) != 2 || !rec.CostEstimated || math.Abs(rec.TotalCost-wantCost) > 1e-9 {
+		t.Fatalf("record = %+v, want cost %v", rec, wantCost)
 	}
 }
 
