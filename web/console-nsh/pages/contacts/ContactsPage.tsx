@@ -705,8 +705,10 @@ export function ContactsPage(props: {
 
   let list: ListRef | undefined;
   const scrollY = signal(0);
-  // Where the library and the open contact are scrolled, across visits of the page.
-  const libraryMemory = useScrollMemory({ column: 2, area: "library", ready: () => !store.loading });
+  // Where the library and the open contact are scrolled, across visits of the page. The library's
+  // place belongs to the tab it was left on: the other tab is another list, and starts at its top
+  // (the page opens on people again, never where the agents were left).
+  const libraryMemory = useScrollMemory({ column: 2, area: "library", selection: () => kind(), ready: () => !store.loading });
   const contactMemory = useScrollMemory({ column: 3, area: "contact", selection: () => selectedContactID() });
   const viewHeight = signal(0);
   /** Scrolls card `index` into view when its row is out of it. */

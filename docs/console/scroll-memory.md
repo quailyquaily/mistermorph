@@ -19,6 +19,9 @@ it is wired, and what was checked.
   place and puts the column at its top, in the page or by the time it is back; only the last
   item's place is ever kept, never one per item. A page that finds its item after it opens (the
   identity is `""` at first) has the place wait for it.
+- **The Contacts library has two tabs**, people and agents, and the page opens on people each
+  time: the library's place is saved with its tab (as a `selection`). The other tab, in the page
+  or on the way back, starts at the top and the old place is forgotten.
 - **Restoring** applies the offset without animation when the scroller is made, and again on a
   short schedule (about five seconds in all) while the content does not reach it yet: a scroller
   clamps an offset past its content's end, and a `Scroll` reports its content's size only as it
@@ -41,7 +44,7 @@ it is wired, and what was checked.
 | Page | Column 2 | Column 3 (its item) |
 | --- | --- | --- |
 | Topics (chat) | the topic list | the conversation (the topic) |
-| Contacts | the library | the open contact, panel or phone pane (the contact) |
+| Contacts | the library (of the tab it was left on) | the open contact, panel or phone pane (the contact) |
 | TODO | the list, the calendar | the editor (the task, heartbeat or day) |
 | Memories | the index | the main column (the subject or the journal) |
 | Skills | the index | the open skill (the skill) |
@@ -74,6 +77,7 @@ the skill store).
   Contacts (lists and the conversation's message), a conversation left at its end, another topic,
   a settings section and another section, the phone's bottom navigation, and no storage, host call
   or request from scrolling.
+- `tests/scroll-memory-contact-tabs.test.tsx`: the Contacts library's place and its tabs.
 - Chrome (headless, the built web Console with stubbed API), 1280×800 with a mouse and 390×844
   with touch: the topic list, the Contacts library and the conversation's message came back at
   the same pixel from the first sample after the navigation and stayed there through the phone's
