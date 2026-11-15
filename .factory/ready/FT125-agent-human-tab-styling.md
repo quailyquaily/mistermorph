@@ -36,3 +36,13 @@ Checks: nsh check passed. Required full Console runner: 118 files, zero failures
 Visual inspection: coder checked a throwaway component showcase in headless Chrome (desktop/phone, both selections, keyboard focus and ArrowRight). Not checked: full Contacts page in a running Console, real phone/Android, desktop app or dark scheme. Headless geometry cannot directly read icon tint or rendered hairline; constants and computed dip position provide regression assertions.
 
 Push credential helper initially required a repository path; retry with command-local credential.useHttpPath=true succeeded. No persistent credential configuration changed.
+
+
+## factory · review · 2026-11-15 11:52
+head: 473471449bbf98dee0d88ec45eed6c3c1803ad09
+verdict: pass
+notes:
+- Claude Code reviewed all four changed files against origin/master, the request and plan; no findings. Selection/filtering, native keyboard semantics, active dip alignment, mobile/desktop geometry and touch targets remain intact.
+- Configured gofmt/vet/Go tests passed. Console nsh check passed; required parallel Console runner passed 118 files with zero failures after its isolated retry of chat-attachments.test.tsx. All seven contacts test files passed. Scripted tests used an absolute throwaway HOME.
+- No unpinned installs or manifest changes. Worktree remained clean; reviewed branch head was checked against origin before recording.
+- No new visual inspection: rendered tint/hairline/focus and dark scheme were not checked. Real Contacts page on Android and desktop app not exercised. Owner should inspect tab appearance, especially alongside the scrolled column border. Existing parallel chat-attachments test flake remains.
