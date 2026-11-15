@@ -20,3 +20,10 @@ Implementation: Claude Code only; do not use Codex.
 
 ## factory · 2026-11-11 20:33
 Cannot build under the current factory configuration: upgrading CI actions requires changes under `.github/workflows/`, which is explicitly forbidden by `never`. Moved to backlog pending an owner configuration change or separately authorized work outside this factory. No workflow or configuration changes made.
+
+## factory · 2026-11-15 20:33
+Moved to done at the owner's request. The owner had the change made outside the factory build, directly on master: commit 2d7ffea0 (`ci: move actions off the deprecated Node.js 20 runtime (FT94)`), pushed without a tag. No factory branch, review or ship merge.
+
+Upgraded: actions/checkout v4 → v5, actions/setup-go v5 → v6, actions/setup-node v4 → v6 (the composite action sets `package-manager-cache: false`), actions/upload-artifact v4 → v6, pnpm/action-setup v4 → v5, cloudflare/wrangler-action v3 → v4 (Wrangler stays pinned at 4.78.0), goreleaser/goreleaser-action v6 → v7. actions/setup-java v5 and Swatinem/rust-cache v2 already ran on Node.js 24.
+
+Checked remotely: the Deploy Docs run on 2d7ffea0 passed with no Node.js 20 warning (checkout, pnpm/action-setup, setup-node, wrangler-action). Not checked remotely: setup-go, upload-artifact, goreleaser-action and the composite action, whose workflows (go-fmt, build, release, Windows signing) that push did not start.
