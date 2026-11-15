@@ -513,3 +513,64 @@ func TestMissingRequestedWrites(t *testing.T) {
 		})
 	}
 }
+
+// A file named without an extension is still a file the run has to write.
+func TestFileWriteGuardEnforcesExtensionlessFiles(t *testing.T) {
+	cases := []struct {
+		name  string
+		task  string
+		write string
+	}{
+		{name: "backticked Makefile", task: "Draft the build and write to `Makefile`.", write: "Makefile"},
+		{name: "bare LICENSE", task: "Pick a license and save it to LICENSE", write: "LICENSE"},
+		{name: "dot relative path", task: "Render it and output to ./build/output", write: "build/output"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, client, writer, _ := writeGuardEngine(t, true, manyFinals(
+				finalResponse("early"),
+				writeCall(tc.write),
+			)...)
+			final, _, err := engine.Run(context.Background(), tc.task, RunOptions{})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			calls := client.allCalls()
+			if final == nil || final.Output != "done 0" || len(calls) != 3 || reminderCount(calls) != 1 || len(writer.paths) != 1 {
+				t.Fatalf("final = %#v, llm calls = %d, reminders = %d, writes = %q", final, len(calls), reminderCount(calls), writer.paths)
+			}
+		})
+	}
+
+	t.Run("never written", func(t *testing.T) {
+		engine, client, _, _ := writeGuardEngine(t, true, manyFinals()...)
+		missing := filepath.Join(t.TempDir(), "out")
+		_, _, err := engine.Run(context.Background(), "Save it to "+missing, RunOptions{})
+		unsat := unsatisfied(t, err)
+		if !slices.Equal(missingPaths(unsat), []string{missing}) || len(client.allCalls()) != 1+maxFileWriteNoProgress {
+			t.Fatalf("missing = %q, llm calls = %d", missingPaths(unsat), len(client.allCalls()))
+		}
+	})
+}
+
+// An extensionless path that is a directory, or is called one, asks for nothing.
+func TestFileWriteGuardExtensionlessDirectoryCompletes(t *testing.T) {
+	dir := t.TempDir()
+	for _, task := range []string{
+		"Save it to " + dir,
+		"Write the notes and save it to `build` folder",
+		"Save it to ./build/output directory",
+		"Write it down and save it to disk",
+	} {
+		t.Run(task, func(t *testing.T) {
+			engine, client, _, _ := writeGuardEngine(t, true, manyFinals()...)
+			final, _, err := engine.Run(context.Background(), task, RunOptions{})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if calls := client.allCalls(); final == nil || len(calls) != 1 || reminderCount(calls) != 0 {
+				t.Fatalf("final = %#v, llm calls = %d, reminders = %d", final, len(calls), reminderCount(calls))
+			}
+		})
+	}
+}
