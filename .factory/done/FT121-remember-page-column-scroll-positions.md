@@ -45,3 +45,9 @@ notes:
 - Installs: no unpinned installs; only the pinned nsh check toolchain cache was restored.
 - Residual risks: no new browser/device run; native desktop, physical Android, Safari and Firefox unverified. Silent browser resets rely on the build's prior Chrome inspection. Slow content beyond the bounded retry window without ready gating and anchors in unloaded older conversation history do not retain their place. Audit offsets are file-keyed rather than cursor-page-keyed; paging was not exercised. TODO, Memories, Skills, Usage and Audit integration was inspected but not page-tested.
 - No linked GitHub issue or PR in the item; no review comments required. Moved review/ → ready/; owner should inspect the documented restoration limits and device behavior before shipping.
+
+
+## factory · 2026-11-15 13:02
+Shipped to master with Claude Code. Merge commit: 424520c6496953a795209685869155057d3ea5fa. Final tested and pushed head: 239920e552855bfff298c2580f914ed5d7cd17ed. No tag created or pushed, per owner instruction.
+Final validation: gofmt cleanliness, go vet ./... and go test ./... passed (163 packages); nsh check passed; required Console scripts/test.sh passed (122 files, 1065 tests, zero failures after chat-attachments isolated retry); extra Node tests 274/274. No unpinned installs.
+Existing review P2/P3 notes remain unchanged. Combined glass/scroll-memory and popup UI not visually checked; no browser/device or platform build performed during ship. No linked GitHub issues or PRs to close. Branch retained (clean action not configured). Moved ready/ → done/.

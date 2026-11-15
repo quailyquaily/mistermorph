@@ -109,3 +109,10 @@ notes:
 Validation: Claude Code reviewed origin/master...HEAD (27 changed files). Configured gofmt/vet/go test command passed; nsh check passed; Console scripts/test.sh passed (118 files, 0 failed, 192s). Headless probes covered date geometry, menu/dialog nesting and keyboard selection/dismissal. Manager confirmed clean worktree, exact reviewed head and git diff --check. No installations or manifest changes; reused pinned caches. No P0/P1 found, so moved review/ -> ready/ under factory policy; P2/P3 remain for owner attention before shipping.
 
 Residual risks: no real Android/iOS device, emulator, actual software keyboard, screen reader or GPUI desktop checks. Focus containment/restoration not directly asserted. Native stacked-overlay hit testing, composer closing-keyboard timing, extreme landscape minimum-height overflow, trigger expanded-state and the mobile/desktop breakpoint interpretation remain unverified. Design inventory lists a nonexistent Topic rows command menu and should be corrected. No source issue/PR or owner-linked issue/PR in the item; no GitHub comment required.
+
+
+## factory · 2026-11-15 13:02
+Shipped to master with Claude Code. Merge commit: d8e9b5afe649bd656d090966aec364f2c1d3d08f. Final tested and pushed head: 239920e552855bfff298c2580f914ed5d7cd17ed. No tag created or pushed, per owner instruction.
+Final validation: gofmt cleanliness, go vet ./... and go test ./... passed (163 packages); nsh check passed; required Console scripts/test.sh passed (122 files, 1065 tests, zero failures after chat-attachments isolated retry); extra Node tests 274/274. No unpinned installs.
+Integration conflicts resolved preserving both feature intents: web/console-nsh/components/ui.tsx.
+Existing review P2/P3 notes remain unchanged. Combined glass/scroll-memory and popup UI not visually checked; no browser/device or platform build performed during ship. No linked GitHub issues or PRs to close. Branch retained (clean action not configured). Moved ready/ → done/.

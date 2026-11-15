@@ -46,3 +46,9 @@ notes:
 - Configured gofmt/vet/Go tests passed. Console nsh check passed; required parallel Console runner passed 118 files with zero failures after its isolated retry of chat-attachments.test.tsx. All seven contacts test files passed. Scripted tests used an absolute throwaway HOME.
 - No unpinned installs or manifest changes. Worktree remained clean; reviewed branch head was checked against origin before recording.
 - No new visual inspection: rendered tint/hairline/focus and dark scheme were not checked. Real Contacts page on Android and desktop app not exercised. Owner should inspect tab appearance, especially alongside the scrolled column border. Existing parallel chat-attachments test flake remains.
+
+
+## factory · 2026-11-15 13:02
+Shipped to master with Claude Code. Merge commit: 239920e552855bfff298c2580f914ed5d7cd17ed. Final tested and pushed head: 239920e552855bfff298c2580f914ed5d7cd17ed. No tag created or pushed, per owner instruction.
+Final validation: gofmt cleanliness, go vet ./... and go test ./... passed (163 packages); nsh check passed; required Console scripts/test.sh passed (122 files, 1065 tests, zero failures after chat-attachments isolated retry); extra Node tests 274/274. No unpinned installs.
+Existing review P2/P3 notes remain unchanged. Combined glass/scroll-memory and popup UI not visually checked; no browser/device or platform build performed during ship. No linked GitHub issues or PRs to close. Branch retained (clean action not configured). Moved ready/ → done/.

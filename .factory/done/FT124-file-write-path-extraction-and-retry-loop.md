@@ -66,3 +66,9 @@ Manager assessment: The reviewer's proposed fallback when no writing tool exists
 Residual risks: No live-model, real builtin writer, or Windows execution. Stat-only checks can inspect task-supplied paths; newly expanded home paths and checked absolute locations in diagnostics were not traced through chat error presentation. Pre-existing file satisfaction and max-step forced conclusions remain unchanged.
 
 Moved review/ → ready/. P2/P3 notes remain for owner consideration; not merged into master.
+
+
+## factory · 2026-11-15 13:02
+Shipped to master with Claude Code. Merge commit: 5b44339d20bf746c11911fcd3e153043abdd3246. Final tested and pushed head: 239920e552855bfff298c2580f914ed5d7cd17ed. No tag created or pushed, per owner instruction.
+Final validation: gofmt cleanliness, go vet ./... and go test ./... passed (163 packages); nsh check passed; required Console scripts/test.sh passed (122 files, 1065 tests, zero failures after chat-attachments isolated retry); extra Node tests 274/274. No unpinned installs.
+Existing review P2/P3 notes remain unchanged. Combined glass/scroll-memory and popup UI not visually checked; no browser/device or platform build performed during ship. No linked GitHub issues or PRs to close. Branch retained (clean action not configured). Moved ready/ → done/.

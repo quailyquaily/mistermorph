@@ -70,3 +70,10 @@ Validation (coder run, throwaway absolute HOME and TMPDIR):
 - Installs outside pinned dependencies reported: TypeScript 7.0.2 fetched by nsh check into throwaway HOME cache; no manifest changes.
 - Worktree verified clean at reviewed head; no code commits made. Branch merges cleanly with fetched master.
 - Visual browser inspection could not be completed: local headless page did not finish loading. Blur/tint/readability not independently visually checked. Android/iOS, native desktop and scrolling frame rate not checked. Focus traversal under the bar and scrollbar-thumb visibility remain unconfirmed, not findings.
+
+
+## factory · 2026-11-15 13:02
+Shipped to master with Claude Code. Merge commit: c35c40876c5bfcaf5a2bb6355c7f05801e370c6d. Final tested and pushed head: 239920e552855bfff298c2580f914ed5d7cd17ed. No tag created or pushed, per owner instruction.
+Final validation: gofmt cleanliness, go vet ./... and go test ./... passed (163 packages); nsh check passed; required Console scripts/test.sh passed (122 files, 1065 tests, zero failures after chat-attachments isolated retry); extra Node tests 274/274. No unpinned installs.
+Integration conflicts resolved preserving both feature intents: web/console-nsh/components/knowledge/parts.tsx, web/console-nsh/components/todo/TodoIndex.tsx, web/console-nsh/components/ui.tsx, web/console-nsh/pages/audit/AuditPage.tsx, web/console-nsh/pages/contacts/ContactsPage.tsx, web/console-nsh/pages/todo/TodoPage.tsx, web/console-nsh/tests/harness.ts.
+Existing review P2/P3 notes remain unchanged. Combined glass/scroll-memory and popup UI not visually checked; no browser/device or platform build performed during ship. No linked GitHub issues or PRs to close. Branch retained (clean action not configured). Moved ready/ → done/.
