@@ -396,7 +396,10 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			"to":           daily.To,
 			"summary":      daily.Summary,
 			"models":       daily.Models,
-			"days":         daily.Days,
+			// The same apart for the agent's own calls and for coder runs; the fields above
+			// stay combined for older Console builds.
+			"sources": daily.Sources,
+			"days":    daily.Days,
 		})
 	})
 

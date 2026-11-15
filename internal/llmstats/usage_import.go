@@ -99,6 +99,8 @@ func importUsageLine(ctx context.Context, tx *sql.Tx, raw []byte, catalog *uniai
 	if err := json.Unmarshal(raw, &rec); err != nil {
 		return &stateimport.Reject{Error: err.Error(), Raw: string(raw)}
 	}
+	// The journal's lines are single calls; the column for parts does not exist yet either.
+	rec.PricingParts = nil
 	rec = normalizeRequestRecord(rec)
 	if err := validateRequestRecord(rec); err != nil {
 		return &stateimport.Reject{Error: err.Error(), Raw: string(raw)}

@@ -792,20 +792,16 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	if req.CoderConversation != "" && coderterm.Supported {
 		ask := userQuestionsFromContext(ctx)
 		engineOpts = append(engineOpts, agent.WithCoderTerminal(func(runCtx context.Context, request agent.CoderRequest) (string, error) {
+			report := coderTerminalReport{started: time.Now()}
 			terminalRequest := coderterm.Request{
 				Backend: request.Backend, Command: request.Command, Env: request.Env, CWD: request.CWD,
 				Task: request.Task, LogRoot: request.LogRoot, BypassApprovals: request.BypassApprovals,
 				Process: request.Process,
-				// Claude Code's status line carries its subscription's quota: reported as a stream
-				// run's would be, so it is saved and said with the result.
-				Status: func(data []byte) {
-					if request.Report == nil {
-						return
-					}
-					if quota, ok := coderusage.ParseClaudeStatusLine(data, time.Now()); ok {
-						request.Report(coderusage.Run{}, &quota)
-					}
-				},
+				// Claude Code's status line carries its subscription's quota, and the session files
+				// what the task used: reported together below, as a stream run's are, so they are
+				// saved and said with the result.
+				Status: report.status,
+				Usage:  report.usage,
 				Progress: func(status string) {
 					if request.Progress != nil {
 						request.Progress(status, status+"\n", status)
@@ -829,7 +825,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 					return coderterm.Answer{Option: answer.Option, Text: answer.Text}, err
 				}
 			}
-			return rt.CoderSessions.Run(runCtx, req.CoderConversation, terminalRequest)
+			output, err := rt.CoderSessions.Run(runCtx, req.CoderConversation, terminalRequest)
+			report.send(request)
+			return output, err
 		}))
 	}
 	if engineToolsConfig.SpawnEnabled || engineToolsConfig.ToolTriggers["spawn"] {
@@ -1253,4 +1251,59 @@ func imageToolRegistrationTask(task string, current *llm.Message) string {
 		}
 	}
 	return strings.Join(parts, "\n")
+}
+
+// coderTerminalReport gathers what a terminal coder task reports when it ends: the usage its
+// session files record and the quota of Claude Code's status line. They go to the coder tool in
+// one report, so neither replaces the other.
+type coderTerminalReport struct {
+	started time.Time
+	run     coderusage.Run
+	quota   *coderusage.Quota
+}
+
+func (r *coderTerminalReport) status(data []byte) {
+	if quota, ok := coderusage.ParseClaudeStatusLine(data, time.Now()); ok {
+		r.quota = &quota
+	}
+}
+
+func (r *coderTerminalReport) usage(usage coderterm.Usage) {
+	r.run = coderusage.Run{Turns: usage.Turns}
+	for _, m := range usage.Models {
+		model := coderusage.ModelUsage{
+			Model:                    m.Model,
+			InputTokens:              m.InputTokens,
+			CachedInputTokens:        m.CachedInputTokens,
+			CacheCreationInputTokens: m.CacheCreationInputTokens,
+			OutputTokens:             m.OutputTokens,
+			ReasoningTokens:          m.ReasoningTokens,
+			CacheDetails:             m.CacheCreation,
+		}
+		// The responses go along one by one: the rows are priced by them, not by their sum.
+		for _, response := range m.Responses {
+			model.Requests = append(model.Requests, coderusage.RequestUsage{
+				InputTokens:              response.InputTokens,
+				CachedInputTokens:        response.CachedInputTokens,
+				CacheCreationInputTokens: response.CacheCreationInputTokens,
+				OutputTokens:             response.OutputTokens,
+				CacheDetails:             response.CacheCreation,
+				Count:                    response.Count,
+			})
+		}
+		r.run.Models = append(r.run.Models, model)
+	}
+}
+
+// send makes the one report, when there is anything to report.
+func (r *coderTerminalReport) send(request agent.CoderRequest) {
+	if request.Report == nil || (r.quota == nil && r.run.Empty()) {
+		return
+	}
+	run := r.run
+	run.Backend = request.Backend
+	if !r.started.IsZero() {
+		run.DurationMs = time.Since(r.started).Milliseconds()
+	}
+	request.Report(run, r.quota)
 }

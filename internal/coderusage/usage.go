@@ -37,6 +37,26 @@ type ModelUsage struct {
 	ReasoningTokens          int64
 	// CostUSD is the CLI's own cost of the run, at list price (Claude Code); 0 when it gives none.
 	CostUSD float64
+	// CacheDetails splits CacheCreationInputTokens by the cache's lifetime, under the CLI's names
+	// (ephemeral_5m_input_tokens, ephemeral_1h_input_tokens), when the CLI says: they have
+	// different prices.
+	CacheDetails map[string]int64
+	// Requests are the model's upstream requests the usage sums, when the CLI tells them apart
+	// and gives no cost (a terminal run of Claude Code). The pricing catalog prices a request,
+	// not a run: the row is priced request by request (llmstats.RequestRecord.PricingParts).
+	Requests []RequestUsage
+}
+
+// RequestUsage is what one upstream request of a run used; the fields are ModelUsage's.
+type RequestUsage struct {
+	InputTokens              int64
+	CachedInputTokens        int64
+	CacheCreationInputTokens int64
+	OutputTokens             int64
+	CacheDetails             map[string]int64
+	// Count is how many such requests; 0 means 1. -1 takes back a request an earlier run of the
+	// session reported, which this run reports again with corrected numbers.
+	Count int64
 }
 
 // Run is what one coder run used.

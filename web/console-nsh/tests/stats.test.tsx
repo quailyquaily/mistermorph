@@ -85,6 +85,10 @@ test("usage shows the summary, the daily chart, and the hosts and models", async
   await app.waitFor("id:stats-daily-plot");
   // The chart opens on the last 7 days.
   await app.waitFor("3/7"); // active days
+  // A payload without sources (an older agent) is the single stack: one total, no halves.
+  await app.waitFor("RANGE TOTAL");
+  expect(await app.shows("id:stats-daily-axis-coder")).toBe(false);
+  expect(await app.shows("AGENT TOTAL")).toBe(false);
   const dailyCall = calls.find((call) => call.uri?.startsWith("/stats/llm/daily"));
   expect(dailyCall?.uri).toContain("days=7");
 
@@ -138,4 +142,122 @@ test("an empty range says there were no requests", async () => {
   });
   await app.waitFor("NO REQUESTS IN THIS RANGE");
   await app.waitFor("NO USAGE RECORDS");
+});
+
+// A range as an agent that splits the usage by source reports it: every day has the agent's own
+// calls and coder runs, with claude-opus-5-5 on both sides.
+function sourcedDaily(days: number, withCoder = true) {
+  const totals = (requests: number, cost: number, extra: Record<string, unknown> = {}) => ({
+    requests,
+    total_cost: cost,
+    total_tokens: cost * 100,
+    input_tokens: cost * 100,
+    cost_currency: "USD",
+    ...extra,
+  });
+  const model = (name: string, requests: number, cost: number) => ({ model: name, ...totals(requests, cost) });
+  const coderCost = withCoder ? 3 : 0;
+  const agentDay = { totals: totals(3, 2), models: [model("claude-opus-5-5", 1, 0.5), model("gpt-5.2", 2, 1.5)] };
+  const coderDay = withCoder
+    ? { totals: totals(2, 3, { cost_estimated: true }), models: [model("claude-opus-5-5", 2, 3)] }
+    : { totals: { requests: 0 }, models: [] };
+  const list = Array.from({ length: days }, (_, i) => ({
+    date: new Date(Date.UTC(2026, 10, 15 - (days - 1 - i))).toISOString().slice(0, 10),
+    ...totals(withCoder ? 5 : 3, 2 + coderCost),
+    models: [model("claude-opus-5-5", withCoder ? 3 : 1, 0.5 + coderCost), model("gpt-5.2", 2, 1.5)],
+    sources: { agent: agentDay, coder: coderDay },
+  }));
+  return {
+    to: list[list.length - 1].date,
+    days: list,
+    summary: totals(days * (withCoder ? 5 : 3), days * (2 + coderCost)),
+    models: [model("claude-opus-5-5", days * (withCoder ? 3 : 1), days * (0.5 + coderCost)), model("gpt-5.2", days * 2, days * 1.5)],
+    sources: {
+      agent: { summary: totals(days * 3, days * 2), models: [model("claude-opus-5-5", days, days * 0.5), model("gpt-5.2", days * 2, days * 1.5)] },
+      coder: withCoder
+        ? { summary: totals(days * 2, days * 3, { cost_estimated: true }), models: [model("claude-opus-5-5", days * 2, days * 3)] }
+        : { summary: { requests: 0 }, models: [] },
+    },
+  };
+}
+
+test("the daily chart shows agent and coder apart when the range has coder runs", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/stats",
+    api: {
+      "GET /proxy:/stats/llm/usage": { body: usage },
+      "GET /proxy:/stats/llm/daily": (request) => ({ body: sourcedDaily(Number(new URLSearchParams(request.uri!.split("?")[1]).get("days"))) }),
+    },
+  });
+  await app.waitFor("id:stats-daily-plot");
+  // The two halves are named at the ends of the value axis.
+  await app.waitFor("id:stats-daily-axis-agent");
+  await app.waitFor("id:stats-daily-axis-coder");
+  // Two totals and two averages, in place of the one; the coder's cost is marked as list price.
+  await app.waitFor("AGENT TOTAL");
+  await app.waitFor("CODER TOTAL");
+  await app.waitFor("$14.00"); // the agent's 7 days
+  await app.waitFor("$21.00"); // the coder's
+  await app.waitFor("list price");
+  await app.waitFor("AGENT AVG / DAY");
+  await app.waitFor("CODER AVG / DAY");
+  await app.waitFor("$2.00");
+  await app.waitFor("$3.00");
+  expect(await app.shows("RANGE TOTAL")).toBe(false);
+
+  // The tooltip has a group per source, each under its subtotal.
+  await app.hover("id:stats-daily-plot");
+  await app.waitFor("id:stats-daily-tip-agent:head");
+  await app.waitFor("id:stats-daily-tip-coder:head");
+  await app.waitFor("1 req"); // the agent's claude-opus-5-5
+  await app.waitFor("2 req"); // gpt-5.2, and the coder's claude-opus-5-5
+  await app.press("id:stats-daily-plot");
+
+  // A legend entry isolates that model on both sides: each total is its own.
+  await app.press("id:stats-daily-legend-claude-opus-5-5");
+  await app.waitFor("$3.50"); // the agent's claude-opus-5-5 over the range
+  await app.waitFor("$21.00");
+  await app.press("id:stats-daily-legend-claude-opus-5-5");
+  await app.press("id:stats-daily-legend-gpt-5.2");
+  await app.waitFor("$10.50"); // the agent's gpt-5.2; the coder ran none
+  expect(await app.shows("$21.00")).toBe(false);
+  await app.press("id:stats-daily-legend-gpt-5.2");
+  await app.waitFor("$14.00");
+
+  // Tokens are not money: no list price mark.
+  await app.press("role:tab[Tokens]");
+  await app.waitFor("CODER TOTAL");
+  expect(await app.shows("list price")).toBe(false);
+  // The cache view keeps the two halves and its own figures.
+  await app.press("role:tab[Cache]");
+  await app.waitFor("Uncached");
+  await app.waitFor("id:stats-daily-axis-coder");
+
+  // The other ranges ask again and stay split.
+  await app.press("role:tab[Cost]");
+  await app.press("role:tab[90D]");
+  await app.waitFor("$180.00"); // the agent's 90 days
+  await app.waitFor("$270.00");
+  await app.waitFor("id:stats-daily-axis-coder");
+});
+
+test("a range without coder runs draws the single stack", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/stats",
+    api: {
+      "GET /proxy:/stats/llm/usage": { body: usage },
+      "GET /proxy:/stats/llm/daily": (request) => ({ body: sourcedDaily(Number(new URLSearchParams(request.uri!.split("?")[1]).get("days")), false) }),
+    },
+  });
+  await app.waitFor("id:stats-daily-plot");
+  await app.waitFor("RANGE TOTAL");
+  await app.waitFor("$14.00");
+  await app.waitFor("7/7");
+  expect(await app.shows("id:stats-daily-axis-agent")).toBe(false);
+  expect(await app.shows("id:stats-daily-axis-coder")).toBe(false);
+  expect(await app.shows("CODER TOTAL")).toBe(false);
+  // The tooltip is the day's models under its one total, without groups.
+  await app.hover("id:stats-daily-plot");
+  await app.waitFor("2 req");
+  expect(await app.shows("id:stats-daily-tip-agent:head")).toBe(false);
 });

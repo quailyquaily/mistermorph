@@ -57,7 +57,7 @@ type CoderRequest struct {
 	// Process reports the OS PID of the CLI used for this task.
 	Process func(pid int)
 	// Report hears, once the CLI has ended, what the run used and the quota it reported (Claude
-	// Code reports one; nil otherwise). Runs in a terminal session report nothing.
+	// Code reports one; nil otherwise). A terminal session reports what its session files record.
 	Report func(run coderusage.Run, quota *coderusage.Quota)
 }
 

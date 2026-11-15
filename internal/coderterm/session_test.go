@@ -333,7 +333,7 @@ func TestTerminalReportsProcessForNewAndReusedSession(t *testing.T) {
 			key := sessionKey{"topic", "claude"}
 			if reuse {
 				backend, _ := backendFor("claude")
-				started, err := start(backend, req, "")
+				started, err := start(backend, req, resumePoint{})
 				if err != nil {
 					t.Fatal(err)
 				}

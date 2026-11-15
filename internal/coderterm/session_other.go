@@ -17,7 +17,7 @@ type session struct {
 	bypass            bool
 }
 
-func start(backend, Request, string) (*session, error) {
+func start(backend, Request, resumePoint) (*session, error) {
 	return nil, fmt.Errorf("coder terminals require Unix")
 }
 func (*session) exited() bool { return true }
@@ -27,3 +27,6 @@ func (*session) run(context.Context, Request) (string, error) {
 }
 
 func (*session) statusLine() []byte { return nil }
+
+func (*session) takeUsage() Usage        { return Usage{} }
+func (*session) usageState() usageReader { return nil }

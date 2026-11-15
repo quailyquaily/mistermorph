@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -132,5 +133,102 @@ func TestCoderToolWithoutUsageRecorderStillReports(t *testing.T) {
 	_ = json.Unmarshal([]byte(raw), &result)
 	if result.Usage != "codex run: 10 in · 2 out · 1 turn" {
 		t.Fatalf("usage = %q", result.Usage)
+	}
+}
+
+// A terminal run (a Console chat) reports what its session files record and Claude Code's quota
+// in one call: both are saved, and the rows are priced from the catalog, as the files carry no cost.
+func TestCoderToolRecordsATerminalRunsUsageAndQuota(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+	binDir := t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "claude", "exit 0\n")
+	usagePath := filepath.Join(t.TempDir(), "usage.db")
+	recorder := coderusage.NewRecorder(usagePath, nil)
+	var progress []string
+	reports := 0
+	tool := newCoderTool(coderToolDeps{
+		Runner:    &execDirectSubtaskRunner{},
+		PathExtra: []string{binDir},
+		Usage:     func() *coderusage.Recorder { return recorder },
+		RunTerminal: func(_ context.Context, req CoderRequest) (string, error) {
+			used := 61.0
+			reports++
+			req.Report(coderusage.Run{Turns: 2, Models: []coderusage.ModelUsage{
+				{Model: "claude-opus-5-5", InputTokens: 1_000_000, CachedInputTokens: 400_000, CacheCreationInputTokens: 100_000, OutputTokens: 20_000},
+				{Model: "claude-not-in-the-catalog", InputTokens: 500, OutputTokens: 5},
+				// Three responses of 50,000 input tokens each, one of them writing to the 1-hour cache.
+				{Model: "claude-haiku-5-5", InputTokens: 150_000, CachedInputTokens: 96_000, CacheCreationInputTokens: 48_000, OutputTokens: 3000,
+					CacheDetails: map[string]int64{"ephemeral_1h_input_tokens": 48_000},
+					Requests: []coderusage.RequestUsage{
+						{InputTokens: 50_000, CacheCreationInputTokens: 48_000, OutputTokens: 1000, CacheDetails: map[string]int64{"ephemeral_1h_input_tokens": 48_000}},
+						{InputTokens: 50_000, CachedInputTokens: 48_000, OutputTokens: 1000},
+						{InputTokens: 50_000, CachedInputTokens: 48_000, OutputTokens: 1000},
+					}},
+			}}, &coderusage.Quota{Backend: "claude", Status: coderusage.StatusAllowed, ObservedAt: "2026-11-15T09:00:00Z",
+				Windows: []coderusage.Window{{Kind: "five_hour", WindowMinutes: 300, UsedPercent: &used, Status: coderusage.StatusAllowed}}})
+			return "fixed in the terminal", nil
+		},
+	})
+	ctx := WithEventSinkContext(llmstats.WithRunID(context.Background(), "run-9"), EventSinkFunc(func(_ context.Context, event Event) {
+		if event.Summary != "" {
+			progress = append(progress, event.Summary)
+		}
+	}))
+	raw, err := tool.Execute(ctx, map[string]any{"coder": "claude", "task": "fix it", "cwd": t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result SubtaskResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatal(err)
+	}
+	if reports != 1 || result.Status != SubtaskStatusDone || result.Output != "fixed in the terminal" {
+		t.Fatalf("reports = %d, result = %+v", reports, result)
+	}
+	for _, want := range []string{"claude run: 1.2M in (496.0k cached) · 23.0k out · 2 turns", "claude quota: 5h 61% used"} {
+		if !strings.Contains(result.Usage, want) {
+			t.Fatalf("usage = %q, want %q", result.Usage, want)
+		}
+	}
+	if last := progress[len(progress)-1]; !strings.HasPrefix(last, "[claude] usage: claude run:") {
+		t.Fatalf("last progress = %q (all: %q)", last, progress)
+	}
+
+	store, err := llmstats.OpenUsageStore(ctx, usagePath, llmstats.UsageStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	records, err := store.Records(ctx, 10)
+	if err != nil || len(records) != 3 {
+		t.Fatalf("records = %+v, %v", records, err)
+	}
+	known, unknown, byRequest := records[0], records[1], records[2]
+	// A row of several requests is priced request by request, each in its own tier of the
+	// catalog (claude-haiku-5-5 up to 100,000 input tokens: $0.10 in, $0.01 cached, $0.20 for a
+	// 1-hour cache write, $0.50 out per 1M), not as one request of their sum.
+	wantCost := 3*(2000*0.10+1000*0.50)/1e6 + 2*48_000*0.01/1e6 + 48_000*0.20/1e6
+	if byRequest.Model != "claude-haiku-5-5" || byRequest.InputTokens != 150_000 || len(byRequest.PricingParts) != 3 ||
+		byRequest.CacheDetails["ephemeral_1h_input_tokens"] != 48_000 ||
+		math.Abs(byRequest.TotalCost-wantCost) > 1e-9 || math.Abs(byRequest.CacheCreationInputCost-48_000*0.20/1e6) > 1e-9 {
+		t.Fatalf("record priced by request = %+v, want cost %v", byRequest, wantCost)
+	}
+	if known.APIHost != "claude-code" || known.Operation != llmstats.OperationCoder || known.Scene != llmstats.OperationCoder ||
+		known.Model != "claude-opus-5-5" || known.RunID != "run-9" || known.InputTokens != 1_000_000 || known.CachedInputTokens != 400_000 ||
+		known.CacheCreationInputTokens != 100_000 || known.OutputTokens != 20_000 {
+		t.Fatalf("record = %+v", known)
+	}
+	// The catalog's list price, split by kind and marked estimated.
+	if known.TotalCost <= 0 || !known.CostEstimated || known.CostCurrency != "USD" || known.OutputCost <= 0 || known.CachedInputCost <= 0 {
+		t.Fatalf("record cost = %+v", known)
+	}
+	if unknown.Model != "claude-not-in-the-catalog" || unknown.TotalCost != 0 || unknown.CostCurrency != "" || unknown.CostEstimated {
+		t.Fatalf("unknown model record = %+v", unknown)
+	}
+	quotas, err := coderusage.LoadQuotas(ctx, store)
+	if err != nil || len(quotas) != 1 || quotas[0].Backend != "claude" || len(quotas[0].Windows) != 1 {
+		t.Fatalf("quotas = %+v, %v", quotas, err)
 	}
 }

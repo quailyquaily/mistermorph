@@ -47,10 +47,13 @@ type session struct {
 	closeOnce sync.Once
 	mu        sync.Mutex // Serializes screen updates, snapshots, and input.
 	screen    *vt.Emulator
+	// usage counts what the session's files record; used by one task at a time.
+	usage usageReader
 }
 
-// start launches the CLI. A non-empty resumeID reopens that session's conversation.
-func start(b backend, req Request, resumeID string) (*session, error) {
+// start launches the CLI. A resume point with an ID reopens that session's conversation.
+func start(b backend, req Request, resume resumePoint) (*session, error) {
+	resumeID := resume.id
 	root := ""
 	if req.LogRoot != "" {
 		root = filepath.Join(req.LogRoot, "coder")
@@ -96,6 +99,16 @@ func start(b backend, req Request, resumeID string) (*session, error) {
 		s.id, s.resumed = resumeID, true
 	}
 	s.transcriptDir = b.transcriptRoot(func(key string) string { return values[key] }, home, req.CWD)
+	s.usage = resume.usage
+	if s.usage == nil {
+		s.usage = b.newUsage()
+		if s.resumed {
+			// A conversation of an earlier runtime: what its files hold was used before.
+			if path, err := b.findTranscript(s.transcriptDir, s.id); err == nil {
+				baselineUsage(s.usage, path)
+			}
+		}
+	}
 	s.cmd = exec.CommandContext(ctx, req.Command, b.args(s.id, s.resumed, s.bypass, dir)...)
 	s.cmd.Dir = req.CWD
 	s.cmd.Env = append(childEnv, "TERM=xterm-256color")
@@ -508,3 +521,15 @@ func (s *session) statusLine() []byte {
 	}
 	return data
 }
+
+// takeUsage counts what the session's files record since the last call.
+func (s *session) takeUsage() Usage {
+	if s.usage == nil {
+		return Usage{}
+	}
+	_ = s.findTranscript()
+	s.usage.read(s.transcriptAt)
+	return s.usage.take()
+}
+
+func (s *session) usageState() usageReader { return s.usage }
