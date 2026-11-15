@@ -1,11 +1,14 @@
 // The local coding CLIs' subscription quotas (GET /stats/coder/quota; internal/coderusage): each
-// coder's windows (Claude Code's 5-hour and 7-day ones, Codex's weekly one), how much of each is
-// used and when it starts again. Pure helpers for the Usage page's Coding agents block.
+// coder's windows (Claude Code's 5-hour and 7-day ones, Codex's weekly one, the Antigravity CLI's
+// per model group), how much of each is used and when it starts again. Pure helpers for the Usage
+// page's Coding agents block.
 
 export type QuotaStatus = "allowed" | "allowed_warning" | "rejected" | "";
 
 export interface QuotaWindow {
   kind: string;
+  /** The model group the window is a limit of (the Antigravity CLI's "Gemini Models"); "" for none. */
+  group?: string;
   window_minutes?: number;
   used_percent?: number;
   resets_at?: string;
@@ -17,8 +20,21 @@ export interface CoderQuota {
   plan?: string;
   status?: QuotaStatus;
   windows: QuotaWindow[];
+  /** The model groups the windows belong to, in the CLI's order; empty for a coder without groups. */
+  groups?: QuotaGroup[];
   observed_at: string;
   source?: "run" | "read";
+}
+
+/** Models that share their usage windows. */
+export interface QuotaGroup {
+  name: string;
+  models: string[];
+}
+
+/** A coder's windows under one group: `name` is "" for windows of the whole subscription. */
+export interface WindowGroup extends QuotaGroup {
+  windows: QuotaWindow[];
 }
 
 export interface CoderQuotaPayload {
@@ -31,6 +47,7 @@ export interface CoderQuotaPayload {
 export const CODERS = [
   { backend: "codex", title: "Codex" },
   { backend: "claude", title: "Claude Code" },
+  { backend: "agy", title: "Antigravity CLI" },
 ] as const;
 
 /** A response as the block reads it: missing or odd fields made empty. */
@@ -43,10 +60,14 @@ export function normalizeCoderQuota(data: any): CoderQuotaPayload {
       status: typeof q.status === "string" ? q.status : "",
       observed_at: typeof q.observed_at === "string" ? q.observed_at : "",
       source: q.source === "read" ? "read" : "run",
+      groups: (Array.isArray(q.groups) ? q.groups : [])
+        .filter((g: any) => g && typeof g.name === "string" && g.name)
+        .map((g: any) => ({ name: g.name, models: (Array.isArray(g.models) ? g.models : []).filter((m: any) => typeof m === "string" && m) })),
       windows: (Array.isArray(q.windows) ? q.windows : [])
         .filter((w: any) => w && typeof w.kind === "string")
         .map((w: any) => ({
           kind: w.kind,
+          group: typeof w.group === "string" ? w.group : "",
           window_minutes: Number(w.window_minutes) > 0 ? Number(w.window_minutes) : 0,
           used_percent: typeof w.used_percent === "number" && Number.isFinite(w.used_percent) ? Math.max(0, Math.min(100, w.used_percent)) : undefined,
           resets_at: typeof w.resets_at === "string" ? w.resets_at : "",
@@ -74,6 +95,25 @@ export function shownCoders(payload: CoderQuotaPayload) {
     available: payload.available[coder.backend] === true,
     error: payload.errors[coder.backend] ?? "",
   }));
+}
+
+/**
+ * A coder's windows by model group, the groups in the order of their first window: one group named
+ * "" for a coder whose windows are of the whole subscription (Codex, Claude Code), and a group per
+ * model group for the Antigravity CLI, each with the models in it.
+ */
+export function windowGroups(quota: CoderQuota | null | undefined): WindowGroup[] {
+  const out: WindowGroup[] = [];
+  for (const w of quota?.windows ?? []) {
+    const name = w.group ?? "";
+    let group = out.find((g) => g.name === name);
+    if (!group) {
+      group = { name, models: quota?.groups?.find((g) => g.name === name)?.models ?? [], windows: [] };
+      out.push(group);
+    }
+    group.windows.push(w);
+  }
+  return out;
 }
 
 /** A window named by its length, and a model's own window by its model too: "5h", "7d", "7d fable". */
