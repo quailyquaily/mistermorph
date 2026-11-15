@@ -7,7 +7,7 @@ Owner request:
 > ok, can we support agy the way like claude code and codex?
 > ok. add this research report to new/ let the factory to implement them.
 
-## Research (2026-11-15, agy 1.5.9 on Linux, signed in with a Google account)
+**Research (2026-11-15, agy 1.5.9 on Linux, signed in with a Google account)**
 
 Background: Google moved its terminal agent from Gemini CLI to Antigravity CLI (`agy`) on 2026-05-19; since 2026-06-18 Gemini CLI serves only paid API keys and enterprise licences, so `agy` is the Google coder for subscription users. Docs: https://antigravity.google/docs/cli/headless/ , https://antigravity.google/docs/cli/commands/usage/ , https://antigravity.google/docs/cli/acp/ .
 
@@ -47,7 +47,7 @@ Checked on a real install:
 - Models (`agy models`): on this account `gemini-3.8-flash-high|medium|low`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`.
 - Sessions on disk: one SQLite file per conversation, `~/.gemini/antigravity-cli/conversations/<id>.db`, with the steps in binary blobs (tables `steps`, `gen_metadata`, `trajectory_meta`, …). It cannot be followed as the Claude Code and Codex session files are, so the Console's terminal sessions (`internal/coderterm`) cannot drive `agy` the same way. `agy acp` (JSON-RPC over stdio, with `session/request_permission`) and `--input-format stream-json` with `--conversation <id>` exist for persistent sessions; neither was tried.
 
-## What to build
+**What to build**
 
 - `coder=agy` beside `codex` and `claude` in the coder tool (`agent/coder_tool.go`): run `agy -p <task> --output-format stream-json --dangerously-skip-permissions` as a one-shot CLI subtask, with a collector for its stream: progress from `step_update` (the text deltas, a line per tool step with its name and what it runs, sub-agent steps), the answer from `result.response`, the run's usage from `result.usage`, turns from `num_turns`.
 - Failures said plainly in the tool result: `status` other than `SUCCESS` with its `error`; not signed in (tell the user to run `agy` once and sign in; do not wait out the sign-in prompt longer than needed); a non-empty `denied_actions` is a failed run naming the denied actions, never an empty success.
@@ -61,7 +61,7 @@ Out of scope, each its own item later: persistent agy sessions with approvals in
 
 Order: FT131 (environment, default paths) is in ready and FT130 (terminal usage, daily chart) is being built; start from the base branch as it is and fit whichever of them has landed.
 
-## Checking
+**Checking**
 
 - Tests with fake `agy` CLIs replaying the captured events above: a successful run with text and a tool step, the usage rows, a denied action, an `ERROR` result, not signed in, a stream line that is not JSON; the `/usage` read with two groups, with a five-hour and a weekly bucket in one group, with `remaining_fraction` 0, and when the CLI fails; the routes with three coders; the Console dialog with agy's groups.
 - A real `agy` is installed and signed in on the owner's machine at `~/.local/bin/agy`. Run it once for real with `--dangerously-skip-permissions` in a throwaway folder and compare the stream with the fakes; read the real quota. Record what was not checked (Windows, macOS, a tier with five-hour buckets, sub-agent steps).
