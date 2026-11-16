@@ -95,29 +95,31 @@ Rejected: the status line's `cost.total_cost_usd`. It is a running total of the 
 
 ### Chart
 
-**Two bars per day, agent at the left and coder at the right, on one scale.** (First built as one column per day with the agent above the base line and the coder mirrored below it; changed at the owner's choice.)
+**Agent above the base line, coder below it, on one scale.** One column per day, as now.
 
 ```
-      │      A
-      │  A   A       A
-      │  AC  A   AC  AC
-      │  AC  A   AC  AC
-      └──────────────────
-         11  12  13  14        A = agent   C = coder
+  agent  ▲      █
+         │  █   █       █
+         │  █   █   █   █
+  ───────┼──█───█───█───█───  0
+         │  █       █   █
+  coder  ▼  █           █
+            █
+           11  12  13  14
 ```
 
-- Each bar is the stack it is today: model segments (cost, tokens) or cache parts (cache). Model colours are assigned over both sources together, so a model is one hue in both bars; the coder's bar is that colour at half its share. Today's bars are both hatched.
-- Both bars share the value axis, so a day's coder use can be compared with its agent use by eye. The plot is as high as the single stack's.
-- The legend stays one row of models and ends with the key to the two bars (`Agent` in full tone, `Coder` lighter). Pressing a model isolates it in both bars.
-- A dashed average line per source, each the average of its own source, the coder's lighter.
-- The figures under the plot show two totals and two averages for the range, Agent and Coder, in place of the one; the coder's cost is marked as list price. The hover tooltip has a group per source, each with its subtotal and model rows.
-- A range without coder rows draws as today: one bar per day, no key, one total.
+- Each half is the stack it is today: model segments (cost, tokens) or cache parts (cache), same colours. Model colours are assigned over both sources together, so a model is one colour on both sides; today's column is hatched on both sides.
+- The value axis reads the same above and below (no minus signs), with a small `Agent` label at its top end and `Coder` at its bottom end. Both halves share the scale, so a day's coder use can be compared with its agent use by eye.
+- A dashed average line per half, each the average of its own source.
+- The readout above the plot shows two totals for the range, Agent and Coder, in place of the one; the coder's cost is marked as list price. The hover tooltip has a group per source, each with its subtotal and model rows.
+- The legend stays one row of models. Pressing an entry isolates that model on both sides.
+- A range without coder rows draws as today: no lower half, no labels, one total.
 
-At 90 days this is 180 bars: about 5 px each in the desktop plot and under 2 px on a phone, where the pairs are hard to tell apart; the tooltip and the readout still give each day's two figures. Why not an Agent / Coder / All switch: it hides the comparison, which is the point, and adds a control.
+Why not two bars per day: at 90 days two bars per day are 180 bars, under 4 px each in the desktop plot and less on a phone, and the eye has to pair them. One column per day stays readable at every range. Why not an Agent / Coder / All switch: it hides the comparison, which is the point, and adds a control.
 
-Each source is a stack of its own (`stack="agent"`, `stack="coder"`), which `nsh/base/plot` stands side by side in the band. The coder's stack is attached only when the range has coder rows, so the single stack keeps the whole band.
+`nsh/base/plot` has no stack that goes both ways, but one stack can be made to: the agent's bars, an unpainted bar of minus their sum that takes the stack back to the base, then the coder's bars with negative values, on a scale from `-max` to `max`. So the planned form was built and the fallback (two bars per day at 7 and 30 days, two plots at 90) was not needed. The trap is in `web/console-nsh/PORTING.md`.
 
-`lib/core/daily-usage.js` (`summarizeDailyUsage`) builds both sources' bars from `sources`; a payload without `sources` (an older agent) is drawn as the single stack of today.
+`lib/core/daily-usage.js` (`summarizeDailyUsage`) builds both halves from `sources`; a payload without `sources` (an older agent) is drawn as the single stack of today.
 
 ## Tests
 
@@ -126,7 +128,7 @@ Each source is a stack of its own (`stack="agent"`, `stack="coder"`), which `nsh
 - `agent/coder_usage_test.go`: a terminal run's usage and quota arrive in one report, the rows in `usage.db`, and the usage line in the result.
 - `internal/llmstats`: a `coder` row with a known model is priced from the catalog and repriced when the catalog changes; one with an unknown model or with the CLI's own cost is left alone. `Daily` with agent and coder rows of the same model on the same day: both sources, the combined fields their sum, a day with only one source.
 - `internal/daemonruntime`: `/stats/llm/daily` carries `sources` and the old fields.
-- `web/console-nsh/tests/stats.test.tsx`: both bars and their key, the two totals and averages, the tooltip groups, isolating a model, a payload without coder rows, a payload without `sources`.
+- `web/console-nsh/tests/stats.test.tsx`: both halves, the two totals and averages, the tooltip groups, isolating a model, a payload without coder rows, a payload without `sources`.
 
 ## As built
 
@@ -156,11 +158,12 @@ The plan above was built as written, with these differences and details:
   - A headless run is unchanged: its `result` gives a cost per model, which is kept, and no split by lifetime per model.
 - **API.** A source's `models` is an empty list, not absent, when it has no rows.
 - **Chart, when the two are drawn apart:**
-  - Two bars per day, not the mirrored halves the plan first had (see Chart above); the plot keeps the single stack's height.
+  - Agent above the base line and coder below it, as planned. For a day (5881500f) it was two bars per day side by side; the owner chose the mirrored halves again.
+  - The plot is taller (260 pt, 210 pt on phones; 184 and 150 otherwise), so each half keeps about the room the single stack had.
   - The figures under the plot are Agent total, Coder total (with `list price` beside a cost), Agent avg / day, Coder avg / day, Active days and Cache rate. Peak and Today are not shown there; today's two values are in the readout. On phones the agent's figures are one row and the coder's the next.
   - The readout of the focused day shows the day's Agent and Coder cost in place of the one Cost.
   - The tooltip has no overall total: the two subtotals are different kinds of money.
-  - The cache view draws each source's cache split, and keeps its own figures (combined).
+  - The cache view draws each half's cache split, and keeps its own figures (combined).
   - The split is drawn when the range has coder rows (`sources.coder.summary.requests > 0`), also when the agent has none.
 
 Not checked: a live Codex or Claude Code terminal run end to end (the readers are tested against lines in the shape the CLIs write), the GPUI desktop app and an Android device. The chart was looked at in Chrome (the built web Console with stubbed APIs) at 7, 30 and 90 days, 1280 pt and 390 pt wide, with mixed, agent-only, coder-only and no-`sources` data.

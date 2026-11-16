@@ -210,7 +210,7 @@ test("summarizeDailyUsage draws agent and coder apart when the range has coder r
   const slots = assignModelSlots(null, payload.models);
   const cost = summarizeDailyUsage(payload, "cost", { slots });
   assert.equal(cost.split, true);
-  // Each day has both sources; a model keeps its slot (its colour) in both bars.
+  // Each day has both halves; a model keeps its slot (its colour) on both sides.
   assert.deepEqual(cost.days.map((day) => [day.sources.agent.value, day.sources.coder.value]), [
     [2, 0],
     [0, 0],
@@ -219,9 +219,9 @@ test("summarizeDailyUsage draws agent and coder apart when the range has coder r
   assert.deepEqual(cost.days[2].sources.agent.segments, [{ key: "claude-opus-5-5", slot: 0, value: 2 }]);
   assert.deepEqual(cost.days[2].sources.coder.segments, [{ key: "claude-opus-5-5", slot: 0, value: 7 }]);
   assert.equal(cost.days[2].sources.coder.models[0].requests, 4);
-  // One scale for both bars, from the higher of the two.
+  // One scale for both halves, mirrored below the base line.
   assert.equal(cost.scaleMax, 10);
-  assert.deepEqual(cost.ticks, [10, 5, 0]);
+  assert.deepEqual(cost.ticks, [10, 5, 0, -5, -10]);
   // A total, an average, a peak and a today per source.
   assert.equal(cost.sources.agent.total, 4);
   assert.equal(cost.sources.agent.average, 4 / 3);
@@ -247,7 +247,7 @@ test("summarizeDailyUsage draws agent and coder apart when the range has coder r
   assert.equal(tokens.scaleMax, 1000);
   assert.equal(tokens.sources.coder.total, 750);
 
-  // The cache view splits each source by how the cache served it.
+  // The cache view splits each half by how the cache served it.
   const cache = summarizeDailyUsage(payload, "cache", { slots });
   assert.deepEqual(cache.days[2].sources.agent.segments, [
     { key: "hits", slot: null, value: 100 },
@@ -260,7 +260,7 @@ test("summarizeDailyUsage draws agent and coder apart when the range has coder r
   assert.equal(cache.scaleMax, 1000);
 });
 
-test("isolating a model applies to both sources", () => {
+test("isolating a model applies to both halves", () => {
   const payload = sourcedPayload();
   const slots = assignModelSlots(null, payload.models);
   const only = summarizeDailyUsage(payload, "cost", { slots, isolate: "claude-opus-5-5" });

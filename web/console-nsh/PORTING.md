@@ -364,13 +364,13 @@ Headless tests prove behaviour, not the look.
   itself after the first recording.
 - `nsh/base/plot` has no stack that goes both ways from its base: the bars of one `stack` pile
   their signed values on one running end (a negative value after positive ones starts at their
-  top and comes back down over them), and two stacks stand side by side in the band. One stack
-  can still be made to go both ways: the bars above the base, then an unpainted bar
-  (`fill-transparent`) of minus their sum, which takes the running end back to the base, then
-  the bars below with negative values, on a y scale from `-max` to `max` (the daily usage chart
-  drew agent and coder this way before it became two stacks side by side). The bars join a stack
-  in the order they are attached, and a `<Bar>` written beside a list of bars is attached before
-  the list whatever the source order: put every bar of the stack in one list.
+  top and comes back down over them), and two stacks stand side by side in the band. The daily
+  usage chart draws the agent's half above the base line and the coder's below it in one stack:
+  the agent's bars, then an unpainted bar (`fill-transparent`) of minus their sum, which takes
+  the running end back to the base, then the coder's bars with negative values, on a y scale
+  from `-max` to `max` (`DailyUsagePanel`). The bars join a stack in the order they are attached,
+  and a `<Bar>` written beside a list of bars is attached before the list whatever the source
+  order: put every bar of the stack in one list.
 
 ### Android (nsh 0.4.0)
 
