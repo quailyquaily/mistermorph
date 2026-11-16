@@ -23,7 +23,7 @@ import {
 } from "nsh/base";
 import { dismissNotice, noticeState, pushNotice } from "../lib/core/notices.js";
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
-import { PickerList, type PickerItem } from "./shared/PickerList";
+import { PickerList, type PickerItem, type PickerProbe } from "./shared/PickerList";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
 import { RunningMark } from "./motion/RunningMark";
 import { sagHalf, SagRule } from "./motion/Sag";
@@ -1238,6 +1238,8 @@ export function PopupList(props: {
   /** The layer's test id (default `partID`). */
   layerID?: string;
   probe?: DialogProbe;
+  /** For tests: the list's scroll view and what it reports. */
+  listProbe?: PickerProbe;
 }) {
   return (
     <PopupSheet open={props.open} onClose={props.onClose} label={props.label} testID={props.layerID ?? props.partID} probe={props.probe}>
@@ -1260,6 +1262,7 @@ export function PopupList(props: {
             rowClass="min-h-11 justify-center"
             // The paper's padding (p-2) round it.
             maxHeight={contentMax() - 16}
+            probe={props.listProbe}
             class="gap-1"
             testID={props.partID ? `${props.partID}-list` : undefined}
             part={(name) => (props.partID ? `${props.partID}-${name}` : undefined)}

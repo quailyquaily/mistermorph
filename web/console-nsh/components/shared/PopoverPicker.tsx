@@ -24,6 +24,9 @@
 // Keys: the filter takes the focus as it opens; Up and Down move the highlight (from the filter
 // too) over the rows that are not disabled, the footer's included, Enter picks it, Escape closes.
 //
+// The bubble is as tall as its list, up to the room on its side (`maxHeight` at most); a longer
+// list scrolls its rows between the filter and the footer (PickerList).
+//
 // The popup is never wider than the window less its margins, and the tail stays off the popup's
 // rounded corners (a trigger near the window's edge: the tail leans to the popup's side of it).
 // It opens growing out of its tail (fading in, sliding toward the trigger and scaling up from the
@@ -35,8 +38,8 @@ import { Popover } from "nsh/base";
 // POPUP_RADIUS is the popup's `rounded-[16px]`, which the tail keeps off.
 import { MENU_POPUP_STYLE, mobilePopups, POPUP_RADIUS, PopupList, Tip } from "../ui";
 
-export { PickerList, type PickerItem } from "./PickerList";
-import { PickerList, type PickerItem } from "./PickerList";
+export { PickerList, type PickerItem, type PickerProbe } from "./PickerList";
+import { PickerList, type PickerItem, type PickerProbe } from "./PickerList";
 
 export type PickerSide = "top" | "bottom";
 
@@ -194,6 +197,8 @@ export function PopoverPicker(props: {
   /** What the parts' test ids start with (`-list`, `-filter`, `-tail`, `-option-<value>`;
    *  default `testID`). */
   partID?: string;
+  /** For tests: the bubble's scroll view and what it reports. */
+  probe?: PickerProbe;
 }) {
   const ownOpen = signal(false);
   const open = () => props.open ?? ownOpen();
@@ -290,6 +295,7 @@ export function PopoverPicker(props: {
         emptyText={props.emptyText}
         partID={props.partID ?? props.testID}
         layerID={part("popup")}
+        listProbe={props.probe}
       />
     </>
   );
@@ -345,7 +351,9 @@ export function PopoverPicker(props: {
           emptyText={props.emptyText}
           footer={props.footer}
           rowClass={props.rowClass}
-          maxHeight={placement().maxHeight}
+          // The popup's cap less its own padding and border.
+          maxHeight={placement().maxHeight - 2 * POPUP_INSET_Y}
+          probe={props.probe}
           testID={part("list")}
           part={part}
           inset={LIST_INSET}
