@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folding the runs of a TODO item that found nothing to do</title>
+<!--
+date: 2026-11-16
+title: Folding the runs of a TODO item that found nothing to do
+status: design
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* The Console's own tokens (web/console-nsh/theme.json). */
+  :root {
+    --background: #f6faff;
+    --card: #fbfdff;
+    --foreground: #181832;
+    --subtle: #304c69;
+    --muted-foreground: #5f7894;
+    --line-soft: #a5bad085;
+    --line-faint: #284e7829;
+    --hover: #426f9e1a;
+    --focus: #426f9e8c;
+    --blue: #426f9e;
+    --radius: 2px;
+    --sans: "IBM Plex Sans", "PingFang SC", "Hiragino Sans", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ffffff; color: var(--foreground); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  main { max-width: 960px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 26px; line-height: 1.25; margin: 0 0 8px; }
+  h2 { font-size: 18px; margin: 40px 0 8px; }
+  h3 { font-size: 15px; margin: 24px 0 4px; }
+  p, ul { margin: 8px 0; }
+  ul { padding-left: 20px; }
+  code { font-family: var(--mono); font-size: 0.9em; background: #edf3f8; border-radius: var(--radius); padding: 0 4px; }
+  .meta { font-family: var(--mono); font-size: 12px; color: var(--muted-foreground); }
+  .note { color: var(--subtle); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line-faint); }
+  th { font-weight: 500; color: var(--subtle); }
+  .scroll { overflow-x: auto; }
+
+  /* A piece of the conversation, as the Console draws it. */
+  .board-title { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); margin: 24px 0 8px; }
+  .board { background: var(--background); border: 1px solid var(--line-faint); border-radius: 6px; padding: 28px 24px; display: flex; flex-direction: column; gap: 24px; }
+  .sent { display: flex; flex-direction: column; gap: 7px; align-items: flex-end; padding-left: 10%; }
+  .mark { height: 20px; display: flex; align-items: center; gap: 3px; font-family: var(--mono); font-size: 11px; line-height: 16px; letter-spacing: 0.04em; color: var(--muted-foreground); }
+  .sent .mark { margin-right: 23px; }
+  .bubble { margin-right: 8px; max-width: 557px; border: 1px solid var(--line-soft); border-radius: 14px 2px 14px 14px; background: var(--card); padding: 10px 14px 11px; font-size: 16px; line-height: 28.5px; }
+  .reply { display: flex; flex-direction: column; gap: 7px; max-width: 736px; padding-right: 2%; }
+  .reply-text { font-size: 16px; line-height: 27.2px; }
+
+  /* The fold. */
+  .fold { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .fold-line { border: 0; background: transparent; border-radius: var(--radius); padding: 2px 6px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; cursor: pointer; font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--subtle); }
+  .fold-line:hover { background: var(--hover); }
+  .fold-line:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .fold-dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--muted-foreground); }
+  .fold-span { color: var(--muted-foreground); }
+  .fold-line[aria-expanded="true"] .caret { transform: rotate(180deg); }
+  .fold-runs { align-self: stretch; margin-left: 4px; border-left: 1px solid var(--line-faint); padding-left: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .fold-runs[hidden] { display: none; }
+  .fold-run { display: flex; align-items: baseline; gap: 12px; }
+  .fold-at { flex: none; width: 40px; font-family: var(--mono); font-size: 11px; line-height: 20px; letter-spacing: 0.04em; color: var(--muted-foreground); }
+  .fold-text { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; color: var(--subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="meta">2026-11-16 · status: design</p>
+<h1>Folding the runs of a TODO item that found nothing to do</h1>
+<p class="note">A TODO item on a schedule often runs and finds nothing to do. Each such run still adds a full message pair to the item's topic, so the runs that did something are hard to find. This note proposes a check that marks those runs, and a fold that draws them as one line.</p>
+
+<h2>Goal</h2>
+<ul>
+  <li>After a scheduled run, decide whether it had a result, found nothing to do, or hit a problem.</li>
+  <li>In the item's topic, draw consecutive "nothing to do" runs as one line that opens.</li>
+  <li>Hide nothing for good: a folded run is still stored and can always be opened.</li>
+</ul>
+
+<h2>The check</h2>
+<p>When a scheduled run finishes, ask the decision route one closed question about it, and store the answer on the run's record beside <code>result.final</code>.</p>
+<div class="scroll">
+<table>
+  <tr><th>Part</th><th>Proposal</th></tr>
+  <tr><td>Question</td><td>One <code>Choice</code> through <code>llm.Evaluate</code>, with the item's task text and the run's final output as <code>State</code>. Options: <code>result</code> (it did or found something), <code>nothing</code> (it found nothing to do), <code>problem</code> (it could not do its job).</td></tr>
+  <tr><td>Which runs</td><td>Runs a schedule fired that ended <code>done</code>. Failed, stopped and manual runs are not checked and never fold.</td></tr>
+  <tr><td>When it cannot answer</td><td>The run is shown in full, as today: when the decision route has no profile of its own, when the call fails, or when the answer is not one of the options.</td></tr>
+  <tr><td>Where</td><td><code>recordAwarenessTaskFinish</code> in <code>internal/channelruntime/awareness/run.go</code> writes the result. Awareness runs do not get the decision client today; it is passed in the way <code>taskruntime</code> passes it for <code>todo_update</code>.</td></tr>
+  <tr><td>Stored as</td><td><code>result.outcome</code>: <code>"result"</code>, <code>"nothing"</code> or <code>"problem"</code>; absent when the run was not checked.</td></tr>
+</table>
+</div>
+<p>This meets the three criteria in <a href="feat_20261005_decision_route_fits.md">Other fits for the decision route</a>: the answer is a closed set, the model writes no text, and a wrong answer is survivable, since it only folds a message that can be opened.</p>
+<p>The run's own model could mark itself instead, at no extra call. That depends on every task prompt and skill doing so; the check after the run works for any item.</p>
+
+<h2>The fold</h2>
+<p>Both boards show the same TODO item's topic. The second one works: press the line.</p>
+
+<p class="board-title">Today: every run in full</p>
+<div class="board" id="today"></div>
+
+<p class="board-title">Proposed: quiet runs folded</p>
+<div class="board">
+  <div class="sent">
+    <div class="mark">08:30</div>
+    <div class="bubble">Run a factory build for this repository.</div>
+  </div>
+  <div class="reply">
+    <div class="mark"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 11.4A5.6 5.6 0 1 1 5 13.1L2.6 13.8z"/><path d="M5.6 8h.01M8 8h.01M10.4 8h.01"/></svg><span>6m 12s</span></div>
+    <div class="reply-text">Built FT138: the compact agent switcher has no caret, buttons are icon-only, and the voice bar has the composer's corners. Tests pass. The item is in review/.</div>
+  </div>
+
+  <div class="fold">
+    <button class="fold-line" id="fold-line" aria-expanded="false" aria-controls="fold-runs">
+      <span class="fold-dot" aria-hidden="true"></span>
+      <span>8 runs, nothing to do</span>
+      <span class="fold-span">09:00 – 12:30</span>
+      <svg class="caret" aria-hidden="true" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#5f7894" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l5 5 5-5"/></svg>
+    </button>
+    <div class="fold-runs" id="fold-runs" hidden></div>
+  </div>
+
+  <div class="sent">
+    <div class="mark">13:00</div>
+    <div class="bubble">Run a factory build for this repository.</div>
+  </div>
+  <div class="reply">
+    <div class="mark"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 11.4A5.6 5.6 0 1 1 5 13.1L2.6 13.8z"/><path d="M5.6 8h.01M8 8h.01M10.4 8h.01"/></svg><span>4m 40s</span></div>
+    <div class="reply-text">Fix round 2 for FT138 is built: the gallery inventory now matches the removed button examples. Tests pass. The item is back in review/.</div>
+  </div>
+</div>
+<p class="note">The sample text and times are made up for the drawing.</p>
+
+<h3>How it is drawn</h3>
+<ul>
+  <li><strong>Folded.</strong> One centred line in mono: a hollow status dot, the count ("8 runs, nothing to do"), the time span, and a caret. It takes the hover tint under the pointer.</li>
+  <li><strong>Open.</strong> The line stays. Under it each quiet run is one row: its time, and its reply cut to one line, hung on a faint vertical rule. The task bubble is not repeated, since it is the same text every run.</li>
+  <li><strong>No new element.</strong> The line is the context-compaction notice's centred mono row (<code>chat-context-notice</code> in <code>ChatHistoryItem.tsx</code>) made pressable. The caret, the hover and the vertical rule are the Agent Link exchange's fold (<code>ChatAgentLinkExchange.tsx</code>). Colours and type are the Console's tokens.</li>
+</ul>
+
+<h3>Rules</h3>
+<ul>
+  <li>Consecutive <code>nothing</code> runs form one group. A <code>result</code> or <code>problem</code> run, a manual run, or an unchecked run ends the group and is shown in full.</li>
+  <li>One quiet run folds too ("1 run, nothing to do"), so the topic looks the same whatever the count.</li>
+  <li>A run still in progress is shown in full; it joins a group only once it is checked.</li>
+  <li>Whether a group is open is the page's state, kept per group like the other folds (<code>ChatRowContext.folds</code>), since rows recycle.</li>
+</ul>
+
+<h3>Around the topic</h3>
+<ul>
+  <li><strong>TODO list in the sidebar.</strong> A <code>nothing</code> run does not move the topic up or mark it unread; the topic's second row is unchanged.</li>
+  <li><strong>Notifications.</strong> A <code>nothing</code> run raises none.</li>
+</ul>
+
+<h2>Open choices</h2>
+<ul>
+  <li><strong>Reading one quiet run in full.</strong> Not drawn. The simplest choice: pressing a row shows that run as it looks today, in place.</li>
+  <li><strong>Three answers or two.</strong> <code>problem</code> keeps "could not reach GitHub" from folding with "new/ is empty". A Boolean is enough if that case is left to the run failing.</li>
+  <li><strong>Runs from before the check.</strong> Left unchecked and shown in full; no backfill.</li>
+  <li><strong>Cost.</strong> One small call per scheduled run on the decision profile.</li>
+</ul>
+
+<h2>Not in scope</h2>
+<ul>
+  <li>Deleting or pruning quiet runs.</li>
+  <li>Folding in the Awareness topic (heartbeat runs) or in other channels.</li>
+</ul>
+
+</main>
+<script>
+  // The drawing's sample runs.
+  var QUIET = "No build performed: .factory/new/ is empty. Lock released; no notification sent.";
+  var CHAT_ICON = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 11.4A5.6 5.6 0 1 1 5 13.1L2.6 13.8z"/><path d="M5.6 8h.01M8 8h.01M10.4 8h.01"/></svg>';
+
+  var today = document.getElementById("today");
+  [["09:00", "11s"], ["09:30", "9s"], ["10:00", "12s"], ["10:30", "10s"]].forEach(function (run) {
+    today.insertAdjacentHTML(
+      "beforeend",
+      '<div class="sent"><div class="mark">' + run[0] + '</div><div class="bubble">Run a factory build for this repository.</div></div>' +
+        '<div class="reply"><div class="mark">' + CHAT_ICON + "<span>" + run[1] + '</span></div><div class="reply-text">' + QUIET + "</div></div>"
+    );
+  });
+
+  var runs = document.getElementById("fold-runs");
+  ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30"].forEach(function (at) {
+    runs.insertAdjacentHTML("beforeend", '<div class="fold-run"><span class="fold-at">' + at + '</span><span class="fold-text">' + QUIET + "</span></div>");
+  });
+
+  var line = document.getElementById("fold-line");
+  line.addEventListener("click", function () {
+    var open = line.getAttribute("aria-expanded") !== "true";
+    line.setAttribute("aria-expanded", open ? "true" : "false");
+    runs.hidden = !open;
+  });
+</script>
+</body>
+</html>
