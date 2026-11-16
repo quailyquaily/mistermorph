@@ -1,6 +1,6 @@
 // A button shows text or a glyph, never both (components/ui.tsx, ButtonProps.icon): given an icon
 // and a label it is a square icon button, and the label is its accessible name and its tooltip
-// instead of being drawn. The busy beam is a state, not a glyph: a text button keeps its label
+// instead of being drawn (a title beside it does not replace it). The busy beam is a state, not a glyph: a text button keeps its label
 // while it runs. The folded agent switcher (components/frame/AgentSwitcher.tsx) shows its avatar
 // without the caret, closed or open, with or without a selected agent; unfolded it keeps the caret.
 import { expect, open, test } from "nsh/test";
@@ -35,17 +35,22 @@ test("a button given an icon and a label draws the glyph alone, named by the lab
   await expect(app.press("id:both-disabled")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
 });
 
-test("the label is the icon button's tooltip, unless it has a title of its own", async () => {
+test("the label is the icon button's tooltip, even beside a title; a title names a button without a label", async () => {
   const app = await openGallery();
   // A tooltip's text is on screen while it shows (a bare selector would match the name as well).
   const shown = (text: string) => app.texts().includes(text);
   await app.hover("id:both");
   await app.waitUntil(() => shown("Refresh"));
 
+  // A title beside the label does not replace it: the tooltip is the former label.
   await app.hover("id:both-titled");
-  await app.waitUntil(() => shown("Stop this run"));
-  expect(shown("Stop")).toBe(false);
+  await app.waitUntil(() => shown("Stop"));
+  expect(shown("Stop this run")).toBe(false);
   expect(shown("Refresh")).toBe(false);
+
+  // Without a label, the title is the tooltip.
+  await app.hover("id:icon-only");
+  await app.waitUntil(() => shown("Close"));
 
   await app.hover("id:placeholder");
   await app.waitUntil(() => shown("Add a profile"));

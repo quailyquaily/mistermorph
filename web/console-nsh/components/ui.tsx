@@ -394,7 +394,7 @@ export interface ButtonProps {
   /**
    * The button's face. A button shows text or a glyph, never both: with an icon it is a square icon
    * button, and its `label` is not drawn but names it, as its accessible name and its tooltip
-   * (`title`, when given, is the tooltip instead). The busy beam of `loading` is a state, not a
+   * (a `title` is the tooltip only of a button without a label). The busy beam of `loading` is a state, not a
    * glyph: a text button keeps its label while it runs.
    */
   icon?: IconName;
@@ -570,7 +570,8 @@ export function Button(props: ButtonProps) {
   // A glyph is the whole face: the label is then the button's name, not drawn (ButtonProps.icon).
   const glyphFace = () => !!props.iconOnly || !!props.icon;
   const square = () => !!props.iconOnly || (!!props.icon && !!props.label);
-  const tip = () => props.title || (glyphFace() ? props.label : undefined);
+  // The tooltip: a glyph's label (what it would have read), else the title.
+  const tip = () => (glyphFace() && props.label ? props.label : props.title);
   return (
     <TipButton
       disabled={!enabled()}
