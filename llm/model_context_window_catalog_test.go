@@ -49,6 +49,8 @@ func TestResolveModelContextWindowCatalogExamples(t *testing.T) {
 		"fugu-ultra-v1.1":                        1000000,
 		"sakana-namazu":                          262144,
 		"sakana-namazu-v1.0":                     262144,
+		"claude-fable-5-2":                       1000000,
+		"claude-mythos-5-2":                      1000000,
 		"claude-fable-5-1":                       1000000,
 		"claude-mythos-5-1":                      1000000,
 		"claude-opus-5":                          1000000,
@@ -139,6 +141,8 @@ func TestResolveModelMaxOutputTokens(t *testing.T) {
 	tests := map[string]int64{
 		"claude-opus-5-5":            128000,
 		"anthropic/claude-opus-5.5":  128000,
+		"claude-fable-5-2":           128000,
+		"claude-mythos-5-2":          128000,
 		"claude-fable-5-1":           128000,
 		"claude-mythos-5-1":          128000,
 		"claude-sonnet-5-5":          128000,

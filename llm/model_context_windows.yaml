@@ -182,6 +182,24 @@ models:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-10-28"
   - provider: anthropic
+    model: claude-fable-5-2
+    aliases:
+      - anthropic/claude-fable-5-2
+    context_window_tokens: 1000000
+    max_output_tokens: 128000
+    sources:
+      - url: https://platform.claude.com/docs/en/models/fable-5-2/overview
+        checked_at: "2026-11-16"
+  - provider: anthropic
+    model: claude-mythos-5-2
+    aliases:
+      - anthropic/claude-mythos-5-2
+    context_window_tokens: 1000000
+    max_output_tokens: 128000
+    sources:
+      - url: https://platform.claude.com/docs/en/models/mythos-5-2/overview
+        checked_at: "2026-11-16"
+  - provider: anthropic
     model: claude-fable-5-1
     aliases:
       - anthropic/claude-fable-5-1
