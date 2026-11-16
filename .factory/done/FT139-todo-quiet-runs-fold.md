@@ -71,3 +71,13 @@ Claude Code reviewed all 27 changed files against origin/master...HEAD. No P0/P1
 Limits: no live decision-model request or independent visual/native desktop/Android check during review. Task text and final output go to the configured decision provider; model-output prompt injection can misclassify a useful result as nothing, although records remain readable. Classification may delay finish recording by 30 seconds. Loading older history can reset a fold's expansion when its first member changes. Multi-day fold time-span labels were not independently verified.
 
 Moved from review/ to ready/. The restart ordering P3 is a follow-up for the owner.
+
+## factory · 2026-11-16 23:53
+
+Shipped with Claude Code. Merge commit: fec2f285; remote master verified at 75ac75cd065b8aec9f0359a989d2c92db103b24b. No tag created or pushed, per owner request. No merge conflicts or integration-fix commits.
+
+The restart-recovery topic-ordering P3 remains unchanged.
+
+Final combined gate passed at 75ac75cd: gofmt, go vet ./..., go test ./..., nsh check 0.5.1, required Console scripts/test.sh (130 files, zero failures, no retries), 281 Console Node tests and 24 Cloudflare Node tests. Earlier FT138/FT139 gates each required an isolated attachment-test retry; the final combined run did not. No unpinned installs. No fresh visual/browser, live model/channel, native platform checks or platform builds.
+
+No linked GitHub issue or PR to close. Branch retained (clean not configured). Moved ready/ → done/.

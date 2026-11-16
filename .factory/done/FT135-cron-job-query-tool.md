@@ -53,3 +53,13 @@ Validation: Claude Code reviewed origin/master...HEAD (base 0200398d, merge-base
 
 Residual risks: live LLM/channel integration not exercised. Prompt workflow is absent when todo_update is disabled, and its opening wording still emphasizes mutation. First-use database initialization/import follows the existing store convention. Owner should assess the cross-audience disclosure note before shipping; this pass is not a claim of no defects.
 
+
+## factory · 2026-11-16 23:53
+
+Shipped with Claude Code. Merge commit: 75ac75cd; remote master verified at 75ac75cd065b8aec9f0359a989d2c92db103b24b. No tag created or pushed, per owner request. No merge conflicts or integration-fix commits.
+
+Owner explicitly approved inclusion: "FT135 is fine to merge too". The documented cross-audience disclosure is accepted for this ship and remains unfixed.
+
+Final combined gate passed at 75ac75cd: gofmt, go vet ./..., go test ./..., nsh check 0.5.1, required Console scripts/test.sh (130 files, zero failures, no retries), 281 Console Node tests and 24 Cloudflare Node tests. Earlier FT138/FT139 gates each required an isolated attachment-test retry; the final combined run did not. No unpinned installs. No fresh visual/browser, live model/channel, native platform checks or platform builds.
+
+No linked GitHub issue or PR to close. Branch retained (clean not configured). Moved ready/ → done/.

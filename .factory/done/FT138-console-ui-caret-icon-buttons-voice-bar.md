@@ -60,3 +60,13 @@ notes:
 Validation: Claude Code reviewed origin/master...HEAD across all 26 changed files; no P0/P1 findings. Root gofmt/vet/go test ./... passed. nsh check (pinned 0.5.1) passed. Required Console scripts/test.sh passed: 129 files, zero final failures, inventory check passed. chat-topic-drag and chat-voice required isolated retries; both passed, and chat-voice passed three further isolated runs. Tests used throwaway HOME. Installs: none beyond pinned toolchain restoration; no manifest or lockfile changes. Worktree stayed clean at the reviewed head; branch merges cleanly with origin/master.
 
 Residual risks: this review used headless probes, not rendered visual inspection. Open compact switcher, real voice bar corners on landing/conversation/mobile, native desktop/Android tooltips, touch discoverability and phone dialog action-row sizing were not visually verified. Four P2/P3 notes remain for the owner; factory policy permits ready/ without P0/P1. Moved review/ → ready/; not merged or shipped. No linked GitHub issue or PR was present, so no GitHub comment was required.
+
+## factory · 2026-11-16 23:53
+
+Shipped with Claude Code. Merge commit: 11a60add; remote master verified at 75ac75cd065b8aec9f0359a989d2c92db103b24b. No tag created or pushed, per owner request. No merge conflicts or integration-fix commits.
+
+Four P2/P3 review notes remain unchanged.
+
+Final combined gate passed at 75ac75cd: gofmt, go vet ./..., go test ./..., nsh check 0.5.1, required Console scripts/test.sh (130 files, zero failures, no retries), 281 Console Node tests and 24 Cloudflare Node tests. Earlier FT138/FT139 gates each required an isolated attachment-test retry; the final combined run did not. No unpinned installs. No fresh visual/browser, live model/channel, native platform checks or platform builds.
+
+No linked GitHub issue or PR to close. Branch retained (clean not configured). Moved ready/ → done/.
