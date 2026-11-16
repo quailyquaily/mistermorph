@@ -16,18 +16,18 @@ func (s *session) agy(ctx context.Context, req Request) (string, coderusage.Run,
 	run := coderusage.Run{Backend: "agy"}
 	var answer strings.Builder
 	noted := 0 // how much of the answer was handed over as notes
+	lastStep := ""
 	handle := func(m message) error {
 		if m.Method == "session/update" {
 			var p struct {
 				SessionID string `json:"sessionId"`
 				Update    struct {
-					Kind    string `json:"sessionUpdate"`
-					Content struct {
-						Text string `json:"text"`
-					} `json:"content"`
-					Title          string `json:"title"`
-					KindTool       string `json:"kind"`
-					CurrentModelID string `json:"currentModelId"`
+					Kind string `json:"sessionUpdate"`
+					// A message chunk's content is one block; a tool call's is a list of them.
+					Content        json.RawMessage `json:"content"`
+					Title          string          `json:"title"`
+					KindTool       string          `json:"kind"`
+					CurrentModelID string          `json:"currentModelId"`
 				} `json:"update"`
 			}
 			if err := json.Unmarshal(m.Params, &p); err != nil {
@@ -38,13 +38,24 @@ func (s *session) agy(ctx context.Context, req Request) (string, coderusage.Run,
 			}
 			switch p.Update.Kind {
 			case "agent_message_chunk":
-				answer.WriteString(p.Update.Content.Text)
+				var block struct {
+					Text string `json:"text"`
+				}
+				// A block that is not text (an image, a resource) has nothing to show here.
+				_ = json.Unmarshal(p.Update.Content, &block)
+				answer.WriteString(block.Text)
 			case "tool_call", "tool_call_update":
 				// What agy wrote before it went on working is a note of its own, whole, not
 				// the chunks it arrived in.
 				note(req, strings.TrimSpace(answer.String()[noted:]))
 				noted = answer.Len()
-				progress(req, p.Update.KindTool+": "+p.Update.Title)
+				// An update carries only what changed: without a title it says nothing new,
+				// and with the same one it would repeat the line.
+				step := strings.TrimPrefix(p.Update.KindTool+": "+p.Update.Title, ": ")
+				if p.Update.Title != "" && step != lastStep {
+					lastStep = step
+					progress(req, step)
+				}
 			case "plan":
 				progress(req, "planning")
 			case "current_model_update":
@@ -178,7 +189,13 @@ func (s *session) agy(ctx context.Context, req Request) (string, coderusage.Run,
 		return answer.String(), run, err
 	}
 	u := result.Usage
-	model := "agy" // ACP reports prompt totals, not individual requests for catalog pricing.
+	// The model agy says it runs, so the catalog can price it; a model the catalog has no price
+	// for keeps its tokens and no cost. ACP reports the prompt's total, not its requests: the
+	// prompt is priced as one request.
+	model := s.model
+	if model == "" {
+		model = "agy"
+	}
 	run.Turns = 1
 	run.Models = []coderusage.ModelUsage{{Model: model, InputTokens: u.Input, CachedInputTokens: u.Read, CacheCreationInputTokens: u.Write, OutputTokens: u.Output, ReasoningTokens: u.Thought}}
 	if result.Stop != "end_turn" {

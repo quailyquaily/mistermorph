@@ -38,6 +38,10 @@ func fakeServer() {
 	}
 	finish := func(id json.RawMessage, task string) {
 		if backend == "agy" {
+			// As agy sends them: a tool call's content is a list, and its updates repeat or omit the title.
+			event("session/update", map[string]any{"sessionId": "s1", "update": map[string]any{"sessionUpdate": "tool_call", "toolCallId": "t1", "kind": "execute", "title": "ls -la", "content": []any{}}})
+			event("session/update", map[string]any{"sessionId": "s1", "update": map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "t1", "kind": "execute", "title": "ls -la", "content": []any{map[string]any{"type": "content", "content": map[string]any{"type": "text", "text": "total 0"}}}}})
+			event("session/update", map[string]any{"sessionId": "s1", "update": map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed"}})
 			event("session/update", map[string]any{"sessionId": "s1", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "done"}}})
 			reply(id, map[string]any{"stopReason": "end_turn", "usage": map[string]any{"inputTokens": 100, "outputTokens": 10, "cachedReadTokens": 20, "thoughtTokens": 3}})
 			return
@@ -152,6 +156,8 @@ func TestSessionReuseUsageAndScope(t *testing.T) {
 			}
 			var pids []int
 			req.Process = func(pid int) { pids = append(pids, pid) }
+			var steps []string
+			req.Progress = func(step string) { steps = append(steps, step) }
 			for i := 0; i < 2; i++ {
 				out, err := sessions.Run(context.Background(), "run1", req)
 				if err != nil || out != "done" {
@@ -160,6 +166,14 @@ func TestSessionReuseUsageAndScope(t *testing.T) {
 			}
 			if len(reports) != 2 || reports[0].Models[0].InputTokens != 100 || reports[1].Models[0].InputTokens != 100 || pids[0] != pids[1] {
 				t.Fatalf("reports=%+v pids=%v", reports, pids)
+			}
+			// agy's usage goes under the model it said it runs, so the catalog can price it.
+			if backend == "agy" && reports[0].Models[0].Model != "gemini-3.8-flash-high" {
+				t.Fatalf("agy model = %q", reports[0].Models[0].Model)
+			}
+			// A tool call's updates say its step once.
+			if backend == "agy" && strings.Join(steps, "|") != "execute: ls -la|execute: ls -la" {
+				t.Fatalf("agy steps = %q", steps)
 			}
 			if backend == "codex" && (quotas != 2 || len(reports[0].Models[0].Requests) != 1) {
 				t.Fatalf("quotas=%d reports=%+v", quotas, reports)
