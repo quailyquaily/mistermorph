@@ -58,3 +58,14 @@ Installs: none unpinned; no dependency/lockfile changes.
 Checks: nsh check passed. Required parallel Console runner: 127 files, zero failed, 256s; chat-attachments passed its isolated retry. New action-popup tests: 12; real Models menu regression included. Configured gofmt/vet/go-test gate passed, independently rerun by manager. Initial coder Go attempt hit full /tmp tmpfs; rerun with scratch TMPDIR/GOTMPDIR passed. git diff --check passed; only item-related commits, no never paths changed. Scripted tests used absolute throwaway HOME.
 
 Visual: headless Chrome real Console with stub API, before/after Models menu at 390×844 touch and 1280×800 desktop; checked initial appearance, arrows/Enter/Escape, tapping activation, hover leaving and unchanged popup placement. Other popup locations inspected in code/test coverage, not visually in Chrome. Not checked: native GPUI desktop, real Android/emulator or screen reader.
+
+
+## factory · review · 2026-11-16 19:10
+head: 5742363ecee4c1aa861ec12344a6bd075fc1d3f2
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (14 files) against the request, clarification and plan. No qualifying introduced findings. Action-only initial highlighting, keyboard traversal and disabled rows, pointer leave, actual selected-value preservation, setup filtering and popup inventory checked. Branch merges cleanly with current origin/master.
+- Validation passed: configured gofmt/vet/go-test gate; nsh check (0.5.1); required parallel Console test runner, 127 files, 0 failed, 488s; git diff --check. mobile-popup and chat-voice had parallel-run failures, both passed the runner's isolated retry; not established as baseline flakes. Scripted tests used absolute throwaway HOME and scratch temporary directories. Worktree remains clean, reviewed remote head unchanged.
+- Installs: none. No files changed or commits made by reviewer.
+- Residual risks: no fresh browser/native desktop/Android/screen-reader session in this review; visual confidence relies on builder's Models-menu Chrome checks. Language menu checkbox semantics are pre-existing. FT136 overlaps PickerList and PopoverPicker: preserve FT137 unmatched-value/all-disabled navigation together with FT136 sizing when resolving any ship conflict; combination not tested here.
+- Moved review/ → ready/.
