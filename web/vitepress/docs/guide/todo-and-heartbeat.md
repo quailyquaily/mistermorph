@@ -102,4 +102,4 @@ Good uses:
 - Look for due follow-ups.
 - Inspect routine files.
 
-For the tool that updates TODOs, see [`todo_update`](/guide/built-in-tools#todo_update). For state directory placement, see [Filesystem Roots](/guide/filesystem-roots).
+For the tools that list and update TODOs, see [`todo_list`](/guide/built-in-tools#todo_list) and [`todo_update`](/guide/built-in-tools#todo_update). For state directory placement, see [Filesystem Roots](/guide/filesystem-roots).

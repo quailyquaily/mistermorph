@@ -204,6 +204,41 @@ func TestAppendTodoWorkflowBlock_IncludesPolicyWhenTodoUpdateToolExists(t *testi
 	}
 }
 
+func TestAppendTodoWorkflowBlock_NamesTodoListOnlyWhenRegistered(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		tools    []string
+		wantList bool
+	}{
+		{name: "update only", tools: []string{"todo_update"}},
+		{name: "update and list", tools: []string{"todo_update", "todo_list"}, wantList: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := agent.PromptSpec{}
+			reg := tools.NewRegistry()
+			for _, name := range tc.tools {
+				reg.Register(&testTool{name: name})
+			}
+
+			AppendTodoWorkflowBlock(&spec, reg)
+
+			if len(spec.Blocks) != 1 {
+				t.Fatalf("blocks len = %d, want 1", len(spec.Blocks))
+			}
+			content := spec.Blocks[0].Content
+			if got := strings.Contains(content, "`todo_list`"); got != tc.wantList {
+				t.Fatalf("names todo_list = %v, want %v: %q", got, tc.wantList, content)
+			}
+			if strings.Contains(content, "{{") || strings.Contains(content, "\n\n\n") {
+				t.Fatalf("template markers or blank runs left: %q", content)
+			}
+			if !strings.Contains(content, "call `todo_update` with action `add_once`") {
+				t.Fatalf("todo_update guidance missing: %q", content)
+			}
+		})
+	}
+}
+
 func TestAppendWakeSignalBlock(t *testing.T) {
 	spec := agent.PromptSpec{}
 

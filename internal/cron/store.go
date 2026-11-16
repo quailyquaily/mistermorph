@@ -60,6 +60,16 @@ func (s *Store) Read() (File, bool, error) {
 	return File{Version: Version, Tasks: tasks}, true, nil
 }
 
+// Tasks returns the list in order, as Read does, under ctx. It is never nil: an empty list is an
+// empty slice.
+func (s *Store) Tasks(ctx context.Context) ([]Task, error) {
+	db, err := s.handle(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return readTasks(ctx, db)
+}
+
 type rowsQueryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }

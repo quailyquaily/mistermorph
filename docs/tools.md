@@ -11,6 +11,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `contacts_send` is static, but default exposure is limited to awareness runs when enabled, or to explicit `$contacts_send` opt-in.
   - `agent_send` is exposed only while at least one active Contact is `kind: agent`.
   - `contacts_list` lists the contacts (in `agent.db`) whenever a contacts folder is configured.
+  - `todo_list` lists the TODO list (in `agent.db`) whenever the runtime has a state folder. It only reads, so it does not depend on `tools.todo_update.enabled`.
 - `engine-scoped` tools:
   - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner and parent tool lookup. See [`spawn`](#spawn).
   - `list_model_profiles`: registered next to `spawn` when more than one model profile can run a subtask. See [`list_model_profiles`](#list_model_profiles).
@@ -378,6 +379,37 @@ Returns `status` (`created` or `replaced`), `id`, `subject`, `name`, `visibility
 `journal_search`: `query`, `since` and `until` (RFC 3339 or `YYYY-MM-DD`), `domain`, `limit` (1–100, default 20). Returns `events` (`seq`, `id`, `time`, `domain`, `type`, `task_id`, `text` excerpt) and `has_more`. The owner searches every event; anyone else only their own conversation's.
 
 `journal_read`: `seq`. Returns the event with its payload, cut at 8 KiB (`truncated`).
+
+## `todo_list`
+
+Purpose: list the scheduled TODO tasks, the ones `todo_update` maintains: one-time and recurring, enabled and disabled.
+
+Parameters: none. The tool always reads the runtime's own TODO list (`<file_state_dir>/agent.db`); a caller cannot name another path, and other parameters are ignored.
+
+Returns JSON:
+
+- `count`: number of tasks.
+- `tasks`: every task in list order, `[]` when there are none. Each task has:
+  - `id`, `title`, `content`.
+  - `enabled`: always present. `false` for a task that is turned off, `true` otherwise (a task stored without `enabled` is on).
+  - `at` (one-time, `YYYY-MM-DD HH:mm`) or `cron` (recurring), and `tz` when set.
+  - `chat_id`, `workspace_dir`, `last_run_at`, `last_run_status` when set.
+  - `bash_env_names`: the names of the task's `bash_env` variables. Values are never returned.
+
+Example:
+
+```json
+{"count":2,"tasks":[
+  {"id":"daily-report","title":"Daily report","enabled":true,"cron":"0 9 * * *","tz":"Asia/Tokyo","content":"Write the daily report"},
+  {"id":"renew-domain","title":"Renew domain","enabled":false,"at":"2027-03-04 08:30","content":"Renew the domain"}
+]}
+```
+
+Notes:
+
+- Read-only: it never adds, changes, enables, disables or runs a task, and does not compute next run times.
+- Registered whenever the runtime has a state folder, with or without `todo_update`. With `BuiltinToolNames` set, it must be named there.
+- A list that cannot be read (for example a damaged `agent.db`) is an error, never an empty result.
 
 ## `contacts_list`
 

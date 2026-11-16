@@ -215,7 +215,8 @@ func AppendTodoWorkflowBlock(spec *agent.PromptSpec, registry *tools.Registry) {
 	if _, ok := registry.Get("todo_update"); !ok {
 		return
 	}
-	content := strings.TrimSpace(todoWorkflowBlockTemplateSource)
+	_, canList := registry.Get("todo_list")
+	content := strings.TrimSpace(todoWorkflowListSection(todoWorkflowBlockTemplateSource, canList))
 	if content == "" {
 		return
 	}
@@ -450,4 +451,25 @@ func appendStaticBlock(spec *agent.PromptSpec, content string) {
 	if content = strings.TrimSpace(content); content != "" {
 		spec.Blocks = append(spec.Blocks, agent.PromptBlock{Content: content})
 	}
+}
+
+const (
+	todoWorkflowListBegin = "{{TODO_LIST_BEGIN}}\n"
+	todoWorkflowListEnd   = "{{TODO_LIST_END}}\n"
+)
+
+// todoWorkflowListSection keeps the template's todo_list section when the run has that tool and
+// cuts it otherwise, so the block never names a tool the model cannot call.
+func todoWorkflowListSection(template string, keep bool) string {
+	template = strings.ReplaceAll(template, "\r\n", "\n")
+	begin := strings.Index(template, todoWorkflowListBegin)
+	end := strings.Index(template, todoWorkflowListEnd)
+	if begin < 0 || end < begin {
+		return template
+	}
+	section := ""
+	if keep {
+		section = template[begin+len(todoWorkflowListBegin) : end]
+	}
+	return template[:begin] + section + template[end+len(todoWorkflowListEnd):]
 }

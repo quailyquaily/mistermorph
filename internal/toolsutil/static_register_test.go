@@ -66,6 +66,9 @@ func TestStaticRegistryConfigFromReaderOwnsStaticToolConfiguration(t *testing.T)
 	if cfg.ContactsSend.ContactsDir != filepath.Join(stateDir, "people") {
 		t.Fatalf("contacts dir = %q", cfg.ContactsSend.ContactsDir)
 	}
+	if cfg.TodoList.CronPath != filepath.Join(stateDir, "cron.yaml") {
+		t.Fatalf("todo_list cron path = %q", cfg.TodoList.CronPath)
+	}
 	if cfg.Common.PathRoots.FileCacheDir != cacheDir || cfg.Common.PathRoots.FileStateDir != stateDir {
 		t.Fatalf("path roots = %#v", cfg.Common.PathRoots)
 	}
@@ -208,6 +211,44 @@ func TestRegisterStaticToolsContactsSendDisabledRequiresExplicitTrigger(t *testi
 
 	if _, ok := reg.Get(BuiltinContactsSend); !ok {
 		t.Fatalf("explicit contacts_send trigger did not register tool")
+	}
+}
+
+func TestRegisterStaticToolsTodoList(t *testing.T) {
+	cronPath := filepath.Join(t.TempDir(), "cron.yaml")
+	cases := []struct {
+		name     string
+		cfg      StaticRegistryConfig
+		selected map[string]bool
+		want     bool
+	}{
+		{name: "registered with a cron path", cfg: StaticRegistryConfig{TodoList: StaticTodoListConfig{CronPath: cronPath}}, want: true},
+		{name: "not registered without a cron path", cfg: StaticRegistryConfig{}},
+		{name: "selected", cfg: StaticRegistryConfig{TodoList: StaticTodoListConfig{CronPath: cronPath}}, selected: map[string]bool{BuiltinTodoList: true}, want: true},
+		{name: "left out of the selected tools", cfg: StaticRegistryConfig{TodoList: StaticTodoListConfig{CronPath: cronPath}}, selected: map[string]bool{BuiltinReadFile: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := tools.NewRegistry()
+			RegisterStaticTools(reg, tc.cfg, tc.selected, nil)
+			tool, ok := reg.Get(BuiltinTodoList)
+			if ok != tc.want {
+				t.Fatalf("todo_list registered = %v, want %v", ok, tc.want)
+			}
+			if !ok {
+				return
+			}
+			if _, mutating := reg.Get(BuiltinTodoUpdate); mutating {
+				t.Fatal("todo_update registered by the static tools")
+			}
+			out, err := tool.Execute(context.Background(), map[string]any{})
+			if err != nil || out != `{"count":0,"tasks":[]}` {
+				t.Fatalf("Execute() = %q, %v", out, err)
+			}
+		})
+	}
+	if !IsKnownBuiltinToolName("todo_list") {
+		t.Fatal("todo_list is not a known built-in tool name")
 	}
 }
 
