@@ -50,6 +50,11 @@ export interface PickerProbe {
  * (`overflow-hidden`, which clips in the layout too) because nsh counts an `Image`'s natural size
  * as overflow whatever its styled size: an icon drawn 16pt from a 256pt SVG reached 240pt past
  * its row, right and down, and the scroll view scrolled over that empty room (PORTING.md).
+ *
+ * The highlight is the keys' and the pointer's: a list with a `value` opens with its chosen row
+ * highlighted (the first when the value is none of them); a menu of actions (no `value`) opens
+ * with none, since nothing in it is chosen, and takes one from the first Down or Up, or from the
+ * pointer while it is over a row.
  */
 export function PickerList(props: {
   items: PickerItem[];
@@ -83,7 +88,7 @@ export function PickerList(props: {
   /** The list's own classes (default `relative flex-1 gap-1`). */
   class?: string;
   testID?: string;
-  /** A part's test id (`filter`, `option-<value>`), or none. */
+  /** A part's test id (`filter`, `option-<value>`, `highlighted-<value>` round the highlighted row), or none. */
   part: (name: string) => string | undefined;
   /** Drawn first in the list, over it (the popover's tail). */
   overlay?: JSX.Element;
@@ -96,6 +101,8 @@ export function PickerList(props: {
   const query = signal("");
   const active = signal(0);
   const footer = () => props.footer ?? [];
+  /** A menu of actions: nothing in it is chosen, so nothing is highlighted until asked. */
+  const actions = () => props.value === undefined;
   const shown = () => {
     const text = query().trim().toLowerCase();
     if (!text) return props.items;
@@ -107,6 +114,8 @@ export function PickerList(props: {
   /** The next row from `from` by `by` (1 or -1, round the ends) that is not disabled; `from` if none. */
   const step = (from: number, by: number) => {
     const list = untracked(rows);
+    // From no row, Up starts at the last one, as Down starts at the first.
+    if (from < 0 && by < 0) from = 0;
     for (let i = 1; i <= list.length; i += 1) {
       const at = (((from + by * i) % list.length) + list.length) % list.length;
       if (!list[at].disabled) return at;
@@ -122,7 +131,7 @@ export function PickerList(props: {
     untracked(() => {
       query.set("");
       const chosen = rows().findIndex((item) => item.value === props.value && !item.disabled);
-      active.set(chosen >= 0 ? chosen : step(-1, 1));
+      active.set(chosen >= 0 ? chosen : actions() ? -1 : step(-1, 1));
     });
     const move = (by: number) => active.set(step(untracked(active), by));
     cleanup(
@@ -136,7 +145,13 @@ export function PickerList(props: {
       onMouseEnter={() => {
         if (!item().disabled) active.set(index());
       }}
+      // A menu's highlight leaves with the pointer; a choice's stays for Enter.
+      onMouseLeave={() => {
+        if (actions() && untracked(active) === index()) active.set(-1);
+      }}
       class={item().separated ? "mt-1 border-t border-line-faint pt-1.5" : ""}
+      // For tests, which read no fills: the highlighted row's wrapper is named.
+      testID={active() === index() ? props.part(`highlighted-${item().value}`) : undefined}
     >
       <BaseButton
         role={props.role === "menu" ? "menuitem" : "option"}
