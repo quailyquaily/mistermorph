@@ -43,6 +43,16 @@ const BOOT = new Set([
  */
 const afterLoad = (calls: { method: string; path: string; uri?: string }[], loaded: number) =>
   requests(calls.slice(loaded)).filter((request) => request !== "POST /stream/ticket");
+/**
+ * Brings a component's card to the top of the page by filtering for its name: a demo is mounted
+ * only near the visible part of the page (pages/ui-components/UiComponentsPage.tsx `DemoCard`).
+ */
+async function find(app: { clear(selector: string): Promise<void>; type(selector: string, text: string): Promise<void>; waitFor(selector: string, options?: any): Promise<unknown> }, name: string, id = name) {
+  await app.clear("id:uig-filter");
+  await app.type("id:uig-filter", name);
+  await app.waitFor(`id:uig-demo-${id}`);
+  await app.waitFor(`id:uig-demo-away-${id}`, { state: "gone" });
+}
 const writes = (calls: { method: string; path: string }[]) => calls.filter((call) => call.method !== "GET" && !["/auth/login", "/stream/ticket"].includes(call.path));
 
 test("the address opens the gallery directly, behind the session guard, with no frame around it", async () => {
@@ -111,6 +121,34 @@ test("every inventory entry is on the page: a demo for each component shown, a r
   expect(app.shows("id:uig-note-SidebarEdge >> text:Not mounted: a private part of Sidebar, which is not mounted on this page.")).toBe(true);
 });
 
+test("only the demos near the visible part of the page are mounted, and scrolling mounts the next ones", async () => {
+  const { app } = await openConsole({ location: PATH });
+  await app.waitFor("id:ui-components-page");
+  const demos = GALLERY_ENTRIES.filter((entry) => entry.mode === "demo");
+  const away = () => demos.filter((entry) => app.shows(`id:uig-demo-away-${entry.id}`)).map((entry) => entry.id);
+  // The first card is there with its demo; the last section's are cards without one.
+  await app.waitFor("id:uig-demo-away-Button", { state: "gone" });
+  const last = demos.at(-1)!.id;
+  expect(app.shows(`id:uig-demo-${last}`)).toBe(true);
+  expect(away()).toContain(last);
+  expect(away().length).toBeGreaterThan(demos.length / 2);
+  // Far down the page the first card gives its demo up and keeps its place.
+  const before = away().length;
+  await app.scroll("id:uig-scroll", 6000);
+  await app.waitFor("id:uig-demo-away-Button");
+  expect(app.shows("id:uig-demo-Button")).toBe(true);
+  expect(away().length).toBeLessThan(demos.length);
+  expect(Math.abs(away().length - before)).toBeLessThan(demos.length / 2);
+  await app.scroll("id:uig-scroll", -6000);
+  await app.waitFor("id:uig-demo-away-Button", { state: "gone" });
+  // Choosing a section shows it from its start, wherever the page was.
+  await app.scroll("id:uig-scroll", 6000);
+  await app.waitFor("id:uig-demo-away-Button");
+  await app.press("id:uig-index-controls");
+  await app.waitFor("id:uig-group-feedback", { state: "gone" });
+  await app.waitFor("id:uig-demo-away-Button", { state: "gone" });
+});
+
 test("the index shows one section, the filter finds components by name or file, and an empty result says how to get back", async () => {
   const { app } = await openConsole({ location: PATH });
   await app.waitFor("id:ui-components-page");
@@ -150,19 +188,24 @@ test("the language control is the console's own: every language, the page and th
   await app.waitFor("id:ui-components-page");
   for (const item of LANGUAGES) expect(app.shows(`id:uig-language >> text:${item.label}`)).toBe(true);
   const before = lastLocation(app);
+  // A fixture with a number in it, and a production component's string.
+  const examples = async (badge: string, save: string) => {
+    await find(app, "Badge");
+    expect(app.shows(`id:uig-demo-Badge >> text:${badge}`)).toBe(true);
+    await find(app, "Button");
+    expect(app.shows(`id:uig-demo-Button >> text:${save}`)).toBe(true);
+    await app.clear("id:uig-filter");
+  };
   // English: the page's own strings, a fixture with a number in it, and a production component's string.
-  expect(app.shows("id:uig-demo-Badge >> text:12 items")).toBe(true);
-  expect(app.shows("id:uig-demo-Button >> text:Save")).toBe(true);
+  await examples("12 items", "Save");
   await app.press("id:uig-language >> label:中文");
   await app.waitFor("text:UI 组件");
   expect(app.shows(`text:${GALLERY_ENTRIES.length} 个组件`)).toBe(true);
-  expect(app.shows("id:uig-demo-Badge >> text:12 项")).toBe(true);
-  expect(app.shows("id:uig-demo-Button >> text:保存")).toBe(true);
+  await examples("12 项", "保存");
   expect(app.shows("id:uig-note-MenuIconTrigger >> text:在 DropdownMenu 的演示中展示。")).toBe(true);
   await app.press("id:uig-language >> label:日本語");
   await app.waitFor("text:UI コンポーネント");
-  expect(app.shows("id:uig-demo-Badge >> text:12 件")).toBe(true);
-  expect(app.shows("id:uig-demo-Button >> text:保存")).toBe(true);
+  await examples("12 件", "保存");
   expect(app.shows("id:uig-note-MenuIconTrigger >> text:DropdownMenu のデモの中で表示されます。")).toBe(true);
   // The same page, still: no navigation, and the choice is the console's saved language.
   expect(lastLocation(app)).toBe(before);
@@ -185,32 +228,41 @@ test("the controls work on local state, the overlays open and close, and nothing
   expect(app.shows("text:No demo control pressed yet")).toBe(true);
 
   // A button, a switch, a field, a busy state and its reset.
+  await find(app, "Button");
   await app.press("id:uig-button-danger");
   await app.waitFor("text:Last local action: Button: danger (1 so far)");
+  await find(app, "Toggle");
   expect(app.shows("text:On")).toBe(true);
   await app.press("id:uig-toggle");
   await app.waitFor("text:Off");
+  await find(app, "TextField");
   await app.type("id:uig-textfield-name", "Quill");
   await app.waitUntil(() => app.texts().some((text) => text.startsWith("Value: ") && text.includes("Quill")));
+  await find(app, "ProgressBar");
   await app.press("id:uig-progress-more");
   await app.waitFor("text:50% done");
+  await find(app, "SettingsCard");
   await app.press("id:uig-fold");
   await app.waitFor("id:uig-fold-body");
 
   // A dialog, a message, the confirm host and a notice: each opens and closes.
+  await find(app, "Modal");
   await app.press("id:uig-modal-open-md");
   await app.waitFor("id:uig-modal");
   await app.press("id:uig-modal-cancel");
   await app.waitFor("id:uig-modal", { state: "gone" });
+  await find(app, "MessageDialog");
   await app.press("id:uig-message-open-danger");
   await app.waitFor("id:uig-message");
   await app.press("id:dialog-action-cancel");
   await app.waitFor("id:uig-message", { state: "gone" });
+  await find(app, "ConfirmHost");
   await app.press("id:uig-confirm-open");
   await app.waitFor("text:This dialog is part of the gallery. Its buttons only close it.");
   await app.press("id:dialog-action-confirm");
   await app.waitFor("text:Answer: confirmed");
   // The inline notice demos show the same sentence twice already; the notice stack adds one.
+  await find(app, "NoticeHost");
   const NOTICE = "A sample warning notice from the gallery.";
   const shownNotices = () => app.texts().filter((text) => text === NOTICE).length;
   const inline = shownNotices();
@@ -218,15 +270,18 @@ test("the controls work on local state, the overlays open and close, and nothing
   await app.waitUntil(() => shownNotices() === inline + 1);
   await app.press("id:uig-notice-clear");
   await app.waitUntil(() => shownNotices() === inline);
+  await find(app, "DialogShell");
   await app.press("id:uig-dialog-DialogShell");
   await app.waitFor("id:uig-dialogshell");
   await app.press("id:uig-dialogshell-done");
   await app.waitFor("id:uig-dialogshell", { state: "gone" });
 
   // What would send, save or approve in the console only notes the action here.
+  await find(app, "ChatComposer");
   await app.type("id:uig-composer-default >> id:chat-composer-input", "hello from the gallery");
   await app.press("id:uig-composer-default >> id:chat-composer-send");
   await app.waitUntil(() => app.texts().some((text) => text.includes("ChatComposer send: hello from the gallery")));
+  await find(app, "SettingsSaveBar");
   await app.press("id:uig-savebar-toggle");
   await app.waitFor("id:settings-save-bar");
   await app.press("id:settings-save-bar-save");

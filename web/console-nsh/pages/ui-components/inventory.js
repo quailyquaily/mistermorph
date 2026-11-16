@@ -522,7 +522,7 @@ const FILES = {
   },
   "pages/ui-components/UiComponentsPage.tsx": {
     group: "pages",
-    items: { UiComponentsPage: L("page"), Chip: L("part", "UiComponentsPage"), DemoCard: L("part", "UiComponentsPage"), NoteRow: L("part", "UiComponentsPage") },
+    items: { UiComponentsPage: L("page"), Chip: L("part", "UiComponentsPage"), SectionRow: L("part", "UiComponentsPage"), DemoCard: L("part", "UiComponentsPage"), NoteRow: L("part", "UiComponentsPage") },
   },
 };
 

@@ -5,11 +5,15 @@
 // components with synthetic props and local state (./demo.tsx, ./demos), the inventory
 // (./inventory.js) says what each component is shown as, and the language control is the
 // console's own (`localeState.setLanguage`, the one catalog in lib/i18n).
+// Only the demos near the visible part of the page are mounted (`DemoCard`): many of them draw on
+// every frame (spinners, beams, clocks), wherever on the page they are.
 // docs/console/ui-components.md describes it.
+import type { ScrollRef } from "nsh";
 import { computed, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import { LANGUAGES } from "../../components/LanguageSelector";
+import { createSlidingSelection } from "../../components/motion/SlidingSelection";
 import { EdgeScroll } from "../../components/motion/ScrollEdges";
-import { Button, EmptyState, Icon, Tabs, TextField } from "../../components/ui";
+import { Button, EmptyState, Icon, Tabs, TextField, TipButton } from "../../components/ui";
 import { currentRoute } from "../../lib/router";
 import { localeState } from "../../lib/stores/index.js";
 import { galleryAction, galleryActionCount, t } from "./demo";
@@ -48,20 +52,88 @@ function Chip(props: { id: string; label: string; count: number; active: boolean
   );
 }
 
-function DemoCard(props: { entry: GalleryEntry; width: number }) {
+/** The sections' sidebar's width on a wide window. */
+const SIDEBAR_WIDTH = 232;
+
+/**
+ * A section's row in the sidebar, as the Settings page's index draws its sections: the title, the
+ * count of its components after it; the selected one is marked by the sidebar's one highlight.
+ */
+function SectionRow(props: {
+  id: string;
+  label: string;
+  count: number;
+  active: boolean;
+  onPress: () => void;
+  onLayout: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
+}) {
+  return (
+    <View onLayout={props.onLayout}>
+      <TipButton
+        selected={props.active}
+        onPress={props.onPress}
+        accessibilityLabel={props.label}
+        testID={`uig-index-${props.id}`}
+        class={`min-h-10 flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 pl-3.5 pr-[13px] transition-colors duration-180 ${
+          props.active ? "hover:bg-blue/3" : "hover:bg-hover-soft"
+        }`}
+      >
+        <Text class="flex-1 text-sm leading-[18.2px] tracking-tight text-foreground line-clamp-2">{props.label}</Text>
+        <Text class="font-mono text-[11px] text-muted-foreground">{String(props.count)}</Text>
+      </TipButton>
+    </View>
+  );
+}
+
+/** How far past the visible part of the page a demo stays mounted, in points. */
+const NEAR = 600;
+/** The visible part moves the demos in steps of this many points, not on every scroll event. */
+const STEP = 200;
+/** A demo's height before it was ever mounted. */
+const UNSEEN_HEIGHT = 120;
+
+/**
+ * A component's card. Its demo is mounted only while the card is near the visible part of the
+ * page (`span`, in the scroll content's coordinates; `top` is where the card's row of cards starts
+ * in them): a demo that animates draws on every frame even when it is far off screen, and the page
+ * has about 150 of them. A demo that is not mounted keeps the height it had, so nothing moves when
+ * it leaves or comes back; its local state starts over.
+ */
+function DemoCard(props: { entry: GalleryEntry; width: number; top: number; span: { from: number; to: number } }) {
   const demo = DEMOS[props.entry.id];
+  // The card's frame in its row, and the demo's height when it was last mounted.
+  const frame = signal({ y: 0, height: 0 });
+  const held = signal(UNSEEN_HEIGHT);
+  const near = computed(() => {
+    const from = props.top + frame().y;
+    return from <= props.span.to + NEAR && from + frame().height >= props.span.from - NEAR;
+  });
   return (
     <View
       class="overflow-hidden rounded-(--radius) border border-line-faint bg-card"
       style={{ width: props.width }}
       testID={`uig-demo-${props.entry.id}`}
       accessibilityLabel={props.entry.name}
+      onLayout={({ bounds }) => {
+        const next = { y: Math.round(bounds.origin.y), height: Math.round(bounds.size.height) };
+        if (next.y !== frame().y || next.height !== frame().height) frame.set(next);
+      }}
     >
       <View class="gap-0.5 border-b border-line-soft px-4 py-2.5">
         <Text class="font-mono text-sm font-medium text-foreground" role="header">{props.entry.name}</Text>
         <Text class="font-mono text-[11px] text-muted-foreground">{props.entry.file}</Text>
       </View>
-      <View class="min-w-0 p-4">{demo ? demo.render() : null}</View>
+      <If when={near()} else={<View style={{ height: held() }} testID={`uig-demo-away-${props.entry.id}`} />}>
+        <View
+          class="min-w-0 p-4"
+          onLayout={({ bounds }) => {
+            const height = Math.round(bounds.size.height);
+            if (height > 0 && height !== held()) held.set(height);
+          }}
+        >
+          {demo ? demo.render() : null}
+        </View>
+      </If>
     </View>
   );
 }
@@ -87,15 +159,41 @@ export function UiComponentsPage() {
   const shown = computed(() => GALLERY_ENTRIES.filter((entry) => matchesFilter(entry, filter())));
   const inGroup = (id: string) => shown().filter((entry) => entry.group === id);
   const visibleGroups = computed(() => GALLERY_GROUPS.filter((item) => (group() === ALL || group() === item.id) && inGroup(item.id).length > 0));
+  // Choosing a section shows it from its start: the page goes back to its top, wherever it was
+  // (else a press on the section already on screen, or on a shorter one, shows no change).
+  let scroller: ScrollRef | undefined;
+  const pick = (id: string) => {
+    group.set(id);
+    scroller?.scrollTo({ y: 0, animated: false });
+  };
   const reset = () => {
     filter.set("");
-    group.set(ALL);
+    pick(ALL);
   };
+  // The visible part of the scroll content, in steps (a demo is mounted near it, `DemoCard`), and
+  // where each section and its row of cards start in the content.
+  const span = signal({ from: 0, to: untracked(() => windowSize().height) });
+  const see = (offset: number, height: number) => {
+    const from = Math.max(0, Math.floor(offset / STEP) * STEP);
+    const to = Math.ceil((offset + height) / STEP) * STEP;
+    if (from !== span().from || to !== span().to) span.set({ from, to });
+  };
+  let scrolled = 0;
+  const tops = signal<Record<string, number>>({});
+  const place = (key: string, y: number) => {
+    const next = Math.round(y);
+    if (tops()[key] !== next) tops.update((all) => ({ ...all, [key]: next }));
+  };
+  const cardsTop = (id: string) => (tops()[`group:${id}`] ?? 0) + (tops()[`cards:${id}`] ?? 0);
+  // The sections: a sidebar beside the page on a wide window, a row of chips in the head on a
+  // narrow one (a phone), where a sidebar would leave the cards no room.
+  const sidebar = () => windowSize().width > 900;
+  const selection = createSlidingSelection(() => (sidebar() ? group() : null));
   // The page's own gutters and columns: one column on a phone, two on a wide window, three on a
   // very wide one. A card never takes more than the page's width; what is wider scrolls inside it.
   const pad = () => (windowSize().width <= 640 ? 12 : 24);
   const gap = 16;
-  const room = () => Math.max(240, windowSize().width - pad() * 2);
+  const room = () => Math.max(240, windowSize().width - (sidebar() ? SIDEBAR_WIDTH : 0) - pad() * 2);
   const columns = () => (room() >= 1560 ? 3 : room() >= 900 ? 2 : 1);
   const cardWidth = (wide: boolean) => (wide ? room() : Math.floor((room() - gap * (columns() - 1)) / columns()));
   const countLabel = () => {
@@ -141,16 +239,48 @@ export function UiComponentsPage() {
             {galleryActionCount() > 0 ? t("uig_last_action", { action: galleryAction(), count: galleryActionCount() }) : t("uig_no_action")}
           </Text>
         </View>
-        <EdgeScroll horizontal class="-mx-1" contentClass="flex-row gap-1.5 px-1" testID="uig-index">
-          <Chip id={ALL} label={t("uig_group_all")} count={shown().length} active={group() === ALL} onPress={() => group.set(ALL)} />
-          <Each of={GALLERY_GROUPS} key={(item) => item.id}>
-            {(item) => (
-              <Chip id={item().id} label={t(item().titleKey)} count={inGroup(item().id).length} active={group() === item().id} onPress={() => group.set(item().id)} />
-            )}
-          </Each>
-        </EdgeScroll>
+        <If when={!sidebar()}>
+          <EdgeScroll horizontal class="-mx-1" contentClass="flex-row gap-1.5 px-1" testID="uig-index">
+            <Chip id={ALL} label={t("uig_group_all")} count={shown().length} active={group() === ALL} onPress={() => pick(ALL)} />
+            <Each of={GALLERY_GROUPS} key={(item) => item.id}>
+              {(item) => (
+                <Chip id={item().id} label={t(item().titleKey)} count={inGroup(item().id).length} active={group() === item().id} onPress={() => pick(item().id)} />
+              )}
+            </Each>
+          </EdgeScroll>
+        </If>
       </View>
-      <Scroll class="flex-1" testID="uig-scroll">
+      <View class="min-h-0 flex-1 flex-row">
+      <If when={sidebar()}>
+        <Scroll class="border-r border-line-soft" style={{ width: SIDEBAR_WIDTH }} testID="uig-index">
+          <View class="relative gap-0.5 p-3">
+            <selection.Highlight class="rounded-(--radius) bg-selection" />
+            <SectionRow id={ALL} label={t("uig_group_all")} count={shown().length} active={group() === ALL} onPress={() => pick(ALL)} onLayout={selection.track(ALL)} />
+            <Each of={GALLERY_GROUPS} key={(item) => item.id}>
+              {(item) => (
+                <SectionRow
+                  id={item().id}
+                  label={t(item().titleKey)}
+                  count={inGroup(item().id).length}
+                  active={group() === item().id}
+                  onPress={() => pick(item().id)}
+                  onLayout={selection.track(item().id)}
+                />
+              )}
+            </Each>
+          </View>
+        </Scroll>
+      </If>
+      <Scroll
+        ref={(ref: ScrollRef) => (scroller = ref)}
+        class="min-w-0 flex-1"
+        testID="uig-scroll"
+        onLayout={({ bounds }) => see(scrolled, bounds.size.height)}
+        onScroll={(event) => {
+          scrolled = event.offset.y;
+          see(scrolled, event.size.height);
+        }}
+      >
         <View class="gap-8 py-5" style={{ paddingHorizontal: pad() }}>
           <If when={visibleGroups().length === 0}>
             <View testID="uig-empty">
@@ -165,18 +295,18 @@ export function UiComponentsPage() {
           <Each of={GALLERY_GROUPS} key={(item) => item.id}>
             {(item) => (
               <If when={visibleGroups().some((visible) => visible.id === item().id)}>
-                <View class="gap-3" testID={`uig-group-${item().id}`}>
+                <View class="gap-3" testID={`uig-group-${item().id}`} onLayout={({ bounds }) => place(`group:${item().id}`, bounds.origin.y)}>
                   <View class="gap-0.5">
                     <Text class="font-mono text-xs uppercase tracking-widest text-muted-foreground" role="header">
                       {`${t(item().titleKey)} · ${inGroup(item().id).length}`}
                     </Text>
                     <Text class="text-xs leading-[18px] text-subtle">{t(`${item().titleKey}_note`)}</Text>
                   </View>
-                  <View class="flex-row flex-wrap items-start" style={{ gap }}>
+                  <View class="flex-row flex-wrap items-start" style={{ gap }} onLayout={({ bounds }) => place(`cards:${item().id}`, bounds.origin.y)}>
                     <Each of={GALLERY_ENTRIES.filter((entry) => entry.group === item().id && entry.mode === "demo")} key={(entry) => entry.id}>
                       {(entry) => (
                         <If when={matchesFilter(entry(), filter())}>
-                          <DemoCard entry={entry()} width={cardWidth(DEMOS[entry().id]?.wide === true)} />
+                          <DemoCard entry={entry()} width={cardWidth(DEMOS[entry().id]?.wide === true)} top={cardsTop(item().id)} span={span()} />
                         </If>
                       )}
                     </Each>
@@ -199,6 +329,7 @@ export function UiComponentsPage() {
           </Each>
         </View>
       </Scroll>
+      </View>
     </View>
   );
 }

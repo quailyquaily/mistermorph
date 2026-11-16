@@ -19,8 +19,9 @@ reading them in each language, on a desktop window and on a phone.
 
 - A head with the language control, a filter (by component name, file path, or the demo a
   component is shown in), the count of matching components, and the last local action.
-- A section index (a row of chips that scrolls sideways on narrow screens). `All` shows every
-  section; a chip shows one. When nothing matches, the page says so and offers one button that
+- A section index: a sidebar beside the page on a window wider than 900pt (a row per section with
+  its count, drawn as the Settings page's index is), and a row of chips in the head that scrolls
+  sideways on narrower ones. `All` shows every section; a row or a chip shows one. When nothing matches, the page says so and offers one button that
   clears the filter and shows every section again.
 - Per section: a card for each component that has a demo (its name, its file, labelled variants),
   then a list named "No demo of their own" with every other component of that section and the
@@ -30,6 +31,13 @@ The cards take one column on a phone, two on a wide window and three on a very w
 marked `wide` take the whole row. A card never grows past the page: tables and variants whose text
 does not wrap scroll sideways inside the card (`Wide` in `pages/ui-components/demo.tsx`), and
 one-line titles are cut by the component's own fade or ellipsis.
+
+Only the demos near the visible part of the page are mounted (within 600pt of it; `DemoCard` in
+`pages/ui-components/UiComponentsPage.tsx`). Many components draw on every frame while they show a
+running state (spinners, beams, clocks), wherever on the page they are, and with all of them
+mounted the page was slow to scroll and to type in. A card that is away keeps its head and the
+height its demo had, so the page does not move; its demo's local state starts over when it comes
+back. A test that presses a demo's control brings its card up first, by filtering for its name.
 
 ## Languages
 
@@ -50,7 +58,7 @@ catalog strings, and the fixtures add fixed mixed-script long text to show wrapp
 | --- | --- | --- |
 | `demo` | The production component, mounted with synthetic props | 151 |
 | `composed` | Shown inside another component's demo (named by `via`) | 72 |
-| `listed` | Not mounted; the page gives the reason | 164 |
+| `listed` | Not mounted; the page gives the reason | 165 |
 
 `scripts/ui-components-inventory.test.mjs` reads the sources and fails when a component is missing
 from the inventory or when an entry names a component that no longer exists, so a new component
@@ -61,7 +69,7 @@ must be added to the inventory (and given a demo or a reason) before the tests p
 - **Whole pages (16)** — Audit, Chat, Contacts, Context, Login, Logs, Memories, Overview, Repair,
   Settings, Setup, Skills, Skill store, Stats, TODO, and the gallery itself. Each is bound to its
   route and loads its data when mounted. Open them at their own addresses.
-- **Private parts of something not mounted (93)** — file-private components of those pages and of
+- **Private parts of something not mounted (94)** — file-private components of those pages and of
   the live panels below (for example the Setup page's stages, the Stats page's bands, the
   Memories page's rows). They are not exported, so they cannot be mounted apart from their owner.
 - **Live components (41)** — they read live stores or call the Console or an agent as soon as they
