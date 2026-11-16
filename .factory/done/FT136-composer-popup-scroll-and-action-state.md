@@ -67,3 +67,11 @@ Validation: configured gofmt/vet/go-test gate passed (163 packages, none failed)
 Not checked: native GPUI desktop, real Android device, screen readers, real touch scrolling or phone software-keyboard interaction. Builder's headless-Chrome visual pass was not repeated. Extremely low picker caps may expose less than one row, still reachable by scrolling. Existing unrelated icon-overflow scroll views and simultaneous hover/keyboard tinting are outside this change.
 
 Moved review/ → ready/; owner should inspect popup appearance on native/mobile and the non-blocking all-disabled Up-arrow highlight.
+
+## factory · 2026-11-16 20:50
+
+Shipped with owner authorization using Claude Code. Merge commit: `1403e3801b2d3d121b609c5206bebeba8e306a5d`. Remote master verified at `fb3236656c19ee5053413be4a835253bd3435463`. No tag created or pushed, as explicitly requested. No linked issue/PR closures applicable; branch retained (clean not configured).
+
+FT136 merged cleanly; FT137 conflicts in PickerList/PopoverPicker resolved preserving FT136 content sizing, image-overflow clipping and probes plus FT137 unmatched-value and all-disabled navigation. FT136 P3 all-disabled Up highlight is resolved by FT137. Targeted tests after each merge passed (10 and 11 files, no retries). Final gofmt, go vet, go test, nsh 0.5.1 check, parallel Console runner (128 files, zero failed, no retries), 280 Console Node tests and 24 Cloudflare Node tests passed at final HEAD. Two concurrent full-gate invocations wrote interleaved shared logs; both returned all zero statuses and clean unchanged HEAD, with separate runner output folders. No installs. No fresh visual/browser, native desktop/Android, screen reader, touch/software-keyboard checks or platform builds.
+
+FT135 excluded from this shipment: its review reproduced cross-audience disclosure of private cron task data; manager treats this as a security blocker despite P2 classification. It remains ready pending correction or owner decision.

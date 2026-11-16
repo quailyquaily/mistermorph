@@ -69,3 +69,11 @@ notes:
 - Installs: none. No files changed or commits made by reviewer.
 - Residual risks: no fresh browser/native desktop/Android/screen-reader session in this review; visual confidence relies on builder's Models-menu Chrome checks. Language menu checkbox semantics are pre-existing. FT136 overlaps PickerList and PopoverPicker: preserve FT137 unmatched-value/all-disabled navigation together with FT136 sizing when resolving any ship conflict; combination not tested here.
 - Moved review/ → ready/.
+
+## factory · 2026-11-16 20:50
+
+Shipped with owner authorization using Claude Code. Merge commit: `fb3236656c19ee5053413be4a835253bd3435463`. Remote master verified at `fb3236656c19ee5053413be4a835253bd3435463`. No tag created or pushed, as explicitly requested. No linked issue/PR closures applicable; branch retained (clean not configured).
+
+FT136 merged cleanly; FT137 conflicts in PickerList/PopoverPicker resolved preserving FT136 content sizing, image-overflow clipping and probes plus FT137 unmatched-value and all-disabled navigation. FT136 P3 all-disabled Up highlight is resolved by FT137. Targeted tests after each merge passed (10 and 11 files, no retries). Final gofmt, go vet, go test, nsh 0.5.1 check, parallel Console runner (128 files, zero failed, no retries), 280 Console Node tests and 24 Cloudflare Node tests passed at final HEAD. Two concurrent full-gate invocations wrote interleaved shared logs; both returned all zero statuses and clean unchanged HEAD, with separate runner output folders. No installs. No fresh visual/browser, native desktop/Android, screen reader, touch/software-keyboard checks or platform builds.
+
+FT135 excluded from this shipment: its review reproduced cross-audience disclosure of private cron task data; manager treats this as a security blocker despite P2 classification. It remains ready pending correction or owner decision.
