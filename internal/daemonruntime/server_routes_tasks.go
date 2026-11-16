@@ -688,6 +688,11 @@ func topicActivity(reader TaskReader, awaiting func(taskID string) bool) []Topic
 					}
 				}
 			case TaskDone:
+				// A run that found nothing to do is not a completion to read: it leaves the
+				// topic's latest one as it was, so the topic is not marked unread.
+				if IsQuietTask(task) {
+					continue
+				}
 				at := task.CreatedAt
 				if task.FinishedAt != nil {
 					at = *task.FinishedAt

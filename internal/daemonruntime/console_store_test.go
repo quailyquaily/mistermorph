@@ -1293,3 +1293,146 @@ func TestCronRunTriggerClassification(t *testing.T) {
 		})
 	}
 }
+
+// A run a TODO item's schedule fired moves the item's topic up when it ends, unless it found
+// nothing to do; a manual run, like any other task, moves it up as it starts.
+func TestConsoleFileStoreQuietScheduledRunKeepsTopicPlace(t *testing.T) {
+	scheduled := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}
+	manual := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefManual}
+	done := func(outcome string) func(*TaskInfo) {
+		return func(task *TaskInfo) {
+			task.Status = TaskDone
+			result := map[string]any{"final": map[string]any{"output": "ok"}}
+			if outcome != "" {
+				result[TaskResultOutcomeKey] = outcome
+			}
+			task.Result = result
+		}
+	}
+	failed := func(task *TaskInfo) { task.Status = TaskFailed }
+	canceled := func(task *TaskInfo) { task.Status = TaskCanceled }
+	for _, tc := range []struct {
+		name       string
+		trigger    TaskTrigger
+		finish     func(*TaskInfo)
+		upAtStart  bool
+		upAtFinish bool
+	}{
+		{"scheduled nothing", scheduled, done(TaskOutcomeNothing), false, false},
+		{"scheduled result", scheduled, done(TaskOutcomeResult), false, true},
+		{"scheduled problem", scheduled, done(TaskOutcomeProblem), false, true},
+		{"scheduled unchecked", scheduled, done(""), false, true},
+		{"scheduled unknown outcome", scheduled, done("maybe"), false, true},
+		{"scheduled failed", scheduled, failed, false, true},
+		{"scheduled stopped", scheduled, canceled, false, true},
+		{"manual", manual, done(""), true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			store, err := NewConsoleFileStore(ConsoleFileStoreOptions{RootDir: root, Persist: true, JournalDir: filepath.Join(root, "journal")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			todo, other := CronTopicID("todo"), CronTopicID("other")
+			// The item's first run makes its topic; another item's topic is then the later one.
+			for _, first := range []string{todo, other} {
+				id := "first-" + first
+				if err := store.UpsertWithTrigger(TaskInfo{ID: id, TopicID: first, Status: TaskRunning}, scheduled, "Item"); err != nil {
+					t.Fatal(err)
+				}
+				if err := store.Update(id, done(TaskOutcomeResult)); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(2 * time.Millisecond)
+			}
+			order := func(s *ConsoleFileStore) string {
+				var ids []string
+				for _, topic := range s.ListTopicsPage(TopicListOptions{Limit: 10}) {
+					ids = append(ids, topic.ID)
+				}
+				return strings.Join(ids, ",")
+			}
+			below, above := other+","+todo, todo+","+other
+			place := func(up bool) string {
+				if up {
+					return above
+				}
+				return below
+			}
+			if got := order(store); got != below {
+				t.Fatalf("order before the run = %s", got)
+			}
+			if err := store.UpsertWithTrigger(TaskInfo{ID: "run", TopicID: todo, Status: TaskRunning}, tc.trigger, "Item"); err != nil {
+				t.Fatal(err)
+			}
+			if got := order(store); got != place(tc.upAtStart) {
+				t.Fatalf("order while the run works = %s, want %s", got, place(tc.upAtStart))
+			}
+			// A write while it works, such as its live progress, moves nothing.
+			if err := store.Update("run", func(task *TaskInfo) { task.Model = "m" }); err != nil {
+				t.Fatal(err)
+			}
+			if got := order(store); got != place(tc.upAtStart) {
+				t.Fatalf("order after a progress write = %s, want %s", got, place(tc.upAtStart))
+			}
+			time.Sleep(2 * time.Millisecond)
+			if err := store.Update("run", tc.finish); err != nil {
+				t.Fatal(err)
+			}
+			want := place(tc.upAtStart || tc.upAtFinish)
+			if got := order(store); got != want {
+				t.Fatalf("order after the run = %s, want %s", got, want)
+			}
+			// A finished run written again moves nothing, and the order survives a restart.
+			before, _ := store.GetTopic(todo)
+			if err := store.Update("run", func(task *TaskInfo) { task.Model = "n" }); err != nil {
+				t.Fatal(err)
+			}
+			if after, _ := store.GetTopic(todo); !after.UpdatedAt.Equal(before.UpdatedAt) {
+				t.Fatalf("a finished run's rewrite moved the topic: %v -> %v", before.UpdatedAt, after.UpdatedAt)
+			}
+			reloaded, err := NewConsoleFileStore(ConsoleFileStoreOptions{RootDir: root, Persist: true, JournalDir: filepath.Join(root, "journal")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := order(reloaded); got != want {
+				t.Fatalf("order after a restart = %s, want %s", got, want)
+			}
+			if run, ok := reloaded.Get("run"); !ok || run.Status == TaskRunning {
+				t.Fatalf("run after a restart = %+v", run)
+			}
+		})
+	}
+}
+
+func TestTaskOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status TaskStatus
+		result any
+		want   string
+		quiet  bool
+	}{
+		{"nothing", TaskDone, map[string]any{"outcome": "nothing"}, TaskOutcomeNothing, true},
+		{"padded", TaskDone, map[string]any{"outcome": " nothing "}, TaskOutcomeNothing, true},
+		{"result", TaskDone, map[string]any{"outcome": "result"}, TaskOutcomeResult, false},
+		{"problem", TaskDone, map[string]any{"outcome": "problem"}, TaskOutcomeProblem, false},
+		{"unknown", TaskDone, map[string]any{"outcome": "quiet"}, "", false},
+		{"not text", TaskDone, map[string]any{"outcome": true}, "", false},
+		{"absent", TaskDone, map[string]any{"final": map[string]any{"output": "x"}}, "", false},
+		{"no result", TaskDone, nil, "", false},
+		{"not an object", TaskDone, "nothing", "", false},
+		{"nothing but failed", TaskFailed, map[string]any{"outcome": "nothing"}, TaskOutcomeNothing, false},
+		{"nothing but running", TaskRunning, map[string]any{"outcome": "nothing"}, TaskOutcomeNothing, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info := TaskInfo{ID: "t", Status: tc.status, Result: tc.result}
+			if got := TaskOutcome(info); got != tc.want {
+				t.Fatalf("TaskOutcome = %q, want %q", got, tc.want)
+			}
+			if got := IsQuietTask(info); got != tc.quiet {
+				t.Fatalf("IsQuietTask = %v, want %v", got, tc.quiet)
+			}
+		})
+	}
+}

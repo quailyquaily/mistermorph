@@ -270,8 +270,12 @@ func (s *ConsoleFileStore) UpsertWithTrigger(info TaskInfo, trigger TaskTrigger,
 		}
 	}
 	currentTopic, topicExists := s.topics[info.TopicID]
-	topic := nextConsoleTopic(currentTopic, topicExists, info.TopicID, topicTitle, now, true)
-	cursor, err := s.appendTaskEventLocked(info, &topic, now, s.triggerForTaskLocked(info.ID, trigger), taskdomain.JournalTypeTaskUpsert)
+	effectiveTrigger := s.triggerForTaskLocked(info.ID, trigger)
+	// A run a TODO item's schedule fired moves its topic up when it ends, and only when it came
+	// to something (see UpdateWithTrigger); any other task moves its topic up as it is recorded.
+	touch := !(topicExists && IsCronTopicID(info.TopicID) && isScheduledCronRunTrigger(effectiveTrigger))
+	topic := nextConsoleTopic(currentTopic, topicExists, info.TopicID, topicTitle, now, touch)
+	cursor, err := s.appendTaskEventLocked(info, &topic, now, effectiveTrigger, taskdomain.JournalTypeTaskUpsert)
 	if err != nil {
 		return err
 	}
@@ -363,17 +367,35 @@ func (s *ConsoleFileStore) UpdateWithTrigger(id string, trigger TaskTrigger, fn 
 	item = normalizeConsoleTaskInfo(item)
 	item.ID = id
 	item.TopicID = s.normalizeTopicIDLocked(item.TopicID)
-	cursor, err := s.appendTaskEventLocked(item, nil, now, s.triggerForTaskLocked(id, trigger), taskdomain.JournalTypeTaskUpdate)
+	previous := s.items[id]
+	effectiveTrigger := s.triggerForTaskLocked(id, trigger)
+	// A scheduled TODO run moves its topic up as it ends, unless it found nothing to do: a quiet
+	// run leaves the topic where it was in the list.
+	var touched *TopicInfo
+	if activeConsoleTask(previous) && !activeConsoleTask(item) && !IsQuietTask(item) &&
+		IsCronTopicID(item.TopicID) && isScheduledCronRunTrigger(effectiveTrigger) {
+		if topic, ok := s.topics[item.TopicID]; ok && !topicDeleted(topic) {
+			topic.UpdatedAt = now
+			touched = &topic
+		}
+	}
+	cursor, err := s.appendTaskEventLocked(item, touched, now, effectiveTrigger, taskdomain.JournalTypeTaskUpdate)
 	if err != nil {
 		return err
 	}
-	previous := s.items[id]
 	s.items[id] = item
 	s.updateTaskOrderLocked(previous, true, item)
+	if touched != nil {
+		s.topics[touched.ID] = *touched
+		s.orderedTopicIDs = upsertOrderedTopicID(s.orderedTopicIDs, s.topics, touched.ID)
+	}
 	if taskdomain.HasTaskTrigger(trigger) {
 		s.triggers[id] = taskdomain.NormalizeTaskTrigger(trigger)
 	}
 	s.projectionCursor = cursor
+	if touched != nil {
+		s.persistTopicsProjectionLocked(now)
+	}
 	if s.onTaskUpdate != nil {
 		s.onTaskUpdate(previous, item, s.triggers[id])
 	}

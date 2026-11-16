@@ -161,6 +161,21 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 		}
 	}
 
+	// What a scheduled TODO run came to is asked of the decision route, on its own client.
+	var (
+		decisionClient llm.Client
+		decisionModel  string
+	)
+	if opts.CronEnabled {
+		var closeDecisionClient func() error
+		decisionClient, decisionModel, closeDecisionClient = newRunOutcomeClient(d, inspectors.Wrap, logger)
+		defer func() {
+			if err := closeDecisionClient(); err != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("close decision LLM client: %w", err))
+			}
+		}()
+	}
+
 	var baseReg *tools.Registry
 	if d.AwarenessRegistry != nil {
 		baseReg = d.AwarenessRegistry()
@@ -230,6 +245,8 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			ContextScope:             contextScope,
 			TopicRunStarted:          opts.TopicRunStarted,
 			CronManual:               cronManual,
+			DecisionClient:           decisionClient,
+			DecisionModel:            decisionModel,
 		})
 	}
 	runTask := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
@@ -433,6 +450,10 @@ type awarenessTaskOptions struct {
 	TopicRunStarted func(TopicRun)
 	// CronManual marks a TODO item's run a person asked for, rather than one its schedule fired.
 	CronManual bool
+	// DecisionClient, when set, is the decision route's own client. A run a TODO item's schedule
+	// fired is checked with it once it ends done (see finishedRunOutcome).
+	DecisionClient llm.Client
+	DecisionModel  string
 }
 
 // TopicRun is a run recorded under a topic, as it starts.
@@ -793,6 +814,8 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if progress != nil {
 		extra = progress.Result(final, agentCtx)
 	}
+	// ctx, not runCtx: the run is over, and the check has its own time limit.
+	extra = withRunOutcome(extra, finishedRunOutcome(ctx, opts, task, summary))
 	recordErr := recordAwarenessTaskFinish(recordOpts, summary, extra, nil, time.Now().UTC())
 	if progress != nil {
 		progress.Close(summary, recordErr)
@@ -863,8 +886,8 @@ func cronTopicTitle(task cronstore.Task) string {
 	return cronstore.DefaultTaskTitle
 }
 
-// extra holds more result fields, such as the plan and activity a live view kept; "final" is
-// always the summary.
+// extra holds more result fields, such as the plan and activity a live view kept, and what a
+// checked run came to ("outcome"); "final" is always the summary.
 func recordAwarenessTaskFinish(opts awarenessTaskOptions, summary string, extra map[string]any, runErr error, now time.Time) error {
 	if opts.TaskStore == nil {
 		return nil

@@ -494,3 +494,50 @@ func TestTaskDetailAddsTheRunningTasksLiveResult(t *testing.T) {
 		t.Fatalf("stored result = %+v", info.Result)
 	}
 }
+
+// A run that found nothing to do is not the topic's latest completion, so the topic is not marked
+// unread for it; the completion before it stays the latest one.
+func TestTopicActivitySkipsQuietRuns(t *testing.T) {
+	store := NewMemoryStore(10)
+	topic := CronTopicID("todo")
+	at := func(minute int) *time.Time {
+		value := time.Date(2026, 11, 16, 9, minute, 0, 0, time.UTC)
+		return &value
+	}
+	add := func(id string, minute int, status TaskStatus, outcome string) {
+		t.Helper()
+		result := map[string]any{"final": map[string]any{"output": "ok"}}
+		if outcome != "" {
+			result[TaskResultOutcomeKey] = outcome
+		}
+		if err := store.Upsert(TaskInfo{ID: id, TopicID: topic, Status: status, CreatedAt: *at(minute), FinishedAt: at(minute), Result: result}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	latest := func() string {
+		t.Helper()
+		got := topicActivity(store, nil)
+		if len(got) != 1 {
+			t.Fatalf("activity = %+v", got)
+		}
+		return got[0].LatestDoneTaskID
+	}
+	add("quiet-1", 0, TaskDone, TaskOutcomeNothing)
+	if got := latest(); got != "" {
+		t.Fatalf("latest with only a quiet run = %q", got)
+	}
+	add("built", 1, TaskDone, TaskOutcomeResult)
+	add("quiet-2", 2, TaskDone, TaskOutcomeNothing)
+	add("quiet-3", 3, TaskDone, TaskOutcomeNothing)
+	if got := latest(); got != "built" {
+		t.Fatalf("latest after quiet runs = %q, want built", got)
+	}
+	add("problem", 4, TaskDone, TaskOutcomeProblem)
+	if got := latest(); got != "problem" {
+		t.Fatalf("latest after a problem run = %q", got)
+	}
+	add("unchecked", 5, TaskDone, "")
+	if got := latest(); got != "unchecked" {
+		t.Fatalf("latest after an unchecked run = %q", got)
+	}
+}
