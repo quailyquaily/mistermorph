@@ -21,6 +21,7 @@ import { SkillsPage } from "./skills/SkillsPage";
 import { SkillStorePage } from "./skills/SkillStorePage";
 import { StatsPage } from "./stats/StatsPage";
 import { TodoPage } from "./todo/TodoPage";
+import { UiComponentsPage } from "./ui-components/UiComponentsPage";
 
 function NotFound() {
   return (
@@ -34,6 +35,7 @@ const PAGES: Record<PageKey, () => JSX.Element> = {
   login: () => <LoginPage />,
   bootPreview: () => <NotFound />,
   componentsPreview: () => <NotFound />,
+  uiComponents: () => <UiComponentsPage />,
   overview: () => <OverviewPage />,
   setup: () => <SetupPage />,
   repair: () => <RepairPage />,

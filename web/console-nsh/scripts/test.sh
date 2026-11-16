@@ -11,7 +11,8 @@ app=$(cd "$(dirname "$0")/.." && pwd)
 cd "$app"
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 logs=$(mktemp -d)
-[ $# -gt 0 ] || set -- tests/*.test.tsx
+all=0
+[ $# -gt 0 ] || { all=1; set -- tests/*.test.tsx; }
 started=$(date +%s)
 printf '%s\n' "$@" | LOGS="$logs" xargs -P "$jobs" -I {} sh -c '
   log="$LOGS/$(basename "$1").log"
@@ -38,6 +39,18 @@ for mark in "$logs"/*.failed; do
   echo "---- $file"
   cat "$log.again"
 done
+# With the whole suite: the UI component gallery's inventory against the sources (a new component
+# must be listed there, pages/ui-components/inventory.js).
+if [ "$all" -eq 1 ]; then
+  if node --test scripts/ui-components-inventory.test.mjs >"$logs/ui-components-inventory.log" 2>&1; then
+    echo "ok    scripts/ui-components-inventory.test.mjs"
+  else
+    failed=$((failed + 1))
+    echo
+    echo "---- scripts/ui-components-inventory.test.mjs"
+    cat "$logs/ui-components-inventory.log"
+  fi
+fi
 echo
 echo "$# files, $failed failed, $(($(date +%s) - started))s (output: $logs)"
 [ "$failed" -eq 0 ]
