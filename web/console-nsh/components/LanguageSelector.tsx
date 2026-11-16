@@ -3,7 +3,8 @@ import { Text, View } from "nsh";
 import { localeState } from "../lib/stores/index.js";
 import { DropdownMenu, Icon } from "./ui";
 
-const LANGUAGES = [
+/** Every language the console has (lib/i18n), with its own name. */
+export const LANGUAGES = [
   { value: "en", label: "English" },
   { value: "zh", label: "中文" },
   { value: "ja", label: "日本語" },

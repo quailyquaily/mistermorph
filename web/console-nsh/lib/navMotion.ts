@@ -39,7 +39,7 @@ const CHILD_PAGES: { prefix: string; tab: string; depth: number }[] = [
   { prefix: "/logs", tab: "/settings", depth: 2 },
 ];
 
-const SHELLLESS = ["/login", "/__boot-preview", "/__components", "/troubleshooting"];
+const SHELLLESS = ["/login", "/__boot-preview", "/__components", "/ui-components", "/troubleshooting"];
 
 function frameOf(pagePath: string, fullPath: string): NavPosition["frame"] {
   if (fullPath === "/" || SHELLLESS.some((prefix) => pagePath === prefix || pagePath.startsWith(`${prefix}/`))) return "shellless";

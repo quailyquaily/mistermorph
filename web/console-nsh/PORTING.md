@@ -31,6 +31,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `components/Shell.tsx` | Sidebar, mobile bottom nav, notice stack |
 | `components/frame/PageStack.tsx` | The page host: a layer per page instance and the slide between two (docs/console/page-transitions.md) |
 | `pages/<area>/` | One folder per screen; `pages/routes.tsx` maps routes to pages |
+| `pages/ui-components/` | The UI component gallery, a testing page at `/ui-components` with no navigation entry: every component from synthetic data (docs/console/ui-components.md). A new component goes in its `inventory.js` |
 | `tests/harness.ts` | `openConsole({ location, api })`: the app with a fake host and a stubbed console API |
 
 ## Rules (nsh is not Vue)
@@ -76,6 +77,7 @@ nsh build                                     # bundler: unknown classes, text i
 scripts/test.sh                               # headless tests, the files several at a time (about 3 minutes)
 nsh test tests/x.test.tsx --web-host tests/noHost.js  # one file
 node --test lib/core/*.test.mjs               # the copied pure logic
+node --test scripts/ui-components-inventory.test.mjs  # every component is in the gallery's inventory
 node --test scripts/android-manifest.test.mjs # what the APK's manifest adds
 scripts/android-host.sh test                  # the Android native part on the JDK
 scripts/build-web.sh /tmp/site                # the web site for console serve
