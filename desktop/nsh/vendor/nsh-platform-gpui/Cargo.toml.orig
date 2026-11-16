@@ -50,6 +50,7 @@ ttf-parser.workspace = true
 unicode-bidi.workspace = true
 unicode-linebreak.workspace = true
 anyhow.workspace = true
+base64.workspace = true
 crossbeam-channel.workspace = true
 futures-channel.workspace = true
 futures-util.workspace = true
@@ -69,6 +70,14 @@ x11rb.workspace = true
 gtk = { workspace = true, optional = true }
 webkit2gtk = { workspace = true, optional = true }
 
+
+# Views drawn by GPUI's headless renderer, read back as pixels.
+[[test]]
+name = "render"
+required-features = ["shot"]
+# Its own `main`: the macOS platform (its text system) is made on the main
+# thread.
+harness = false
 
 # A whole app: tests do not build it.
 [[example]]

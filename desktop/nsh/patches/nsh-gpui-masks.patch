@@ -74,10 +74,10 @@ index 8d50fd1..6207e6d 100644
  struct Ramp {
      stops: Vec<([f32; 4], f32)>,
 diff --git a/crates/gpui/nsh-platform-gpui/src/render.rs b/crates/gpui/nsh-platform-gpui/src/render.rs
-index 6437382..e0ed960 100644
+index b97b28a..e9f03f1 100644
 --- a/crates/gpui/nsh-platform-gpui/src/render.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/render.rs
-@@ -84,6 +84,7 @@ struct Saved {
+@@ -85,6 +85,7 @@ struct Saved {
      matrix: Option<[f32; 20]>,
      rounded: Option<RoundedClip>,
      clip_polygon: Option<Rc<[shape::Pt]>>,
@@ -85,7 +85,7 @@ index 6437382..e0ed960 100644
  }
  
  /// The state of one drawing pass.
-@@ -111,6 +112,9 @@ pub(crate) struct DrawCx<'a> {
+@@ -112,6 +113,9 @@ pub(crate) struct DrawCx<'a> {
      /// The clip as a convex polygon (window coordinates) when it is
      /// rounded or not axis-aligned: paths are cut to it.
      clip_polygon: Option<Rc<[shape::Pt]>>,
@@ -95,7 +95,7 @@ index 6437382..e0ed960 100644
      saved: Vec<Saved>,
      /// Hosted items drawn in this pass, with their window bounds.
      pub(crate) drawn: Vec<(Rc<dyn Hosted>, Bounds<Pixels>)>,
-@@ -140,6 +144,7 @@ impl<'a> DrawCx<'a> {
+@@ -141,6 +145,7 @@ impl<'a> DrawCx<'a> {
              matrix: None,
              rounded: None,
              clip_polygon: None,
@@ -103,7 +103,7 @@ index 6437382..e0ed960 100644
              saved: Vec::new(),
              drawn: Vec::new(),
              measured: None,
-@@ -186,7 +191,7 @@ impl<'a> DrawCx<'a> {
+@@ -187,7 +192,7 @@ impl<'a> DrawCx<'a> {
      }
  
      /// [`DrawCx::map`] as a pair.
@@ -112,7 +112,7 @@ index 6437382..e0ed960 100644
          if let Some(p) = self.transform.map(x, y) {
              return p;
          }
-@@ -330,6 +335,23 @@ impl<'a> DrawCx<'a> {
+@@ -331,6 +336,23 @@ impl<'a> DrawCx<'a> {
  
      /// True when the clip is rounded or not axis-aligned (kept as a
      /// polygon, [`DrawCx::shows`]).
@@ -136,7 +136,7 @@ index 6437382..e0ed960 100644
      pub(crate) fn has_clip_polygon(&self) -> bool {
          self.clip_polygon.is_some()
      }
-@@ -365,6 +387,7 @@ impl<'a> DrawCx<'a> {
+@@ -372,6 +394,7 @@ impl<'a> DrawCx<'a> {
              matrix: self.matrix,
              rounded: self.rounded,
              clip_polygon: self.clip_polygon.clone(),
@@ -144,7 +144,7 @@ index 6437382..e0ed960 100644
          });
      }
  
-@@ -377,6 +400,7 @@ impl<'a> DrawCx<'a> {
+@@ -384,6 +407,7 @@ impl<'a> DrawCx<'a> {
                  self.matrix = s.matrix;
                  self.rounded = s.rounded;
                  self.clip_polygon = s.clip_polygon;
@@ -152,7 +152,7 @@ index 6437382..e0ed960 100644
              }
              None => log::error!("render: pop without push"),
          }
-@@ -634,13 +658,25 @@ pub(crate) fn draw_view(cx: &mut DrawCx<'_>, view: &NshView, parent: Mat4, origi
+@@ -641,13 +665,25 @@ pub(crate) fn draw_view(cx: &mut DrawCx<'_>, view: &NshView, parent: Mat4, origi
          return;
      }
      let matrix = crate::decor::color_matrix(&state);
@@ -179,10 +179,10 @@ index 6437382..e0ed960 100644
          cx.pop();
      }
 diff --git a/crates/gpui/nsh-platform-gpui/src/text.rs b/crates/gpui/nsh-platform-gpui/src/text.rs
-index c4badfc..3542e70 100644
+index 73ab342..a874726 100644
 --- a/crates/gpui/nsh-platform-gpui/src/text.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/text.rs
-@@ -2244,6 +2244,23 @@ fn paint_glyphs(cx: &mut DrawCx<'_>, mut glyphs: Vec<Painted>) {
+@@ -2274,6 +2274,23 @@ fn paint_glyphs(cx: &mut DrawCx<'_>, mut glyphs: Vec<Painted>) {
              )
          });
      }

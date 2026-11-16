@@ -24,7 +24,8 @@
 //! rectangles (translations and scales) are GPUI's quads, exact; under a
 //! rotation, skew or perspective they are filled as paths whose points are
 //! mapped one by one ([`DrawCx::fill_contours`]), so they turn and project
-//! with the view; glyphs are placed at their mapped origins, upright.
+//! with the view; glyphs are placed at their mapped origins, upright, and
+//! images are turned by `image::turn`.
 //!
 //! Clips are rectangles in window coordinates (GPUI's content masks),
 //! intersected as they nest. A clip that is rounded or not axis-aligned
@@ -354,6 +355,12 @@ impl<'a> DrawCx<'a> {
 
     pub(crate) fn has_clip_polygon(&self) -> bool {
         self.clip_polygon.is_some()
+    }
+
+    /// The clip polygon (window coordinates, convex), when the clip is
+    /// rounded or not axis-aligned.
+    pub(crate) fn clip_polygon(&self) -> Option<&[shape::Pt]> {
+        self.clip_polygon.as_deref()
     }
 
     /// True if the window point `(x, y)` lies inside the clip polygon (or

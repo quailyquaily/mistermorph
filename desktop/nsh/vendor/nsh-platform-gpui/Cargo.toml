@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "nsh-platform-gpui"
-version = "0.5.0"
+version = "0.5.1"
 build = false
 autolib = false
 autobins = false
@@ -61,11 +61,20 @@ name = "embed"
 path = "examples/embed.rs"
 test = false
 
+[[test]]
+name = "render"
+path = "tests/render/main.rs"
+harness = false
+required-features = ["shot"]
+
 [dependencies.log]
 version = "0.4"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.anyhow]
 version = "1"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.base64]
+version = "0.22"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.crossbeam-channel]
 version = "0.5"
@@ -127,7 +136,7 @@ features = [
 default-features = false
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-base]
-version = "0.5.0"
+version = "0.5.1"
 features = [
     "editor",
     "emoji-picker",
@@ -140,19 +149,19 @@ features = [
 default-features = false
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-core]
-version = "0.5.0"
+version = "0.5.1"
 features = [
     "svg",
     "loader",
 ]
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-dev]
-version = "0.5.0"
+version = "0.5.1"
 features = ["client"]
 optional = true
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-engine]
-version = "0.5.0"
+version = "0.5.1"
 features = [
     "net",
     "shader",
@@ -160,7 +169,7 @@ features = [
 default-features = false
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-testing]
-version = "0.5.0"
+version = "0.5.1"
 features = ["agent"]
 optional = true
 default-features = false
@@ -205,7 +214,7 @@ default-features = false
 package = "gpui-fast"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dev-dependencies.nsh-bundler]
-version = "0.5.0"
+version = "0.5.1"
 default-features = false
 
 [target.'cfg(target_os = "linux")'.dependencies.gtk]

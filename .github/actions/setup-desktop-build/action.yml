@@ -8,7 +8,7 @@ description: >
 inputs:
   nsh-version:
     description: The nsh release to install (the nsh-* crates in desktop/nsh/Cargo.toml use the same)
-    default: v0.5.0
+    default: v0.5.1
   components:
     description: >
       The nsh runtimes to add beside the CLI (nsh 0.5 ships them apart): "web" for the web console,

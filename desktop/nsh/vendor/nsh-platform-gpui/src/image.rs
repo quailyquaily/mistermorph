@@ -41,7 +41,9 @@
 //! translucent screens). While a variant is being made, the closest one
 //! that is ready is drawn. A texture leaves GPUI's atlases when its last
 //! owner drops it ([`Texture`]). GPUI rounds the sprite: the corners of
-//! the innermost rounded clip it reaches ([`DrawCx::clip_rounded`]).
+//! the innermost rounded clip it reaches ([`DrawCx::clip_rounded`]). A
+//! sprite cannot turn: under a rotation, skew or perspective the picture
+//! is drawn by [`turn`].
 //!
 //! A file named `…@2x.png` (or a source with a declared size) has its
 //! natural size scaled accordingly, as on iOS.
@@ -91,6 +93,8 @@ use crate::{
     surface::Surface,
     view::{NshView, ViewState},
 };
+
+mod turn;
 
 /// Threads that make variants.
 const WORKERS: usize = 4;
@@ -922,6 +926,8 @@ pub(crate) struct Image {
     key: Key,
     /// Its atlas copy is counted (it was drawn).
     drawn: Cell<bool>,
+    /// The one color an SVG is drawn in, once asked ([`Image::one_color`]).
+    one_color: std::cell::OnceCell<Option<Color>>,
 }
 
 /// A decoded image, shared.
@@ -943,6 +949,28 @@ impl Image {
     /// variant made, or dropped).
     fn count(&self, delta: isize) {
         images().memory().add_cost(&self.key, delta);
+    }
+
+    /// The color an SVG is drawn in when it has one (every pixel that
+    /// shows has it, antialiased edges aside): such an icon turns as a
+    /// monochrome sprite.
+    fn one_color(&self) -> Option<Color> {
+        if !matches!(self.natural, Natural::Vector(_)) {
+            return None;
+        }
+        *self.one_color.get_or_init(|| {
+            let bytes = self.texture.image().as_bytes(0)?;
+            let mut first: Option<[u8; 3]> = None;
+            for px in bytes.as_chunks::<4>().0.iter().filter(|px| px[3] >= 128) {
+                let bgr = [px[0], px[1], px[2]];
+                let one = first.get_or_insert(bgr);
+                if one.iter().zip(&bgr).any(|(a, b)| a.abs_diff(*b) > 4) {
+                    return None;
+                }
+            }
+            let [b, g, r] = first?;
+            Some(Color(u32::from_be_bytes([r, g, b, 0xff])))
+        })
     }
 }
 
@@ -967,6 +995,7 @@ fn picture(pixels: &Pixels, key: Key) -> Picture {
         variants: RefCell::default(),
         key: key.clone(),
         drawn: Cell::new(false),
+        one_color: Default::default(),
     });
     // An entry evicted already would never drop it: it is not kept.
     if images().memory().contains(&key) {
@@ -1421,6 +1450,8 @@ pub(crate) struct ImageState {
     /// The surface's key and the view's node id: timers find the view
     /// again with them (and find nothing once it is gone).
     owner: (u64, NodeId),
+    /// The placeholder and the image as last drawn turned.
+    turned: RefCell<[turn::Turned; 2]>,
 }
 
 /// Where an animation is in its timeline: pure bookkeeping, in monotonic
@@ -2025,12 +2056,15 @@ fn level(pixels: (u32, u32), drawn: (f32, f32), blur: f32) -> (u8, u8) {
     (mip, radius.round().clamp(1.0, 254.0) as u8)
 }
 
-/// Draws one picture with the view's mode, the clip's corners, tint,
-/// filters, blur and `alpha` (with the pass's opacity).
+/// Draws one picture (`slot` 0: the placeholder, 1: the image) with the
+/// view's mode, the clip's corners, tint, filters, blur and `alpha` (with
+/// the pass's opacity).
+#[allow(clippy::too_many_arguments)]
 fn draw_one(
     cx: &mut DrawCx<'_>,
     state: &ViewState,
     image: &ImageState,
+    slot: usize,
     picture: &Picture,
     frame: usize,
     source: Option<&ImageSource>,
@@ -2046,6 +2080,7 @@ fn draw_one(
     if fw <= 0.0 || fh <= 0.0 || cx.culled() {
         return;
     }
+    let fade = alpha;
     let alpha = (alpha * cx.opacity * ALPHA_STEPS as f32).round();
     if alpha <= 0.0 {
         return;
@@ -2072,6 +2107,38 @@ fn draw_one(
         tint: state.style.tint_color,
         alpha: alpha.min(ALPHA_STEPS as f32) as u8,
     };
+    let turned = &mut image.turned.borrow_mut()[slot];
+    let upright = cx.axis_aligned();
+    if upright {
+        *turned = turn::Turned::default();
+    }
+    // A one-color SVG the GPU turns: only its alpha (at the size drawn) is
+    // needed, the color filters and opacity go to its color.
+    let color = state.style.tint_color.or_else(|| picture.one_color());
+    if !upright
+        && blur == 0.0
+        && let Some(color) = color
+    {
+        let plain = Look {
+            mip,
+            ..Look::default()
+        };
+        let frame = frame.min(picture.texture.frames().saturating_sub(1));
+        if let Some(mask) = texture_for(picture, plain, 0, image.owner.0)
+            && turn::draw_mask(
+                cx,
+                turned,
+                &mask,
+                frame,
+                (w, h),
+                (x, y, fw, fh),
+                color,
+                fade,
+            )
+        {
+            return;
+        }
+    }
     let Some(texture) = texture_for(picture, look, blur_px, image.owner.0) else {
         return;
     };
@@ -2079,15 +2146,18 @@ fn draw_one(
     if Rc::ptr_eq(&texture, &picture.texture) && !picture.drawn.replace(true) {
         picture.count(picture.bytes() as isize);
     }
-    // GPUI cannot turn a sprite: a rotated or skewed image is drawn
-    // upright at its own size rather than stretched over its bounding box.
+    let frame = frame.min(texture.frames().saturating_sub(1));
+    if !upright && turn::draw_resampled(cx, turned, &texture, frame, (w, h), (x, y, fw, fh)) {
+        return;
+    }
+    // Partly behind the viewer: drawn upright at its own size rather than
+    // stretched over its bounding box.
     let boxed = cx.upright(0.0, 0.0, w, h);
     let placed = cx.upright(x, y, fw, fh);
     // GPUI rounds the sprite itself: the corners of the innermost rounded
     // clip (the view's own, or a rounded parent's) that the part shown
     // reaches.
     let (shown, corners) = cx.clip_rounded(boxed.intersect(&placed), Corners::default());
-    let frame = frame.min(texture.frames().saturating_sub(1));
     let data = texture.image().clone();
     cx.paint(|window, _| {
         if let Err(e) = window.paint_image(shown, placed, corners, data, frame, false) {
@@ -2105,7 +2175,7 @@ pub(crate) fn draw(cx: &mut DrawCx<'_>, state: &ViewState) {
         && (image.image.is_none() || fading)
     {
         let source = image.options.placeholder.as_ref();
-        draw_one(cx, state, image, placeholder, 0, source, 1.0);
+        draw_one(cx, state, image, 0, placeholder, 0, source, 1.0);
     }
     let Some(picture) = &image.image else { return };
     let frame = match &image.playback {
@@ -2123,7 +2193,7 @@ pub(crate) fn draw(cx: &mut DrawCx<'_>, state: &ViewState) {
     };
     let alpha = if fading { image.alpha } else { 1.0 };
     let source = image.source.as_ref();
-    draw_one(cx, state, image, picture, frame, source, alpha);
+    draw_one(cx, state, image, 1, picture, frame, source, alpha);
 }
 
 #[cfg(test)]

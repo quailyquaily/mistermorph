@@ -1386,7 +1386,9 @@ fn composition(text: &str, selected: Option<Range<usize>>) -> Option<Composition
 /// What a field's config asks of input methods and on-screen keyboards.
 fn configuration_of(c: &InputConfig) -> gpui::TextInputConfiguration {
     use gpui::{Autocapitalize, TextInputAction};
-    let plain = !c.secure;
+    // A password shown as plain text is never capitalized or corrected,
+    // as a secure one is.
+    let plain = !c.secure && !c.visible_password();
     gpui::TextInputConfiguration {
         autocorrect: c.auto_correct && plain,
         autocapitalize: match c.auto_capitalize {
@@ -1777,6 +1779,13 @@ pub(crate) fn blur(view: &NshView) {
     {
         set_focus(&surface, None);
     }
+}
+
+/// Sets `view` up as an input and focuses it, for tests of the pointer.
+#[cfg(test)]
+pub(crate) fn focus_for_test(surface: &Rc<Surface>, view: &NshView) {
+    create(surface, view);
+    set_focus(surface, Some(view));
 }
 
 /// Blurs whatever field has the focus.
@@ -2208,16 +2217,6 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
             }
             false
         }
-        // Copying with nothing selected in the field copies the text
-        // selected on the page (a selectable text or area), which a press
-        // there leaves the field focused for.
-        _ if is_command(m)
-            && (vk == 0x43 || (vk == VK_INSERT && !m.shift))
-            && !input.model.borrow().has_selection()
-            && page_selected(surface) =>
-        {
-            false
-        }
         _ if is_command(m) => match vk {
             0x41 => moved(&|model| model.select_all()),
             0x43 => {
@@ -2262,35 +2261,6 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
         }
         _ => false,
     }
-}
-
-/// True when text outside the fields of `surface` is selected: a selectable
-/// text's ([`crate::text`]) or a selectable view's ([`crate::selectable_view`]).
-fn page_selected(surface: &Surface) -> bool {
-    crate::text::has_selection(surface.key())
-        || crate::selectable_view::has_selection(surface.key())
-}
-
-/// A mouse press starts selecting text outside the focused field, which
-/// keeps the keyboard: the field's selection collapses to its caret, so one
-/// selection shows at a time and the copy keys copy the new one.
-pub(crate) fn page_pressed(surface: &Surface) {
-    let Some(view) = focused(surface) else {
-        return;
-    };
-    let Some(input) = input_of(&view) else {
-        return;
-    };
-    {
-        let mut model = input.model.borrow_mut();
-        if !model.has_selection() {
-            return;
-        }
-        let caret = model.caret();
-        model.move_to(caret, false);
-    }
-    report_selection(surface, &view, &input);
-    view.changed();
 }
 
 /// Copies the selection (never a password's).
@@ -2581,8 +2551,13 @@ mod tests {
         assert_eq!(configuration_of(&c).input_action, TextInputAction::Enter);
         c.return_key = ReturnKeyType::Send;
         assert_eq!(configuration_of(&c).input_action, TextInputAction::Send);
-        // Passwords get no corrections or capitals.
+        // Passwords get no corrections or capitals, shown as plain text too.
         c.secure = true;
+        let g = configuration_of(&c);
+        assert!(!g.autocorrect && !g.suggestions);
+        assert_eq!(g.autocapitalize, Autocapitalize::None);
+        c.secure = false;
+        c.auto_fill = nsh_core::AutoFill::Password;
         let g = configuration_of(&c);
         assert!(!g.autocorrect && !g.suggestions);
         assert_eq!(g.autocapitalize, Autocapitalize::None);

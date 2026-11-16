@@ -1,7 +1,8 @@
-// nsh 0.4.0's List never disposes the scope a function `empty` slot renders in: what that view reads
-// keeps it alive after the list has gone. An element the list's own component made goes with it, and
-// still comes and goes as the list empties and fills. Contacts' phone index depends on that
-// (pages/contacts/ContactsPage.tsx, tests/contacts-todo-switch.test.tsx).
+// A List's `empty` slot goes with its list, whether it is a function or an element the list's own
+// component made, and still comes and goes as the list empties and fills. Up to nsh 0.5.0 the List
+// never disposed the scope a function slot rendered in (what that view read kept it alive after the
+// list had gone), which is why Contacts' phone index passes an element
+// (pages/contacts/ContactsPage.tsx, tests/contacts-todo-switch.test.tsx); nsh 0.5.1 disposes both.
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
 
@@ -12,7 +13,7 @@ async function report(app: App): Promise<Report> {
   return JSON.parse(app.texts().find((text) => text.startsWith("{")) ?? "{}") as Report;
 }
 
-test("an empty slot made as an element goes with its list; a function slot's stays behind", async () => {
+test("an empty slot goes with its list, made as an element or as a function", async () => {
   const app = await open("./fixtures/list-empty-slot-app.tsx", { width: 390, height: 844, platform: "android", locale: "en-US" });
   await app.waitFor("id:element-row-r0");
   for (let i = 0; i < 5; i += 1) {
@@ -37,8 +38,8 @@ test("an empty slot made as an element goes with its list; a function slot's sta
   const counts = await report(app);
   expect(counts.lists).toBe(12);
   expect(counts.element).toBe(0);
-  // The runtime's trap the element works around: if this fails, nsh disposes function slots now.
-  expect(counts.fn).toBeGreaterThan(0);
+  // Up to nsh 0.5.0 a function slot stayed behind (the trap the element worked around).
+  expect(counts.fn).toBe(0);
 
   // The element still shows the slot's states after its list came back.
   await app.press("id:mount");

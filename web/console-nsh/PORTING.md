@@ -1,6 +1,6 @@
 # The Mister Morph console in nsh
 
-One TSX app (nsh 0.5.0, Native Shell) that builds as the web console (`scripts/build-web.sh`, served by
+One TSX app (nsh 0.5.1, Native Shell) that builds as the web console (`scripts/build-web.sh`, served by
 `console serve --console-static-dir`), as the desktop app (`desktop/nsh`, a GPUI shell that embeds
 it and runs the backend) and as the Android app (`scripts/build-android.sh`, a client of a console
 server elsewhere). It reimplements `web/console` (Vue) screen for screen; `web/console/src`
@@ -92,7 +92,8 @@ Headless tests prove behaviour, not the look.
 - Opacity modifiers on the app's own colour tokens (`bg-paper/70`) do nothing: add a token to
   `theme.json` (`paper-soft`, `card-soft`) instead.
 - `style={{ display: "flex" }}` turns a View into a row.
-- A `List`'s `empty` slot given as a function renders in a scope nsh 0.4.0 never disposes: the
+- (Up to nsh 0.5.0; 0.5.1 disposes it, `tests/list-empty-slot.test.tsx`.) A `List`'s `empty` slot
+  given as a function rendered in a scope nsh never disposed: the
   signals its view reads keep it alive after the list has gone, rendering into the dead list each
   time they change. Leaked like that by every Contacts page left, an `If` on the store's loading flag
   hung the Android app after about ten Contacts / TODO round trips. Give `empty` an element made in

@@ -1413,17 +1413,22 @@ impl TextEngine for GpuiTextEngine {
             last = Some(line);
             true
         });
-        // A last line ending its paragraph gets the ellipsis after it.
+        // A last line ending its paragraph gets the ellipsis after it; one
+        // inside it holds the rest of the paragraph, cut at the box
+        // (`layout`).
         if more
             && p.ellipsizes()
             && !p.cuts_inside()
             && let Some(line) = last
-            && line.last
         {
-            let span = p.clusters[..line.end as usize]
-                .last()
-                .map_or(p.paragraphs[line.paragraph as usize].span, |c| c.span);
-            width = width.max(line.width + self.ellipsis(p, span).advance);
+            if line.last {
+                let span = p.clusters[..line.end as usize]
+                    .last()
+                    .map_or(p.paragraphs[line.paragraph as usize].span, |c| c.span);
+                width = width.max(line.width + self.ellipsis(p, span).advance);
+            } else {
+                width = max;
+            }
         }
         if max.is_finite() {
             width = width.min(max);
@@ -1476,11 +1481,30 @@ impl TextEngine for GpuiTextEngine {
         } else {
             let count = broken.len();
             for (k, line) in broken.iter().enumerate() {
-                let mut items: Vec<Item> = (line.start..line.end).map(Item::Cluster).collect();
-                let trim = p.ellipsizes()
-                    && ((k + 1 == count && more) || (t.no_wrap && line.width > avail.0 + EPSILON));
+                let clamped = k + 1 == count && more && p.ellipsizes();
+                let line = &if clamped && !line.last {
+                    // The last line a clamp shows holds the rest of its
+                    // paragraph and is cut at the box, as CoreText, Pango
+                    // and StaticLayout cut it: ending it where it broke
+                    // would leave the ellipsis after a word that fit and
+                    // the box empty past it (`truncate` in a row).
+                    let end = p.paragraphs[line.paragraph as usize].clusters.end;
+                    Broken {
+                        end,
+                        width: p.width(line.start, end),
+                        last: true,
+                        ..*line
+                    }
+                } else {
+                    *line
+                };
+                let trim =
+                    clamped || (p.ellipsizes() && t.no_wrap && line.width > avail.0 + EPSILON);
+                let mut items: Vec<Item> = Vec::new();
                 if trim {
                     self.trim_tail(p, line, &mut items, avail.0);
+                } else {
+                    items.extend((line.start..line.end).map(Item::Cluster));
                 }
                 rows.push(Row {
                     items,
@@ -1623,13 +1647,19 @@ fn visual_order(levels: &[u8]) -> Vec<usize> {
 }
 
 impl GpuiTextEngine {
-    /// Cuts the end of `line` for an ellipsis that fits in `avail`.
+    /// Pushes the clusters of `line` that fit in `avail` with an ellipsis
+    /// after them, and the ellipsis.
     fn trim_tail(&self, p: &Prepared, line: &Broken, items: &mut Vec<Item>, avail: f32) {
         let span = p.clusters[line.start as usize..line.end as usize]
             .last()
             .map_or(p.paragraphs[line.paragraph as usize].span, |c| c.span);
         let advance = self.ellipsis(p, span).advance;
-        let mut end = line.end;
+        // Past every cluster whose pen (trailing spaces included) fits: a
+        // clamped line can hold a whole long paragraph.
+        let base = p.prefix[line.start as usize];
+        let fits = p.prefix[line.start as usize + 1..=line.end as usize]
+            .partition_point(|&x| (x - base) as f32 + advance <= avail + EPSILON);
+        let mut end = (line.start + fits as u32 + 1).min(line.end);
         while end > line.start && p.width(line.start, end) + advance > avail + EPSILON {
             end -= 1;
         }
@@ -1645,7 +1675,7 @@ impl GpuiTextEngine {
         } else {
             span
         };
-        items.truncate((end - line.start) as usize);
+        items.extend((line.start..end).map(Item::Cluster));
         items.push(Item::Ellipsis { span, at });
     }
 
@@ -2703,14 +2733,6 @@ fn select(surface: u64, view: &NshView, range: Option<(u32, u32)>) {
     }
 }
 
-/// True when a single text of the surface keyed `surface` has a selection.
-pub(crate) fn has_selection(surface: u64) -> bool {
-    SELECTED.with_borrow(|s| {
-        s.as_ref()
-            .is_some_and(|(key, v)| *key == surface && v.attached())
-    })
-}
-
 /// Clears the selection of a single text, if there is one (a selection
 /// area selects: one selection at a time).
 pub(crate) fn clear_selection() {
@@ -3630,6 +3652,52 @@ mod tests {
         t.ellipsize = EllipsizeMode::Middle;
         let (_, layout) = layout_of(&engine, &t, Some(160.0));
         assert_eq!(shown(&t, &layout), "Short");
+    }
+
+    /// A line clamp cuts its last line at the box, inside a word if need
+    /// be, not after the last word that fit there: a `truncate`d name in
+    /// a row ended at a space or hyphen with the box empty past it.
+    #[test]
+    fn clamped_last_line_is_cut_at_the_box() {
+        let Some(engine) = engine() else {
+            return;
+        };
+        let style = plain(15.0);
+        let box_width = 150.0;
+        for (long, max_lines) in [
+            ("Hohenzollern-Sigmaringen-Wittelsbach", 1),
+            ("Karl Anton Hohenzollern-Sigmaringen", 1),
+            ("Christopher Montgomery Wellington", 1),
+            (
+                "Christopher Montgomery-Wellington the Third, Senior Equity Strategist",
+                2,
+            ),
+        ] {
+            let mut t = text(&[(long, style)]);
+            t.max_lines = max_lines;
+            t.ellipsize = EllipsizeMode::Tail;
+            let (size, layout) = layout_of(&engine, &t, Some(box_width));
+            assert_eq!(size.width.0, box_width, "{long}");
+            let s = shown(&t, &layout);
+            assert!(s.ends_with('…'), "{long}: {s}");
+            let lines = engine.lines(&layout);
+            assert_eq!(lines.len(), max_lines as usize, "{long}: {s}");
+            let last = lines.last().unwrap();
+            let end = last.x.0 + last.width.0;
+            assert!(end <= box_width + 0.01, "{long}: {s} ends at {end}");
+            // It keeps all that fits: one more letter would not.
+            let start = last.start as usize;
+            let kept = s.rsplit('|').next().unwrap().trim_end_matches('…');
+            let mut next = start + kept.len();
+            while long.as_bytes()[next] == b' ' {
+                next += 1;
+            }
+            let longer = format!("{}…", &long[start..=next]);
+            let (longer, _) = layout_of(&engine, &text(&[(&longer, style)]), None);
+            assert!(longer.width.0 > box_width, "{long}: {s} could keep more");
+            // The ellipsis stands for the rest of the text.
+            assert_eq!(last.end as usize, long.encode_utf16().count(), "{long}");
+        }
     }
 
     #[test]

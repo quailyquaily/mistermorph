@@ -165,15 +165,12 @@ test("while a dialog is over the page, Escape is not the panel's", async () => {
   await app.waitFor("id:chat-detail-panel");
   for (let i = 0; i < 5; i += 1) await app.press("id:chat-history-status");
   await app.waitFor("RAW JSON");
-  // (Headless, Escape never reaches nsh's dialog itself, with or without the panel: only that the
-  // panel leaves it alone can be checked here.)
+  // Escape is the dialog's: it closes, and the panel stays. (Headless, Escape reaches nsh's
+  // dialog since nsh 0.5.1.)
   await app.keyboard.press("escape");
-  await app.wait(300);
-  expect(app.shows("id:chat-detail-panel")).toBe(true);
-  // The dialog closed, Escape closes the panel again.
-  await app.press("id:chat-raw-json-close");
   await app.waitFor("RAW JSON", { state: "gone" });
   expect(app.shows("id:chat-detail-panel")).toBe(true);
+  // The dialog closed, Escape closes the panel again.
   await app.keyboard.press("escape");
   await app.waitFor("id:chat-detail-panel", { state: "gone" });
 });

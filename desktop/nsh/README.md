@@ -19,7 +19,7 @@ stops it on quit.
 ## Build
 
 Needs Rust (the toolchain in `rust-toolchain.toml` is installed by rustup on first use),
-[nsh 0.5.0](https://nsh.dev/docs/installation), Node (for `scripts/generate.mjs`) and Go.
+[nsh 0.5.1](https://nsh.dev/docs/installation), Node (for `scripts/generate.mjs`) and Go.
 
 On Ubuntu or Debian, GPUI also needs these development packages:
 
@@ -113,7 +113,7 @@ quits.
 
 ## Patches to nsh-platform-gpui
 
-`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.5.0 with the patches in `patches/` applied, wired
+`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.5.1 with the patches in `patches/` applied, wired
 in through `[patch.crates-io]` in Cargo.toml. Drop the vendored copy once nsh or GPUI Fast ship
 these. To rebuild it: copy the crate from the cargo registry to `crates/gpui/nsh-platform-gpui` in a
 scratch git repo, `git apply` each patch in order, and copy the result back.
@@ -136,14 +136,11 @@ scratch git repo, `git apply` each patch in order, and copy the result back.
   own accelerated amounts. Ctrl + wheel keeps the system's amounts so pinch-zooming keeps its
   pace (and a Ctrl + wheel scroll with nothing to zoom moves at that pace too). The scrolls
   nsh's test agent sends (`src/agent.rs`) are not scaled.
-- `nsh-selection-copy.patch` (applied last): Ctrl+C (Cmd+C on macOS) and Ctrl+Insert copy
-  the text selected in a selectable text or `selectable` view (the chat bubbles) while a text
-  field keeps the keyboard focus. A press on page text does not take the focus from the field
-  (the composer), and the field took the copy keys first, copying its own empty selection, so
-  only the context menu's Copy worked. Now a field with nothing selected lets the copy keys go
-  to the page's selection, and a mouse press that starts selecting page text collapses the
-  focused field's selection to its caret, so one selection shows and the newest one is copied.
-  The field keeps the focus, its caret and every other key.
+
+`nsh-selection-copy.patch` (the copy keys copying a selected chat bubble's text while the composer
+had the focus) was dropped with nsh 0.5.1, which solves it its own way: selecting page text with
+the mouse (a drag, a double or triple click) takes the keyboard from the focused field, as in
+browsers, so the copy keys reach the selection.
 
 ## Packaging
 

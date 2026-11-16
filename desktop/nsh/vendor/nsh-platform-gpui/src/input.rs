@@ -1559,6 +1559,25 @@ fn put(surface: &Surface, p: Pointer) {
     surface.input.pointers.borrow_mut().push(p);
 }
 
+/// Selecting with the mouse (a drag that began, or a double or triple
+/// click that selected a word or paragraph) takes the keyboard from the
+/// focused text field when the press was outside it, as in browsers: the
+/// field would otherwise swallow Cmd/Ctrl + C (even with nothing selected in
+/// it) and the text just selected could not be copied. The field blurs as
+/// for `blur()`, so its composition, caret and `onBlur` follow. A plain
+/// click on a button or a link in selectable text keeps the focus, and so
+/// does a press inside the field. Touch never selects this way. "Inside"
+/// follows the mounted parents: a portaled overlay that belongs to the
+/// field logically counts as outside it.
+fn blur_field_for_selection(surface: &Rc<Surface>, hit: &NshView) {
+    let Some(field) = crate::text_input::focused(surface) else {
+        return;
+    };
+    if !chain(hit).contains(&field) {
+        crate::text_input::blur_all(surface);
+    }
+}
+
 fn down(
     surface: &Rc<Surface>,
     key: Key,
@@ -1642,8 +1661,10 @@ fn down(
     {
         // Mouse drags in a selectable view select across its texts; its
         // texts never select alone.
-        crate::text_input::page_pressed(surface);
         crate::selectable_view::down(surface, &area, &hit.view, (x, y), clicks, modifiers.shift);
+        if clicks >= 2 {
+            blur_field_for_selection(surface, &hit.view);
+        }
         item = Some(Item::Area(area));
     }
     if item.is_none() {
@@ -1652,13 +1673,15 @@ fn down(
         } else if !touch && crate::text::selectable(&hit.view.state()) {
             // Mouse drags over selectable text select it rather than
             // pan.
-            crate::text_input::page_pressed(surface);
             Some(Item::Text(hit.view.clone()))
         } else {
             None
         };
         if let Some(c) = candidate {
             c.send(surface, PointerKind::Down, (x, y), clicks, modifiers);
+            if clicks >= 2 && matches!(c, Item::Text(_)) {
+                blur_field_for_selection(surface, &hit.view);
+            }
             item = Some(c);
         }
     }
@@ -1781,7 +1804,11 @@ fn motion(surface: &Rc<Surface>, key: Key, x: f32, y: f32, time: f64) {
     p.velocity
         .add(time, nsh_core::geometry::point(Points(x), Points(y)));
     if let Some(item) = &p.item {
-        item.send(surface, PointerKind::Move, (x, y), 1, p.modifiers);
+        let taken = item.send(surface, PointerKind::Move, (x, y), 1, p.modifiers);
+        // The drag selecting text has begun.
+        if taken && matches!(item, Item::Text(_) | Item::Area(_)) {
+            blur_field_for_selection(surface, &p.target);
+        }
     }
     let moved = std::mem::replace(&mut p.moved, true);
     let (tx, ty) = (x - p.start.0, y - p.start.1);
@@ -3335,6 +3362,142 @@ mod tests {
             .iter()
             .map(NshView::id)
             .collect()
+    }
+
+    /// A surface with a focused field 4 and a selectable text 6 (inside a
+    /// selectable view 5 when `area`) beside it. The text has no layout (no
+    /// text engine in tests), which selecting does not need to begin.
+    fn field_and_text(area: bool) -> (Rc<Surface>, NshView, NshView) {
+        let surface = Surface::new(nsh_engine::Environment::default());
+        surface.root.state_mut().frame = rect(0.0, 0.0, 400.0, 400.0);
+        let field = view(
+            &surface.root,
+            4,
+            ViewKind::Input,
+            rect(0.0, 0.0, 100.0, 30.0),
+        );
+        let parent = if area {
+            let a = view(
+                &surface.root,
+                5,
+                ViewKind::View,
+                rect(0.0, 100.0, 200.0, 100.0),
+            );
+            a.state_mut().props.selectable_view = true;
+            a
+        } else {
+            surface.root.clone()
+        };
+        let y = if area { 0.0 } else { 100.0 };
+        let text = view(&parent, 6, ViewKind::Text, rect(0.0, y, 100.0, 30.0));
+        let content = nsh_core::AttributedText {
+            text: "hello world".into(),
+            selectable: Some(true),
+            ..Default::default()
+        };
+        crate::text::set(
+            &text,
+            &std::sync::Arc::new(content),
+            &nsh_core::TextLayout(std::sync::Arc::new(())),
+            rect(0.0, 0.0, 100.0, 30.0),
+        );
+        crate::text_input::focus_for_test(&surface, &field);
+        (surface, field, text)
+    }
+
+    fn cmd_c(down: bool) -> KeyEvent {
+        let mac = cfg!(target_os = "macos");
+        KeyEvent {
+            vk: 0x43,
+            down,
+            repeat: false,
+            modifiers: Modifiers {
+                meta: mac,
+                ctrl: !mac,
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Presses at `(10, y)` with `key`, then drags 40 points right (past
+    /// the selection slop) and releases.
+    fn press_and_drag(surface: &Rc<Surface>, key: Key, y: f32, clicks: u32, drag: bool) {
+        down(surface, key, 10.0, y, 1.0, clicks, Modifiers::default());
+        if drag {
+            motion(surface, key, 50.0, y, 1.1);
+        }
+        up(surface, key, Some((50.0, y)), 1.2, false);
+    }
+
+    fn focused_is(surface: &Rc<Surface>, field: &NshView) -> bool {
+        crate::text_input::focused(surface).as_ref() == Some(field)
+    }
+
+    /// While the field is focused it swallows Cmd + C; once a selection
+    /// drag blurred it, the key is left to the selection.
+    fn assert_copy_goes_to_selection(surface: &Rc<Surface>, field: &NshView) {
+        assert!(!focused_is(surface, field));
+        assert!(!crate::text_input::key(surface, &cmd_c(true)));
+    }
+
+    #[test]
+    fn dragging_selectable_text_blurs_the_field_and_copy_goes_to_the_selection() {
+        let (surface, field, _) = field_and_text(false);
+        assert!(crate::text_input::key(&surface, &cmd_c(true)));
+        press_and_drag(&surface, Key::Mouse, 110.0, 1, true);
+        assert_copy_goes_to_selection(&surface, &field);
+        crate::text_input::surface_stopped(surface.key());
+    }
+
+    #[test]
+    fn dragging_in_a_selectable_view_blurs_the_field() {
+        let (surface, field, _) = field_and_text(true);
+        assert!(crate::text_input::key(&surface, &cmd_c(true)));
+        press_and_drag(&surface, Key::Mouse, 110.0, 1, true);
+        assert_copy_goes_to_selection(&surface, &field);
+        crate::text_input::surface_stopped(surface.key());
+    }
+
+    #[test]
+    fn a_plain_click_keeps_the_field_focused() {
+        for area in [false, true] {
+            let (surface, field, _) = field_and_text(area);
+            press_and_drag(&surface, Key::Mouse, 110.0, 1, false);
+            assert!(focused_is(&surface, &field), "area: {area}");
+            crate::text_input::surface_stopped(surface.key());
+        }
+    }
+
+    #[test]
+    fn a_double_click_selecting_a_word_blurs_the_field() {
+        for area in [false, true] {
+            let (surface, field, _) = field_and_text(area);
+            press_and_drag(&surface, Key::Mouse, 110.0, 2, false);
+            assert!(!focused_is(&surface, &field), "area: {area}");
+            crate::text_input::surface_stopped(surface.key());
+        }
+    }
+
+    #[test]
+    fn a_touch_drag_over_selectable_text_keeps_the_focus() {
+        for area in [false, true] {
+            let (surface, field, _) = field_and_text(area);
+            press_and_drag(&surface, Key::Touch(1), 110.0, 1, true);
+            assert!(focused_is(&surface, &field), "area: {area}");
+            crate::text_input::surface_stopped(surface.key());
+        }
+    }
+
+    #[test]
+    fn dragging_inside_the_field_keeps_the_focus() {
+        let (surface, field, _) = field_and_text(false);
+        press_and_drag(&surface, Key::Mouse, 10.0, 1, true);
+        assert!(focused_is(&surface, &field));
+        // A selectable text inside the field counts as inside it.
+        let inner = view(&field, 8, ViewKind::Text, rect(0.0, 0.0, 50.0, 30.0));
+        blur_field_for_selection(&surface, &inner);
+        assert!(focused_is(&surface, &field));
+        crate::text_input::surface_stopped(surface.key());
     }
 
     #[test]

@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1.7
 
 # The Console (web/console-nsh) as a static site. The nsh CLI is a glibc build, so this stage is
-# Debian; nsh's install script downloads the pinned release and checks its .sha256.
+# Debian; nsh's install script downloads the pinned release and checks its .sha256. The version is
+# the one .github/actions/setup-desktop-build installs; since 0.5 the web runtime is a component
+# added beside the CLI.
 FROM node:24-bookworm-slim AS console
-ARG NSH_VERSION=v0.4.0
+ARG NSH_VERSION=v0.5.1
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \
   && rm -rf /var/lib/apt/lists/* \
   && curl -fsSL "https://github.com/longbridge/nsh/releases/download/${NSH_VERSION}/install.sh" | sh
 ENV PATH="/root/.local/bin:${PATH}"
+RUN nsh --version && nsh component add web
 WORKDIR /src
 COPY assets/config/ ./assets/config/
 COPY web/console-nsh/ ./web/console-nsh/

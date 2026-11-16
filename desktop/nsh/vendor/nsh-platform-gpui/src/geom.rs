@@ -209,6 +209,12 @@ impl Mat4 {
         ]
     }
 
+    /// The inverse of the plane's homography (same conventions): window
+    /// points back to the plane's, homogeneous; `None` when seen edge-on.
+    pub(crate) fn plane_inverse(&self) -> Option<[[f32; 3]; 3]> {
+        invert3(&self.homography())
+    }
+
     /// Where `(x, y)` of the plane lands (`None` behind the viewer).
     pub(crate) fn map(&self, x: f32, y: f32) -> Option<(f32, f32)> {
         let h = self.homography();

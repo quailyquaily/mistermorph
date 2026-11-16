@@ -59,10 +59,10 @@ index cccf148..eeddaa3 100644
              crate::input::touchpad(&s, event, phase);
          } else {
 diff --git a/crates/gpui/nsh-platform-gpui/src/input.rs b/crates/gpui/nsh-platform-gpui/src/input.rs
-index 054de1c..95059ff 100644
+index 4b861a9..fd23c0f 100644
 --- a/crates/gpui/nsh-platform-gpui/src/input.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/input.rs
-@@ -2898,6 +2898,15 @@ pub(crate) fn touchpad(surface: &Rc<Surface>, event: WheelEvent, phase: GestureP
+@@ -2927,6 +2927,15 @@ pub(crate) fn touchpad(surface: &Rc<Surface>, event: WheelEvent, phase: GestureP
      }
  }
  

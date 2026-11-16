@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the phone app: the console as an Android app (APK, or an App Bundle for Google Play).
 # The app is a client of a `morph console serve` elsewhere, whose address the user enters on the
-# login page (lib/mobileHost.ts). Needs nsh 0.5.0 with its Android runtime (`nsh component add
+# login page (lib/mobileHost.ts). Needs nsh 0.5.1 with its Android runtime (`nsh component add
 # android`, added here when missing) and that release's nsh.aar (embedding SDK, fetched and checked
 # here when missing), Node, a JDK, curl, unzip and the Android SDK (build tools and
 # `platforms;android-35`, found through ANDROID_HOME); no NDK, no Gradle. The app's own Java (android/src: voice input's
