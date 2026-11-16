@@ -47,3 +47,16 @@ Tests: nsh check passed (repository-pinned nsh 0.5.1). Required Console scripts/
 Visual checking: gallery inspected in headless Chrome at desktop 1400x1000 and mobile 390x844: button demo/hover tooltip, full and compact switcher, and voice composer demo (27px computed corners, clipping). Not visually checked: compact switcher while open, converted buttons on real pages, real chat voice bar, final release-download and Follow changes. Desktop and Android apps not run. Those states have automated test coverage only.
 
 Push: initial credential-helper request lacked repository-path information; command-local credential.useHttpPath=true resolved it on the allowed retry. Branch pushed successfully.
+
+## factory · review · 2026-11-16 21:54
+head: 7e66af8342f80200f3e70801277aac6440d84af7
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/ui.tsx:610: hiding all icon-button labels also hides the memory card source count. Keep the value as adjacent text. Verified example: a memory with source_events: [] visibly showed "No recorded source" on base, but only Edit/Forget on head; its accessibility label remains.
+- [P2] web/console-nsh/pages/logs/LogsPage.tsx:516: the existing custom ToolButton was missed by the requested conversion. Make its face icon-only with its label as accessible name and tooltip. Verified example: opening a tool_failed log entry still displays both icons and ONLY THIS EVENT / VIEW RAW LOG labels.
+- [P3] web/console-nsh/components/ui.tsx:572: icon plus title without label is no longer square in the converted gallery examples. Apply square sizing to glyph-only faces while preserving intentional children. Verified example: md icon/title Refresh measures 50x44 versus 44x44 with iconOnly; smaller sizes likewise have unequal sides.
+- [P3] web/console-nsh/components/ui.tsx:574: label-first tooltips remove unique title information. Preserve the full checksum and truncated-skill disabled-edit explanation as adjacent text or supplementary tooltip content. Verified example: label="Stop" title="Stop this run" is explicitly tested to suppress the latter; the checksum Copy and disabled skill Edit use the same path.
+
+Validation: Claude Code reviewed origin/master...HEAD across all 26 changed files; no P0/P1 findings. Root gofmt/vet/go test ./... passed. nsh check (pinned 0.5.1) passed. Required Console scripts/test.sh passed: 129 files, zero final failures, inventory check passed. chat-topic-drag and chat-voice required isolated retries; both passed, and chat-voice passed three further isolated runs. Tests used throwaway HOME. Installs: none beyond pinned toolchain restoration; no manifest or lockfile changes. Worktree stayed clean at the reviewed head; branch merges cleanly with origin/master.
+
+Residual risks: this review used headless probes, not rendered visual inspection. Open compact switcher, real voice bar corners on landing/conversation/mobile, native desktop/Android tooltips, touch discoverability and phone dialog action-row sizing were not visually verified. Four P2/P3 notes remain for the owner; factory policy permits ready/ without P0/P1. Moved review/ → ready/; not merged or shipped. No linked GitHub issue or PR was present, so no GitHub comment was required.
