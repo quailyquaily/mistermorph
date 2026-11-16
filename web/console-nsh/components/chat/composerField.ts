@@ -61,9 +61,20 @@ export function composerFrameBorder(mobile: boolean): "border-line" | "border-in
  *  the glass tint and the conversation shows through it, blurred (the frame's style takes
  *  `glassStyle()`); else it is the field's own fill. */
 export function composerFrameClass(mobile: boolean, glass = false): string {
-  return `relative rounded-[27px] border ${composerFrameBorder(mobile)} ${glassFill("composer", glass)} transition-shadow duration-[260ms] focus-within:shadow-md`;
+  return `relative ${COMPOSER_RADIUS_CLASS} border ${composerFrameBorder(mobile)} ${glassFill("composer", glass)} transition-shadow duration-[260ms] focus-within:shadow-md`;
 }
 
 /** The frame's corner radius: half the one-row height, so one row is a pill; its round controls
  *  sit 8pt in, concentric with the corners (19 + 8). */
 export const COMPOSER_RADIUS = 27;
+/** The radius as the class the frame and the voice bar take (a literal, so the class is found). */
+export const COMPOSER_RADIUS_CLASS = "rounded-[27px]";
+
+/**
+ * The voice bar (the strip above the field while it records or transcribes: the dot, the time, the
+ * live words, its two buttons): rounded as the frame it lies in is (COMPOSER_RADIUS, so one line of
+ * it is a pill, as one row of the composer is) and clipping what it holds to that shape. The same
+ * on the landing composer, in a conversation and on a phone: the frame's radius is one everywhere.
+ * Its ends are padded past the curve.
+ */
+export const COMPOSER_VOICE_BAR_CLASS = `mx-2.5 mt-2.5 flex-row items-center gap-2 overflow-hidden ${COMPOSER_RADIUS_CLASS} bg-paper py-1 pl-3 pr-1.5`;
