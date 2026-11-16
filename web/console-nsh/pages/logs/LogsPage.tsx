@@ -564,23 +564,19 @@ export function LogsPage() {
           <If when={!compact()}>
             <FilterGroup />
           </If>
-          {/* Following: Vue's 8pt square mark, filled green while the view follows the end. */}
+          {/* Following: Vue's 8pt square mark, filled green while the view follows the end. The mark
+              is the button's glyph, alone on it: its label is its name and its tooltip. */}
           <Button
             variant="outlined"
             size="sm"
+            iconOnly
             title={followLabel()}
             selected={following()}
             disabled={loading() || loadingOlder() || unsupported()}
             onPress={() => (untracked(following) ? following.set(false) : resumeFollowing())}
             testID="logs-follow"
           >
-            {/* The mark before the label, as Vue's button lays them out (8pt apart). */}
             <View class={`size-2 rounded-[1px] border ${following() ? "border-ok bg-ok" : "border-muted-foreground"}`} />
-            <If when={!compact()}>
-              <Text class="ml-0.5 text-sm font-medium tracking-[0.01em] text-foreground" style={{ numberOfLines: 1 }}>
-                {followLabel()}
-              </Text>
-            </If>
           </Button>
           <Button
             variant="outlined"

@@ -124,8 +124,8 @@ ask nothing. Known limits, stated plainly:
 A Console button shows its label or an icon, not the two side by side.
 
 - `Button` (`components/ui.tsx`) enforces it: given an `icon` it is a square icon button. Its
-  `label` is then not drawn; it stays the button's accessible name and is its tooltip (a `title`,
-  where the button has one, is the tooltip instead). `disabled`, `selected` and `loading` are as
+  `label` is then not drawn; it stays the button's accessible name and is its tooltip (a `title`
+  is the tooltip only of a button that has no label). `disabled`, `selected` and `loading` are as
   they were. The busy beam of `loading` is a state, not a glyph: a text button keeps its label
   while it runs.
 - The controls that draw their own box follow the same rule: `PlaceholderButton` (the dashed "add"
@@ -133,8 +133,8 @@ A Console button shows its label or an icon, not the two side by side.
   Logs page's "Load older" a caret, each named by its former label.
 - Where the label was a value to read rather than a name, the value is text beside an icon button:
   the release checksum with its copy button, the server's address with its button on the phone's
-  login page. A release's download is a text button without a glyph, because its label says
-  which system and build the file is for.
+  login page, and the system and build of a release's download with its download button. The
+  Logs page's Follow button is its status mark alone.
 - Not buttons, and unchanged: menu rows and menu or select triggers, list and tree rows,
   disclosure rows with a caret, tabs, filter chips, file pills, navigation entries and links.
 

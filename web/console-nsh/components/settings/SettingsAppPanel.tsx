@@ -395,20 +395,25 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
         />
       );
     }
-    // A download is a text button, without a glyph: its label says which file it is (the system
-    // and build it is for), which is what the reader checks before taking it, and what tells one
-    // of several from the others. On phones it takes the card's width and a long label wraps.
+    // A download is an icon button, named by which file it is (the system and build it is for):
+    // that name is its accessible name and its tooltip. The same words are plain text beside it,
+    // not part of the button: what the reader checks before taking the file, and what tells one of
+    // several from the others. On phones the row takes the card's width and a long name wraps.
     const testID = choice().kind === "choose" ? `settings-update-download-${file.os}-${file.arch}` : "settings-update-download";
     return (
-      <Button
-        variant="outlined"
-        label={fileLabel(file)}
-        block={isMobile()}
-        wrap={isMobile()}
-        onPress={() => openExternal(file.url)}
-        onLayout={probeButton(testID)}
-        testID={testID}
-      />
+      <View class={`flex-row items-center gap-2 ${isMobile() ? "" : "justify-end"}`} onLayout={probeButton(`${testID}-row`)} testID={`${testID}-row`}>
+        <Text class={`min-w-0 text-sm text-foreground ${isMobile() ? "flex-1" : "shrink"}`} testID={`${testID}-label`}>
+          {fileLabel(file)}
+        </Text>
+        <Button
+          variant="outlined"
+          icon="PhCloudArrowDown"
+          label={fileLabel(file)}
+          onPress={() => openExternal(file.url)}
+          onLayout={probeButton(testID)}
+          testID={testID}
+        />
+      </View>
     );
   }
 
