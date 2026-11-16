@@ -5,6 +5,7 @@
 import type { ListRef, ViewRef } from "nsh";
 import { cleanup, computed, createMotion, effect, List, signal, Text, untracked, View, windowSize } from "nsh";
 import { createArrivalTracker } from "../../lib/core/arrivals.js";
+import { foldQuietRuns } from "../../lib/core/chat-quiet-runs.js";
 import { SystemBackScope } from "../../lib/systemBack";
 import { forgetScroll, hasSavedScroll, onPageSettled, recallScroll, rememberScroll, reportScrollArea } from "../../lib/scrollMemory";
 import { SCROLLBAR } from "../motion/ScrollEdges";
@@ -102,8 +103,13 @@ export function ChatHistoryList(props: {
   // List gets the ids (equal strings while a message only changes) and each row looks its message
   // up: a message changes in place and its row is measured again. Only new, removed or reordered
   // messages change the ids.
-  const rows = computed(() => props.items.map(historyID), { equals: sameIDs });
-  const byID = computed(() => new Map(props.items.map((item) => [historyID(item), item])));
+  //
+  // A TODO item's runs that found nothing to do are one row per group of consecutive ones
+  // (lib/core/chat-quiet-runs.js), named by the group's first run: it keeps its id, and so its
+  // cell and whether it is open, as new quiet runs join it.
+  const shown = computed(() => foldQuietRuns(props.items) as HistoryItem[]);
+  const rows = computed(() => shown().map(historyID), { equals: sameIDs });
+  const byID = computed(() => new Map(shown().map((item) => [historyID(item), item])));
   // Messages that just joined the thread animate in; history loads and topic switches do not (the
   // Vue console's arrival tracker). An id stays "arriving" for a moment longer than its motion, so
   // a row bound again by streaming text in that time does not start over.
@@ -111,7 +117,7 @@ export function ChatHistoryList(props: {
   let arrivingUntil = new Map<string, number>();
   effect(() => {
     if (props.loading) return;
-    const ids = props.items.map((item) => String(item?.id ?? ""));
+    const ids = shown().map((item) => String(item?.id ?? ""));
     const scope = props.ctx.topicID();
     untracked(() => {
       const now = Date.now();

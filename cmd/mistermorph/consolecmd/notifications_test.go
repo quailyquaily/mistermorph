@@ -354,3 +354,66 @@ func TestNotificationWebSocketSkipsScheduledCronRuns(t *testing.T) {
 		t.Fatalf("first frame = %#v, want the manual run's", got)
 	}
 }
+
+// A run that found nothing to do raises no notification: neither the TODO item's own, which a
+// scheduled run never raises, nor a topic task completion, whatever started the task.
+func TestQuietRunsRaiseNoNotification(t *testing.T) {
+	hub := newConsoleNotificationHub()
+	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{OnTaskUpdate: hub.PublishTaskCompletion})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+	finish := func(outcome string) func(*daemonruntime.TaskInfo) {
+		return func(task *daemonruntime.TaskInfo) {
+			task.Status = daemonruntime.TaskDone
+			result := map[string]any{"final": map[string]any{"output": "new/ is empty."}}
+			if outcome != "" {
+				result[daemonruntime.TaskResultOutcomeKey] = outcome
+			}
+			task.Result = result
+		}
+	}
+	for _, run := range []struct {
+		id      string
+		topic   string
+		trigger daemonruntime.TaskTrigger
+		outcome string
+	}{
+		{"scheduled-quiet", daemonruntime.CronTopicID("todo"), scheduledCronTrigger, daemonruntime.TaskOutcomeNothing},
+		{"chat-quiet", "topic", chatTrigger, daemonruntime.TaskOutcomeNothing},
+		{"chat-result", "topic", chatTrigger, daemonruntime.TaskOutcomeResult},
+		{"chat-unchecked", "topic", chatTrigger, ""},
+	} {
+		info := daemonruntime.TaskInfo{ID: run.id, TopicID: run.topic, Status: daemonruntime.TaskRunning}
+		if err := store.UpsertWithTrigger(info, run.trigger, ""); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Update(run.id, finish(run.outcome)); err != nil {
+			t.Fatal(err)
+		}
+		if run.trigger == scheduledCronTrigger {
+			hub.Publish(awarenessloop.CronNotification{ID: run.id, Title: "Build", Body: "new/ is empty.", Trigger: awarenessloop.CronNotificationTriggerSchedule})
+		}
+	}
+	var got []string
+	for {
+		select {
+		case event := <-events:
+			got = append(got, event.ID)
+			continue
+		default:
+		}
+		break
+	}
+	want := []string{"topic-task:chat-result", "topic-task:chat-unchecked"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("notifications = %v, want %v", got, want)
+	}
+	page, _ := hub.completions.read(taskCompletionQuery{since: time.Hour})
+	raw, _ := json.Marshal(page)
+	if len(page.Events) != 2 || page.Active != 0 || strings.Contains(string(raw), "quiet") {
+		t.Fatalf("the completions a watcher reads = %s", raw)
+	}
+}

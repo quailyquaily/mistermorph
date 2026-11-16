@@ -4,7 +4,8 @@
 // upload ends in the gallery's local action log.
 import { signal, Text, View } from "nsh";
 import { approvalDetailsByID, skillInstallApproval } from "../../../lib/core/chat-approvals.js";
-import { normalizeActivity, normalizeElevations, normalizePlan, normalizeQuestions } from "../../../lib/core/chat-task-history.js";
+import { foldQuietRuns, quietGroupFoldKey, quietRunFoldKey } from "../../../lib/core/chat-quiet-runs.js";
+import { normalizeActivity, normalizeElevations, normalizePlan, normalizeQuestions, taskListHistoryItems } from "../../../lib/core/chat-task-history.js";
 import { createArtifactPreviews } from "../../../components/chat/ArtifactPreviewCard";
 import { AttachSourceSheet } from "../../../components/chat/AttachSourceSheet";
 import { ChatAgentLinkExchange } from "../../../components/chat/ChatAgentLinkExchange";
@@ -14,6 +15,8 @@ import { ChatHistoryItem, type ChatRowContext, type HistoryItem } from "../../..
 import { ChatHistoryList } from "../../../components/chat/ChatHistoryList";
 import { ChatLoadError } from "../../../components/chat/ChatLoadError";
 import { ChatMarkdown } from "../../../components/chat/ChatMarkdown";
+import { ChatNoticeLine } from "../../../components/chat/ChatNoticeLine";
+import { ChatQuietRuns } from "../../../components/chat/ChatQuietRuns";
 import { ChatQuestionCard, type QuestionState } from "../../../components/chat/ChatQuestionCard";
 import { ChatRichContent } from "../../../components/chat/ChatRichContent";
 import { ChatSkillInstallPreview } from "../../../components/chat/ChatSkillInstallPreview";
@@ -35,7 +38,7 @@ import { Button, Muted } from "../../../components/ui";
 import { ActivityDetailPanel } from "../../chat/ActivityDetailPanel";
 import { ViewToggle } from "../../chat/TopicSidebar";
 import { WorkspacePanelTabs, WorkspaceSheet } from "../../chat/WorkspacePanel";
-import { act, Col, type DemoMap, FIXED_ISO, LONG_TEXT, LONG_WORD, Row, t, useFlag, useText, V, Wide } from "../demo";
+import { act, Col, type DemoMap, FIXED_ISO, FIXED_MS, LONG_TEXT, LONG_WORD, Row, t, useFlag, useText, V, Wide } from "../demo";
 
 const REPLY = [
   "Here is what I found in the **synthetic** workspace:",
@@ -191,6 +194,52 @@ function HistoryDemo() {
           </V>
         )}
       </Each>
+    </Col>
+  );
+}
+
+// A TODO item's topic as the runtime lists it: a run that built something, then scheduled runs
+// that found nothing to do (result.outcome "nothing"). The chat's own grouping folds them.
+const QUIET_TASK = "Run a factory build for this repository.";
+const QUIET_REPLIES = [
+  "No build performed: .factory/new/ is empty. Lock released; no notification sent.",
+  "No review candidate: review/ is empty. No changes made and no notification sent.",
+  `${LONG_TEXT} ${LONG_WORD}`,
+];
+function quietTasks(count: number, prefix: string) {
+  return Array.from({ length: count }, (_, index) => {
+    const time = new Date(FIXED_MS + index * 30 * 60_000).toISOString();
+    return {
+      id: `${prefix}-${index + 1}`,
+      task: QUIET_TASK,
+      topic_id: "_cron_uig",
+      status: "done",
+      created_at: time,
+      started_at: time,
+      finished_at: time,
+      result: { final: { output: QUIET_REPLIES[index % QUIET_REPLIES.length] }, outcome: "nothing" },
+    };
+  });
+}
+const quietGroup = (count: number, prefix: string) =>
+  (foldQuietRuns(taskListHistoryItems(quietTasks(count, prefix), t, { locale: "en-US", now: new Date(FIXED_MS) })) as HistoryItem[])[0];
+
+function QuietRunsDemo() {
+  const ctx = rowContext();
+  const many = quietGroup(8, "uig-quiet");
+  const one = quietGroup(1, "uig-quiet-one");
+  const open = quietGroup(3, "uig-quiet-open");
+  // The third example starts open, its second run shown in full.
+  ctx.folds.set(quietGroupFoldKey(open.id), true);
+  ctx.folds.set(quietRunFoldKey("uig-quiet-open-2"), true);
+  const group = (item: HistoryItem) => (
+    <ChatQuietRuns group={item} folds={ctx.folds} renderMessage={(message) => <ChatHistoryItem item={message() as HistoryItem} ctx={ctx} />} />
+  );
+  return (
+    <Col>
+      <V s="closed" l="8 runs"><View testID="uig-quiet-many">{group(many)}</View></V>
+      <V s="closed" l="1 run"><View testID="uig-quiet-one">{group(one)}</View></V>
+      <V s="open" l="a run in full"><View testID="uig-quiet-open">{group(open)}</View></V>
     </Col>
   );
 }
@@ -660,6 +709,33 @@ export const CHAT_DEMOS: DemoMap = {
         <Each of={replyWorkers(ACTIVITY, "running")} key={(worker) => worker.id}>{(worker) => <WorkerAvatar avatarStyle={worker().avatarStyle} />}</Each>
       </V>
     ),
+  },
+  ChatQuietRuns: { render: () => <QuietRunsDemo />, wide: true },
+  ChatNoticeLine: {
+    render: () => {
+      const open = useFlag(false);
+      return (
+        <Col>
+          <V s="default" l="notice"><ChatNoticeLine state="on" text="Context compacted. Earlier messages were summarized." /></V>
+          <V s="busy" l="notice"><ChatNoticeLine state="running" text="Compacting context" /></V>
+          <V s="error" l="notice"><ChatNoticeLine state="error" text="Context compaction failed." /></V>
+          <V s={open.on() ? "open" : "closed"} l="fold head">
+            <ChatNoticeLine
+              state="off"
+              text="8 runs, nothing to do"
+              detail="09:00 – 12:30"
+              open={open.on()}
+              onPress={() => {
+                open.toggle();
+                act("ChatNoticeLine", open.on() ? "open" : "closed");
+              }}
+              testID="uig-notice-fold"
+            />
+          </V>
+          <V s="long" l="fold head"><ChatNoticeLine state="off" text={LONG_TEXT} detail={LONG_WORD} onPress={() => act("ChatNoticeLine", "long")} /></V>
+        </Col>
+      );
+    },
   },
   ChatSystemMessage: {
     render: () => (

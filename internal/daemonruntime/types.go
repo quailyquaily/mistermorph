@@ -223,3 +223,40 @@ func IsReservedTopicID(id string) bool {
 	id = strings.TrimSpace(id)
 	return id == ConsoleDefaultTopicID || id == ConsoleAwarenessTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id)
 }
+
+const (
+	// TaskOutcomeResult, TaskOutcomeNothing and TaskOutcomeProblem are what a scheduled TODO run
+	// that ended done came to, as the decision route judged it: it did or found something, it found
+	// nothing to do, or it could not do its job. A task's result keeps the answer under
+	// TaskResultOutcomeKey, beside "final"; a run that was not checked has none.
+	TaskOutcomeResult  = "result"
+	TaskOutcomeNothing = "nothing"
+	TaskOutcomeProblem = "problem"
+
+	TaskResultOutcomeKey = "outcome"
+)
+
+// TaskOutcome returns the outcome recorded in a task's result, or "" when it has none.
+func TaskOutcome(info TaskInfo) string {
+	result, ok := info.Result.(map[string]any)
+	if !ok {
+		return ""
+	}
+	outcome, _ := result[TaskResultOutcomeKey].(string)
+	switch outcome = strings.TrimSpace(outcome); outcome {
+	case TaskOutcomeResult, TaskOutcomeNothing, TaskOutcomeProblem:
+		return outcome
+	}
+	return ""
+}
+
+// IsQuietTask reports whether the task is a run that ended done and found nothing to do. Such a
+// run is kept and shown folded: it does not move its topic up, mark it unread or notify.
+func IsQuietTask(info TaskInfo) bool {
+	return info.Status == TaskDone && TaskOutcome(info) == TaskOutcomeNothing
+}
+
+// isScheduledCronRunTrigger reports whether trigger is that of a run a TODO item's schedule fired.
+func isScheduledCronRunTrigger(trigger TaskTrigger) bool {
+	return IsCronRunTrigger(trigger) && strings.TrimSpace(trigger.Ref) == CronRunTriggerRefSchedule
+}

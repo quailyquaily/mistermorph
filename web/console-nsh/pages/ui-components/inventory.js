@@ -163,6 +163,8 @@ const FILES = {
   },
   "components/chat/ChatHistoryList.tsx": { group: "chat", items: { ChatHistoryList: D(), Skeleton: C("ChatHistoryList") } },
   "components/chat/ChatLoadError.tsx": { group: "chat", items: { ChatLoadError: D() } },
+  "components/chat/ChatNoticeLine.tsx": { group: "chat", items: { ChatNoticeLine: D() } },
+  "components/chat/ChatQuietRuns.tsx": { group: "chat", items: { ChatQuietRuns: D() } },
   "components/chat/ChatMarkdown.tsx": { group: "rich", items: { ChatMarkdown: D(), CodeBlock: C("ChatMarkdown") } },
   "components/chat/ChatQuestionCard.tsx": { group: "chat", items: { ChatQuestionCard: D(), Key: C("ChatQuestionCard") } },
   "components/chat/ChatRichContent.tsx": { group: "rich", items: { ChatRichContent: D() } },

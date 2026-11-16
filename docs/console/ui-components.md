@@ -56,7 +56,7 @@ catalog strings, and the fixtures add fixed mixed-script long text to show wrapp
 
 | Mode | Meaning | Count |
 | --- | --- | --- |
-| `demo` | The production component, mounted with synthetic props | 151 |
+| `demo` | The production component, mounted with synthetic props | 153 |
 | `composed` | Shown inside another component's demo (named by `via`) | 72 |
 | `listed` | Not mounted; the page gives the reason | 165 |
 
@@ -103,7 +103,9 @@ the page asks the Console only what the route guard and the app frame ask on any
 ask nothing. Known limits, stated plainly:
 
 - The chat fixtures are shaped by the chat's own pure normalizers
-  (`lib/core/chat-task-history.js`, `lib/core/chat-approvals.js`); `ReceivedFile` gets a stand-in
+  (`lib/core/chat-task-history.js`, `lib/core/chat-approvals.js`, and
+  `lib/core/chat-quiet-runs.js` for the folded TODO runs of the `ChatQuietRuns` demo: eight
+  runs and one run folded, three runs open with one shown in full); `ReceivedFile` gets a stand-in
   file store that fetches and downloads nothing.
 - `KindAvatar` and `ContactCard` read the endpoint list to find an agent contact's avatar. The
   fixture contacts have none, so nothing is fetched and the result does not depend on that list.

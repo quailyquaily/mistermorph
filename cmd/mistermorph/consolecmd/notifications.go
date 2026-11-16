@@ -71,7 +71,8 @@ func (h *consoleNotificationHub) PublishTaskCompletion(previous, next daemonrunt
 		return
 	}
 	h.completions.track(next)
-	if previous.ID == "" {
+	// A run that found nothing to do has nothing to tell.
+	if previous.ID == "" || daemonruntime.IsQuietTask(next) {
 		return
 	}
 	switch previous.Status {
