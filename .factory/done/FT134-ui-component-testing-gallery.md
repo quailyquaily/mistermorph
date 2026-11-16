@@ -80,3 +80,12 @@ Residual risks:
 - No real-browser review in this run. Build-reported Japanese mobile chat clipping (~166px), narrow skill-install URL and equal-width Tabs clipping remain unverified and unresolved.
 - Dark scheme, hover/tooltips, real Android/desktop builds, clipboard and file picker were not checked. Owner should examine inventory completeness, live-link exceptions and narrow-screen behavior before shipping.
 Moved review/ -> ready/. No linked issue or PR was present in the item.
+
+
+## factory · 2026-11-16 15:25
+Owner approved: "FT134 is fine move on. Cc Claude".
+Shipped using Claude Code. Clean merge commit: 0200398d20a3326a5e61c3ac9156aa674fc0d9cd (parents c611561e and reviewed 8f717938). No integration fixes or unrelated changes.
+Annotated tag: v0.3.114. Atomic master/tag push succeeded; remote master and peeled tag independently verified at the merge commit.
+Checks on final clean HEAD: gofmt, go vet ./..., go test ./..., nsh check, required Console scripts/test.sh (126 files, zero failures; chat-attachments passed isolated retry), 280 Node tests plus 24 Cloudflare tests all passed. Absolute throwaway HOME and home-cache TMPDIR used. No additional installs reported.
+No live-browser/visual/device checks or platform builds during shipping. Existing review P2 findings, inventory limitations and mobile clipping remain unchanged; approval is not a claim of exhaustive component coverage. Route: authenticated /ui-components, no normal navigation entry.
+No linked issues or PRs to close. Branch retained (configured ship defaults do not include clean). Moved ready/ -> done/.
