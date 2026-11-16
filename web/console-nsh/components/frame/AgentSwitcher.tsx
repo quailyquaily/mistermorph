@@ -2,7 +2,8 @@
 // agent's avatar and name; pressed, the agents in the composer's popover bubble (PopoverPicker),
 // opening below with its tail up to the switcher: online agents first, offline ones dimmed and not
 // selectable, the current one marked, and a last row to the overview of every agent. With more than
-// eight agents a filter heads the list. Folded, the sidebar shows the avatar only. The phone's
+// eight agents a filter heads the list. Folded, the sidebar shows the avatar only, without the
+// caret (the name joins it while the list is open). The phone's
 // bottom bar shows the same rows on a sheet that rises over the page (MobileBottomNav, `AgentList`).
 //
 // Why not nsh's Menu: on the desktop app (GPUI) the menu's agent rows took no clicks while its
@@ -275,8 +276,13 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
       <AgentAvatar image={triggerAvatar()} size={24} />
       <If when={!props.compact || open()}>
         <FadeText text={triggerName()} class="flex-1 text-xs font-semibold leading-[14.4px] text-foreground" />
+      </If>
+      {/* The caret is the unfolded switcher's: folded, the avatar stands alone, open or not, whether
+          or not an agent is selected. */}
+      <If when={!props.compact}>
         <View
           class="opacity-75"
+          testID="agent-switcher-caret"
           style={{
             rotate: open() ? "180deg" : "0deg",
             transitionProperty: "transform",
