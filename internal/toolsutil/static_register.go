@@ -27,6 +27,7 @@ const (
 	BuiltinWebSearch     = "web_search"
 	BuiltinPlanCreate    = "plan_create"
 	BuiltinTodoUpdate    = "todo_update"
+	BuiltinTodoList      = "todo_list"
 	BuiltinImageGenerate = "image_generate"
 	BuiltinImageEdit     = "image_edit"
 	BuiltinContactsSend  = "contacts_send"
@@ -45,6 +46,7 @@ var builtinToolNameSet = map[string]struct{}{
 	BuiltinWebSearch:     {},
 	BuiltinPlanCreate:    {},
 	BuiltinTodoUpdate:    {},
+	BuiltinTodoList:      {},
 	BuiltinImageGenerate: {},
 	BuiltinImageEdit:     {},
 	BuiltinContactsSend:  {},
@@ -63,6 +65,13 @@ type StaticRegistryConfig struct {
 	URLFetch     StaticURLFetchConfig
 	WebSearch    StaticWebSearchConfig
 	ContactsSend StaticContactsSendConfig
+	TodoList     StaticTodoListConfig
+}
+
+// StaticTodoListConfig is todo_list's: the cron.yaml path of the runtime's own TODO list, the
+// one todo_update changes.
+type StaticTodoListConfig struct {
+	CronPath string
 }
 
 type StaticCommonConfig struct {
@@ -279,6 +288,7 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 			StateDir:              paths.StateDir,
 			AgentLinkReplyTimeout: reader.GetDuration("contacts.agent_link.reply_timeout"),
 		},
+		TodoList: StaticTodoListConfig{CronPath: paths.CronPath},
 	}, nil
 }
 
@@ -419,6 +429,12 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 	// contacts_list reads the contacts in agent.db, as reading the contacts files with read_file did.
 	if isSelected(BuiltinContactsList) && strings.TrimSpace(cfg.ContactsSend.ContactsDir) != "" {
 		_ = reg.Replace(builtin.NewContactsListTool(cfg.ContactsSend.StateDir, cfg.ContactsSend.ContactsDir))
+	}
+
+	// todo_list reads the TODO list in agent.db. It only reads, so it does not depend on
+	// tools.todo_update.enabled.
+	if isSelected(BuiltinTodoList) && strings.TrimSpace(cfg.TodoList.CronPath) != "" {
+		_ = reg.Replace(builtin.NewTodoListTool(cfg.TodoList.CronPath))
 	}
 
 	contactSendOpts := builtin.ContactsSendToolOptions{

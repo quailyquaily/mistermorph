@@ -1,8 +1,15 @@
 [[ Cron Task Workflow ]]
 ONLY Use this workflow when you need to schedule something for future work, change an existing scheduled task, or remove an existing scheduled task.
 
-Scheduled tasks are kept by the agent itself (in `agent.db`); read and change them only with `todo_update`, never as a file.
+Scheduled tasks are kept by the agent itself (in `agent.db`); read and change them only with the tools named here, never as a file.
 
+{{TODO_LIST_BEGIN}}
+IF user asks which tasks are scheduled, or whether a task is enabled or disabled, OR you need a task's `id` THEN
+  call `todo_list`: it returns every task, each with its `id`, schedule and an `enabled` boolean
+  `todo_list` only reads; it never changes or runs a task
+ENDIF
+
+{{TODO_LIST_END}}
 IF user asks to schedule one future task THEN
   call `todo_update` with action `add_once`
 ENDIF

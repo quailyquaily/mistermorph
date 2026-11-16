@@ -16,7 +16,7 @@ Mistermorph does not register every tool as one flat bundle. Tools are layered b
 
 | Group | When available | Tools |
 |---|---|---|
-| Static tools | Available from config alone | `read_file`, `write_file`, `bash`, `powershell`, `url_fetch`, `web_search`, `contacts_send` |
+| Static tools | Available from config alone | `read_file`, `write_file`, `bash`, `powershell`, `url_fetch`, `web_search`, `contacts_send`, `todo_list` |
 | Engine tools | Available when an agent engine is assembled for a run | `spawn`, `coder` |
 | Runtime tools | Available when the LLM or required context is available | `plan_create`, `todo_update`, `image_generate`, `image_edit` |
 | Channel-specific tools | Available when the current channel is Telegram / Slack or another concrete channel runtime | `send_voice`, `send_photo`, `send_file`, `message_react` |
@@ -131,6 +131,14 @@ Maintains TODOs in `file_state_dir/cron.yaml`.
 - Key limits: use `action=add_once` with `content` and `at` to add a one-time TODO; use `action=add_recurring` with `content` and a five-field numeric `cron` expression to add a recurring TODO. `title` is optional for new TODOs. Use `action=delete` to delete a TODO. Deletion prefers `id`; without `id`, it uses semantic matching on `content` and errors on no-match or ambiguous match. Optional `workspace_dir` sets the workspace the TODO runs in: an existing absolute path, or `workspace_dir` for the workspace attached to the current conversation. Optional `bash_env` sets the TODO's bash environment as a list of `{"name": ..., "value": ...}` entries, the same form as `bash_env` in the TODO list.
 - Editing: use `action=update` with the TODO's `id` and only the fields to change (`title`, `content`, `at`, `cron`, `tz`, `chat_id`, `workspace_dir`, `bash_env`). Omitted fields keep their values and the `id` stays the same, so an edit never needs a delete and re-add. The change is applied in one transaction: an unknown `id` or a change that does not validate leaves the TODO as it was. `content` is stored exactly as given. Setting `at` alone makes the TODO one-time and clears its `cron`; setting `cron` alone makes it recurring and clears its `at`. `""` clears `tz`, `chat_id` or `workspace_dir` (and resets `title` to the default); `bash_env: []` clears the bash environment, while omitting `bash_env` keeps it.
 - Results list a TODO's `bash_env` variable names as `bash_env_names`, never their values.
+
+### `todo_list`
+
+Lists every TODO, enabled and disabled, one-time and recurring. It is a static tool: it needs no LLM and stays available when `tools.todo_update.enabled` is off.
+
+- Takes no parameters and always reads the agent's own TODO list.
+- Returns `count` and `tasks` (`[]` when there are none). Each TODO has its `id`, `title`, `content`, its schedule (`at` or `cron`, plus `tz`), and an `enabled` boolean that is always present.
+- Read-only: it never changes or runs a TODO. `bash_env` values are never returned, only their names as `bash_env_names`.
 
 For the runtime workflow around TODOs and `HEARTBEAT.md`, see [TODO and Heartbeat](/guide/todo-and-heartbeat).
 
