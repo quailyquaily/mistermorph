@@ -59,3 +59,15 @@ Tests: required gofmt/vet/go test gate passed under throwaway HOME, independentl
 UI: coder checked headless Chrome at desktop 1400x1000 and mobile 390x844, folding, hover, expansion, full run display, keyboard Enter, and en/zh/ja gallery. Not checked: live decision-model request, native desktop GPUI or Android. No pre-existing base failures reported.
 
 Moved from new/ to review/.
+
+## factory · review · 2026-11-16 22:29
+head: 7162afcd89a23ad0410225893c315fb278d31dc9
+verdict: pass
+notes:
+- [P3] internal/daemonruntime/console_store.go:276: a scheduled run interrupted by a runtime restart no longer moves its TODO topic up. Upsert now defers topic activity until completion, but recoverNonTerminalTasksLocked cancels interrupted runs without touching their topic. Verified with a Go overlay probe: topics ordered _cron_other,_cron_todo remain in that order after a scheduled run in _cron_todo and reopening the store; the run becomes canceled with "runtime restarted". Touch the topic during scheduled-run restart recovery and add regression coverage.
+
+Claude Code reviewed all 27 changed files against origin/master...HEAD. No P0/P1 findings. Required gofmt/vet/go test gate passed; nsh 0.5.1 check passed; required Console scripts/test.sh passed 129 files, zero failures, using throwaway HOME. Worktree remained clean. No reportable installs; nsh restored TypeScript 7.0.2 in its disposable cache.
+
+Limits: no live decision-model request or independent visual/native desktop/Android check during review. Task text and final output go to the configured decision provider; model-output prompt injection can misclassify a useful result as nothing, although records remain readable. Classification may delay finish recording by 30 seconds. Loading older history can reset a fold's expansion when its first member changes. Multi-day fold time-span labels were not independently verified.
+
+Moved from review/ to ready/. The restart ordering P3 is a follow-up for the owner.
