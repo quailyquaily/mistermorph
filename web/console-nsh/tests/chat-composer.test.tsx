@@ -108,6 +108,28 @@ test("files picked from the add menu upload, a failed one can be retried, and a 
   await app.waitFor("hello, file");
 });
 
+test("the add menu opens with no action highlighted; the arrow keys highlight one", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/chat/topic-2",
+    api: { "GET /proxy:/topics": TOPICS, "GET /proxy:/tasks": history },
+  });
+  await app.waitFor("id:chat-composer-input");
+  const highlighted = () =>
+    ["chat-composer-upload-files", "chat-composer-add-workspace"].filter((id) => app.count(`id:chat-composer-add-highlighted-${id}`) > 0);
+  await app.press("id:chat-composer-add");
+  await app.waitFor("id:chat-composer-add-list");
+  // Its rows are actions, not a choice: commands of a menu, none marked as it opens.
+  expect(app.count("role:menuitem[Upload Files]")).toBe(1);
+  expect(app.count("role:menuitem[Attach Workspace]")).toBe(1);
+  expect(highlighted()).toEqual([]);
+  await app.keyboard.press("down");
+  expect(highlighted()).toEqual(["chat-composer-upload-files"]);
+  await app.keyboard.press("down");
+  expect(highlighted()).toEqual(["chat-composer-add-workspace"]);
+  await app.keyboard.press("escape");
+  await app.waitFor("id:chat-composer-add-list", { state: "gone" });
+});
+
 test("the model picker lists the agent's profiles and the choice goes with the task", async () => {
   let body: any = null;
   const { app } = await openConsole({
