@@ -195,7 +195,9 @@ llm:
   # messages addressed to the agent (private chats, mentions, Console chat): an
   # emoji-only reply is sent without a main-loop run (as a reaction where the
   # channel has them, otherwise as a message), and a text reply runs the main
-  # loop without the lightweight-reaction prompt rules.
+  # loop without the lightweight-reaction prompt rules. It also judges, once per
+  # scheduled TODO run that ended done, whether the run came to something, found
+  # nothing to do or hit a problem; the Console folds the runs with nothing to do.
   # `addressing` is a legacy alias, used only when `decision` is unset.
   # Evaluate uses uniai's native-or-Chat emulation fallback on the selected model;
   # cross-profile fallback still requires explicit fallback_profiles below.
