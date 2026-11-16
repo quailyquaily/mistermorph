@@ -59,11 +59,12 @@ func (r Run) Records(ctx context.Context, ts time.Time) []llmstats.RequestRecord
 		if len(m.CacheDetails) > 0 {
 			rec.CacheDetails = maps.Clone(m.CacheDetails)
 		}
+		// The store prices the row from the catalog, request by request where the CLI tells them
+		// apart. The CLI's own cost (a list price: on a subscription it is not what is billed)
+		// goes along for a model the catalog has no price for.
+		rec.PricingParts = m.pricingParts()
 		if m.CostUSD > 0 {
-			// The CLI's price is the list price: on a subscription it is not what is billed.
 			rec.CostCurrency, rec.CostEstimated, rec.TotalCost = "USD", true, m.CostUSD
-		} else {
-			rec.PricingParts = m.pricingParts()
 		}
 		// The run's duration goes on its first row only, so totals do not count it twice.
 		if i == 0 {

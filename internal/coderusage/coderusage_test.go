@@ -200,8 +200,13 @@ func TestRecordsAndQuotasInUsageDB(t *testing.T) {
 	}
 	rec := records[0]
 	if rec.APIHost != "claude-code" || rec.Model != "claude-opus-5-5" || rec.Operation != llmstats.OperationCoder || rec.RunID != "run-1" ||
-		rec.TotalCost != 0.09425 || !rec.CostEstimated || rec.InputTokens != 22858 || rec.DurationMs != 1200 {
+		!rec.CostEstimated || rec.InputTokens != 22858 || rec.DurationMs != 1200 {
 		t.Fatalf("record = %+v", rec)
+	}
+	// The catalog knows the model: its price (which says what each kind of token cost) is the
+	// row's, not the $0.09425 the CLI gave.
+	if rec.TotalCost <= 0 || rec.TotalCost == 0.09425 || rec.InputCost <= 0 || rec.CacheCreationInputCost <= 0 {
+		t.Fatalf("cost = %+v", rec)
 	}
 	quotas, err := LoadQuotas(ctx, store)
 	if err != nil || len(quotas) != 1 || quotas[0].Status != StatusAllowed || len(quotas[0].Windows) != 2 {
@@ -229,7 +234,8 @@ func TestRecordsKeepRequestsAndCacheDetails(t *testing.T) {
 		{Model: "claude-opus-5-5", InputTokens: 10, OutputTokens: 60, Requests: []RequestUsage{
 			{InputTokens: 1210, OutputTokens: 4, Count: -1}, {InputTokens: 1210, OutputTokens: 60, Count: 1}, {InputTokens: 10, Count: 1},
 		}},
-		// The CLI's own cost is the row's cost: nothing is priced, so nothing is kept for it.
+		// The CLI's own cost goes along with the requests: the store prices the row from the
+		// catalog, and keeps the CLI's cost when the catalog has no price.
 		{Model: "claude-fable-5-2", InputTokens: 100, OutputTokens: 1, CostUSD: 0.5, Requests: []RequestUsage{request, request}},
 	}}
 	records := run.Records(context.Background(), time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC))
@@ -248,7 +254,7 @@ func TestRecordsKeepRequestsAndCacheDetails(t *testing.T) {
 	if got := records[2]; len(got.PricingParts) != 3 || got.PricingParts[0].Count != -1 || got.PricingParts[1].Count != 1 {
 		t.Fatalf("corrected request = %+v", got)
 	}
-	if got := records[3]; got.PricingParts != nil || got.TotalCost != 0.5 || !got.CostEstimated {
+	if got := records[3]; len(got.PricingParts) != 2 || got.TotalCost != 0.5 || !got.CostEstimated {
 		t.Fatalf("the CLI's cost = %+v", got)
 	}
 	// The row's details are its own copy.

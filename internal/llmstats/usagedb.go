@@ -299,8 +299,13 @@ func (s *UsageStore) repriceBatch(ctx context.Context, catalog *uniaiapi.Pricing
 
 // priceRecord prices a chat or coder record that reports no cost from the catalog. It returns the record
 // and its cost_source.
+//
+// A coder run is priced from the catalog even when its CLI reports a cost (Claude Code's), so
+// every coder is priced one way; the CLI's cost stands only for a model the catalog has no price
+// for.
 func priceRecord(rec RequestRecord, catalog *uniaiapi.PricingCatalog) (RequestRecord, string) {
-	if requestRecordHasCost(rec) {
+	reported := rec
+	if requestRecordHasCost(rec) && rec.Operation != OperationCoder {
 		return rec, costSourceProvider
 	}
 	rec.CostCurrency, rec.CostEstimated = "", false
@@ -309,7 +314,21 @@ func priceRecord(rec RequestRecord, catalog *uniaiapi.PricingCatalog) (RequestRe
 	if requestRecordHasCost(priced) {
 		return priced, costSourceCatalog
 	}
+	if requestRecordHasCost(reported) {
+		return reported, costSourceProvider
+	}
 	return rec, ""
+}
+
+// PriceRecord is rec as the store would price it with catalog: for what says a cost before the
+// row is written (a coder run's usage line), so it says the row's.
+func PriceRecord(rec RequestRecord, catalog *uniaiapi.PricingCatalog) RequestRecord {
+	rec = normalizeRequestRecord(rec)
+	if !catalogPriced(rec.Operation) {
+		return rec
+	}
+	priced, _ := priceRecord(rec, catalog)
+	return priced
 }
 
 // Append records one call. A chat call or a coder run that reports no cost is priced from the

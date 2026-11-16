@@ -21,10 +21,14 @@
 package coderusage
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/llmstats"
 )
 
 // The coders, as the coder tool names them.
@@ -104,8 +108,22 @@ func (r Run) Total() ModelUsage {
 	return total
 }
 
+// Cost is the run's cost at list price, as its usage.db rows carry it: the pricing catalog's
+// price of each model's usage, or the CLI's own (Claude Code) for a model the catalog has no
+// price for. A model with neither adds nothing; 0 when no model has a price.
+func (r Run) Cost() float64 {
+	// Without a catalog the rows keep what the CLI gave.
+	catalog, _, _ := llmstats.DefaultPricing()
+	var total float64
+	for _, rec := range r.Records(context.Background(), time.Now()) {
+		total += llmstats.PriceRecord(rec, catalog).TotalCost
+	}
+	return total
+}
+
 // Summary is one line for the run's activity and the tool result, e.g.
-// "48.2k in (31.0k cached) · 3.1k out · $0.21 at list price · 6 turns".
+// "48.2k in (31.0k cached) · 3.1k out · $0.21 at list price · 6 turns". The cost is Cost: the
+// catalog's price, which the run's rows carry.
 func (r Run) Summary() string {
 	if r.Empty() {
 		return ""
@@ -116,8 +134,11 @@ func (r Run) Summary() string {
 		parts[0] += " (" + CompactTokens(total.CachedInputTokens) + " cached)"
 	}
 	parts = append(parts, CompactTokens(total.OutputTokens)+" out")
-	if total.CostUSD > 0 {
-		parts = append(parts, fmt.Sprintf("$%.2f at list price", total.CostUSD))
+	if cost := r.Cost(); cost >= 0.01 {
+		parts = append(parts, fmt.Sprintf("$%.2f at list price", cost))
+	} else if cost > 0 {
+		// A small run: cents would say $0.00.
+		parts = append(parts, fmt.Sprintf("$%.4f at list price", cost))
 	}
 	if r.Turns > 0 {
 		unit := "turns"

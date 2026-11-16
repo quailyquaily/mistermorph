@@ -156,8 +156,8 @@ func TestUsagePricesAndRepricesACoderRowByItsRequests(t *testing.T) {
 	unknown := coderRecord("unknown-model")
 	unknown.InputTokens, unknown.OutputTokens = 100_000, 2000
 	unknown.PricingParts = []PricingPart{part, part}
-	// The CLI's own cost is left alone, parts or not.
-	provider := byRequest
+	// The CLI's own cost stands for a model the catalog has no price for, parts or not.
+	provider := unknown
 	provider.CostCurrency, provider.CostEstimated, provider.TotalCost = "USD", true, 7
 	for _, rec := range []RequestRecord{byRequest, asOne, mixed, corrected, unknown, provider} {
 		if err := store.Append(rec); err != nil {
@@ -191,7 +191,7 @@ func TestUsagePricesAndRepricesACoderRowByItsRequests(t *testing.T) {
 	}
 	// The rows' own numbers, which the pages add up, are the sums as before.
 	usage, err := store.Usage(ctx)
-	if err != nil || usage.Summary.Requests != 6 || usage.Summary.InputTokens != 3*150_000+201_000+3000+100_000 {
+	if err != nil || usage.Summary.Requests != 6 || usage.Summary.InputTokens != 2*150_000+201_000+3000+2*100_000 {
 		t.Fatalf("summary = %+v, %v", usage.Summary, err)
 	}
 
@@ -301,7 +301,8 @@ func TestUsageAddsThePricingPartsColumn(t *testing.T) {
 // sessions: they carry no cost of the CLI's but their requests (one of them a correction of an
 // earlier task's, Count -1). Nothing writes such rows for Claude Code any more, and they are
 // still priced again, request by request, when a later build opens the file with another
-// catalog. A stream session's row beside them keeps the CLI's own cost.
+// catalog. A stream session's row beside them, which carries the CLI's own cost and no requests,
+// is priced from the catalog too, as one request.
 func TestUsageRepricesTerminalRowsAlreadyInAFile(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "usage.db")
@@ -342,7 +343,8 @@ func TestUsageRepricesTerminalRowsAlreadyInAFile(t *testing.T) {
 	}
 	checkCosts(t, "opened with another catalog", costRows(t, store), legacy(4))
 
-	// A stream session's row: the CLI's list price, no parts.
+	// A stream session's row: the CLI's list price and no parts. The catalog knows the model, so
+	// its price is the row's: 6,000 in at $10, 144,000 cached at $1 and 3,000 out at $50 per 1M.
 	session := coderRecord("tier-model")
 	session.InputTokens, session.CachedInputTokens, session.OutputTokens = 150_000, 144_000, 3000
 	session.CostCurrency, session.CostEstimated, session.TotalCost = "USD", true, 0.42
@@ -354,5 +356,5 @@ func TestUsageRepricesTerminalRowsAlreadyInAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkCosts(t, "repriced beside a session's row", costRows(t, store),
-		append(legacy(2), costRow{Total: 0.42, Source: "provider", Estimated: true}))
+		append(legacy(2), costRow{Input: 2 * 0.06, Cached: 2 * 0.144, Output: 2 * 0.15, Total: 2 * 0.354, Source: "catalog", Estimated: true}))
 }

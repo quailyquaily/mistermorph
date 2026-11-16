@@ -91,10 +91,14 @@ func TestCoderToolRecordsClaudeUsageAndQuota(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 	// The result tells the agent what the task used and what is left.
-	for _, want := range []string{"claude run: 2.6k in (2.0k cached) · 40 out · $0.50 at list price · 3 turns", "claude quota: 5h 92% used", "7d 30% used"} {
+	// The cost is the catalog's price of the task, as its row carries it, not the CLI's $0.50.
+	for _, want := range []string{"claude run: 2.6k in (2.0k cached) · 40 out · $", " at list price · 3 turns", "claude quota: 5h 92% used", "7d 30% used"} {
 		if !strings.Contains(result.Usage, want) {
 			t.Fatalf("usage = %q, want %q", result.Usage, want)
 		}
+	}
+	if strings.Contains(result.Usage, "$0.50") {
+		t.Fatalf("usage = %q, should say the catalog's price", result.Usage)
 	}
 	// The activity ends with the same line.
 	if last := progress[len(progress)-1]; !strings.HasPrefix(last, "[claude] usage: claude run:") {
@@ -107,8 +111,9 @@ func TestCoderToolRecordsClaudeUsageAndQuota(t *testing.T) {
 	if second.Status != SubtaskStatusDone || second.Output != "and tested" {
 		t.Fatalf("second result = %+v", second)
 	}
-	if want := "claude run: 3.1k in (3.0k cached) · 20 out · $0.30 at list price · 1 turn"; second.Usage != want {
-		t.Fatalf("second usage = %q, want %q", second.Usage, want)
+	if !strings.HasPrefix(second.Usage, "claude run: 3.1k in (3.0k cached) · 20 out · $") || !strings.HasSuffix(second.Usage, " at list price · 1 turn") ||
+		strings.Contains(second.Usage, "$0.30") {
+		t.Fatalf("second usage = %q", second.Usage)
 	}
 
 	store, err := llmstats.OpenUsageStore(ctx, usagePath, llmstats.UsageStoreOptions{})
@@ -122,11 +127,12 @@ func TestCoderToolRecordsClaudeUsageAndQuota(t *testing.T) {
 	}
 	if rec := records[0]; rec.APIHost != "claude-code" || rec.Model != "claude-opus-5-5" || rec.RunID != "run-7" || rec.InputTokens != 2600 ||
 		rec.CachedInputTokens != 2000 || rec.CacheCreationInputTokens != 500 || rec.OutputTokens != 40 ||
-		rec.TotalCost != 0.5 || !rec.CostEstimated || rec.CostCurrency != "USD" || len(rec.PricingParts) != 0 {
+		// Priced from the catalog (which says what the input cost), not the CLI's $0.50.
+		rec.TotalCost <= 0 || rec.TotalCost == 0.5 || rec.InputCost <= 0 || !rec.CostEstimated || rec.CostCurrency != "USD" {
 		t.Fatalf("record = %+v", rec)
 	}
 	if rec := records[1]; rec.Model != "claude-opus-5-5" || rec.InputTokens != 3100 || rec.CachedInputTokens != 3000 || rec.CacheCreationInputTokens != 0 ||
-		rec.OutputTokens != 20 || rec.TotalCost != 0.3 || !rec.CostEstimated {
+		rec.OutputTokens != 20 || rec.TotalCost <= 0 || rec.TotalCost == 0.3 || !rec.CostEstimated {
 		t.Fatalf("second record = %+v", rec)
 	}
 	quotas, err := coderusage.LoadQuotas(ctx, store)
@@ -207,7 +213,8 @@ func TestCoderToolPricesAReportsRequestsFromTheCatalog(t *testing.T) {
 	if reports != 1 || result.Status != SubtaskStatusDone || result.Output != "fixed in the session" {
 		t.Fatalf("reports = %d, result = %+v", reports, result)
 	}
-	for _, want := range []string{"claude run: 1.2M in (496.0k cached) · 23.0k out · 2 turns", "claude quota: 5h 61% used"} {
+	// The line says the catalog's price of the models it knows.
+	for _, want := range []string{"claude run: 1.2M in (496.0k cached) · 23.0k out · $", " at list price · 2 turns", "claude quota: 5h 61% used"} {
 		if !strings.Contains(result.Usage, want) {
 			t.Fatalf("usage = %q, want %q", result.Usage, want)
 		}

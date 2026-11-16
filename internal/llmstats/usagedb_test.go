@@ -551,8 +551,10 @@ func TestUsagePricesCoderRowsFromTheCatalog(t *testing.T) {
 		// A model the catalog does not know, and Codex: no cost.
 		{TS: now, Provider: "claude-code", APIHost: "claude-code", Model: "other-model", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000},
 		{TS: now, Provider: "codex-cli", APIHost: "codex-cli", Model: "codex", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000},
-		// A headless run carries the CLI's own cost: left alone.
+		// A headless run carries the CLI's own cost: the catalog's price replaces it, as for every coder.
 		{TS: now, Provider: "claude-code", APIHost: "claude-code", Model: "test-model", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000, CostCurrency: "USD", CostEstimated: true, TotalCost: 5},
+		// The CLI's cost stands only for a model the catalog has no price for.
+		{TS: now, Provider: "claude-code", APIHost: "claude-code", Model: "other-model", Operation: OperationCoder, Scene: OperationCoder, InputTokens: 1_000_000, CostCurrency: "USD", CostEstimated: true, TotalCost: 5},
 		// Other operations are not priced.
 		{TS: now, Provider: "openai", Model: "test-model", Operation: "transcribe", InputTokens: 1_000_000},
 	} {
@@ -587,18 +589,19 @@ func TestUsagePricesCoderRowsFromTheCatalog(t *testing.T) {
 		{1, "catalog", true, "USD"},
 		{0, "", false, ""},
 		{0, "", false, ""},
+		{1, "catalog", true, "USD"},
 		{5, "provider", true, "USD"},
 		{0, "", false, ""},
 	}
 	if got := read(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("rows = %+v\nwant   %+v", got, want)
 	}
-	// A new catalog prices the catalog-priced coder row again and leaves the CLI's cost alone.
+	// A new catalog prices the catalog-priced coder rows again and leaves the CLI's cost alone.
 	catalog, digest, _ := testPricing(t, "9")()
 	if err := store.SetPricing(ctx, catalog, digest); err != nil {
 		t.Fatal(err)
 	}
-	want[0].cost = 9
+	want[0].cost, want[3].cost = 9, 9
 	if got := read(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("rows after reprice = %+v\nwant                 %+v", got, want)
 	}
