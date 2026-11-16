@@ -284,6 +284,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
           <DropdownMenu
             disabled={busy()}
             items={menuItems()}
+            testID="todo-task-actions"
             trigger={
               // While the task's run is being started from this menu, a busy plain button (BusyBeam).
               <View

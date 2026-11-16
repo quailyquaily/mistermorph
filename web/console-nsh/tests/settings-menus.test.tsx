@@ -121,3 +121,27 @@ test("Channels: a channel pane's top-right menu opens its advanced settings", as
   await app.press("role:menuitem[Advanced settings]");
   await app.waitFor("id:settings-advanced");
 });
+
+test("Models on a phone: the top-right menu's rows are actions, none highlighted as it opens (FT137)", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/settings/agent",
+    platform: "android",
+    width: 390,
+    height: 844,
+    api: { "GET /settings/agent": { body: agentSettings() } },
+  });
+  const highlighted = () => ["advanced", "context", "benchmark"].filter((id) => app.count(`id:settings-llm-menu-popup-highlighted-${id}`) > 0);
+  await app.waitFor("id:settings-llm-menu");
+  await app.press("id:settings-llm-menu");
+  await app.waitFor("id:settings-llm-menu-popup-list");
+  expect(menuLabels(app)).toEqual(MODELS_MENU);
+  expect(app.count("role:menuitem")).toBe(MODELS_MENU.length);
+  expect(app.count("role:option")).toBe(0);
+  expect(highlighted()).toEqual([]);
+  // A hardware keyboard's Down still takes the first action, and Enter runs it.
+  await app.keyboard.press("down");
+  expect(highlighted()).toEqual(["advanced"]);
+  await app.keyboard.press("enter");
+  await app.waitFor("id:settings-advanced");
+  await app.waitFor("id:settings-llm-menu-popup-list", { state: "gone" });
+});

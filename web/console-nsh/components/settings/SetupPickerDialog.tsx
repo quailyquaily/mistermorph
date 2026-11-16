@@ -1,6 +1,8 @@
 // The API base and model pickers (the Vue console's SetupPickerDialog and SetupPickerDialogContent):
 // a filter, the matching items (grouped by vendor prefix when asked), and a custom row. Up and
-// Down move the highlight, Enter picks it, Escape closes.
+// Down move the highlight, Enter picks it, Escape closes. It opens with the value in use highlighted;
+// with none in use no row is (a highlighted first row read as the chosen one): the first Down or
+// Up, the pointer over a row, or a filter typed (its first match) gives it one.
 //
 // Vue to nsh: `modelValue` is `open`, `update:modelValue` is `onOpenChange(open)`; `select` is
 // `onSelect(item)`, `close` is `onClose()`.
@@ -77,7 +79,8 @@ type Entry =
 
 export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
   const query = signal("");
-  const active = signal(0);
+  // The highlighted row's index; -1: none.
+  const active = signal(-1);
   let list: ListRef | undefined;
   let visible: [number, number] = [0, -1];
 
@@ -127,7 +130,7 @@ export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
       const row = group.items.find((item) => isSelected(item.item));
       if (row) return row.index;
     }
-    return 0;
+    return -1;
   }
 
   /** Scrolls the highlighted row into view when it is outside it. */
@@ -153,7 +156,9 @@ export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
   function move(step: number) {
     const count = untracked(rows).count;
     if (count <= 0) return;
-    active.set((untracked(active) + step + count) % count);
+    const from = untracked(active);
+    // From no row, Down starts at the first one and Up at the last.
+    active.set(from < 0 ? (step > 0 ? 0 : count - 1) : (from + step + count) % count);
     scrollActiveIntoView();
   }
 
@@ -164,13 +169,13 @@ export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
     queueMicrotask(() => scrollActiveIntoView(true));
   }
 
-  // A new filter starts at the first match.
+  // A new filter starts at the first match; cleared, back at the value in use.
   let lastQuery = untracked(query);
   effect(() => {
     const next = query();
     if (next !== lastQuery) {
       lastQuery = next;
-      untracked(() => active.set(0));
+      untracked(() => active.set(next.trim() ? 0 : selectedIndex()));
     }
   });
   // Each opening starts afresh: the filter cleared, the value in use highlighted.
@@ -301,6 +306,8 @@ export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
         accessibilityLabel={row()?.label}
         onPress={() => selectItem(row()?.item ?? null)}
         onMouseEnter={() => active.set(row()?.index ?? 0)}
+        // For tests, which read no fills: the highlighted row is named.
+        testID={active() === row()?.index ? "setup-picker-highlighted" : undefined}
         class={`min-h-9 flex-row items-center gap-2.5 rounded-(--radius) px-2 py-1.5 ${tint()}`}
       >
         <View class="flex-1 gap-0.5">

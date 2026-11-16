@@ -52,9 +52,9 @@ export interface PickerProbe {
  * its row, right and down, and the scroll view scrolled over that empty room (PORTING.md).
  *
  * The highlight is the keys' and the pointer's: a list with a `value` opens with its chosen row
- * highlighted (the first when the value is none of them); a menu of actions (no `value`) opens
+ * highlighted; a menu of actions (no `value`), or a list whose value is none of its rows, opens
  * with none, since nothing in it is chosen, and takes one from the first Down or Up, or from the
- * pointer while it is over a row.
+ * pointer while it is over a row. A row highlighted with nothing chosen read as a chosen one.
  */
 export function PickerList(props: {
   items: PickerItem[];
@@ -115,9 +115,9 @@ export function PickerList(props: {
   const step = (from: number, by: number) => {
     const list = untracked(rows);
     // From no row, Up starts at the last one, as Down starts at the first.
-    if (from < 0 && by < 0) from = 0;
+    const start = from < 0 && by < 0 ? 0 : from;
     for (let i = 1; i <= list.length; i += 1) {
-      const at = (((from + by * i) % list.length) + list.length) % list.length;
+      const at = (((start + by * i) % list.length) + list.length) % list.length;
       if (!list[at].disabled) return at;
     }
     return from;
@@ -131,7 +131,8 @@ export function PickerList(props: {
     untracked(() => {
       query.set("");
       const chosen = rows().findIndex((item) => item.value === props.value && !item.disabled);
-      active.set(chosen >= 0 ? chosen : actions() ? -1 : step(-1, 1));
+      // No chosen row (a menu of actions, or a value that is none of the rows): none highlighted.
+      active.set(chosen);
     });
     const move = (by: number) => active.set(step(untracked(active), by));
     cleanup(

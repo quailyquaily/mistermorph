@@ -384,6 +384,7 @@ function ChannelPaneHeader(props: { s: SettingsStore }) {
             disabled={s.consoleLoading() || s.consoleSaving()}
             trigger={<MenuIconTrigger label={t("todo_action_more")} testID="settings-channel-menu" />}
             items={s.channelActionMenuItems(id())}
+            testID="settings-channel-menu"
           />
           <Button variant="plain" size="xs" iconOnly icon="PhX" title={t("settings_channel_close")} onPress={() => s.closeChannelPane()} testID="settings-channel-close" />
         </>
