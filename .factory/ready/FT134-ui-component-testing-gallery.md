@@ -55,3 +55,28 @@ Built commit: 8f717938 (factory/FT134-ui-component-testing-gallery).
 - Scope additions: optional group/q URL filters; exported existing LANGUAGES; inventory check added to whole-suite runner; shellless navigation-motion classification.
 - Initial code push lacked credential repository path; retry with per-command credential.useHttpPath=true succeeded. No force pushes, base/tag changes, or protected-path modifications.
 Moved new/ -> review/, round 1. Next step: independent review, especially inventory omissions, narrow-screen clipping, and fixture side-effect/determinism qualifications.
+
+
+## factory · review · 2026-11-16 14:19
+head: 8f717938ce2150b14ef08d5ad672cd649d52d445
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/ui-components/demos/chat.tsx:615: fold controls recreate keyedState on prop reads, so clicking “How the score works” does not expand the preview (probe text count unchanged at 2966). Allocate stable stores outside JSX; inspect the same pattern at line 623.
+- [P2] web/console-nsh/pages/ui-components/demos/chat.tsx:389: composer file labels are built once; switching to Chinese leaves the files composer showing “Loading”, not “加载中”. Make labels and dependent file counts reactive.
+- [P2] web/console-nsh/pages/ui-components/demos/controls.tsx:594: msg_loading is absent from the locale catalog; affected loading demos expose the raw key, including an accessibility label verified by probe. Use uig_state_loading or another existing key throughout the gallery.
+- [P2] web/console-nsh/pages/ui-components/demos/settings.tsx:433: CodexAuthDialog and ProAuthDialog retain hard-wired production usage links (chatgpt.com/codex/settings/usage and router.mistermorph.com/console/usage), contrary to the documented example.com destinations. Inject a synthetic URL via DeviceAuthDialogContent or accurately document these exceptions. Verified by tracing handlers, not opening the links.
+- [P2] web/console-nsh/pages/ui-components/demos/overlays.tsx:144: timeout-zero notices persist in the real notice stack when the section unmounts and the local id list is lost. Probe: warning notice remains after switching to Motion. Dismiss fixed gallery notice ids on unmount or reset all known ids.
+- [P2] web/console-nsh/scripts/ui-components-inventory.test.mjs:31: column-zero regexes silently miss nested component declarations; 37 indented declarations include ReadoutCard, EventRow and VoiceOrSend. The inventory check still passes. Include nested declarations and explicitly list private parts rather than claiming exhaustive coverage.
+- [P2] web/console-nsh/pages/ui-components/inventory.js:377: some omissions are incorrectly attributed to unavoidable live stores/APIs. TopicRenameDialog, TodoIndex, TodoCalendar, UnsupportedSection and ArtifactPreviewCard accept injectable props/state. Provide safe fixtures where possible and correct omission reasons. Coverage remains partial even though each requested category has mounted examples.
+
+Validation (independent Claude Code review of origin/master...HEAD, 21 changed files):
+- Required gofmt/vet/go test command passed: 163 packages, none failed.
+- nsh check passed.
+- Required Console scripts/test.sh passed: 126 files, zero failed, 347 seconds; inventory check passed. Five non-gallery files required the runner's built-in isolated retry and then passed: settings-menus, chat-scroll-anchor, stats-coder-quota, glass-page-heads, settings-page-sections. Baseline flakiness was not checked.
+- First test attempts hit shared temporary-filesystem exhaustion; all checks were rerun successfully using home-cache scratch and absolute throwaway HOME. No installs or downloads reported.
+- Authenticated route, shellless registration, absence of navigation entry and unchanged public preview checked. No commits or persistent repository changes by reviewer; manager confirmed clean worktree and unchanged head.
+- No P0/P1 findings. Per factory policy, P2 notes do not block moving to ready; pass is not a claim that every acceptance detail is complete.
+Residual risks:
+- No real-browser review in this run. Build-reported Japanese mobile chat clipping (~166px), narrow skill-install URL and equal-width Tabs clipping remain unverified and unresolved.
+- Dark scheme, hover/tooltips, real Android/desktop builds, clipboard and file picker were not checked. Owner should examine inventory completeness, live-link exceptions and narrow-screen behavior before shipping.
+Moved review/ -> ready/. No linked issue or PR was present in the item.
