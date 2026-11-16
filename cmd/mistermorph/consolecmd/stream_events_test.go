@@ -78,10 +78,12 @@ func TestConsoleCoderProgressLineBoundaries(t *testing.T) {
 						if activity == nil || activity.Current == nil || len(activity.History) != 1 || len(activity.Workers) != 1 {
 							t.Fatalf("chunk %d: missing activity/worker: %+v", i, activity)
 						}
-						for _, got := range []string{activity.Current.Output, activity.History[0].Output, activity.Workers[0].Output} {
-							if got != want {
-								t.Fatalf("chunk %d: output = %q, want %q", i, got, want)
-							}
+						if got := activity.Workers[0].Output; got != want {
+							t.Fatalf("chunk %d: output = %q, want %q", i, got, want)
+						}
+						// The worker has the output; the call's entry does not repeat it.
+						if activity.Current.Output != "" || activity.History[0].Output != "" {
+							t.Fatalf("chunk %d: the coder's entry repeats its output: %+v", i, activity.Current)
 						}
 					}
 				}

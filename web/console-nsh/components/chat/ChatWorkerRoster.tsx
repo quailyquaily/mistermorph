@@ -214,7 +214,8 @@ export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; a
 
       {/* What it answered: its result, or its error; while it runs, that it is running. */}
       <View class="gap-1.5" testID="chat-worker-answer">
-        <Speaker from={name()} to={agent()} fromColor={tone()} toColor={NEON.ok} />
+        {/* When it last printed or answered. */}
+        <Speaker from={name()} to={agent()} fromColor={tone()} toColor={NEON.ok} at={clock(String(worker().at || ""))} testID="chat-worker-answer-head" />
         <If
           when={answer().length > 0}
           else={

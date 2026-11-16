@@ -304,33 +304,41 @@ func TestConsoleEventPreviewSinkPublishesBashTail(t *testing.T) {
 	}
 }
 
+// What a coder prints is published as its worker's output; the call's entry does not repeat it.
 func TestConsoleEventPreviewSinkPublishesCoderActivityOutput(t *testing.T) {
 	hub := newConsoleStreamHub()
 	sink := newConsoleEventPreviewSink(hub, "task-coder", nil, nil)
+	worker := &agent.WorkerMetadata{ID: "worker-1", Name: "Nova"}
 
 	sink.HandleEvent(context.Background(), agent.Event{
 		Kind:       agent.EventKindToolStart,
 		ActivityID: "tool:coder",
 		ToolName:   "coder",
 		Status:     "running",
+		Worker:     worker,
 	})
 	sink.HandleEvent(context.Background(), agent.Event{
-		Kind:     agent.EventKindToolOutput,
-		ToolName: "coder",
-		Stream:   "codex",
-		Text:     "working",
-		Status:   "running",
+		Kind:       agent.EventKindToolOutput,
+		ActivityID: "tool:coder",
+		ToolName:   "coder",
+		Stream:     "codex",
+		Text:       "working",
+		Status:     "running",
+		Worker:     worker,
 	})
 
 	frame, ok := hub.Latest("task-coder")
 	if !ok {
 		t.Fatal("expected coder activity frame")
 	}
-	if frame.Activity == nil || frame.Activity.Current == nil {
-		t.Fatalf("frame.Activity = %#v, want current activity", frame.Activity)
+	if frame.Activity == nil || frame.Activity.Current == nil || len(frame.Activity.Workers) != 1 {
+		t.Fatalf("frame.Activity = %#v, want current activity and its worker", frame.Activity)
 	}
-	if frame.Activity.Current.Output != "working" {
-		t.Fatalf("frame.Activity.Current.Output = %q, want working", frame.Activity.Current.Output)
+	if got := frame.Activity.Workers[0].Output; got != "working" {
+		t.Fatalf("worker output = %q, want working", got)
+	}
+	if frame.Activity.Current.Output != "" {
+		t.Fatalf("frame.Activity.Current.Output = %q, want none", frame.Activity.Current.Output)
 	}
 	if frame.Activity.Current.Stream != "codex" {
 		t.Fatalf("frame.Activity.Current.Stream = %q, want codex", frame.Activity.Current.Stream)
@@ -383,11 +391,15 @@ func TestConsoleEventPreviewSinkKeepsCoderStatusWhenGuardEnabled(t *testing.T) {
 			sink := newConsoleEventPreviewSink(hub, "task", nil, guard.New(guard.Config{Enabled: true}, nil, nil))
 			defer sink.Close()
 			summary := "[" + backend + "] tool completed"
-			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
-			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ToolName: "coder", Stream: backend, Summary: summary, Text: "private file contents"})
+			worker := &agent.WorkerMetadata{ID: "worker-1", Name: "Nova"}
+			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running", Worker: worker})
+			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: backend, Summary: summary, Text: "private file contents", Worker: worker})
 			frame, _ := hub.Latest("task")
-			if frame.Activity == nil || frame.Activity.Current == nil || !strings.Contains(frame.Activity.Current.Output, summary) || strings.Contains(frame.Activity.Current.Output, "private") {
+			if frame.Activity == nil || len(frame.Activity.Workers) != 1 {
 				t.Fatalf("guarded progress = %#v", frame.Activity)
+			}
+			if got := frame.Activity.Workers[0].Output; !strings.Contains(got, summary) || strings.Contains(got, "private") {
+				t.Fatalf("guarded worker output = %q", got)
 			}
 		})
 	}

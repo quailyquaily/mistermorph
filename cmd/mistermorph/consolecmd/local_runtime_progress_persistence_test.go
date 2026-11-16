@@ -338,8 +338,9 @@ func TestConsoleCoderProgressPersistsLineBoundaries(t *testing.T) {
 							coder = &activity.History[i]
 						}
 					}
-					if coder == nil || coder.Output != want {
-						t.Fatalf("activity output mismatch, want %q: %+v", want, coder)
+					// The call's entry stays, without a second copy of the worker's output.
+					if coder == nil || coder.Output != "" {
+						t.Fatalf("the coder's entry should stay, without output: %+v", coder)
 					}
 				}
 			})

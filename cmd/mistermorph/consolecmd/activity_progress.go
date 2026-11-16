@@ -288,8 +288,9 @@ func updateConsoleActivityOutput(progress *consoleActivityProgress, event agent.
 	if status := strings.TrimSpace(event.Status); status != "" {
 		entry.Status = status
 	}
+	// What the coder prints is its worker's output (applyConsoleWorkerEvent): the call's entry
+	// keeps the call, not a second copy of the output.
 	entry.At = time.Now().Format(time.RFC3339Nano)
-	entry.Output = appendConsoleTail(entry.Output, event.Text, consoleActivityOutputMaxChars)
 	progress.Current = cloneConsoleActivityEntry(&progress.History[target.index])
 	return cloneConsoleActivityProgress(progress), true
 }

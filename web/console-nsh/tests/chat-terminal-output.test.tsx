@@ -6,6 +6,8 @@ import { expect, test, type App } from "nsh/test";
 import { openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
+// When the coder last printed, as its answer's head shows it (local time).
+const ANSWERED = new Date(2026, 10, 16, 7, 38, 29).toISOString();
 const NO_WORKSPACE = { body: { workspace: { workspace_dir: "", source: "none" } } };
 
 const TASK = {
@@ -20,6 +22,8 @@ const TASK = {
       history: [
         { id: "a1", kind: "tool", name: "bash", status: "done", args: { cmd: "make" }, output: "progress printed this", at: NOW },
         { id: "a2", kind: "tool", name: "read_file", status: "failed", error: "progress failed here" },
+        // A task saved before progress stopped repeating a coder's output still carries it.
+        { id: "a3", kind: "tool", name: "coder", status: "running", args: { coder: "codex" }, output: "coder printed this", at: NOW },
       ],
       workers: [
         {
@@ -30,6 +34,7 @@ const TASK = {
           kind: "coder",
           status: "running",
           output: "coder printed this",
+          at: ANSWERED,
           processes: [{ pid: 4242, program: "codex" }],
         },
         { id: "w2", name: "Hopper", name_index: 2, avatar_index: 1, kind: "coder", status: "running" },
@@ -76,6 +81,9 @@ test("a coder's output, empty output and error are drawn on the progress termina
   const failed = style(app, "id:chat-terminal >> text:progress failed here");
   const chip = style(app, "id:chat-terminal >> text:TOOL >> nth=0");
   expect(printed.color).toBe(TERMINAL.note);
+  // The coder's call is listed, without what the coder printed: that is its worker's.
+  expect(app.shows("id:chat-detail-activity >> text:coder")).toBe(true);
+  expect(app.shows("id:chat-detail-activity >> text:coder printed this")).toBe(false);
   expect(failed.color.slice(0, 7)).toBe(TERMINAL.error);
   expect(chip.color.slice(0, 7)).toBe(TERMINAL.chip);
 
@@ -90,6 +98,8 @@ test("a coder's output, empty output and error are drawn on the progress termina
   // What it printed is headed OUTPUT, apart from its answer (none yet: it runs).
   expect(style(app, "id:chat-terminal >> text:OUTPUT").color).toBe(TERMINAL.muted);
   expect(app.shows("id:chat-worker-answer >> text:Running…")).toBe(true);
+  // Its answer's head carries the time, at its end.
+  expect(app.shows("id:chat-worker-answer-head >> text:07:38:29")).toBe(true);
 
   // A coder with nothing printed yet: its answer is that it runs, in the muted text.
   await openWorker(app, "Hopper · Coder · Running");

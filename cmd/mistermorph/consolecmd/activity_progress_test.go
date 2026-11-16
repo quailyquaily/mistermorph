@@ -87,7 +87,8 @@ func TestUpdateConsoleActivityProgressTracksSubtaskHistory(t *testing.T) {
 	}
 }
 
-func TestUpdateConsoleActivityProgressAppendsCoderOutput(t *testing.T) {
+// A coder's output is its worker's: the call's entry follows the run without repeating it.
+func TestUpdateConsoleActivityProgressKeepsCoderOutputOutOfItsEntry(t *testing.T) {
 	var progress *consoleActivityProgress
 
 	progress, _ = updateConsoleActivityProgress(progress, agent.Event{
@@ -122,8 +123,8 @@ func TestUpdateConsoleActivityProgressAppendsCoderOutput(t *testing.T) {
 	if progress.Current.Stream != "codex" {
 		t.Fatalf("progress.Current.Stream = %q, want codex", progress.Current.Stream)
 	}
-	if progress.Current.Output != "alpha\nbeta" {
-		t.Fatalf("progress.Current.Output = %q, want alpha newline beta", progress.Current.Output)
+	if progress.Current.Output != "" {
+		t.Fatalf("progress.Current.Output = %q, want none", progress.Current.Output)
 	}
 	if progress.Current.Status != "running" {
 		t.Fatalf("progress.Current.Status = %q, want running", progress.Current.Status)

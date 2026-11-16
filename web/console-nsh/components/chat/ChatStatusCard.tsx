@@ -123,7 +123,10 @@ function childCount(entry: any) {
 function entryNote(entry: any) {
   const error = cleanText(entry?.error);
   if (error) return error;
-  const output = String(entry?.output || "");
+  // A coder's output is its worker's (ChatWorkerOutput): progress keeps the call, not a second
+  // copy of what it printed (tasks saved before that still carry one).
+  const coder = normalizeActivityKind(entry?.kind) === "tool" && String(entry?.name || "").trim() === "coder";
+  const output = coder ? "" : String(entry?.output || "");
   if (output.trim()) return output;
   return cleanText(entry?.summary);
 }
