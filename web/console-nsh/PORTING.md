@@ -330,8 +330,15 @@ Headless tests prove behaviour, not the look.
 - On the web, an `Image` inside a `Scroll` adds its own pixels to the scroll's content size, not
   its styled size: a 512px avatar drawn at 24pt made the agent picker's list (177pt of rows)
   scroll to 656pt, and 532pt across (the runtime's `nsh-spacer` is sized from the core's content
-  size). Put such an image in a View of its size with `overflow-hidden` (`AgentAvatar`). Headless
-  tests and GPUI do not show it; read the scroll's `nsh-spacer` in a browser.
+  size). Put such an image in a View of its size with `overflow-hidden` (`AgentAvatar`). It is the
+  layout's doing, not the browser's: an `Image` whose natural size is known counts that size as
+  its overflow whatever its styled size, and overflow passes up through every view that does not
+  clip. So an `Icon` does it too (the SVGs are 256pt: a 16pt icon reaches 240pt right and down),
+  and the composer's add menu, two rows of 74pt, scrolled over 304pt. `PickerList` clips the view
+  that holds its rows, so nothing in a row can add to its scroll; other scroll views with icons
+  near their end still get the extra room. Headless tests show it for bundled images (their size
+  is known at build time), not for loaded ones: read `contentSize` from the scroll's `onScroll`
+  (tests/picker-popups.test.tsx), or the `nsh-spacer` in a browser.
 - On the web, what a `ShaderEffect` draws through its shader (`sample_content`) loses the masks
   inside it: an `Icon` (a tinted mask) comes out as a solid square of its colour. The Contacts
   panel's avatar resolves through one (`PixelResolve`) with its kind badge kept outside it, over

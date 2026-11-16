@@ -5,7 +5,7 @@
 // More's neighbours, and the menus, selects and pickers that are dropdowns on the desktops.
 // In a file of its own, without components/ui.tsx, so ui.tsx can show it too.
 import type { JSX } from "nsh";
-import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View, type ScrollRef } from "nsh";
 import { Button as BaseButton, Input } from "nsh/base";
 
 export interface PickerItem {
@@ -31,14 +31,30 @@ export interface PickerItem {
   testID?: string;
 }
 
+/** For tests: a PickerList's scroll view, and what it reports as it scrolls. */
+export interface PickerProbe {
+  scroller?: (ref: ScrollRef) => void;
+  scroll?: (event: { offset: { x: number; y: number }; size: { width: number; height: number }; contentSize: { width: number; height: number } }) => void;
+}
+
 /**
  * The list a picker shows: the filter, the section label, the rows in a scroll view and the footer
  * under them, with the keys (Up, Down, Enter) bound while `open`. PopoverPicker shows it in its
  * bubble; the phone's agent sheet (components/frame/MobileBottomNav.tsx) on a sheet of its own.
  *
- * The scroll view is as tall as its rows, up to what `maxHeight` leaves it: its height is set from
- * the rows' measured height, not left to the layout, so a short list never leaves an empty stretch
- * to scroll under its last row.
+ * The list is as tall as its parts, up to `maxHeight`; past that the scroll view alone gives way
+ * (the filter, the label and the footer keep their heights), and scrolls its rows. All of it is
+ * the layout's: nothing is measured and no part's height is assumed.
+ *
+ * What scrolls is the rows' own box and nothing else. The view holding the rows clips
+ * (`overflow-hidden`, which clips in the layout too) because nsh counts an `Image`'s natural size
+ * as overflow whatever its styled size: an icon drawn 16pt from a 256pt SVG reached 240pt past
+ * its row, right and down, and the scroll view scrolled over that empty room (PORTING.md).
+ *
+ * The highlight is the keys' and the pointer's: a list with a `value` opens with its chosen row
+ * highlighted (the first when the value is none of them); a menu of actions (no `value`) opens
+ * with none, since nothing in it is chosen, and takes one from the first Down or Up, or from the
+ * pointer while it is over a row.
  */
 export function PickerList(props: {
   items: PickerItem[];
@@ -67,10 +83,12 @@ export function PickerList(props: {
   rowClass?: string;
   /** The tallest the whole list may be, filter, label and footer included. */
   maxHeight: number;
+  /** For tests: the scroll view (to scroll it) and what it reports (its frame and its content's). */
+  probe?: PickerProbe;
   /** The list's own classes (default `relative flex-1 gap-1`). */
   class?: string;
   testID?: string;
-  /** A part's test id (`filter`, `option-<value>`), or none. */
+  /** A part's test id (`filter`, `option-<value>`, `highlighted-<value>` round the highlighted row), or none. */
   part: (name: string) => string | undefined;
   /** Drawn first in the list, over it (the popover's tail). */
   overlay?: JSX.Element;
@@ -83,6 +101,8 @@ export function PickerList(props: {
   const query = signal("");
   const active = signal(0);
   const footer = () => props.footer ?? [];
+  /** A menu of actions: nothing in it is chosen, so nothing is highlighted until asked. */
+  const actions = () => props.value === undefined;
   const shown = () => {
     const text = query().trim().toLowerCase();
     if (!text) return props.items;
@@ -94,6 +114,8 @@ export function PickerList(props: {
   /** The next row from `from` by `by` (1 or -1, round the ends) that is not disabled; `from` if none. */
   const step = (from: number, by: number) => {
     const list = untracked(rows);
+    // From no row, Up starts at the last one, as Down starts at the first.
+    if (from < 0 && by < 0) from = 0;
     for (let i = 1; i <= list.length; i += 1) {
       const at = (((from + by * i) % list.length) + list.length) % list.length;
       if (!list[at].disabled) return at;
@@ -109,7 +131,7 @@ export function PickerList(props: {
     untracked(() => {
       query.set("");
       const chosen = rows().findIndex((item) => item.value === props.value && !item.disabled);
-      active.set(chosen >= 0 ? chosen : step(-1, 1));
+      active.set(chosen >= 0 ? chosen : actions() ? -1 : step(-1, 1));
     });
     const move = (by: number) => active.set(step(untracked(active), by));
     cleanup(
@@ -117,17 +139,19 @@ export function PickerList(props: {
     );
   });
 
-  // The scroll view's tallest, and the rows' own height (0 until measured).
-  const scrollMax = () => Math.max(80, props.maxHeight - (props.filterPlaceholder ? 96 : 48) - footer().length * 44);
-  const rowsHeight = signal(0);
-
   /** One row: the list's (`index` among the shown) or the footer's (after them). */
   const row = (item: () => PickerItem, index: () => number) => (
     <View
       onMouseEnter={() => {
         if (!item().disabled) active.set(index());
       }}
+      // A menu's highlight leaves with the pointer; a choice's stays for Enter.
+      onMouseLeave={() => {
+        if (actions() && untracked(active) === index()) active.set(-1);
+      }}
       class={item().separated ? "mt-1 border-t border-line-faint pt-1.5" : ""}
+      // For tests, which read no fills: the highlighted row's wrapper is named.
+      testID={active() === index() ? props.part(`highlighted-${item().value}`) : undefined}
     >
       <BaseButton
         role={props.role === "menu" ? "menuitem" : "option"}
@@ -158,7 +182,7 @@ export function PickerList(props: {
   );
 
   return (
-    <View class={props.class ?? "relative flex-1 gap-1"} testID={props.testID}>
+    <View class={props.class ?? "relative flex-1 gap-1"} style={{ maxHeight: props.maxHeight }} testID={props.testID}>
       {props.overlay}
       <If when={props.filterPlaceholder}>
         <Input
@@ -182,19 +206,12 @@ export function PickerList(props: {
           {String(props.label ?? "").toLocaleUpperCase()}
         </Text>
       </If>
-      <Scroll
-        class="shrink"
-        style={{
-          maxHeight: scrollMax(),
-          height: rowsHeight() > 0 ? Math.min(rowsHeight(), scrollMax()) : undefined,
-        }}
-      >
+      <Scroll ref={(node: ScrollRef) => props.probe?.scroller?.(node)} onScroll={props.probe?.scroll} class="shrink">
         <View
-          class="gap-0.5"
+          class="gap-0.5 overflow-hidden"
           style={inset()}
           role={props.role ?? "listbox"}
           accessibilityLabel={props.label ?? props.accessibilityLabel}
-          onLayout={({ bounds }) => rowsHeight.set(bounds.size.height)}
         >
           <Each of={shown()} key={(item) => item.value}>
             {(item, index) => row(item, index)}

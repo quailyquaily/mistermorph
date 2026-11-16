@@ -23,6 +23,11 @@
 //
 // Keys: the filter takes the focus as it opens; Up and Down move the highlight (from the filter
 // too) over the rows that are not disabled, the footer's included, Enter picks it, Escape closes.
+// A picker opens with its chosen row highlighted; a menu of actions with none (nothing in it is
+// chosen): the first Down or Up, or the pointer over a row, gives it one.
+//
+// The bubble is as tall as its list, up to the room on its side (`maxHeight` at most); a longer
+// list scrolls its rows between the filter and the footer (PickerList).
 //
 // The popup is never wider than the window less its margins, and the tail stays off the popup's
 // rounded corners (a trigger near the window's edge: the tail leans to the popup's side of it).
@@ -35,8 +40,8 @@ import { Popover } from "nsh/base";
 // POPUP_RADIUS is the popup's `rounded-[16px]`, which the tail keeps off.
 import { MENU_POPUP_STYLE, mobilePopups, POPUP_RADIUS, PopupList, Tip } from "../ui";
 
-export { PickerList, type PickerItem } from "./PickerList";
-import { PickerList, type PickerItem } from "./PickerList";
+export { PickerList, type PickerItem, type PickerProbe } from "./PickerList";
+import { PickerList, type PickerItem, type PickerProbe } from "./PickerList";
 
 export type PickerSide = "top" | "bottom";
 
@@ -194,6 +199,8 @@ export function PopoverPicker(props: {
   /** What the parts' test ids start with (`-list`, `-filter`, `-tail`, `-option-<value>`;
    *  default `testID`). */
   partID?: string;
+  /** For tests: the bubble's scroll view and what it reports. */
+  probe?: PickerProbe;
 }) {
   const ownOpen = signal(false);
   const open = () => props.open ?? ownOpen();
@@ -267,6 +274,8 @@ export function PopoverPicker(props: {
   // On phones the bubble has no trigger to stand beside with room for its list: the same rows are
   // on the shared floating paper (design/mobile-popups.md), which the trigger opens.
   const sheet = () => props.sheet ?? mobilePopups();
+  // Without a value its rows are commands, not choices: a menu to screen readers too.
+  const role = () => (props.value === undefined ? "menu" : "listbox");
   const sheetPicker = () => (
     <>
       <View
@@ -285,11 +294,13 @@ export function PopoverPicker(props: {
         items={props.items}
         footer={props.footer}
         value={props.value}
+        role={role()}
         onChoose={(value) => props.onChange(value)}
         filterPlaceholder={props.filterPlaceholder}
         emptyText={props.emptyText}
         partID={props.partID ?? props.testID}
         layerID={part("popup")}
+        listProbe={props.probe}
       />
     </>
   );
@@ -345,7 +356,10 @@ export function PopoverPicker(props: {
           emptyText={props.emptyText}
           footer={props.footer}
           rowClass={props.rowClass}
-          maxHeight={placement().maxHeight}
+          // The popup's cap less its own padding and border.
+          maxHeight={placement().maxHeight - 2 * POPUP_INSET_Y}
+          role={role()}
+          probe={props.probe}
           testID={part("list")}
           part={part}
           inset={LIST_INSET}
