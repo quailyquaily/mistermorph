@@ -53,3 +53,17 @@ Headless Chrome inspected on the real Console with stubbed API: desktop 1280×80
 Not checked: native GPUI desktop, real Android device/emulator, screen reader, real touch scrolling, software keyboard over the phone sheet; agent switcher/gallery not visually inspected (existing suite only).
 
 First code push failed because the credential helper lacked repository path; retry with per-command credential.useHttpPath=true succeeded. No user settings changed.
+
+## factory · review · 2026-11-16 18:55
+head: 010c0256497e45f40fdecb6278efcab0e37c7839
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/shared/PickerList.tsx:118: Up in an action menu whose rows are all disabled highlights the first disabled row. step() changes from=-1 to 0 and returns that changed fallback when no enabled row exists. Preserve the original fallback instead. Verified scratch probe: open with disabled actions a and b -> no highlight; Down -> no highlight; Up -> a highlighted. choose() still blocks activation, so impact is cosmetic.
+
+Reviewed origin/master e94180a1ac7b887cd08fc4c90d6743969917e31a...HEAD with Claude Code. No P0/P1/P2 findings. Verified the SVG intrinsic-overflow cause by removing the clipping in a scratch copy: 9/13 geometry tests fail; the normal add menu regains artificial scroll content. Checked shared picker consumers, selection semantics, sizing caps, keyboard behavior and clipping boundaries.
+
+Validation: configured gofmt/vet/go-test gate passed (163 packages, none failed); nsh 0.5.1 check passed; required parallel Console test runner passed (127 files, 0 failed, 257s; inventory passed). chat-attachments.test.tsx failed once under parallel load with `Retry upload is covered`, passed the runner retry and 5/5 isolated repeats; treated as a pre-existing parallel flake. All scripted tests used absolute throwaway HOME. Worktree clean and HEAD unchanged. No installs or manifest/lockfile changes.
+
+Not checked: native GPUI desktop, real Android device, screen readers, real touch scrolling or phone software-keyboard interaction. Builder's headless-Chrome visual pass was not repeated. Extremely low picker caps may expose less than one row, still reachable by scrolling. Existing unrelated icon-overflow scroll views and simultaneous hover/keyboard tinting are outside this change.
+
+Moved review/ → ready/; owner should inspect popup appearance on native/mobile and the non-blocking all-disabled Up-arrow highlight.
