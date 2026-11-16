@@ -331,9 +331,11 @@ test("Stop stops the item's running run once, and says so only when the run has 
   });
   await app.press("id:todo-item-task-1");
   await app.waitFor("id:todo-stop");
-  expect(app.texts()).toContain("Stop");
+  // Stop is an icon button: named, its label not drawn.
+  expect(app.count("label:Stop")).toBe(1);
+  expect(app.texts()).not.toContain("Stop");
   await app.press("id:todo-stop");
-  await app.waitFor("text:Stopping…");
+  await app.waitFor("label:Stopping…");
   // Pending: a second press sends nothing.
   await expect(app.press("id:todo-stop")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
   const stops = proxied(calls, "POST", "/todo/tasks/task-1/stop");
@@ -346,7 +348,7 @@ test("Stop stops the item's running run once, and says so only when the run has 
   const before = polls();
   await app.waitUntil(() => polls() > before, { timeout: 4000 });
   expect(app.shows("text:/^Stopped/")).toBe(false);
-  expect(app.texts()).toContain("Stopping…");
+  expect(app.count("label:Stopping…")).toBe(1);
 
   live.state.runs = [];
   live.state.finished = [{ id: "task-1", run_id: "run_a", status: "canceled", stopping: true, finished_at: "2030-01-01T09:16:00Z" }];
@@ -368,7 +370,7 @@ test("a run that finishes before it stops says so, and the next run has a Stop o
   });
   await app.press("id:todo-item-task-1");
   await app.press("id:todo-stop");
-  await app.waitFor("text:Stopping…");
+  await app.waitFor("label:Stopping…");
   // The run completed anyway, and the item's schedule started its next run.
   live.state.runs = [{ ...RUN_A, run_id: "run_b", started_at: "2030-01-01T09:20:00Z" }];
   live.state.finished = [{ id: "task-1", run_id: "run_a", status: "done", stopping: true, finished_at: "2030-01-01T09:16:00Z" }];
@@ -376,9 +378,9 @@ test("a run that finishes before it stops says so, and the next run has a Stop o
   expect(app.shows("text:/^Stopped/")).toBe(false);
   await app.waitFor("text:/^Last run .+ · Done$/");
   // The new run is not being stopped: its Stop is ready, and names it.
-  await app.waitFor("text:Stop");
+  await app.waitFor("label:Stop");
   await app.press("id:todo-stop");
-  await app.waitFor("text:Stopping…");
+  await app.waitFor("label:Stopping…");
   expect(proxied(calls, "POST", "/todo/tasks/task-1/stop").map((call) => call.json?.run_id)).toEqual(["run_a", "run_b"]);
 });
 
@@ -414,8 +416,8 @@ test("a failed stop says why and can be tried again; a run that is gone says so"
   await app.press("id:todo-stop");
   await app.waitFor("Could not stop the run: runtime busy");
   // Still running: Stop is offered again, not stuck pending.
-  await app.waitFor("text:Stop");
-  expect(app.shows("text:Stopping…")).toBe(false);
+  await app.waitFor("label:Stop");
+  expect(app.shows("label:Stopping…")).toBe(false);
   await app.press("id:todo-stop");
   await app.waitFor('"Review" is no longer running.');
   expect(proxied(calls, "POST", "/todo/tasks/task-1/stop").length).toBe(2);
@@ -444,7 +446,7 @@ test("idle and waiting items and Heartbeat offer no Stop", async () => {
 test("a run someone else is stopping shows Stopping… and sends nothing", async () => {
   const { app, calls } = await openTodo(liveRuns([{ ...RUN_A, stopping: true }]).api);
   await app.press("id:todo-item-task-1");
-  await app.waitFor("text:Stopping…");
+  await app.waitFor("label:Stopping…");
   await expect(app.press("id:todo-stop")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
   expect(agentWrites(calls).length).toBe(0);
 });
@@ -461,7 +463,7 @@ test("on a phone the open item's editor offers Stop while it runs", async () => 
   await app.press("id:todo-item-task-1");
   await app.waitFor("id:todo-task-editor");
   await app.press("id:todo-stop");
-  await app.waitFor("text:Stopping…");
+  await app.waitFor("label:Stopping…");
   live.state.runs = [];
   live.state.finished = [{ id: "task-1", run_id: "run_a", status: "canceled", stopping: true, finished_at: "2030-01-01T09:16:00Z" }];
   await app.waitFor('Stopped "Review". What it already did is not undone.', { timeout: 4000 });

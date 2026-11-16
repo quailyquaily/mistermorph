@@ -9,7 +9,7 @@
 // tests/fixtures/composer-field-app.tsx, which lays the row out as ChatComposer does.
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
-import { COMPOSER_CONTROL_SIZE, COMPOSER_LINE_HEIGHT, composerFieldBox, composerFrameBorder, composerFrameClass, composerRowClass } from "../components/chat/composerField";
+import { COMPOSER_CONTROL_SIZE, COMPOSER_LINE_HEIGHT, COMPOSER_RADIUS, COMPOSER_RADIUS_CLASS, COMPOSER_VOICE_BAR_CLASS, composerFieldBox, composerFrameBorder, composerFrameClass, composerRowClass } from "../components/chat/composerField";
 import { COMPOSER_INPUT_CLASS, COMPOSER_PLACEHOLDER_STYLE, composerPlaceholderShown, composerSlotClass } from "../components/chat/ComposerFieldSlot";
 import { PLACEHOLDERS } from "./fixtures/composerPlaceholders";
 
@@ -553,6 +553,23 @@ test("the composer's frame differs between a phone and a desktop only in its bor
     expect(classes).toContain("focus-within:shadow-md");
     expect(classes).toContain("bg-field");
   }
+});
+
+// The voice bar (the strip above the field while it records or transcribes) lies in the frame, and
+// is rounded as the frame is: the frame's own radius class, clipping what it holds. One class for
+// the landing composer, a conversation's and a phone's, where the frame's radius is the same.
+test("the voice bar takes the composer frame's radius, and clips to it", () => {
+  const bar = COMPOSER_VOICE_BAR_CLASS.split(" ");
+  expect(COMPOSER_RADIUS_CLASS).toBe(`rounded-[${COMPOSER_RADIUS}px]`);
+  expect(bar.filter((name) => name.startsWith("rounded"))).toEqual([COMPOSER_RADIUS_CLASS]);
+  expect(bar).toContain("overflow-hidden");
+  for (const mobile of [true, false]) {
+    for (const glass of [true, false]) {
+      expect(composerFrameClass(mobile, glass).split(" ").filter((name) => name.startsWith("rounded"))).toEqual([COMPOSER_RADIUS_CLASS]);
+    }
+  }
+  // No state or width variant changes its shape.
+  expect(bar.filter((name) => name.includes(":"))).toEqual([]);
 });
 
 // The light border stays while the field has the focus, while typing, sending and running, and after

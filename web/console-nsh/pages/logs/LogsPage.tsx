@@ -17,7 +17,7 @@ import { SCROLLBAR } from "../../components/motion";
 import { gutterX, gutterY } from "../../components/frame/metrics";
 import { isMobile } from "../../lib/shell";
 import type { IconName } from "../../components/icons";
-import { Button, Icon, Page, ProgressBar, SelectField, Skeleton, TextField } from "../../components/ui";
+import { Button, Icon, Page, ProgressBar, SelectField, Skeleton, TextField, Tip, TipButton } from "../../components/ui";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const LIMIT_OPTIONS = [100, 300, 1000];
@@ -564,23 +564,19 @@ export function LogsPage() {
           <If when={!compact()}>
             <FilterGroup />
           </If>
-          {/* Following: Vue's 8pt square mark, filled green while the view follows the end. */}
+          {/* Following: Vue's 8pt square mark, filled green while the view follows the end. The mark
+              is the button's glyph, alone on it: its label is its name and its tooltip. */}
           <Button
             variant="outlined"
             size="sm"
+            iconOnly
             title={followLabel()}
             selected={following()}
             disabled={loading() || loadingOlder() || unsupported()}
             onPress={() => (untracked(following) ? following.set(false) : resumeFollowing())}
             testID="logs-follow"
           >
-            {/* The mark before the label, as Vue's button lays them out (8pt apart). */}
             <View class={`size-2 rounded-[1px] border ${following() ? "border-ok bg-ok" : "border-muted-foreground"}`} />
-            <If when={!compact()}>
-              <Text class="ml-0.5 text-sm font-medium tracking-[0.01em] text-foreground" style={{ numberOfLines: 1 }}>
-                {followLabel()}
-              </Text>
-            </If>
           </Button>
           <Button
             variant="outlined"
@@ -647,18 +643,16 @@ export function LogsPage() {
           </If>
           <If when={nextCursor()}>
             <View class="items-center border-b border-dashed border-line-soft p-2">
-              <BaseButton
+              <TipButton
                 onPress={() => void loadOlder()}
                 disabled={loading() || loadingOlder()}
                 accessibilityLabel={t(loadingOlder() ? "runtime_loading" : "logs_load_older")}
+                tooltip={<Tip text={t(loadingOlder() ? "runtime_loading" : "logs_load_older")} />}
                 testID="logs-older"
-                class="group h-6.5 flex-row items-center gap-1.5 px-2 disabled:opacity-60"
+                class="h-6.5 flex-row items-center rounded-(--radius) px-3 hover:bg-hover disabled:opacity-60"
               >
                 <Icon name="PhCaretUp" size={13} color="muted-foreground" />
-                <Text class={`${LABEL} tracking-[0.08em] text-muted-foreground group-hover:text-blue`}>
-                  {t(loadingOlder() ? "runtime_loading" : "logs_load_older")}
-                </Text>
-              </BaseButton>
+              </TipButton>
             </View>
           </If>
           <If when={!loading() && filteredEntries().length === 0}>

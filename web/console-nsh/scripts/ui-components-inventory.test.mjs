@@ -74,3 +74,27 @@ test("entries are well formed", () => {
     assert.ok(GALLERY_ENTRIES.some((entry) => entry.group === group.id), `group ${group.id} is empty`);
   }
 });
+
+// A button shows text or a glyph, never both (docs/console/ui-components.md): the demos show the two
+// apart, and none hands a Button an icon together with a label (which would draw the glyph alone).
+test("no demo shows a button with both an icon and a label", () => {
+  const dir = path.join(app, "pages/ui-components/demos");
+  const both = [];
+  for (const name of fs.readdirSync(dir).filter((entry) => entry.endsWith(".tsx"))) {
+    const source = fs.readFileSync(path.join(dir, name), "utf8");
+    for (const match of source.matchAll(/<Button\b/g)) {
+      // The opening tag: up to the `>` outside every `{…}`.
+      let depth = 0;
+      let end = match.index;
+      for (; end < source.length; end++) {
+        const char = source[end];
+        if (char === "{") depth++;
+        else if (char === "}") depth--;
+        else if (char === ">" && depth === 0 && source[end - 1] !== "=") break;
+      }
+      const tag = source.slice(match.index, end + 1);
+      if (/\sicon=/.test(tag) && /\slabel=/.test(tag)) both.push(`${name}:${source.slice(0, match.index).split("\n").length}`);
+    }
+  }
+  assert.deepEqual(both, []);
+});

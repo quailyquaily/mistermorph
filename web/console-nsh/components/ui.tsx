@@ -389,11 +389,16 @@ export interface ButtonProps {
   variant?: ButtonVariant;
   /** md 44, sm 38 (default), xs 32, xxs 24 points tall, as the Vue console's AppButton sizes. */
   size?: ButtonSize;
-  /** The button's text. */
+  /** The button's text; with an `icon`, its name instead (see `icon`). */
   label?: string;
-  /** An icon before the text, or the whole button with `iconOnly`. */
+  /**
+   * The button's face. A button shows text or a glyph, never both: with an icon it is a square icon
+   * button, and its `label` is not drawn but names it, as its accessible name and its tooltip
+   * (a `title` is the tooltip only of a button without a label). The busy beam of `loading` is a state, not a
+   * glyph: a text button keeps its label while it runs.
+   */
   icon?: IconName;
-  /** A square icon button; give `title` for its tooltip and accessible name. */
+  /** A square icon button whose glyph is its `children`; give `title` (or `label`) for its tooltip and accessible name. */
   iconOnly?: boolean;
   /** The tooltip, and the accessible name when there is no label. */
   title?: string;
@@ -402,7 +407,7 @@ export interface ButtonProps {
   disabled?: boolean;
   /** Busy: disabled (presses blocked), keeping its size and content, with the border beam running round it (design/ui-refresh.html §6). */
   loading?: boolean;
-  /** Full width. */
+  /** Full width (an icon button then keeps its height and centres its glyph). */
   block?: boolean;
   /** A long label wraps onto more lines, centred, and the button grows taller (at least its size's height) instead of cutting the label off. */
   wrap?: boolean;
@@ -417,7 +422,7 @@ export interface ButtonProps {
   onLayout?: BaseButtonProps["onLayout"];
   /** Its icon's frame in it (layout probes in tests). */
   onIconLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
-  /** Anything after the label (a count, a caret). */
+  /** Anything after the label (a count), or an `iconOnly` button's own glyph. Not a glyph beside a label. */
   children?: JSX.Element;
 }
 
@@ -562,6 +567,11 @@ export function Button(props: ButtonProps) {
     loadingText() ?? (props.disabled || props.loading ? variant().disabledText : props.selected ? "ink" : variant().text);
   const textClass = () =>
     loadingText() ? LOADING_TEXT_CLASS[loadingText()!] : props.selected && enabled() ? "text-ink" : variant().textClass;
+  // A glyph is the whole face: the label is then the button's name, not drawn (ButtonProps.icon).
+  const glyphFace = () => !!props.iconOnly || !!props.icon;
+  const square = () => !!props.iconOnly || (!!props.icon && !!props.label);
+  // The tooltip: a glyph's label (what it would have read), else the title.
+  const tip = () => (glyphFace() && props.label ? props.label : props.title);
   return (
     <TipButton
       disabled={!enabled()}
@@ -569,9 +579,9 @@ export function Button(props: ButtonProps) {
       onPress={() => enabled() && props.onPress?.()}
       accessibilityLabel={props.accessibilityLabel || props.label || props.title || props.icon || undefined}
       testID={props.testID}
-      tooltip={props.title ? <Tip text={props.title} /> : undefined}
+      tooltip={tip() ? <Tip text={tip()!} /> : undefined}
       class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
-        props.iconOnly ? `${size().square} px-0` : props.wrap ? wrapBox(size().box) : size().box
+        square() && !props.block ? `${size().square} px-0` : props.wrap && !glyphFace() ? wrapBox(size().box) : size().box
       } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
       onLayout={props.onLayout}
       style={{
@@ -597,7 +607,7 @@ export function Button(props: ButtonProps) {
       <If when={props.icon}>
         <Icon name={props.icon!} size={size().icon} color={iconColor()} onLayout={props.onIconLayout} />
       </If>
-      <If when={props.label && !props.iconOnly}>
+      <If when={props.label && !glyphFace()}>
         <Text
           class={`${size().text} font-medium tracking-[0.01em] transition-colors duration-180 ${textClass()} ${props.wrap ? "min-w-0 shrink text-center" : ""}`}
           style={props.wrap ? undefined : { numberOfLines: 1 }}

@@ -46,7 +46,7 @@ import {
   useProfile,
 } from "../../lib/core/model-routes.js";
 import { layoutRouteLines } from "../../lib/core/route-lines.js";
-import { Button, Icon } from "../ui";
+import { Button, Icon, Tip, TipButton } from "../ui";
 import { isMobile } from "../../lib/shell";
 import { motionMs } from "../motion";
 import { SettingsCard } from "../settings-page/parts";
@@ -924,15 +924,15 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
               </Text>
             </If>
             <View style={addEntrance()}>
-              <BaseButton
+              <TipButton
                 disabled={props.loading || props.saving}
                 onPress={() => props.onAddProfile?.()}
                 accessibilityLabel="Add profile"
-                class="min-h-10 flex-row items-center justify-center gap-1.5 rounded-(--radius) border border-dashed border-input px-2.5 py-1.5 transition-colors duration-120 hover:border-blue disabled:opacity-55"
+                tooltip={<Tip text="Add profile" />}
+                class="min-h-10 flex-row items-center justify-center rounded-(--radius) border border-dashed border-input px-2.5 py-1.5 transition-colors duration-120 hover:border-blue disabled:opacity-55"
               >
                 <Icon name="PhPlus" size={14} color="subtle" />
-                <Text class="text-sm text-subtle">Add profile</Text>
-              </BaseButton>
+              </TipButton>
             </View>
           </View>
 

@@ -34,7 +34,7 @@ import {
 } from "../../lib/core/chat-composer-suggestions.js";
 import { glassEnabled, glassStyle } from "../../lib/glass";
 import { isMobile } from "../../lib/shell";
-import { COMPOSER_RADIUS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { COMPOSER_RADIUS, COMPOSER_VOICE_BAR_CLASS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
 import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
 import { followComposerLayout, ONE_ROW, type ComposerLayout } from "./composerRows";
@@ -915,7 +915,7 @@ export function ChatComposer(props: ChatComposerProps) {
           </View>
         </If>
         <If when={voiceActive()}>
-          <View role="text" class="mx-2.5 mt-2.5 flex-row items-center gap-2 rounded-(--radius) bg-paper px-2 py-1" testID="chat-composer-voice-strip">
+          <View role="text" class={COMPOSER_VOICE_BAR_CLASS} testID="chat-composer-voice-strip">
             <View class={`size-2 rounded-full ${props.voiceState === "recording" ? "bg-danger" : "bg-status-pending"}`} />
             <Text class="font-mono text-xs text-subtle">{voiceElapsedText()}</Text>
             <Text class={`flex-1 text-sm ${props.voicePreview ? "text-foreground" : "text-muted-foreground"} line-clamp-2`}>

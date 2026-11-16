@@ -76,7 +76,7 @@ function ButtonDemo() {
         {(variant) => (
           <V l={variant()} row>
             <Button variant={variant()} label={t("action_save")} onPress={() => act("Button", variant())} testID={`uig-button-${variant()}`} />
-            <Button variant={variant()} label={t("action_save")} icon="PhCheck" onPress={() => act("Button", variant())} />
+            <Button variant={variant()} icon="PhCheck" title={t("action_save")} onPress={() => act("Button", variant())} testID={`uig-button-icon-${variant()}`} />
             <Button variant={variant()} label={t("action_save")} disabled />
             <Button variant={variant()} label={t("action_save")} loading />
           </V>
@@ -84,17 +84,18 @@ function ButtonDemo() {
       </Each>
       <V l="size md / sm / xs / xxs" row>
         <Each of={BUTTON_SIZES} key={(size) => size}>
-          {(size) => <Button variant="outlined" size={size()} label={t("action_refresh")} icon="PhArrowClockwise" onPress={() => act("Button size", size())} />}
+          {(size) => <Button variant="outlined" size={size()} label={t("action_refresh")} onPress={() => act("Button size", size())} />}
         </Each>
       </V>
-      <V l="iconOnly" row>
+      <V l="icon" row>
         <Each of={BUTTON_SIZES} key={(size) => size}>
-          {(size) => <Button variant="outlined" size={size()} iconOnly icon="PhArrowClockwise" title={t("action_refresh")} onPress={() => act("Button icon", size())} />}
+          {(size) => <Button variant="outlined" size={size()} icon="PhArrowClockwise" title={t("action_refresh")} onPress={() => act("Button icon", size())} />}
         </Each>
-        <Button variant="plain" iconOnly icon="PhTrash" title={t("action_delete")} disabled />
+        <Button variant="plain" icon="PhTrash" title={t("action_delete")} disabled />
+        <Button variant="outlined" icon="PhArrowClockwise" title={t("action_refresh")} loading testID="uig-button-icon-busy" />
       </V>
       <V s="selected" row>
-        <Button variant="outlined" label={t("uig_fixture_toggle")} icon="PhPushPin" selected={picked.on()} onPress={picked.toggle} testID="uig-button-selected" />
+        <Button variant="outlined" icon="PhPushPin" title={t("uig_fixture_toggle")} selected={picked.on()} onPress={picked.toggle} testID="uig-button-selected" />
         <Text class="text-xs text-muted-foreground" testID="uig-button-selected-state">{picked.on() ? t("uig_state_on") : t("uig_state_off")}</Text>
       </V>
       <V s="loading" row>

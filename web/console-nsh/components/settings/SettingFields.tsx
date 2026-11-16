@@ -13,7 +13,7 @@ import { pickDesktopDirectory } from "../../lib/core/desktop-runtime.js";
 import { ROW_MODES } from "../../lib/core/setting-rows.js";
 import { useRevealRow } from "../settings-page/reveal";
 import { isMobile } from "../../lib/shell";
-import { Icon, PopupList, popupSheets } from "../ui";
+import { Icon, PopupList, popupSheets, Tip, TipButton } from "../ui";
 
 /** A choice in a settings list. `hint` shows beside the title, `one` is a unit's singular title. */
 export interface SettingOption {
@@ -61,7 +61,8 @@ function Sep() {
   return <View class="h-5 w-px self-center bg-input" accessibilityElementsHidden />;
 }
 
-/** A pressable part of a box: a unit, Browse, a remove button. */
+/** A pressable part of a box: a unit, Browse, a remove button. Text or a glyph, not both: with an
+ * `icon`, the label is its accessible name and its tooltip, not drawn (a menu's `caret` is no glyph). */
 function Part(props: {
   label?: string;
   icon?: Parameters<typeof Icon>[0]["name"];
@@ -74,17 +75,18 @@ function Part(props: {
   onPress?: () => void;
 }) {
   return (
-    <BaseButton
+    <TipButton
       disabled={props.disabled}
       onPress={() => props.onPress?.()}
       accessibilityLabel={props.accessibilityLabel || props.label}
+      tooltip={props.icon && (props.label || props.accessibilityLabel) ? <Tip text={(props.label || props.accessibilityLabel)!} /> : undefined}
       testID={props.testID}
       class={PART_CLASS}
     >
       <If when={props.icon}>
         <Icon name={props.icon!} size={14} color={props.quiet ? "muted-foreground" : "subtle"} />
       </If>
-      <If when={props.label}>
+      <If when={props.label && !props.icon}>
         <Text class={`text-sm ${props.quiet ? "text-muted-foreground" : "text-subtle"}`} style={{ numberOfLines: 1 }}>
           {props.label}
         </Text>
@@ -92,7 +94,7 @@ function Part(props: {
       <If when={props.caret}>
         <Icon name="PhCaretDown" size={12} color="muted-foreground" />
       </If>
-    </BaseButton>
+    </TipButton>
   );
 }
 
@@ -1043,15 +1045,15 @@ export function SettingRows(props: SettingRowsProps) {
             </View>
           )}
         </Each>
-        <BaseButton
+        <TipButton
           disabled={props.disabled}
           onPress={addRow}
           accessibilityLabel={props.addLabel || "Add"}
-          class="flex-row items-center gap-1.5 self-start rounded-(--radius) px-2 py-1.5 hover:bg-hover active:bg-selection disabled:opacity-50"
+          tooltip={<Tip text={props.addLabel || "Add"} />}
+          class="size-8 items-center justify-center self-start rounded-(--radius) hover:bg-hover active:bg-selection disabled:opacity-50"
         >
           <Icon name="PhPlus" size={14} color="blue" />
-          <Text class="text-sm text-blue">{props.addLabel || "Add"}</Text>
-        </BaseButton>
+        </TipButton>
       </If>
     </View>
   );

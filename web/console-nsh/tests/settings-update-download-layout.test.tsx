@@ -44,29 +44,42 @@ async function openChecked(width: number, client: Record<string, unknown>, downl
 
 const near = (a: number, b: number) => Math.abs(a - b) <= 1;
 
-test("on a phone the download takes the release box's width", async () => {
+// A download is an icon button with the file's name as plain text beside it: the row takes the
+// width, the button is a square at its end.
+const square = (button: { w: number; h: number }) => button.w === SM_HEIGHT && button.h === SM_HEIGHT;
+
+test("on a phone the download's row takes the release box's width, the icon button at its end", async () => {
   const { app, frames } = await openChecked(390, ANDROID, { status: "available", os: "android", url: "https://downloads.example/MrMorph-android.apk" });
-  await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames().downloads && frames().release));
-  const { release, downloads, "button:settings-update-download": button } = frames();
+  await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames()["button:settings-update-download-row"] && frames().downloads && frames().release));
+  const { release, downloads, "button:settings-update-download": button, "button:settings-update-download-row": row } = frames();
   expect(near(downloads.x, release.x) && near(downloads.w, release.w)).toBe(true);
-  expect(near(button.x, release.x) && near(button.w, release.w)).toBe(true);
-  expect(button.h).toBe(SM_HEIGHT);
+  expect(near(row.x, release.x) && near(row.w, release.w)).toBe(true);
+  // The button is a square at the row's end.
+  expect(square(button)).toBe(true);
+  expect(near(button.x + button.w, row.x + row.w)).toBe(true);
+  // Its name is not on it: it is the text beside it, once, and the button's accessible name.
+  expect(app.texts().filter((text) => text === "Download for Android")).toHaveLength(1);
+  expect(app.shows("id:settings-update-download-label")).toBe(true);
+  expect(app.count("label:Download for Android")).toBe(1);
   // Below the release notes, not beside them.
   expect(downloads.y).toBeGreaterThan(release.y + 20);
 });
 
-test("on a narrow phone a long label wraps inside the full-width button", async () => {
+test("on a narrow phone a long name wraps beside the icon button, inside the row", async () => {
   const { app, frames } = await openChecked(320, MAC, MAC_DOWNLOAD);
   await app.waitFor("Download for macOS (Apple silicon)");
-  await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames().release));
-  const { release, "button:settings-update-download": button } = frames();
-  expect(near(button.x, release.x) && near(button.w, release.w)).toBe(true);
-  // Taller than one line: the label went onto a second line rather than past the button's edge.
-  expect(button.h).toBeGreaterThan(SM_HEIGHT);
+  await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames()["button:settings-update-download-row"] && frames().release));
+  const { release, "button:settings-update-download": button, "button:settings-update-download-row": row } = frames();
+  expect(near(row.x, release.x) && near(row.w, release.w)).toBe(true);
+  // The name has the row's width less the button, and wraps there if it must: the button stays a
+  // square at the row's end, inside the box.
+  expect(square(button)).toBe(true);
+  expect(row.h).toBeGreaterThanOrEqual(SM_HEIGHT);
+  expect(near(button.x + button.w, row.x + row.w)).toBe(true);
   expect(button.x + button.w).toBeLessThanOrEqual(release.x + release.w + 1);
 });
 
-test("on a phone each build to pick and the releases button take the full width", async () => {
+test("on a phone each build to pick is a full-width row, told apart by its text; the releases button is a square icon button", async () => {
   const choose = await openChecked(390, { userAgent: "Mozilla/5.0 (X11; Linux)", platform: "Linux" }, {
     status: "choose",
     os: "linux",
@@ -78,24 +91,37 @@ test("on a phone each build to pick and the releases button take the full width"
   const ids = ["button:settings-update-download-linux-amd64", "button:settings-update-download-linux-arm64"];
   await choose.app.waitUntil(() => ids.every((id) => choose.frames()[id]) && Boolean(choose.frames().release));
   const { release } = choose.frames();
+  await choose.app.waitUntil(() => ids.every((id) => choose.frames()[`${id}-row`]));
   for (const id of ids) {
-    const button = choose.frames()[id];
-    expect({ id, full: near(button.x, release.x) && near(button.w, release.w) }).toEqual({ id, full: true });
+    const row = choose.frames()[`${id}-row`];
+    expect({ id, full: near(row.x, release.x) && near(row.w, release.w), square: square(choose.frames()[id]) }).toEqual({ id, full: true, square: true });
   }
+  // Each build's name is text beside its button, and the button's own name.
+  for (const id of ids) expect(choose.app.shows(`id:${id.slice("button:".length)}-label`)).toBe(true);
+  const names = choose.app.texts().filter((text) => text.startsWith("Download for "));
+  expect(names).toHaveLength(2);
+  expect(new Set(names).size).toBe(2);
+  for (const name of names) expect(choose.app.count(`label:${name}`)).toBe(1);
 
   const none = await openChecked(390, ANDROID, { status: "unavailable", reason: "not_published", os: "android" });
   await none.app.waitUntil(() => Boolean(none.frames()["button:settings-update-open-releases"] && none.frames().release));
+  // An icon button (the arrow, named "Open releases"): square, at the start, its label not drawn.
   const button = none.frames()["button:settings-update-open-releases"];
-  expect(near(button.x, none.frames().release.x) && near(button.w, none.frames().release.w)).toBe(true);
+  expect(near(button.x, none.frames().release.x)).toBe(true);
+  expect({ w: button.w, h: button.h }).toEqual({ w: SM_HEIGHT, h: SM_HEIGHT });
+  expect(none.app.texts()).not.toContain("Open releases");
+  expect(none.app.count("label:Open releases")).toBe(1);
 });
 
 test("on a desktop screen the download keeps its own size beside the release notes", async () => {
   const { app, frames } = await openChecked(1280, MAC, MAC_DOWNLOAD);
   await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames().release));
   const { release, "button:settings-update-download": button } = frames();
-  expect(button.h).toBe(SM_HEIGHT);
-  expect(button.w).toBeLessThan(release.w / 2);
+  await app.waitUntil(() => Boolean(frames()["button:settings-update-download-row"]));
+  const row = frames()["button:settings-update-download-row"];
+  expect(square(button)).toBe(true);
+  expect(row.w).toBeLessThan(release.w / 2);
   // At the right of the notes column, on its first line.
-  expect(button.x).toBeGreaterThan(release.x + release.w / 2);
-  expect(button.y).toBeLessThan(release.y + 20);
+  expect(row.x).toBeGreaterThan(release.x + release.w / 2);
+  expect(row.y).toBeLessThan(release.y + 20);
 });

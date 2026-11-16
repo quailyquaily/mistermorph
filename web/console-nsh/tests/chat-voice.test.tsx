@@ -113,6 +113,34 @@ test("with a ready transcription route the mic is an icon button that records in
   expect(app.value("id:chat-composer-input")).toBe("");
 });
 
+// The voice bar is one strip (COMPOSER_VOICE_BAR_CLASS, rounded as the composer's frame; its class is
+// checked in chat-composer-field.test.tsx) wherever the composer is: on the landing page, in a
+// conversation and on a phone.
+test("the voice bar shows in the landing composer, a conversation's and a phone's", async () => {
+  for (const variant of [
+    { location: "/e/default/chat", width: 1200, height: 800 },
+    { location: "/e/default/chat/topic-1", width: 1200, height: 800 },
+    { location: "/e/default/chat/topic-1", width: 390, height: 844 },
+  ]) {
+    const { app } = await openConsole({
+      ...variant,
+      features: ["pickFile", "saveFile", "voiceRecord", "voicePreview"],
+      host: recordingHost(),
+      api: { ...CHAT, "GET /proxy:/voice/transcribe": READY },
+    });
+    await app.waitFor("id:chat-composer-input");
+    await app.press("label:Voice input");
+    await app.waitFor("id:chat-composer-voice-strip");
+    expect(app.count("id:chat-composer-voice-strip")).toBe(1);
+    // Its two buttons are in it, named.
+    expect(app.count("id:chat-composer-voice-strip >> label:Discard recording")).toBe(1);
+    expect(app.count("id:chat-composer-voice-strip >> label:Hide live text")).toBe(1);
+    await app.press("label:Stop and transcribe");
+    await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
+    await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
+  }
+});
+
 test("without a ready transcription route there is no mic: unset or failed", async () => {
   for (const route of [UNSET, { status: 500, body: { error: "boom" } }]) {
     const { app, calls } = await openRecording(route);

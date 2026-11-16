@@ -13,7 +13,7 @@ import { DateField } from "../shared/DateField";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, Tabs, Tip } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, Tabs, Tip, TipButton } from "../ui";
 import * as model from "./todo-model.js";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
@@ -597,17 +597,17 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               </View>
             </If>
             {/* The ui-kit's "placeholder" button: a dashed blue hairline on translucent white. */}
-            <BaseButton
+            <TipButton
               onPress={() => state.edits.addBashEnvRow(task())}
               disabled={busy()}
               accessibilityLabel={t("todo_bash_env_add")}
+              tooltip={<Tip text={t("todo_bash_env_add")} />}
               testID="todo-bash-env-add"
               class="h-9.5 flex-row items-center justify-center gap-2 rounded-(--radius) border border-dashed border-blue/35 bg-white/45 hover:border-blue/60 hover:bg-white/75 disabled:opacity-50"
               style={{ transitionProperty: "colors", transitionDuration: 180 }}
             >
               <Icon name="PhPlus" size={16} color="subtle" />
-              <Text class="text-sm font-medium tracking-[0.14px] text-subtle">{t("todo_bash_env_add")}</Text>
-            </BaseButton>
+            </TipButton>
           </View>
         </View>
       </View>
