@@ -43,3 +43,13 @@ Tests: configured `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` pas
 Not checked: live LLM/channel integration. No Console/UI sources changed; Console tests not required.
 
 Push note: initial code push lacked repository-path credentials; retry with command-local credential.useHttpPath=true succeeded. No credential settings persisted.
+## factory · review · 2026-11-16 15:50
+head: 04df63c71f78a0535a9ee2e587550c2552d43a67
+verdict: pass
+notes:
+- [P2] tools/builtin/todo_list.go:64: The tool ignores the runtime audience and returns the entire cron store to non-owner conversations, including tasks from other chats. Restrict non-owner calls to their authorized tasks or exclude the tool from non-owner registries; add audience regression tests. Verified example: a call under audience.Conversation("tg:-1009999") returned an owner Console task with its private reminder content, destination, workspace and environment variable names. The accepted runtime-store plan does not explicitly authorize cross-audience disclosure.
+
+Validation: Claude Code reviewed origin/master...HEAD (base 0200398d, merge-base c611561e). Configured formatting, go vet and full go test gate passed with a throwaway HOME. An overlay-only audience probe reproduced the P2 finding; no tracked files changed. No P0/P1 findings, so pass under the factory review gate. No installs. Worktree clean, no protected paths changed. No Console sources changed.
+
+Residual risks: live LLM/channel integration not exercised. Prompt workflow is absent when todo_update is disabled, and its opening wording still emphasizes mutation. First-use database initialization/import follows the existing store convention. Owner should assess the cross-audience disclosure note before shipping; this pass is not a claim of no defects.
+
