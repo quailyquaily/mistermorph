@@ -158,16 +158,20 @@ export function LoginPage() {
           title={t("login_subtitle")}
           meta={
             <If when={isMobile()} else={<Text class="font-mono text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{host()}</Text>}>
-              <Button
-                variant="plain"
-                size="xs"
-                icon="PhPlugsConnected"
-                label={host() || t("login_server_set")}
-                title={t("login_server_title")}
-                disabled={busy()}
-                testID="login-server-open"
-                onPress={() => serverOpen.set(true)}
-              />
+              {/* The server is read as text, as on wide windows; the button beside it changes it. */}
+              <View class="min-w-0 shrink flex-row items-center gap-1">
+                <Text class="min-w-0 shrink font-mono text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{host()}</Text>
+                <Button
+                  variant="plain"
+                  size="xs"
+                  icon="PhPlugsConnected"
+                  label={host() || t("login_server_set")}
+                  title={t("login_server_title")}
+                  disabled={busy()}
+                  testID="login-server-open"
+                  onPress={() => serverOpen.set(true)}
+                />
+              </View>
             </If>
           }
           gap={0}

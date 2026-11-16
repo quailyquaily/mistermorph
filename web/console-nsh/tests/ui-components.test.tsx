@@ -231,6 +231,14 @@ test("the controls work on local state, the overlays open and close, and nothing
   await find(app, "Button");
   await app.press("id:uig-button-danger");
   await app.waitFor("text:Last local action: Button: danger (1 so far)");
+  // The demo shows text buttons and icon buttons apart, none with both: the icon button of a
+  // variant is named for its tooltip and draws no label, and the selected example is a glyph.
+  await app.press("id:uig-button-icon-danger");
+  await app.waitFor("text:Last local action: Button: danger (2 so far)");
+  expect(app.count("id:uig-button-selected")).toBe(1);
+  expect(app.count("label:Sample switch")).toBeGreaterThan(0);
+  expect(app.texts()).not.toContain("Sample switch");
+  expect(app.shows("id:uig-button-icon-busy-loading")).toBe(true);
   await find(app, "Toggle");
   expect(app.shows("text:On")).toBe(true);
   await app.press("id:uig-toggle");

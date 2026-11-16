@@ -77,7 +77,6 @@ export function SystemSection(props: { s: SettingsStore }) {
             <Button
               variant="outlined"
               size="md"
-              class={control()}
               icon="PhCode"
               label={t("settings_logs_open")}
               onPress={() => void navigate(endpointRoutePath(endpointState.selectedRef, "/logs"))}

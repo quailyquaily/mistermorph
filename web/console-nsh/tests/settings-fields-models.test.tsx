@@ -42,15 +42,17 @@ test("routes: a fallback is added in order, and a problem blocks the save", asyn
 
 test("routes: Add profile asks the page to start one", async () => {
   const { app } = await openFixture("/routes");
-  await app.waitFor("text:Add profile");
-  await app.press("text:Add profile");
+  // The dashed add button is a plus, named "Add profile".
+  await app.waitFor("label:Add profile");
+  expect(app.texts()).not.toContain("Add profile");
+  await app.press("label:Add profile");
   await app.waitUntil(() => out(app, "added") === "1");
 });
 
 test("auth profiles: Save waits for a complete profile and sends the list", async () => {
   const { app } = await openFixture("/auth");
   await app.waitFor("text:AUTH PROFILES");
-  await app.press("text:Add auth profile");
+  await app.press("label:Add auth profile");
   expect(app.enabled("id:auth-save")).toBe(false);
   await app.type("label:Name 2", "slack");
   await app.type("label:Credential secret 2", "xoxb-1");

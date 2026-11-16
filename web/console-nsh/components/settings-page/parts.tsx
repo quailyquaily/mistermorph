@@ -2,9 +2,9 @@
 // row, a row with a control at its right, a fold (the Vue page's <details>), and a dot.
 import type { JSX } from "nsh";
 import { Text, View } from "nsh";
-import { Button as BaseButton, Collapsible, Switch } from "nsh/base";
+import { Collapsible, Switch } from "nsh/base";
 import { isMobile } from "../../lib/shell";
-import { Icon, type IconName } from "../ui";
+import { Icon, type IconName, Tip, TipButton } from "../ui";
 import { useRevealRow } from "./reveal";
 
 export { LoadingLine } from "../ui";
@@ -331,25 +331,26 @@ export function GroupTitle(props: { text: string }) {
 
 /**
  * The full-width dashed button that adds an item at the end of a list (`.settings-profile-placeholder`,
- * the ui-kit's `placeholder` button): 44pt, a dashed hairline, the label in the middle. Its look is
+ * the ui-kit's `placeholder` button): 44pt, a dashed hairline, its glyph (a plus) in the middle; the
+ * label is its accessible name and its tooltip, not drawn (a button shows a glyph or text). Its look is
  * what Vue draws, measured: SettingsView.css gives it a 135deg hatching under a paper gradient, but
  * the morph theme's `.touchable.placeholder { background: … !important }` replaces that background,
  * so Vue shows white at 46% (68% on hover) on a blue dashed hairline at 36% (52%), 180ms.
  */
 export function PlaceholderButton(props: { label: string; icon?: IconName; disabled?: boolean; onPress?: () => void; testID?: string; class?: string }) {
   return (
-    <BaseButton
+    <TipButton
       onPress={() => props.onPress?.()}
       disabled={props.disabled}
       accessibilityLabel={props.label}
+      tooltip={<Tip text={props.label} />}
       testID={props.testID}
       class={`h-11 flex-row items-center justify-center gap-2 rounded-(--radius) border border-dashed border-blue/36 bg-white/46 transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-white/68 disabled:opacity-50 ${
         props.class ?? ""
       }`}
     >
       <Icon name={props.icon ?? "PhPlus"} size={16} color="subtle" />
-      <Text class="text-sm font-medium text-subtle">{props.label}</Text>
-    </BaseButton>
+    </TipButton>
   );
 }
 

@@ -66,7 +66,7 @@ test("on a narrow phone a long label wraps inside the full-width button", async 
   expect(button.x + button.w).toBeLessThanOrEqual(release.x + release.w + 1);
 });
 
-test("on a phone each build to pick and the releases button take the full width", async () => {
+test("on a phone each build to pick takes the full width; the releases button is a square icon button", async () => {
   const choose = await openChecked(390, { userAgent: "Mozilla/5.0 (X11; Linux)", platform: "Linux" }, {
     status: "choose",
     os: "linux",
@@ -85,8 +85,12 @@ test("on a phone each build to pick and the releases button take the full width"
 
   const none = await openChecked(390, ANDROID, { status: "unavailable", reason: "not_published", os: "android" });
   await none.app.waitUntil(() => Boolean(none.frames()["button:settings-update-open-releases"] && none.frames().release));
+  // An icon button (the arrow, named "Open releases"): square, at the start, its label not drawn.
   const button = none.frames()["button:settings-update-open-releases"];
-  expect(near(button.x, none.frames().release.x) && near(button.w, none.frames().release.w)).toBe(true);
+  expect(near(button.x, none.frames().release.x)).toBe(true);
+  expect({ w: button.w, h: button.h }).toEqual({ w: SM_HEIGHT, h: SM_HEIGHT });
+  expect(none.app.texts()).not.toContain("Open releases");
+  expect(none.app.count("label:Open releases")).toBe(1);
 });
 
 test("on a desktop screen the download keeps its own size beside the release notes", async () => {

@@ -10,7 +10,7 @@ import { CONSOLE_LOCAL_ENDPOINT_REF, endpointDisplayItem } from "../../lib/core/
 import { pushNotice } from "../../lib/core/notices.js";
 import { checkDesktopUpdate, copyText, downloadTarget, openExternal, origin } from "../../lib/platform";
 import { type DownloadFile, type DownloadTarget, downloadChoice, downloadQuery, systemName, UNKNOWN_TARGET } from "../../lib/downloadTarget";
-import { Button, Icon, Markdown } from "../ui";
+import { Button, Markdown } from "../ui";
 import { isMobile } from "../../lib/shell";
 import { SettingRow, SettingsCard, SettingSwitch } from "../settings-page/parts";
 import { SettingSelect } from "./SettingFields";
@@ -69,7 +69,7 @@ export function SettingsAppPanel() {
                 </Text>
               </View>
               <If when={mode() === "waiting"}>
-                <Button variant="primary" size="xs" class={isMobile() ? "self-stretch" : ""} icon="PhDownloadSimple" label={t("settings_app_install")} disabled />
+                <Button variant="primary" size="xs" icon="PhDownloadSimple" label={t("settings_app_install")} disabled />
               </If>
             </View>
           )}
@@ -132,8 +132,6 @@ export function releaseNotesSource(notes: unknown) {
 
 const Row = SettingRow;
 
-/** A row's control (`.settings-console-control`): at least 180pt, full width on phones. */
-const control = () => (isMobile() ? "self-stretch" : "min-w-[180px]");
 
 export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
   const loading = signal(false);
@@ -384,7 +382,6 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
       ? (event: Parameters<typeof boundsFrame>[0]) => parts.report(`button:${testID}`, downloadsNode, () => boundsFrame(event))
       : undefined;
 
-  // On phones the downloads take the card's width, and a long label wraps rather than overflows.
   function downloadButton(file: DownloadFile | null) {
     if (!file) {
       return (
@@ -392,19 +389,19 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
           variant="outlined"
           icon="PhArrowUpRight"
           label={t("settings_update_open_releases")}
-          block={isMobile()}
-          wrap={isMobile()}
           onPress={openReleases}
           onLayout={probeButton("settings-update-open-releases")}
           testID="settings-update-open-releases"
         />
       );
     }
+    // A download is a text button, without a glyph: its label says which file it is (the system
+    // and build it is for), which is what the reader checks before taking it, and what tells one
+    // of several from the others. On phones it takes the card's width and a long label wraps.
     const testID = choice().kind === "choose" ? `settings-update-download-${file.os}-${file.arch}` : "settings-update-download";
     return (
       <Button
         variant="outlined"
-        icon="PhCloudArrowDown"
         label={fileLabel(file)}
         block={isMobile()}
         wrap={isMobile()}
@@ -460,7 +457,6 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
           <Button
             variant="outlined"
             size="md"
-            class={control()}
             icon="PhArrowClockwise"
             label={t("settings_update_check_action")}
             loading={checking()}
@@ -477,26 +473,29 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
                 <If when={releaseDate()}>
                   <Text class="text-xs text-muted-foreground">{releaseDate()}</Text>
                 </If>
-                <Button variant="plain" size="xxs" label={t("settings_update_all_releases")} onPress={openReleases}>
-                  <Icon name="PhArrowUpRight" size={12} color="subtle" />
-                </Button>
+                <Button variant="plain" size="xxs" icon="PhArrowUpRight" label={t("settings_update_all_releases")} onPress={openReleases} testID="settings-update-all-releases" />
               </View>
               <If when={notes()} else={<Text class="text-xs text-muted-foreground">{t("settings_desktop_update_changelog_empty")}</Text>}>
                 <Markdown source={notes()} class="text-xs" />
               </If>
               <If when={checksum()}>
-                <Button
-                  variant="plain"
-                  size="xxs"
-                  class="-ml-2"
-                  title={checksum()}
-                  onPress={() => void copyChecksum()}
-                  testID="settings-update-checksum"
-                >
+                {/* The checksum is read as text; the button beside it copies it. */}
+                <View class="flex-row items-center gap-1.5">
                   <Text class="text-xs text-subtle">SHA256</Text>
-                  <Text class="font-mono text-xs text-foreground">{checksumShort()}</Text>
-                  <Icon name={checksumCopied() ? "PhCheckCircle" : "PhCopy"} size={12} color="subtle" />
-                </Button>
+                  <Text class="font-mono text-xs text-foreground" testID="settings-update-checksum-value">
+                    {checksumShort()}
+                  </Text>
+                  <Button
+                    variant="plain"
+                    size="xxs"
+                    icon={checksumCopied() ? "PhCheckCircle" : "PhCopy"}
+                    label={t("action_copy")}
+                    title={checksum()}
+                    accessibilityLabel={`${t("action_copy")} SHA256`}
+                    onPress={() => void copyChecksum()}
+                    testID="settings-update-checksum"
+                  />
+                </View>
               </If>
             </View>
             <View

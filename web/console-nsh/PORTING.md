@@ -145,6 +145,11 @@ Headless tests prove behaviour, not the look.
 - nsh/base's indeterminate `Progress` neither sizes nor moves its indicator: left alone it fills the
   track and stands still (a dash). `Spinner` and `LoadingLine` (ui.tsx) animate their own segment.
   A loading `Button` draws the ui-kit's moving stripe over itself, not a spinner beside its label.
+- A button shows text or a glyph, never both: `Button` given an `icon` is a square icon button and
+  its `label` is its accessible name and tooltip, not drawn (docs/console/ui-components.md). In a
+  test, a bare selector (`app.press("Save")`) still finds it by that name, so it does not show
+  whether the label is drawn: read `app.texts()` for that; a tooltip's text is in `app.texts()`
+  about half a second after `app.hover`.
 - nsh/base's `Button` drops the `tooltip` prop: a button with a tooltip is `TipButton` (ui.tsx),
   which puts the tooltip on a view around it and gives that view the button's placement classes
   and `onLayout`.

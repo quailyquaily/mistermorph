@@ -102,8 +102,12 @@ test("Updates: shows the version, finds a release, opens this device's download 
   await app.press("id:settings-update-download");
   expect(app.openedUrls()).toContain("https://downloads.example/morph-1.0.0.dmg");
   expect(app.openedUrls()).not.toContain(SERVER_ASSET.asset_url);
-  await app.press("All releases");
+  // An icon button, named by its former label; the checksum is text beside its copy button.
+  expect(app.texts()).not.toContain("All releases");
+  await app.press("label:All releases");
   expect(app.openedUrls()).toContain("https://mistermorph.com/releases/?channel=community");
+  expect(app.texts()).toContain("SHA256");
+  expect(app.shows("id:settings-update-checksum-value")).toBe(true);
   await app.press("id:settings-update-checksum");
   await app.waitFor("Checksum copied.");
   expect(app.clipboard()).toBe("sha256:aaaaaaaaaaaabbbbbbbbbbbbccccccccdddddddd");

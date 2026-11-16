@@ -76,7 +76,7 @@ test("a path is typed, and Browse fills it from the folder picker", async () => 
   await app.waitFor("id:path");
   await app.type("id:path", "/tmp");
   await app.waitUntil(() => out(app, "path") === "/tmp");
-  await app.press("text:Browse");
+  await app.press("label:Browse");
   await app.waitUntil(() => out(app, "path") === "/home/me/logs");
 });
 
@@ -88,8 +88,8 @@ test("a path whose folder picker fails says so", async () => {
       },
     },
   });
-  await app.waitFor("text:Browse");
-  await app.press("text:Browse");
+  await app.waitFor("label:Browse");
+  await app.press("label:Browse");
   await app.waitFor("text:no picker here");
 });
 
@@ -115,7 +115,7 @@ test("list rows edit, add and remove values", async () => {
   expect(app.value("label:Paths: value 1")).toBe("~/.ssh");
   await app.type("label:Paths: value 2", "/x");
   await app.waitUntil(() => out(app, "rows-list") === "~/.ssh\n/etc/x");
-  await app.press("text:Add path");
+  await app.press("label:Add path");
   await app.type("label:Paths: value 3", "/var");
   await app.waitUntil(() => out(app, "rows-list") === "~/.ssh\n/etc/x\n/var");
   await app.press("id:rows-list >> label:Remove row 1");
@@ -141,8 +141,8 @@ test("identity rows pick their platform from the list", async () => {
 
 test("a pattern row says when its expression is not valid", async () => {
   const { app } = await openFixture("/fields");
-  await app.waitFor("text:Add pattern");
-  await app.press("text:Add pattern");
+  await app.waitFor("label:Add pattern");
+  await app.press("label:Add pattern");
   await app.type("label:Patterns: Name 1", "card");
   await app.type("label:Patterns: Regular expression 1", "([");
   await app.waitFor("text:Not a valid regular expression.");
