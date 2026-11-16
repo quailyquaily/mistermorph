@@ -1047,6 +1047,9 @@ export function DropdownMenu(props: {
   /** What the menu is of, over its rows on phones (the paper's title, as More's) and for screen readers there. */
   label?: string;
   class?: string;
+  /** On phones, what the paper's test ids start with (`<testID>-popup`, then `-list`,
+   *  `-option-<id>`, `-highlighted-<id>` round the highlighted row). */
+  testID?: string;
 }) {
   const shown = signal(false);
   const isOpen = () => (props.open ?? shown()) && !props.disabled;
@@ -1082,6 +1085,7 @@ export function DropdownMenu(props: {
       label={props.label}
       role="menu"
       items={rows()}
+      partID={props.testID ? `${props.testID}-popup` : undefined}
       onChoose={(id) => props.items.find((item) => item.id === id)?.onSelect?.()}
     />
     <Menu

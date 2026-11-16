@@ -15,6 +15,7 @@ export function LanguageSelector(props: { class?: string }) {
   return (
     <DropdownMenu
       align="center"
+      testID="language-menu"
       trigger={
         <View role="button" accessibilityLabel={current().label} class={`flex-row items-center gap-1.5 rounded-(--radius) px-2 py-1 hover:bg-hover ${props.class ?? ""}`}>
           <Icon name="PhGlobe" size={14} color="muted-foreground" />

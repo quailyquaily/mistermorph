@@ -947,7 +947,7 @@ export function ContactsPage(props: {
               <Button variant="plain" size="xs" iconOnly title={t("contacts_action_edit_yaml")} onPress={() => void startEdit()} testID="contact-edit">
                 <Icon name="PhPencilSimple" size={15} color="subtle" />
               </Button>
-              <DropdownMenu items={contactMenu()} disabled={deleting()} trigger={<MoreTrigger label={t("todo_action_more")} testID="contact-actions" />} />
+              <DropdownMenu items={contactMenu()} testID="contact-actions" disabled={deleting()} trigger={<MoreTrigger label={t("todo_action_more")} testID="contact-actions" />} />
             </If>
             <If when={!isMobile()}>
               <CircleButton

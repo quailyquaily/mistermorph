@@ -23,6 +23,8 @@
 //
 // Keys: the filter takes the focus as it opens; Up and Down move the highlight (from the filter
 // too) over the rows that are not disabled, the footer's included, Enter picks it, Escape closes.
+// A picker opens with its chosen row highlighted; a menu of actions with none (nothing in it is
+// chosen): the first Down or Up, or the pointer over a row, gives it one.
 //
 // The popup is never wider than the window less its margins, and the tail stays off the popup's
 // rounded corners (a trigger near the window's edge: the tail leans to the popup's side of it).
@@ -267,6 +269,8 @@ export function PopoverPicker(props: {
   // On phones the bubble has no trigger to stand beside with room for its list: the same rows are
   // on the shared floating paper (design/mobile-popups.md), which the trigger opens.
   const sheet = () => props.sheet ?? mobilePopups();
+  // Without a value its rows are commands, not choices: a menu to screen readers too.
+  const role = () => (props.value === undefined ? "menu" : "listbox");
   const sheetPicker = () => (
     <>
       <View
@@ -285,6 +289,7 @@ export function PopoverPicker(props: {
         items={props.items}
         footer={props.footer}
         value={props.value}
+        role={role()}
         onChoose={(value) => props.onChange(value)}
         filterPlaceholder={props.filterPlaceholder}
         emptyText={props.emptyText}
@@ -346,6 +351,7 @@ export function PopoverPicker(props: {
           footer={props.footer}
           rowClass={props.rowClass}
           maxHeight={placement().maxHeight}
+          role={role()}
           testID={part("list")}
           part={part}
           inset={LIST_INSET}

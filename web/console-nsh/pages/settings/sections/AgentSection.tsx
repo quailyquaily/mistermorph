@@ -75,6 +75,7 @@ export function AgentSection(props: { s: SettingsStore }) {
             disabled={busy()}
             trigger={<MenuIconTrigger label={t("todo_action_more")} testID="settings-llm-menu" />}
             items={s.llmActionMenuItems()}
+            testID="settings-llm-menu"
           />
         }
       >

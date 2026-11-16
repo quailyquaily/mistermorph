@@ -734,7 +734,7 @@ export function SkillsPage() {
                     testID="skill-detail"
                     title={skill().name}
                     class={isMobile() ? "mx-3 mt-2 mb-4" : "mb-2 mr-2 mt-2"}
-                    actions={<DropdownMenu items={skillMenu()} trigger={<MoreTrigger label={t("skills_more")} testID="skill-actions" />} />}
+                    actions={<DropdownMenu items={skillMenu()} testID="skill-actions" trigger={<MoreTrigger label={t("skills_more")} testID="skill-actions" />} />}
                   >
                     <If when={skill().description}>
                       <View selectable>
