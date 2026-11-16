@@ -1,7 +1,8 @@
 // One message of the conversation (the Vue console's ChatHistoryItem): a person's message with its
 // files, or the agent's reply with what it did on the way (status card, workers, step messages,
 // received files, questions, password requests, Agent Link messages), its reply text or the wait
-// before it, an approval it asks for, and copy. The plan, progress, reasoning and workers are
+// before it, an approval it asks for, and copy. A row can also stand for a TODO item's runs that
+// found nothing to do, folded into one line (ChatQuietRuns). The plan, progress, reasoning and workers are
 // compact entry points only: their details open in the temporary panel beside the conversation.
 //
 // It is a List row: it is made once per cell and shows whatever item the cell holds now, so every
@@ -28,9 +29,12 @@ import { ICONS } from "../icons";
 import { Button, Icon, StatusMark, Tip, TipButton } from "../ui";
 import { approvalParameterEntries, skillInstallApproval } from "../../lib/core/chat-approvals.js";
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord, taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
+import { QUIET_RUNS_ROLE } from "../../lib/core/chat-quiet-runs.js";
 import { activityDetailKey, activityDetailWorkerID, type ActivityDetailRef } from "./activityDetail";
 import type { ArtifactPreviews } from "./ArtifactPreviewCard";
 import { ChatAgentLinkExchange } from "./ChatAgentLinkExchange";
+import { ChatNoticeLine } from "./ChatNoticeLine";
+import { ChatQuietRuns } from "./ChatQuietRuns";
 import { ChatElevationCard, type ElevationAnswer, type ElevationState } from "./ChatElevationCard";
 import { ChatQuestionCard, type QuestionAnswer, type QuestionState } from "./ChatQuestionCard";
 import { ChatRichContent } from "./ChatRichContent";
@@ -248,6 +252,7 @@ export function ChatHistoryItem(props: {
   const fileFrames = new Map<number, PartFrame>();
   const role = () => roleOf(item());
   const isAgent = () => role() === "agent";
+  const quietRuns = () => role() === QUIET_RUNS_ROLE;
   const contextCompact = () => String(item()?.presentation || "").trim().toLowerCase() === "context-compact";
   const status = () => normalizeTaskStatus(item()?.status);
 
@@ -598,13 +603,25 @@ export function ChatHistoryItem(props: {
         </View>
       </If>
       <If
-        when={contextCompact()}
-        else={<If when={isAgent()} else={messageBody()}>{agentBody()}</If>}
+        when={quietRuns()}
+        else={
+          <If
+            when={contextCompact()}
+            else={<If when={isAgent()} else={messageBody()}>{agentBody()}</If>}
+          >
+            <ChatNoticeLine
+              state={status() === "failed" ? "error" : isTerminalStatus(status()) ? "on" : "running"}
+              text={String(item()?.text ?? "")}
+              testID="chat-context-notice"
+            />
+          </If>
+        }
       >
-        <View class="flex-row items-center gap-2 self-center" role="text" testID="chat-context-notice">
-          <StatusMark state={status() === "failed" ? "error" : isTerminalStatus(status()) ? "on" : "running"} />
-          <Text class="font-mono text-xs text-subtle">{String(item()?.text ?? "")}</Text>
-        </View>
+        <ChatQuietRuns
+          group={item()}
+          folds={ctx.folds}
+          renderMessage={(message) => <ChatHistoryItem item={message() as HistoryItem} ctx={ctx} />}
+        />
       </If>
     </View>
   );

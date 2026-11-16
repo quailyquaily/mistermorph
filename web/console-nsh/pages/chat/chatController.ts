@@ -50,6 +50,7 @@ import {
   taskElevations,
   taskInsights,
   taskListHistoryItems,
+  taskOutcome,
   taskPlan,
   taskQuestions,
   taskRawJSON,
@@ -2227,6 +2228,7 @@ export function createChatController() {
         approvalBusy: false,
         approvalError: "",
         status,
+        outcome: taskOutcome(detail),
         text: taskAgentText(detail, t, { agentName: untracked(activeAgentName), pendingSeed, pendingText: preservePendingText ? existing?.text : "" }),
         // Still the polling hint, unless the stream has already shown words.
         awaiting: taskAwaitingReply(detail) && existing?.awaiting !== false,

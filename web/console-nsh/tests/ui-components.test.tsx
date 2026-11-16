@@ -292,6 +292,47 @@ test("the controls work on local state, the overlays open and close, and nothing
   expect(lastLocation(app)).toBe(PATH);
 });
 
+test("the quiet runs example folds and opens: a line per group, a row per run, a run in full in place", async () => {
+  const { app, calls } = await openConsole({ location: PATH });
+  await app.waitFor("id:ui-components-page");
+  const loaded = calls.length;
+  await find(app, "ChatQuietRuns");
+  // Three groups: eight runs and one run, both folded, and three runs open with one in full.
+  expect(app.count("id:uig-demo-ChatQuietRuns >> id:chat-quiet-runs-line")).toBe(3);
+  expect(app.shows("id:uig-quiet-many >> text:8 runs, nothing to do")).toBe(true);
+  expect(app.shows("id:uig-quiet-one >> text:1 run, nothing to do")).toBe(true);
+  expect(app.shows("id:uig-quiet-open >> text:3 runs, nothing to do")).toBe(true);
+  expect(app.count("id:uig-quiet-many >> id:chat-quiet-run")).toBe(0);
+  expect(app.count("id:uig-quiet-one >> id:chat-quiet-run")).toBe(0);
+  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run")).toBe(3);
+  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run-full")).toBe(1);
+  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run-full >> id:chat-user-bubble")).toBe(1);
+  // The folded group opens to a row per run, without the task's message, and folds again.
+  await app.press("id:uig-quiet-many >> id:chat-quiet-runs-line");
+  await app.waitUntil(() => app.count("id:uig-quiet-many >> id:chat-quiet-run") === 8);
+  expect(app.count("id:uig-quiet-many >> id:chat-user-bubble")).toBe(0);
+  expect(app.count("id:uig-quiet-many >> id:chat-quiet-run-time")).toBe(8);
+  // A row shows its run in full under it; the other groups are as they were.
+  await app.press("id:uig-quiet-many >> id:chat-quiet-run >> nth=0");
+  await app.waitFor("id:uig-quiet-many >> id:chat-quiet-run-full");
+  expect(app.count("id:uig-quiet-many >> id:chat-quiet-run-full >> id:chat-item-agent")).toBe(1);
+  expect(app.count("id:uig-quiet-one >> id:chat-quiet-run")).toBe(0);
+  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run-full")).toBe(1);
+  await app.press("id:uig-quiet-many >> id:chat-quiet-runs-line");
+  await app.waitUntil(() => app.count("id:uig-quiet-many >> id:chat-quiet-run") === 0);
+  // The line by itself: the context notice's row, plain and as a fold's head.
+  await find(app, "ChatNoticeLine");
+  expect(app.shows("id:uig-demo-ChatNoticeLine >> text:Context compacted. Earlier messages were summarized.")).toBe(true);
+  await app.press("id:uig-notice-fold");
+  await app.waitFor("text:Last local action: ChatNoticeLine: open (1 so far)");
+  // In another language the line is the Console's own string.
+  await app.press("id:uig-language >> label:中文");
+  await find(app, "ChatQuietRuns");
+  await app.waitFor("id:uig-quiet-many >> text:8 次运行，无事可做");
+  expect(afterLoad(calls, loaded)).toEqual([]);
+  expect(writes(calls)).toEqual([]);
+});
+
 test("on a phone the gallery is one column inside the window, and its popups are the phone's sheets", async () => {
   const { app, calls } = await openConsole({ location: PATH, platform: "android" });
   await app.waitFor("id:ui-components-page");

@@ -168,6 +168,13 @@ function markdownList(items) {
   return items.map((item) => `- ${item.trim()}`).join("\n");
 }
 
+// What the runtime's check said a scheduled TODO run came to: "result", "nothing" or "problem",
+// or "" for a run that was not checked.
+function taskOutcome(task) {
+  const outcome = String(task?.result?.outcome || "").trim();
+  return ["result", "nothing", "problem"].includes(outcome) ? outcome : "";
+}
+
 function taskOutputText(task) {
   const finalOutput = task?.result?.final?.output;
   if (typeof finalOutput === "string") {
@@ -606,6 +613,7 @@ function taskHistoryItems(task, t, options = {}) {
       approvalBusy: false,
       approvalError: "",
       status: normalizeTaskStatus(task?.status),
+      outcome: taskOutcome(task),
       timeText: historyTimeLabel(task?.finished_at || task?.started_at || task?.created_at, locale, now),
       durationText: taskDurationLabel(task, now),
       durationVisible: false,
@@ -803,6 +811,7 @@ export {
   taskElevations,
   taskInsights,
   taskListHistoryItems,
+  taskOutcome,
   taskPlan,
   taskQuestions,
   taskRawJSON,
