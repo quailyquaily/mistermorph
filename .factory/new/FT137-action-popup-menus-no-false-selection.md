@@ -15,3 +15,12 @@ Scope and acceptance:
 - Related: FT136 covers the composer plus-menu selection and popup sizing; this request extends the action-versus-selection fix to other popup menus without duplicating its scroll-sizing work.
 
 Requested status: new. Investigation and implementation are pending.
+
+## factory · 2026-11-16 18:21
+
+Owner clarification:
+> Check all popups. If there are similar issues, fix them together in FT137.
+
+- Inspect all popup menus and pickers across the UI, on mobile and desktop, not only Settings → Models or known action menus.
+- Fix every instance of the same false-selection issue found during that inspection as part of this item. Classify each popup by whether it represents actions or a genuine selection; preserve valid selected-state indicators and accessible focus feedback.
+- Record the inspected popup locations and findings, and add regression coverage for affected popup types. Coordinate overlapping composer fixes with FT136 rather than duplicating them.
