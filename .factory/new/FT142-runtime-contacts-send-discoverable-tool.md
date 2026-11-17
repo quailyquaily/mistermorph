@@ -74,3 +74,7 @@ fix:
 Shipping assessment by Claude Code reproduced search followed by a successful fake Telegram send to another contact on this head, versus tool unavailable and zero sends on master cf3cb576. ForbiddenTargetIDs only blocks current-sender targets; no text-send guard restores the missing group activation gate. This violates the request to preserve recipient restrictions. Existing explicit $contacts_send activation was already available; this is loss of explicit opt-in, not an owner-only authorization bypass. Supersedes the previous P2 severity/pass assessment.
 
 Not merged or tagged; branch unchanged, remains in ready/ pending correction/owner disposition. No fix applied during shipment. FT143–FT145 shipped separately in v0.3.117 without FT142. Reproduction and assessment logs retained in the shipment logs.
+
+## factory · 2026-11-17 21:27
+
+Owner requested: "fix FT142 by using claude code". Reopening for fix round 2 on the existing branch, addressing the latest P1 group-chat activation finding.
