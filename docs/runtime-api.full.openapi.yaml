@@ -286,6 +286,63 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /tasks/{task_id}/replace:
+    post:
+      operationId: replaceTask
+      tags:
+      - Tasks
+      summary: Edit a sent message and run the conversation again from it
+      description: 'Console: replaces the person''s message task_id in topic_id with the new text. The
+        message and every later task of the topic are removed, in the stored history and in every later
+        prompt, and the new text runs as a new task from the conversation before it (a replacement, not
+        a branch). The message''s file references go with the new text. One journal event records the
+        replacement, so a refused or failed request leaves the history as it was. Refused while any task
+        of the topic is queued, running or pending (409), for a message or text that is a runtime command
+        (400), in an Agent Link, TODO item or Awareness topic (400), and for a message that is not (or
+        no longer) in the topic (404). A runtime without message editing answers 404 for the route.'
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceTaskRequest'
+            example:
+              task: What do foxes eat?
+              topic_id: topic-example
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplaceTaskResponse'
+              example:
+                id: task-new
+                status: queued
+                topic_id: topic-example
+                replaced_task_id: task-edited
+                removed_task_ids:
+                - task-later
+                - task-edited
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /topics:
     get:
       operationId: listTopics
@@ -4994,6 +5051,53 @@ components:
       - id
       - status
       x-source: internal/daemonruntime/types.go:SubmitTaskResponse
+    ReplaceTaskRequest:
+      type: object
+      properties:
+        task:
+          type: string
+          minLength: 1
+          description: The edited message's new text (nonblank, not a runtime command).
+        topic_id:
+          type: string
+          minLength: 1
+          description: The topic of the edited message.
+        model:
+          type: string
+        llm_profile:
+          type: string
+        timeout:
+          type: string
+        trigger:
+          $ref: '#/components/schemas/TaskTrigger'
+      required:
+      - task
+      - topic_id
+      x-source: internal/daemonruntime/types.go:ReplaceTaskRequest
+    ReplaceTaskResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The task that runs the edited message.
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        topic_id:
+          type: string
+        replaced_task_id:
+          type: string
+        removed_task_ids:
+          type: array
+          items:
+            type: string
+          description: The removed tasks, newest first, the edited message's own included.
+      required:
+      - id
+      - status
+      - topic_id
+      - replaced_task_id
+      - removed_task_ids
+      x-source: internal/daemonruntime/types.go:ReplaceTaskResponse
     StopTaskResponse:
       type: object
       properties:
