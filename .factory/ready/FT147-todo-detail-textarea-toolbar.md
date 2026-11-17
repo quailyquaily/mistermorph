@@ -31,3 +31,12 @@ Manual UI: coder reports 32 Chrome checks passing on desktop and phone viewport 
 Not checked/limits: real Android, desktop application, Safari/Firefox, undo grouping and screen-reader operation were not checked. Web input accessible name currently comes from its placeholder rather than the wrapper label (existing nsh limitation). Phone picker may briefly show keyboard; phone cancel focus was inconsistent, without content changes. Native mobile keyboard behavior remains unchecked.
 Installs: none; no manifest or lockfile changes.
 Move: new/ → review/. No deployment or base merge.
+
+## factory · review · 2026-11-18 00:53
+head: 0ba56f2fca768cbb98399c56c0005db4fafbfb2e
+verdict: pass
+Review: Claude Code reviewed origin/master...HEAD, all 9 changed files and meaningful hunks. No findings. Branch merges cleanly with current master (77ebe88a).
+Validation: configured gofmt/vet/go test gate passed; nsh check passed; Console scripts/test.sh passed (137 files, 0 failed, 273 seconds). contacts.test.tsx failed during concurrency and passed the script's isolated retry. Manager verified reviewed HEAD and clean worktree after the review.
+Installs: none; existing pinned tools and cached TypeScript reused; no manifest changes.
+Limits: review did not repeat browser/manual platform checks. Headless tests cannot prove actual host caret restoration after picker close; build reported Chrome desktop/phone-viewport checks. Native Android keyboard, desktop application, Safari/Firefox, screen readers and undo grouping remain unchecked. Phone keyboard may briefly appear before picker; mobile autocorrect and cancel focus remain manual-check risks, not confirmed defects.
+Move: review/ → ready/. No code changes, deployment or base merge.
