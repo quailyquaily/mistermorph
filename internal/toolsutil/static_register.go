@@ -37,6 +37,13 @@ const (
 	BuiltinCoder         = "coder"
 )
 
+// SearchableContactsSendTrigger is the trigger an ordinary run with tool search on passes to
+// RegisterStaticTools: when tools.contacts_send.enabled is true, contacts_send is registered as a
+// deferred tool, hidden until tool_search finds it. Awareness and an explicit $contacts_send
+// still register the visible tool instead. Unlike the explicit trigger, it never registers a
+// disabled contacts_send. It is not a tool name, so a task's $ reference cannot set it.
+const SearchableContactsSendTrigger = "contacts_send/searchable"
+
 var builtinToolNameSet = map[string]struct{}{
 	BuiltinReadFile:      {},
 	BuiltinWriteFile:     {},
@@ -466,7 +473,12 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 	}
 
 	contactsSendEnabled := cfg.Common.Awareness && cfg.ContactsSend.Enabled
-	if isSelected(BuiltinContactsSend) && isEnabled(BuiltinContactsSend, contactsSendEnabled) {
-		_ = reg.Replace(builtin.NewContactsSendTool(contactSendOpts))
+	if isSelected(BuiltinContactsSend) {
+		switch {
+		case isEnabled(BuiltinContactsSend, contactsSendEnabled):
+			_ = reg.Replace(builtin.NewContactsSendTool(contactSendOpts))
+		case cfg.ContactsSend.Enabled && triggers[SearchableContactsSendTrigger]:
+			_ = reg.Replace(builtin.NewDeferredContactsSendTool(contactSendOpts))
+		}
 	}
 }

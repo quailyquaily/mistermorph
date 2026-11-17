@@ -900,3 +900,23 @@ func assertUUIDv7(t *testing.T, value string) {
 		t.Fatalf("uuid version mismatch: got %d want %d", parsed.Version(), 7)
 	}
 }
+
+func TestDeferredContactsSendToolIsContactsSend(t *testing.T) {
+	opts := ContactsSendToolOptions{Enabled: true}
+	visible := NewContactsSendTool(opts)
+	deferred := NewDeferredContactsSendTool(opts)
+	if visible.Deferred() || !deferred.Deferred() {
+		t.Fatalf("Deferred() = %v / %v, want false for NewContactsSendTool and true for NewDeferredContactsSendTool", visible.Deferred(), deferred.Deferred())
+	}
+	if deferred.Name() != "contacts_send" || deferred.Description() != visible.Description() || deferred.ParameterSchema() != visible.ParameterSchema() {
+		t.Fatal("the deferred contacts_send must be the same tool as the visible one")
+	}
+	for _, route := range []string{"Telegram", "Slack", "Discord", "Agent Link", "contacts_list", "outcome.accepted=false"} {
+		if !strings.Contains(deferred.Description(), route) {
+			t.Fatalf("description does not mention %q", route)
+		}
+	}
+	if _, err := NewDeferredContactsSendTool(ContactsSendToolOptions{}).Execute(context.Background(), map[string]any{"contact_id": "tg:1", "message_text": "hi"}); err == nil || !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("disabled deferred contacts_send error = %v", err)
+	}
+}
