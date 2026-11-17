@@ -91,3 +91,14 @@ Merged origin/master without conflicts (7d69b0b3). Fix commits: 66bcf705, 4c024f
 Validation: Claude Code passed the full gate, and manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with isolated HOME and TMPDIR. Worktree clean; no protected paths changed. Installs: none.
 Limitations: no live outbound messages; tests use local fake Telegram delivery and injected runtime dependencies. Public-post Bluesky/X behavior unchanged. No UI changes or visual checks. Review of this new head is pending; previous head's review is not valid for this head.
 Moved new/ → review/ for another review. Not merged into master or released.
+
+
+## factory · review · 2026-11-17 21:52
+head: 028e85eeef783acc76d079a6422a9e60eeaf4044
+verdict: fix
+fix:
+- [P1] internal/channelruntime/socialpost/runtime.go:363-371: public Bluesky/X mention tasks omit ContactsSendOptIn, so shared prepareRun automatically registers searchable contacts_send without explicit activation. Set the public-thread opt-in flag and add regression coverage. Example: a public mention from did:plc:stranger with no $contacts_send can search for contacts_send and deliver one accepted fake Telegram send to tg:1001 on this head; origin/master delivers zero. This violates the requirement to preserve existing explicit activation safeguards.
+
+Claude Code reviewed all 27 files in origin/master...HEAD, base b054491a; the six-channel group restriction fix holds, but the shared socialpost runtime remains exposed. No other verified findings. Required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (163 packages ok, zero failures), with isolated HOME/cache under TMPDIR; go.mod/go.sum and worktree unchanged. Reproduction used scratch copies and local fake delivery only, comparing this head against origin/master. Installs: none.
+Limits: no live outbound messaging or end-to-end guard approval resume. Console sources unchanged in reviewed range; UI checks not applicable.
+Moved review/ → new/ for fix round 3 (round 2 of max 3). Not merged into master or released.
