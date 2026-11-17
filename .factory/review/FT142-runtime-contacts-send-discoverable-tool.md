@@ -1,6 +1,6 @@
 ---
 branch: factory/FT142-runtime-contacts-send-discoverable-tool
-round: 1
+round: 2
 ---
 # Ordinary runtime: discoverable contacts send tool
 
@@ -78,3 +78,16 @@ Not merged or tagged; branch unchanged, remains in ready/ pending correction/own
 ## factory · 2026-11-17 21:27
 
 Owner requested: "fix FT142 by using claude code". Reopening for fix round 2 on the existing branch, addressing the latest P1 group-chat activation finding.
+
+## factory · plan · 2026-11-17 21:39
+
+Fix round 2: preserve each channel's existing group-chat explicit activation gate in shared deferred registration; keep direct-chat/Console discovery and explicit $contacts_send activation intact. Add actual task-entry regression coverage across Telegram, Slack, Discord, LINE, Lark and Mixin for unactivated group discovery/calls blocked with zero sends, explicit activation allowed, and direct-chat deferred discovery allowed. Use local fake delivery only; no UI changes or live sends.
+
+## factory · 2026-11-17 21:39
+
+Claude Code fixed the latest P1 by passing each channel's group restriction into shared run preparation as ContactsSendOptIn, suppressing automatic searchable registration when explicit activation is required. Existing explicit activation and channel triggers still work. Added cross-channel task-entry regression tests and English documentation; direct-chat and Console discovery remain covered.
+
+Merged origin/master without conflicts (7d69b0b3). Fix commits: 66bcf705, 4c024fcc, 028e85ee. Head: 028e85ee. Branch pushed.
+Validation: Claude Code passed the full gate, and manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with isolated HOME and TMPDIR. Worktree clean; no protected paths changed. Installs: none.
+Limitations: no live outbound messages; tests use local fake Telegram delivery and injected runtime dependencies. Public-post Bluesky/X behavior unchanged. No UI changes or visual checks. Review of this new head is pending; previous head's review is not valid for this head.
+Moved new/ → review/ for another review. Not merged into master or released.
