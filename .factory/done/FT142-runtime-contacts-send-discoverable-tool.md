@@ -142,3 +142,13 @@ Owner attention: awareness/heartbeat/cron contacts_send registration and deliver
 
 Limits: no live outbound sends, no end-to-end guard approval resume; awareness delivery assessed by code tracing, not an actual awareness-runtime send test. No Console UI sources changed, so UI checks were not applicable.
 Moved review/ → ready/ under the no-P0/P1 rule. Not merged into master or released.
+
+
+## factory · 2026-11-17 22:26
+
+Shipped on owner approval using Claude Code. Conflict-free no-ff merge: d3be936fcb3d8387cc05539489c34de8260c5c63. Release: v0.3.118. Remote master and peeled tag verified at 77ebe88a00e1ab8c3f0e816b68876c0b0f9677d8.
+
+Full gate passed: gofmt, go vet ./..., go test ./... (163 packages passed); nsh check; required parallel Console runner 136/136 files, zero retries; Console Node 288/288; Cloudflare Node 24/24; Android JVM 3 suites at 15/15 plus ShellInfoTest. No installs or manifest changes. No linked issues/PRs identified; branch retained (clean not configured).
+
+Retained acceptance-coverage gap: no awareness-runtime fake-delivery invocation test; registration/helper assertions and wiring tracing only. Group and public activation gates preserved.
+No live outbound messages or end-to-end guard resume validation. One pre-merge repro test used default Go caches accidentally; isolated rerun and all subsequent gates passed. Logs retained under ship/ship-20261117-2216/logs. Moved ready/ → done/.

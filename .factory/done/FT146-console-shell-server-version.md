@@ -57,3 +57,13 @@ Merged origin/master into the item branch, preserving Android file saving alongs
 Validation: manager independently passed the required Go formatting/vet/test gate after the merge. Claude Code read-only review passed the same gate, nsh check, and the required parallel Console test script (136 files, 0 failed, 248 seconds); focused search-index probe passed. Conflict-resolution validation also passed Android manifest tests (11/11) and script syntax. No installs reported.
 
 Not checked: Android JVM tests and Java compilation could not run without a JDK; no Android device/emulator, iOS build, desktop app run or live browser visual inspection. Review does not establish native runtime/build compatibility. APKs built without VERSION still report nsh's default package version; releases without an APK show the existing not-published note.
+
+
+## factory · 2026-11-17 22:26
+
+Shipped on owner approval using Claude Code. Conflict-free no-ff merge: 77ebe88a00e1ab8c3f0e816b68876c0b0f9677d8. Release: v0.3.118. Remote master and peeled tag verified at 77ebe88a00e1ab8c3f0e816b68876c0b0f9677d8.
+
+Full gate passed: gofmt, go vet ./..., go test ./... (163 packages passed); nsh check; required parallel Console runner 136/136 files, zero retries; Console Node 288/288; Cloudflare Node 24/24; Android JVM 3 suites at 15/15 plus ShellInfoTest. No installs or manifest changes. No linked issues/PRs identified; branch retained (clean not configured).
+
+Retained P3: browser Settings search indexes hidden Shell Version. Android JVM helpers passed, but no Android SDK compilation/APK or device, iOS, desktop or live visual validation.
+No live outbound messages or end-to-end guard resume validation. One pre-merge repro test used default Go caches accidentally; isolated rerun and all subsequent gates passed. Logs retained under ship/ship-20261117-2216/logs. Moved ready/ → done/.
