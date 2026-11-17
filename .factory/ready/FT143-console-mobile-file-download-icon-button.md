@@ -47,3 +47,13 @@ Installs: none; no dependency manifest changes.
 Checks: coder reports nsh check passed; required parallel Console script passed 133 files with 0 failed, plus affected tests rerun after final edit. Native Java suites passed, manifest tests passed 11/11. Manager independently ran the configured gofmt/vet/go test gate: passed.
 Android limitations: no real nsh 0.5.1 APK build verified. Java compilation and manifest/link/packaging checks used locally cached 0.4.0 runtime artifacts as a compatibility smoke check only; the resulting mixed-version APK was deleted and is not an installable deliverable. No device/emulator end-to-end save, cloud-provider save, or visual/screenshot check was performed. iOS remains explicitly unsupported.
 Review should inspect the native activity lifecycle, destination cancellation, failure cleanup, authenticated origin checks/redirect rejection and touch UI. This build does not claim verified on-device saving.
+
+## factory · review · 2026-11-17 19:55
+head: baa1869b2aaea578d0bce4fae2f457c79a0fe25c
+verdict: pass
+
+No findings. Claude Code reviewed all 20 changed files against origin/master...HEAD and the request/plan, including native activity lifecycle, picker cancellation and failure cleanup, authenticated origin checks and redirect refusal, capability detection, browser/desktop compatibility and icon accessibility/state.
+
+Validation: configured gofmt/vet/go test gate passed; nsh 0.5.1 check passed; required parallel Console test script passed 133 files, 0 failed (7 unrelated files passed the script's isolated reruns); Android host Java suites passed 15/15 each; Android manifest tests passed 11/11. Worktree stayed clean. Installs: none; no dependency manifest changes.
+
+Residual risks: Android-dependent classes and a real nsh 0.5.1 APK could not be compiled/built in this review because the Android SDK android.jar and nsh 0.5.1 AAR were unavailable. No device/emulator end-to-end save, cloud-provider destination or visual check. Real runtime manifest integration, storage-provider write-mode behavior and Android automatic gzip/length handling remain unverified platform details, not confirmed defects. iOS saving remains explicitly unsupported. Owner should verify a genuine 0.5.1 Android build and on-device saving before release.
