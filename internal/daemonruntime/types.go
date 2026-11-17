@@ -41,6 +41,30 @@ type SubmitTaskResponse struct {
 	SteerTargetTaskID string     `json:"steer_target_task_id,omitempty"`
 }
 
+// ReplaceTaskRequest edits the person's message TaskID of topic TopicID: Task is the new text,
+// which runs in place of the message and everything after it. The message's attached files go
+// with the new text; the other fields are a submission's (SubmitTaskRequest).
+type ReplaceTaskRequest struct {
+	TaskID     string       `json:"-"`
+	Task       string       `json:"task"`
+	TopicID    string       `json:"topic_id"`
+	Model      string       `json:"model,omitempty"`
+	LLMProfile string       `json:"llm_profile,omitempty"`
+	Timeout    string       `json:"timeout,omitempty"`
+	Trigger    *TaskTrigger `json:"trigger,omitempty"`
+}
+
+// ReplaceTaskResponse is the task that runs the edited message (ID), and the tasks the edit
+// dropped: the edited message's own (ReplacedTaskID) and every later one (RemovedTaskIDs, newest
+// first, the edited one included).
+type ReplaceTaskResponse struct {
+	ID             string     `json:"id"`
+	Status         TaskStatus `json:"status"`
+	TopicID        string     `json:"topic_id"`
+	ReplacedTaskID string     `json:"replaced_task_id"`
+	RemovedTaskIDs []string   `json:"removed_task_ids"`
+}
+
 type CreateTopicRequest struct {
 	Title string `json:"title,omitempty"`
 }

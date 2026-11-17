@@ -25,6 +25,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	createTopic := opts.CreateTopic
 	submit := opts.Submit
 	stop := opts.Stop
+	replace := opts.Replace
 	answerQuestion := opts.AnswerQuestion
 	awaitingAnswer := opts.AwaitingAnswer
 	liveResult := opts.LiveResult
@@ -208,6 +209,57 @@ func (routes *routeRegistration) registerTaskRoutes() {
 					return
 				}
 				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if strings.HasSuffix(suffix, "/replace") {
+			if replace == nil {
+				http.NotFound(w, r)
+				return
+			}
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			taskID := strings.TrimSpace(strings.TrimSuffix(suffix, "/replace"))
+			if taskID == "" || strings.Contains(taskID, "/") {
+				http.Error(w, "missing task_id", http.StatusBadRequest)
+				return
+			}
+			var req ReplaceTaskRequest
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			req.TaskID = taskID
+			req.Task = strings.TrimSpace(req.Task)
+			req.TopicID = strings.TrimSpace(req.TopicID)
+			if req.Task == "" {
+				http.Error(w, "missing task", http.StatusBadRequest)
+				return
+			}
+			if req.TopicID == "" {
+				http.Error(w, "missing topic_id", http.StatusBadRequest)
+				return
+			}
+			resp, err := replace(r.Context(), req)
+			if err != nil {
+				status := http.StatusServiceUnavailable
+				switch {
+				case errors.Is(err, ErrMessageNotFound), errors.Is(err, ErrTopicNotFound):
+					status = http.StatusNotFound
+				case errors.Is(err, ErrTopicRunning):
+					status = http.StatusConflict
+				default:
+					if _, ok := badRequestMessage(err); ok {
+						status = http.StatusBadRequest
+					}
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), status)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")

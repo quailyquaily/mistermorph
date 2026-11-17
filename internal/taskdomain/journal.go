@@ -15,6 +15,10 @@ const (
 
 	JournalTypeTaskUpsert = "task_upsert"
 	JournalTypeTaskUpdate = "task_update"
+	// JournalTypeTaskReplace records an edited message: in one event, the task that replaces the
+	// edited one (Task) and every task of the topic it drops, the edited one and all after it
+	// (RemovedTaskIDs). A reader that does not know the type skips the whole event.
+	JournalTypeTaskReplace = "task_replace"
 
 	JournalTypeTopicUpsert       = "topic_upsert"
 	JournalTypeTopicTitleUpdated = "topic_title_updated"
@@ -28,6 +32,8 @@ type JournalPayload struct {
 	Trigger *TaskTrigger `json:"trigger,omitempty"`
 	Task    *TaskInfo    `json:"task,omitempty"`
 	Topic   *TopicInfo   `json:"topic,omitempty"`
+	// RemovedTaskIDs are the tasks a task_replace event drops.
+	RemovedTaskIDs []string `json:"removed_task_ids,omitempty"`
 }
 
 func NewJournal(dir string, rotateMaxBytes int64) (*domainjournal.Journal, error) {
@@ -43,11 +49,26 @@ func NewJournal(dir string, rotateMaxBytes int64) (*domainjournal.Journal, error
 }
 
 func AppendJournalEvent(journal *domainjournal.Journal, target string, eventType string, now time.Time, trigger TaskTrigger, task *TaskInfo, topic *TopicInfo) (domainjournal.Cursor, error) {
+	return appendJournalEvent(journal, target, eventType, now, trigger, task, topic, nil)
+}
+
+// AppendTaskReplaceEvent records, as one event, task replacing the tasks named in removed
+// (JournalTypeTaskReplace): either all of it is written or none of it.
+func AppendTaskReplaceEvent(journal *domainjournal.Journal, target string, now time.Time, trigger TaskTrigger, task TaskInfo, topic *TopicInfo, removed []string) (domainjournal.Cursor, error) {
+	return appendJournalEvent(journal, target, JournalTypeTaskReplace, now, trigger, &task, topic, removed)
+}
+
+func appendJournalEvent(journal *domainjournal.Journal, target string, eventType string, now time.Time, trigger TaskTrigger, task *TaskInfo, topic *TopicInfo, removed []string) (domainjournal.Cursor, error) {
 	if journal == nil {
 		return domainjournal.Cursor{}, nil
 	}
 	target = strings.TrimSpace(target)
 	payload := JournalPayload{At: now.UTC(), Target: target}
+	for _, id := range removed {
+		if id = strings.TrimSpace(id); id != "" {
+			payload.RemovedTaskIDs = append(payload.RemovedTaskIDs, id)
+		}
+	}
 	if HasTaskTrigger(trigger) {
 		trigger = NormalizeTaskTrigger(trigger)
 		payload.Trigger = &trigger

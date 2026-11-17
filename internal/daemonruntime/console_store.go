@@ -32,6 +32,11 @@ var (
 	ErrTopicTitleChanged = errors.New("topic was renamed or deleted during generation")
 	ErrTopicTitleBusy    = errors.New("topic name generation is already in progress")
 	ErrTopicNotFound     = errors.New("topic not found")
+	// ErrMessageNotFound: the message an edit names is not (or no longer) in that topic, such as
+	// one an earlier edit already replaced.
+	ErrMessageNotFound = errors.New("message not found in this topic")
+	// ErrTopicRunning: a message of a topic is edited only while nothing in it runs or waits.
+	ErrTopicRunning = errors.New("a reply in this topic is still under way; wait for it to finish or stop it before editing a message")
 )
 
 type ConsoleFileStoreOptions struct {
@@ -296,6 +301,98 @@ func (s *ConsoleFileStore) UpsertWithTrigger(info TaskInfo, trigger TaskTrigger,
 		s.onTaskUpdate(previous, info, s.triggers[info.ID])
 	}
 	return nil
+}
+
+// ReplaceTopicTasks replaces the person's message targetID with the new task info, the same
+// topic's: the edited message and every task after it go, info comes in their place. It is one
+// journal event (taskdomain.JournalTypeTaskReplace), so a reload sees either the old conversation
+// or the edited one, never a part of each. Nothing changes when targetID is not in info's topic
+// (ErrMessageNotFound), when the topic is gone (ErrTopicNotFound), or while any task of the topic
+// is unfinished (ErrTopicRunning). It returns the dropped tasks' IDs, newest first.
+func (s *ConsoleFileStore) ReplaceTopicTasks(targetID string, info TaskInfo, trigger TaskTrigger) ([]string, error) {
+	if s == nil {
+		return nil, fmt.Errorf("console task store is nil")
+	}
+	targetID = strings.TrimSpace(targetID)
+	info = normalizeConsoleTaskInfo(info)
+	if targetID == "" || info.ID == "" || targetID == info.ID {
+		return nil, ErrMessageNotFound
+	}
+	now := time.Now().UTC()
+
+	unlock, err := s.lockShared()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+
+	info.TopicID = s.normalizeTopicIDLocked(info.TopicID)
+	topic, ok := s.topics[info.TopicID]
+	if !ok || topicDeleted(topic) {
+		return nil, ErrTopicNotFound
+	}
+	target, ok := s.items[targetID]
+	if !ok || strings.TrimSpace(target.TopicID) != info.TopicID {
+		return nil, ErrMessageNotFound
+	}
+	if _, exists := s.items[info.ID]; exists {
+		return nil, fmt.Errorf("task %q already exists", info.ID)
+	}
+	for _, id := range s.orderedIDsByTopic[info.TopicID] {
+		if activeConsoleTask(s.items[id]) {
+			return nil, ErrTopicRunning
+		}
+	}
+	// The topic's tasks newest first: the edited message and everything newer go.
+	removed := make([]string, 0, 4)
+	for _, id := range s.orderedIDsByTopic[info.TopicID] {
+		item := s.items[id]
+		if id != targetID && !taskComesBefore(item, target) {
+			continue
+		}
+		removed = append(removed, id)
+	}
+	effectiveTrigger := taskdomain.NormalizeTaskTrigger(trigger)
+	topic = nextConsoleTopic(topic, true, info.TopicID, "", now, true)
+	cursor, err := taskdomain.AppendTaskReplaceEvent(s.journal, s.target, now, effectiveTrigger, info, &topic, removed)
+	if err != nil {
+		return nil, err
+	}
+	s.applyTaskReplaceLocked(info, effectiveTrigger, removed)
+	s.topics[topic.ID] = topic
+	s.orderedTopicIDs = upsertOrderedTopicID(s.orderedTopicIDs, s.topics, topic.ID)
+	s.projectionCursor = cursor
+	s.persistTopicsProjectionLocked(now)
+	if s.onTaskUpdate != nil {
+		s.onTaskUpdate(TaskInfo{}, info, s.triggers[info.ID])
+	}
+	return removed, nil
+}
+
+// applyTaskReplaceLocked drops the removed tasks and records info, for ReplaceTopicTasks and for
+// the journal's task_replace events on replay.
+func (s *ConsoleFileStore) applyTaskReplaceLocked(info TaskInfo, trigger TaskTrigger, removed []string) {
+	for _, id := range removed {
+		previous, ok := s.items[id]
+		if !ok {
+			continue
+		}
+		delete(s.items, id)
+		delete(s.triggers, id)
+		s.orderedIDs = removeOrderedTaskID(s.orderedIDs, id)
+		topicID := strings.TrimSpace(previous.TopicID)
+		if ids := removeOrderedTaskID(s.orderedIDsByTopic[topicID], id); len(ids) > 0 {
+			s.orderedIDsByTopic[topicID] = ids
+		} else {
+			delete(s.orderedIDsByTopic, topicID)
+		}
+	}
+	previous, existed := s.items[info.ID]
+	s.items[info.ID] = info
+	s.updateTaskOrderLocked(previous, existed, info)
+	if taskdomain.HasTaskTrigger(trigger) {
+		s.triggers[info.ID] = taskdomain.NormalizeTaskTrigger(trigger)
+	}
 }
 
 func (s *ConsoleFileStore) Update(id string, fn func(*TaskInfo)) error {
@@ -1169,13 +1266,19 @@ func (s *ConsoleFileStore) replayJournalLocked(cursor domainjournal.Cursor) erro
 			if topic.ID != "" {
 				s.topics[topic.ID] = topic
 			}
-		case taskdomain.JournalTypeTaskUpsert, taskdomain.JournalTypeTaskUpdate:
+		case taskdomain.JournalTypeTaskUpsert, taskdomain.JournalTypeTaskUpdate, taskdomain.JournalTypeTaskReplace:
 			if payload.Task == nil {
 				return nil
 			}
 			info := normalizeConsoleTaskInfo(*payload.Task)
 			if info.ID == "" {
 				return nil
+			}
+			// An edited message: the tasks it replaced go first (ReplaceTopicTasks). The caller
+			// rebuilds the order once the replay is done.
+			for _, id := range payload.RemovedTaskIDs {
+				delete(s.items, strings.TrimSpace(id))
+				delete(s.triggers, strings.TrimSpace(id))
 			}
 			s.items[info.ID] = info
 			if payload.Trigger != nil && taskdomain.HasTaskTrigger(*payload.Trigger) {

@@ -1396,6 +1396,13 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 				generation.acquire()
 				return r.submitTaskWithGeneration(ctx, generation, req)
 			},
+			Replace: func(ctx context.Context, req daemonruntime.ReplaceTaskRequest) (daemonruntime.ReplaceTaskResponse, error) {
+				if generation == nil {
+					return daemonruntime.ReplaceTaskResponse{}, fmt.Errorf("console runtime generation is not initialized")
+				}
+				generation.acquire()
+				return r.replaceTaskWithGeneration(ctx, generation, req)
+			},
 			Stop:            r.stopTask,
 			AnswerQuestion:  r.answerQuestion,
 			AnswerElevation: r.answerElevation,
