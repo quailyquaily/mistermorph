@@ -45,3 +45,17 @@ Visual verification: coder verified equivalent styled Hello World HTML with work
 Installs: none; no manifest/dependency changes. Repository pins nsh 0.5.1, used despite stale board rule naming 0.5.0. Coder reported an accidental scratch directory outside the run directory, immediately relocated into run temporary storage. Initial branch push lacked credential request repository path; one retry with per-command credential.useHttpPath=true succeeded. No base/tag push or deployment.
 
 Moved new/ → review/. Owner should check the actual Android app preview, greeting button and fullscreen behavior.
+
+## factory · review · 2026-11-17 20:34
+head: c15bf085079d99171cfa585a3a5a3ec10b9ae0cd
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/ArtifactPreviewCard.tsx:225: fullscreen Retry clears entryURL/page, but a subsequent ticket error sets only error; frame renders an empty placeholder while the error/retry lives behind the dialog in the card. Verified phone-size reproduction: ticket succeeds → fullscreen → page failure → Retry → ticket fails with `invalid dir_name`; dialog remains with zero fullscreen-failed/loading/web nodes. Render ticket failures and Retry inside the fullscreen frame (or leave fullscreen on ticket failure), and add regression coverage.
+
+Validation: Claude Code reviewed origin/master...HEAD across all six changed files. No P0/P1 findings. Required gofmt/vet/go test gate passed (exit 0); nsh 0.5.1 check passed; required scripts/test.sh passed, 133 files and zero failures after built-in isolated retries for dialog-sheet/mobile-popup. Manager inspected logs and confirmed unchanged worktree. Root-relative native URL rejection and absolute console-origin resolution checked against nsh-core; authentication/path restrictions/server sandbox unchanged. Scratch phone-layout probes verified WebView sizing and the P2 error path.
+
+Residual risks: actual Android device/emulator and native desktop app not tested. Native WebView load-event delivery and native Image onLoad remain unverified; browser iframe HTTP errors retain server error pages. Owner should check real Android preview, greeting button, fullscreen and retry. P2 is non-blocking under factory rules, not a claim that every acceptance path is defect-free.
+
+Installs: no new tools or manifest/dependency changes; restored pinned Go modules. Coder disclosed default Go module cache use outside run TMPDIR; no external cache deletion attempted. nsh check restored its TypeScript helper into the throwaway HOME under run temporary storage.
+
+Moved review/ → ready/.
