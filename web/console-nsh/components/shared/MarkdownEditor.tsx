@@ -10,19 +10,24 @@
 // the last line, the 8pt over the caret the console's scroll bars take on the desktops) reaches the
 // view around the Editor, which places the caret where the rows would have (`editorPresses.ts`).
 //
+// `plainText` swaps the Editor for a regular textarea (a multiline `Input`): the source unstyled, no
+// Edit / Preview switch, the same toolbar. Its insertions keep the textarea's last selection
+// (`textInsert.ts`).
+//
 // Vue to nsh: `modelValue` is `value`, `update:modelValue` is `onChange(value)`, `ariaLabel` is
 // `accessibilityLabel`, the `toolbar` slot is the `toolbar` prop, the `height` CSS string may also be
 // points, and the exposed `insertAtCursor` comes through `editorRef`.
 import type { EditorDecoration, EditorRef, EditorSelection } from "nsh/base";
-import type { JSX } from "nsh";
+import type { InputRef, JSX } from "nsh";
 import { batch, effect, Image, platform, signal, Text, untracked, View } from "nsh";
-import { Button as BaseButton, Editor } from "nsh/base";
+import { Button as BaseButton, Editor, Input } from "nsh/base";
 import { activeChannelTab, channelTabs, itemsForChannelTab } from "../../lib/core/channel-tabs.js";
 import { endpointState, runtimeApiFetchForEndpoint, translate } from "../../lib/core/context.js";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import { Icon, Markdown, Modal, TextField, Tip, TipButton, type IconName } from "../ui";
 import { ContactAvatar } from "./ContactAvatar";
 import { createBesidePresses } from "./editorPresses";
+import { createTextareaInsert, insertIntoText } from "./textInsert";
 import discordLogo from "../../assets/images/channels/discord.svg";
 import larkLogo from "../../assets/images/channels/lark.svg";
 import lineLogo from "../../assets/images/channels/line.svg";
@@ -39,6 +44,12 @@ export interface MarkdownEditorApi {
   /** Types `text` at the caret (or the last caret, or the end); `spacing` adds a space on a side that touches text. */
   insertAtCursor(text: string, options?: { spacing?: boolean }): Promise<boolean>;
   focus(): void;
+  /**
+   * Called before a toolbar dialog opens: the textarea (`plainText`) takes the focus at its last
+   * selection, so the dialog gives it back there as it closes (`textInsert.ts`). Open the dialog once
+   * the promise settles: when the field has the focus, or after 200 ms. Nothing in the Editor.
+   */
+  holdCaret(): Promise<void> | void;
 }
 
 export interface MarkdownEditorProps {
@@ -52,8 +63,15 @@ export interface MarkdownEditorProps {
   /** Can be read and selected, not changed. */
   readOnly?: boolean;
   accessibilityLabel?: string;
-  /** Show the Edit / Preview switch (default true). */
+  /** Show the Edit / Preview switch (default true; never with `plainText`). */
   preview?: boolean;
+  /** A regular textarea in place of the highlighted Editor: the text as it is, no preview. */
+  plainText?: boolean;
+  /**
+   * Which document the value is (a TODO item's key): a new one drops the remembered caret even
+   * when its text is the same, so an insertion never lands at the last document's caret.
+   */
+  documentKey?: string | number;
   /** Controls at the start of the toolbar. */
   toolbar?: JSX.Element;
   editorRef?: (api: MarkdownEditorApi) => void;
@@ -92,35 +110,41 @@ function textPosition(text: string, offset: number) {
 
 export function MarkdownEditor(props: MarkdownEditorProps) {
   let editor: EditorRef | undefined;
+  let field: InputRef | undefined;
   const mode = signal<"edit" | "preview">("edit");
   const focused = signal(false);
+  // `holdCaret`s waiting for the textarea to have the focus.
+  let focusWaiters: (() => void)[] = [];
   // The last selections, so a toolbar press (which takes the focus) still inserts at the caret.
   let lastSelections: EditorSelection[] = [];
 
   const label = () => String(props.accessibilityLabel || "").trim() || "Markdown editor";
   const locked = () => Boolean(props.disabled || props.readOnly);
-  const showTabs = () => props.preview !== false;
+  const plain = () => Boolean(props.plainText);
+  const showTabs = () => !plain() && props.preview !== false;
+
+  // The textarea's insertions (`plainText`): its last selection, and the focus and caret after.
+  const textarea = createTextareaInsert({
+    value: () => String(untracked(() => props.value) ?? ""),
+    onChange: (value) => props.onChange?.(value),
+    locked: () => untracked(locked),
+    field: () => field,
+  });
 
   const api: MarkdownEditorApi = {
     async insertAtCursor(raw, options = {}) {
+      if (untracked(plain)) return textarea.insert(raw, options);
       const text = typeof raw === "string" ? raw : String(raw ?? "");
       if (!editor || !text || untracked(locked)) return false;
       if (untracked(mode) !== "edit") mode.set("edit");
       const current = String(untracked(() => props.value) ?? "");
       const selection = lastSelections[lastSelections.length - 1];
-      let start = selection ? textOffset(current, selection.anchor) : current.length;
-      let end = selection ? textOffset(current, selection.head) : current.length;
-      if (end < start) [start, end] = [end, start];
-      const before = current.slice(0, start);
-      const after = current.slice(end);
-      const prefix = options.spacing === true && before && !/\s$/.test(before) ? " " : "";
-      const suffix = options.spacing === true && after && !/^\s/.test(after) ? " " : "";
-      const inserted = `${prefix}${text}${suffix}`;
-      const next = `${before}${inserted}${after}`;
+      const range = selection ? { start: textOffset(current, selection.anchor), end: textOffset(current, selection.head) } : null;
+      const next = insertIntoText(current, range, text, options);
       // The app's value is the source of truth: say the new text, and put the caret after it.
-      lastValue = next;
-      props.onChange?.(next);
-      const caret = textPosition(next, start + inserted.length);
+      lastValue = next.value;
+      props.onChange?.(next.value);
+      const caret = textPosition(next.value, next.caret);
       lastSelections = [{ anchor: caret, head: caret }];
       queueMicrotask(() => {
         editor?.focus();
@@ -129,7 +153,22 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
       return true;
     },
     focus() {
-      editor?.focus();
+      if (untracked(plain)) field?.focus();
+      else editor?.focus();
+    },
+    holdCaret() {
+      if (!untracked(plain) || untracked(locked)) return;
+      textarea.hold();
+      if (untracked(focused)) return;
+      return new Promise<void>((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          focusWaiters = focusWaiters.filter((waiter) => waiter !== done);
+          resolve();
+        };
+        const timer = setTimeout(done, 200);
+        focusWaiters.push(done);
+      });
     },
   };
   props.editorRef?.(api);
@@ -139,12 +178,17 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
   const desktop = platform.desktop;
   const beside = createBesidePresses({ editor: () => editor, desktop, active: () => untracked(mode) === "edit" });
 
-  // A new value from outside (another document) drops the remembered caret.
+  // A new value from outside (another document) drops the remembered caret, and so does another
+  // document with the same text.
   let lastValue = untracked(() => props.value);
+  let lastDocument = untracked(() => props.documentKey);
   effect(() => {
     const value = props.value;
-    if (value !== lastValue) {
+    const document = props.documentKey;
+    untracked(() => textarea.follow(String(value ?? ""), document));
+    if (value !== lastValue || document !== lastDocument) {
       lastValue = value;
+      lastDocument = document;
       lastSelections = [];
     }
   });
@@ -184,66 +228,96 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
           </View>
         </If>
         <If
-          when={mode() === "edit"}
+          when={!plain()}
           else={
-            <View class="flex-1 overflow-hidden">
-              <If
-                when={String(props.value || "").trim()}
-                else={<Text class="px-4 py-3 text-sm text-placeholder">{props.placeholder || ""}</Text>}
-              >
-                <View class="flex-1 px-4 py-3">
-                  <Markdown source={props.value || ""} />
-                </View>
-              </If>
-            </View>
-          }
-        >
-          <View
-            class="flex-1 cursor-text"
-            // Not a control of its own: the Editor in it is (pressables are buttons by default).
-            role="group"
-            focusable={false}
-            onLayout={({ bounds }) => beside.layout(bounds.size.width)}
-            onPressDown={desktop ? (e) => void beside.pressDown(e) : undefined}
-            onPress={(e) => void beside.press(e)}
-            onMouseMove={desktop ? (e) => void beside.mouseMove(e) : undefined}
-            onMouseLeave={desktop ? (e) => void beside.mouseLeave(e) : undefined}
-            testID={props.testID ? `${props.testID}-frame` : undefined}
-          >
-            <Editor
-              ref={(node: EditorRef) => {
-                editor = node;
+            // A regular textarea: the text as it is, scrolling inside the box.
+            <Input
+              ref={(node: InputRef) => {
+                field = node;
               }}
               value={props.value ?? ""}
-              language="markdown"
-              decorations={props.decorations}
-              placeholder={props.placeholder || null}
-              readOnly={locked()}
-              lineNumbers={false}
-              softWrap
-              folding={false}
-              indentGuides={false}
-              activeLine={false}
-              autoClose={false}
-              scrollBeyondLastLine={false}
-              fontSize={14}
-              lineHeight={24}
+              multiline
+              placeholder={props.placeholder || undefined}
+              readonly={locked()}
               accessibilityLabel={label()}
               testID={props.testID ? `${props.testID}-source` : undefined}
-              class="flex-1"
-              classes={{ content: "px-4 py-3", placeholder: "text-placeholder" }}
-              onFocus={() => focused.set(true)}
+              class="min-h-0 flex-1 self-stretch px-4 py-3 text-sm leading-[21.7px] text-foreground placeholder:text-placeholder caret-blue selection:bg-[#426f9e38]"
+              onFocus={() => {
+                focused.set(true);
+                for (const done of focusWaiters.slice()) done();
+              }}
               onBlur={() => focused.set(false)}
               onChange={({ value }) => {
                 if (untracked(locked)) return;
-                lastValue = value;
+                textarea.edited(value);
                 props.onChange?.(value);
               }}
-              onSelectionChange={({ selections }) => {
-                lastSelections = selections;
-              }}
+              onSelectionChange={(range) => textarea.selected(range)}
             />
-          </View>
+          }
+        >
+          <If
+            when={mode() === "edit"}
+            else={
+              <View class="flex-1 overflow-hidden">
+                <If
+                  when={String(props.value || "").trim()}
+                  else={<Text class="px-4 py-3 text-sm text-placeholder">{props.placeholder || ""}</Text>}
+                >
+                  <View class="flex-1 px-4 py-3">
+                    <Markdown source={props.value || ""} />
+                  </View>
+                </If>
+              </View>
+            }
+          >
+            <View
+              class="flex-1 cursor-text"
+              // Not a control of its own: the Editor in it is (pressables are buttons by default).
+              role="group"
+              focusable={false}
+              onLayout={({ bounds }) => beside.layout(bounds.size.width)}
+              onPressDown={desktop ? (e) => void beside.pressDown(e) : undefined}
+              onPress={(e) => void beside.press(e)}
+              onMouseMove={desktop ? (e) => void beside.mouseMove(e) : undefined}
+              onMouseLeave={desktop ? (e) => void beside.mouseLeave(e) : undefined}
+              testID={props.testID ? `${props.testID}-frame` : undefined}
+            >
+              <Editor
+                ref={(node: EditorRef) => {
+                  editor = node;
+                }}
+                value={props.value ?? ""}
+                language="markdown"
+                decorations={props.decorations}
+                placeholder={props.placeholder || null}
+                readOnly={locked()}
+                lineNumbers={false}
+                softWrap
+                folding={false}
+                indentGuides={false}
+                activeLine={false}
+                autoClose={false}
+                scrollBeyondLastLine={false}
+                fontSize={14}
+                lineHeight={24}
+                accessibilityLabel={label()}
+                testID={props.testID ? `${props.testID}-source` : undefined}
+                class="flex-1"
+                classes={{ content: "px-4 py-3", placeholder: "text-placeholder" }}
+                onFocus={() => focused.set(true)}
+                onBlur={() => focused.set(false)}
+                onChange={({ value }) => {
+                  if (untracked(locked)) return;
+                  lastValue = value;
+                  props.onChange?.(value);
+                }}
+                onSelectionChange={({ selections }) => {
+                  lastSelections = selections;
+                }}
+              />
+            </View>
+          </If>
         </If>
       </View>
       <If when={String(props.hint || "").trim()}>
@@ -351,7 +425,8 @@ function PickerButton(props: {
   header?: JSX.Element;
   avatar: (item: PickerItem) => JSX.Element;
   testID: string;
-  onOpen?: () => void;
+  /** Before the dialog opens; a promise it returns holds the dialog until it settles. */
+  onOpen?: () => Promise<void> | void;
   onPick: (item: PickerItem) => void;
 }) {
   const open = signal(false);
@@ -366,11 +441,14 @@ function PickerButton(props: {
       <TipButton
         disabled={props.disabled}
         onPress={() => {
-          batch(() => {
-            filter.set("");
-            open.set(true);
-          });
-          props.onOpen?.();
+          const show = () =>
+            batch(() => {
+              filter.set("");
+              open.set(true);
+            });
+          const ready = props.onOpen?.();
+          if (ready) void ready.then(show);
+          else show();
         }}
         accessibilityLabel={props.title}
         testID={props.testID}
@@ -509,6 +587,7 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
             loading={contactsStore.loading && mentionItems().length === 0}
             disabled={locked()}
             testID="markdown-editor-mention"
+            onOpen={() => inner?.holdCaret()}
             avatar={(item) => <ContactAvatar item={item.contact} name={item.title} endpointRef={endpointRef()} class="size-7" />}
             onPick={insertReference}
           />
@@ -521,7 +600,10 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
             loading={conversationsLoading() && conversationItems().length === 0}
             disabled={locked()}
             testID="markdown-editor-conversation"
-            onOpen={() => void loadConversations()}
+            onOpen={() => {
+              void loadConversations();
+              return inner?.holdCaret();
+            }}
             header={
               <If when={conversationTabs().length > 0}>
                 <View class="flex-row gap-1 border-b border-line-faint" role="tablist" accessibilityLabel={t("markdown_editor_conversation_channels")}>

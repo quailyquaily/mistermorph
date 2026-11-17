@@ -315,7 +315,11 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
         />
 
         <View class="gap-3" onLayout={(event) => formWidth.set(event.bounds.size.width)}>
+          {/* A regular textarea with the mention and conversation toolbar: the content as written,
+              no Markdown highlighting or preview. */}
           <AppMarkdownEditor
+            plainText
+            documentKey={task()._key}
             value={task().content}
             // clamp(168px, 26vh, 320px), worked out here: the shared editor reads a clamp as its max.
             height={Math.round(Math.min(320, Math.max(168, windowSize().height * 0.26)))}
