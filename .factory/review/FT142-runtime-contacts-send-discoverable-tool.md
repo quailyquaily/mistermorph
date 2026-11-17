@@ -118,3 +118,14 @@ Validation: coder and manager independently passed `test -z "$(gofmt -l .)" && g
 Limits: no live outbound messages or end-to-end guard approval resume. Public runtime tests exercise shared socialpost.Run with Bluesky/X channel values, not external platform APIs. No UI changes or visual inspection.
 Process exception: coder reported running `git fetch --dry-run` despite the no-fetch instruction; no ref updates reported. Manager handled the actual push.
 Moved new/ → review/ for round 3 review; this head is not reviewed, merged into master or released.
+
+## factory · 2026-11-17 22:09
+
+Owner scope clarification (verbatim):
+> One comment for ft142, the contact send tool should be available for all runtimes, include awareness.
+
+Apply FT142 to all runtimes, explicitly including awareness, not only ordinary conversation runtimes. Audit runtime registration and delivery wiring for Console, channel conversations, awareness/cron, and public social-post runtimes; do not assume existing awareness behavior is sufficient without checking it. Keep contacts_send discoverable and callable where permitted, and cover awareness registration and invocation with regression tests using fake delivery.
+
+This clarification broadens runtime coverage; it does not waive existing authorization, recipient restrictions, explicit group/public-thread activation gates, or delivery safeguards. Preserve those gates while fixing the latest review finding. No live messages are requested by this comment.
+
+Comment only: item remains at its current board status; this clarification needs implementation/review verification; no implementation or new validation performed.
