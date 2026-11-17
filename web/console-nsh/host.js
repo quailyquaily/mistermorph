@@ -153,26 +153,31 @@ function base64Bytes(base64) {
   return bytes;
 }
 
-async function saveFile({ name, url, headers = {}, text, base64, type = "application/octet-stream" }) {
+// `morph.file.save`: the browser downloads the file (a link to its bytes, clicked). `env` is the
+// page's, or a test's fakes.
+export async function saveFile(
+  { name, url, headers = {}, text, base64, type = "application/octet-stream" },
+  env = { fetch: (...args) => fetch(...args), document, URL, setTimeout: (...args) => setTimeout(...args) },
+) {
   let blob;
   if (typeof text === "string") blob = new Blob([text], { type });
   else if (typeof base64 === "string") blob = new Blob([base64Bytes(base64)], { type });
   else if (url) {
-    const response = await fetch(url, { headers, cache: "no-store" });
+    const response = await env.fetch(url, { headers, cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     blob = await response.blob();
   } else {
     throw new Error("nothing to save");
   }
-  const href = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const href = env.URL.createObjectURL(blob);
+  const link = env.document.createElement("a");
   link.href = href;
   link.download = name || "download";
   link.style.display = "none";
-  document.body.append(link);
+  env.document.body.append(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  env.setTimeout(() => env.URL.revokeObjectURL(href), 60_000);
   return "saved";
 }
 
@@ -618,7 +623,7 @@ export function createHost(player) {
     ["morph.file.pick", (args) => pickFiles(args)],
     ["morph.file.upload", (args) => uploadFile(player, args)],
     ["morph.file.release", ({ id }) => releasePickedFile(id)],
-    ["morph.file.save", saveFile],
+    ["morph.file.save", (args) => saveFile(args)],
     ["morph.voice.support", () => voice.support()],
     ["morph.voice.start", (args) => voice.start(args)],
     ["morph.voice.stop", () => voice.stop()],

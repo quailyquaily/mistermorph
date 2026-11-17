@@ -103,7 +103,8 @@ test("a file the agent sent offers its download", async () => {
     host: { "morph.file.save": "saved" },
   });
   await app.waitFor("report.pdf");
-  await app.press("label:report.pdf >> role:button[Download]");
+  // An icon button named for the file (tests/chat-received-file-download.test.tsx has the rest).
+  await app.press("label:report.pdf >> label:Download report.pdf");
   await app.waitUntil(() => app.host.calls().some((call) => call.name === "morph.file.save"));
   const save = app.host.calls().find((call) => call.name === "morph.file.save")!.data as any;
   expect(save.url).toContain("/api/attachments?");

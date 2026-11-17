@@ -9,8 +9,9 @@
 // What nsh 0.5.0 offers on Android shapes what works: saved values (`Storage`), the app's state
 // (`lifecycle`), the system's pickers (`Picker.pickImages`, the photo picker, for a gallery pick;
 // `Picker.pickFiles`, the document picker (`ACTION_OPEN_DOCUMENT`), for files of any type) and
-// `fetch` with `FormData` for uploads. There is no way to save a file, so that reports
-// "unsupported" and the console explains it.
+// `fetch` with `FormData` for uploads. nsh has no save dialog on Android (its save dialog is the
+// desktops' alone, and `fs/promises` reaches only the app's own files), so saving comes from the
+// app's native part too (below).
 //
 // nsh records no audio, so voice input comes from the app's own native part (android/src, built
 // into the APK by scripts/build-android.sh): it answers `morph.voice.*` over nsh's host channel,
@@ -23,6 +24,14 @@
 // while the app is away a system job reads the server's recent completions and shows them. The
 // app configures it (`morph.notify.configure`: the server, the session, the texts) and takes the
 // topic of a pressed notification (`morph.notify.take`). An APK without it has no notifications.
+//
+// Saving a file (`morph.file.save`: a received attachment, a workspace file, a log) is the native
+// part's as well (android/src/.../FileSaver.java): it shows the system's picker for a new document
+// (ACTION_CREATE_DOCUMENT, no storage permission) with the file's name, downloads the file from the
+// console server with the session's headers into the chosen document, and answers "saved" once the
+// bytes are written, "cancelled" when the user backed out. The app offers it (`saveFile`) only when
+// the native part says the device has that picker; an APK without it, or another phone (iOS), says
+// saving is not available. Only the console server's own URLs are given the session's headers.
 import { effect, host, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
 
 /** The saved address of the console server, `https://host[:port][/base]`. */
@@ -207,6 +216,67 @@ function notifyCall(name: string, data: unknown = {}, fallback: unknown = null) 
   return host.call(name, data, { timeout: 0 });
 }
 
+/* ---------- saving files (the native part) ---------- */
+
+// Whether the native part saves files on this device: asked once at boot.
+let nativeSave = false;
+
+/** What a phone without the native part's saving says when asked to save. */
+export const SAVE_UNAVAILABLE = "Saving files is not available in this build of the phone app.";
+
+async function probeSave(): Promise<boolean> {
+  try {
+    const reason = await host.call("morph.file.saveSupport", {});
+    if (reason === "") return true;
+    console.warn("saving files: not on this device:", reason);
+    return false;
+  } catch (error) {
+    // No handler: an APK `nsh package` built alone, iOS, or a test without the native part.
+    console.warn("saving files: no native part in this app:", (error as Error)?.message || error);
+    return false;
+  }
+}
+
+/**
+ * The native part's request for `morph.file.save`'s: a name and text or base64 the app has, or a URL
+ * on the console server `server` (an origin) with the headers to fetch it with. A URL anywhere
+ * else is refused: the session's headers go to the console server alone.
+ */
+export function nativeSaveRequest(
+  data: { name?: unknown; url?: unknown; headers?: unknown; text?: unknown; base64?: unknown; type?: unknown },
+  server: string,
+): Record<string, unknown> {
+  const name = String(data?.name ?? "").trim() || "download";
+  const type = typeof data?.type === "string" && data.type ? data.type : "application/octet-stream";
+  if (typeof data?.text === "string") return { name, text: data.text, type };
+  if (typeof data?.base64 === "string") return { name, base64: data.base64, type };
+  const raw = String(data?.url ?? "");
+  if (!raw) throw new Error("Nothing to save.");
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("The file's address is not a URL.");
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || !server || url.origin !== server) {
+    throw new Error("The file is not on this console server.");
+  }
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries((data?.headers ?? {}) as Record<string, unknown>)) {
+    if (value !== undefined && value !== null) headers[key] = String(value);
+  }
+  return { name, url: url.href, headers, type };
+}
+
+async function save(data: Record<string, unknown>): Promise<"saved" | "cancelled"> {
+  if (!nativeSave) throw new Error(SAVE_UNAVAILABLE);
+  const request = nativeSaveRequest(data, parseServer(kv[SERVER_KEY] || "")?.origin ?? "");
+  // The picker waits for the user and the download for the server: no timeout.
+  const answer = await host.call("morph.file.save", request, { timeout: 0 });
+  if (answer === "saved" || answer === "cancelled") return answer;
+  throw new Error("The file could not be saved.");
+}
+
 async function bootData() {
   const keys = await Storage.keys().catch(() => [] as string[]);
   const values: Record<string, string> = {};
@@ -219,6 +289,7 @@ async function bootData() {
   const server = parseServer(kv[SERVER_KEY] || "");
   nativeVoice = await probeVoice();
   nativeNotify = await probeNotify();
+  nativeSave = await probeSave();
   if (nativeNotify) {
     // A pressed notification brought the app back: the console takes its topic.
     host.on("morph.notify.opened", (data: unknown) => emit("morph.notify.opened", data));
@@ -249,6 +320,7 @@ async function bootData() {
     desktopVersion: "",
     features: [
       "pickFile",
+      ...(nativeSave ? ["saveFile"] : []),
       ...(nativeVoice ? ["voiceRecord"] : []),
       ...(nativeNotify ? ["backgroundTaskNotifications"] : []),
     ],
@@ -413,7 +485,7 @@ export async function call(name: string, data?: unknown): Promise<unknown> {
       voiceFiles.clear();
       return voiceCall("morph.voice.cancel").then(() => null);
     case "morph.file.save":
-      throw new Error("Saving files is not available in the phone app yet.");
+      return save(args);
     default:
       throw new Error(`${name} is not available in the phone app`);
   }

@@ -1,11 +1,29 @@
-// A file the agent sent with its reply (a task attachment): its name, a download button, and an
-// image preview for raster images. Ported from web/console/src/components/ReceivedFile.js. Its
+// A file the agent sent with its reply (a task attachment): its name, a download icon button, and
+// an image preview for raster images. Ported from web/console/src/components/ReceivedFile.js. Its
 // preview and download state lives in a ReceivedFiles store, keyed by file, since rows recycle.
-import { effect, Image, Text, untracked, View } from "nsh";
-import { Button } from "../ui";
+//
+// The download is the host's save (lib/platform.ts `saveFile`): a browser download, the desktop's
+// save dialog, the phone app's picker for a new document. While it runs the button is busy (and
+// takes no presses); once the file is written the glyph turns to a check for a moment; backing out
+// of the picker leaves the row as it was; a failure says why under the row, and the button tries again.
+import { effect, Image, platform, Text, untracked, View } from "nsh";
+import { Button, type ButtonSize } from "../ui";
 import { canPreviewReceivedFile, receivedFileURL } from "../../lib/core/received-files.js";
+import { t } from "./i18n";
+import { SAVE_UNAVAILABLE } from "../../lib/platform";
 import { keyedState } from "./rowState";
 import { fetchConsoleBlob, saveConsoleFile } from "./files";
+
+/** How long the check shows after a save. */
+export const SAVED_MS = 2000;
+
+/**
+ * The download button's size: 32pt beside the name on a desktop, the 44pt touch target on a touch
+ * screen (a phone, a tablet).
+ */
+export function receivedFileButtonSize(touch: boolean): ButtonSize {
+  return touch ? "md" : "xs";
+}
 
 export interface ReceivedFileInfo {
   id: string;
@@ -19,12 +37,30 @@ interface FileState {
   error: string;
   busy: boolean;
   requested: boolean;
+  /** Saved a moment ago: the check shows. */
+  saved: boolean;
 }
 
-const EMPTY: FileState = { previewURL: "", error: "", busy: false, requested: false };
+const EMPTY: FileState = { previewURL: "", error: "", busy: false, requested: false, saved: false };
 
-export function createReceivedFiles() {
+/** What a failed save says: why, or that this app cannot save files at all. */
+function saveError(error: unknown) {
+  if ((error as { code?: string })?.code === SAVE_UNAVAILABLE) return t("chat_received_file_unavailable");
+  return t("chat_received_file_failed", { error: String((error as Error)?.message || error || "").trim() || "?" });
+}
+
+/** Saves the console's file at `pathname` as `name` (`saveConsoleFile`; tests give their own). */
+export type SaveReceivedFile = (pathname: string, name: string) => Promise<"saved" | "cancelled">;
+
+export function createReceivedFiles(options: { save?: SaveReceivedFile } = {}) {
+  const save = options.save ?? saveConsoleFile;
   const states = keyedState<FileState>();
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const clearTimer = (key: string) => {
+    const timer = timers.get(key);
+    if (timer !== undefined) clearTimeout(timer);
+    timers.delete(key);
+  };
   const peek = (key: string) => untracked(() => states.get(key) ?? EMPTY);
   const patch = (key: string, next: Partial<FileState>) => states.update(key, (value) => ({ ...(value ?? EMPTY), ...next }));
 
@@ -48,16 +84,29 @@ export function createReceivedFiles() {
     },
     async download(key: string, file: ReceivedFileInfo, topicID: string, taskID: string) {
       if (peek(key).busy) return;
-      patch(key, { busy: true, error: "" });
+      clearTimer(key);
+      patch(key, { busy: true, error: "", saved: false });
       try {
-        await saveConsoleFile(receivedFileURL(topicID, taskID, file.id), file.name);
+        const result = await save(receivedFileURL(topicID, taskID, file.id), file.name);
+        if (result === "saved") {
+          patch(key, { busy: false, saved: true });
+          timers.set(
+            key,
+            setTimeout(() => {
+              timers.delete(key);
+              patch(key, { saved: false });
+            }, SAVED_MS),
+          );
+        } else {
+          // Backed out of the picker or the dialog: nothing to say.
+          patch(key, { busy: false });
+        }
       } catch (error) {
-        patch(key, { error: (error as Error)?.message || "Download failed" });
-      } finally {
-        patch(key, { busy: false });
+        patch(key, { busy: false, error: saveError(error) });
       }
     },
     dispose() {
+      for (const key of [...timers.keys()]) clearTimer(key);
       for (const key of states.keys()) {
         const url = untracked(() => states.get(key)?.previewURL);
         if (url) URL.revokeObjectURL(url);
@@ -79,6 +128,8 @@ export function ReceivedFile(props: {
 }) {
   const key = () => `${props.topicID}|${props.taskID}|${props.file?.id}`;
   const state = () => props.files.state(key());
+  const name = () => String(props.file?.name || "").trim() || "download";
+  const size = () => receivedFileButtonSize(!platform.desktop);
 
   effect(() => {
     const k = key();
@@ -94,9 +145,14 @@ export function ReceivedFile(props: {
       <View class="flex-row items-center gap-2">
         <Text class="flex-1 text-sm text-foreground line-clamp-1">{props.file?.name}</Text>
         <Button
-          variant="outlined"
-          size="xs"
-          label={props.downloadLabel}
+          variant="plain"
+          size={size()}
+          iconOnly
+          icon={state().saved ? "PhCheck" : "PhCloudArrowDown"}
+          title={props.downloadLabel}
+          accessibilityLabel={state().saved ? t("chat_received_file_saved", { name: name() }) : t("chat_received_file_download", { name: name() })}
+          // Its size and state, for tests (headless runs have no geometry): `chat-received-file-download.md.busy`.
+          testID={`chat-received-file-download.${size()}.${state().busy ? "busy" : state().saved ? "saved" : "idle"}`}
           loading={state().busy}
           onPress={() => void props.files.download(key(), props.file, props.topicID, props.taskID)}
         />

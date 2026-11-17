@@ -14,7 +14,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
 | `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the pickers (Gallery: the photo picker; File: the document picker), voice input and task notifications through the native part |
-| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) and the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) |
+| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`), the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) and saving files behind `morph.file.save` (`FileSaver`, `SaveDocumentActivity`) |
 | `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
@@ -457,7 +457,13 @@ Headless tests prove behaviour, not the look.
 - 0.4.0 had the photo picker but no `Picker.pickFiles`; 0.5.0 has both (`pickFiles` is Android's
   `ACTION_OPEN_DOCUMENT`), so the phone's Upload files asks Gallery or File (`AttachSourceSheet`)
   and `lib/mobileHost.ts` takes the matching picker. Headless tests answer either with
-  `app.onPick` (`pick.kind` says which). There are still no `Notifications`. Avatars (crop and re-encode) and saving files are not available there yet;
-  they say so. Task notifications come from the app's own Java (a JobScheduler job reading
+  `app.onPick` (`pick.kind` says which). There are still no `Notifications`. Avatars (crop and re-encode) are not available there yet;
+  they say so.
+- nsh 0.5.1 has no save dialog for apps on Android: its `SaveDialog` is Rust-only and desktop-only
+  (iOS, Android and the web answer every file request with an error), and `fs/promises` reaches only
+  the app's own files. The phone's `morph.file.save` is the app's Java (`FileSaver`: a transparent
+  `SaveDocumentActivity` shows `ACTION_CREATE_DOCUMENT`, then the file is streamed from the console
+  into the chosen document). `lib/mobileHost.ts` asks `morph.file.saveSupport` at boot and only then
+  lists `saveFile`; headless tests play the native part with those two handlers. Task notifications come from the app's own Java (a JobScheduler job reading
   `/api/notifications/events` while the app is away: the page, and its socket, are suspended then);
   see `docs/feat/feat_20261110_android_task_notifications.md`.
