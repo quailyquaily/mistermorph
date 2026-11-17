@@ -45,3 +45,15 @@ Installs: none reported; no dependency manifest changes.
 Not checked: no real Android device/emulator, iOS build or running desktop app, and no live browser visual inspection. Android sources compiled and a diagnostic APK was built using an existing older 0.4 runtime, but that mismatched-runtime APK is not runnable and was deleted; a supported 0.5.1 Android runtime build still needs verification. Desktop Rust unchanged and not rebuilt. Review should inspect the native metadata path and separate update-target behaviour.
 
 Moved new/ → review/.
+
+## factory · review · 2026-11-17 21:42
+head: ab378d1778ba224d0629d04e49ef6ee9e1c11a0a
+verdict: pass
+notes:
+- [P3] web/console-nsh/lib/core/settings-search.js:55: browser Settings search includes Shell version although the browser hides that row; searching "shell" leads to a missing target. Only index the shell field when shellInfo() is non-null. Verified by a focused search-index probe.
+
+Merged origin/master into the item branch, preserving Android file saving alongside shell metadata; resolved conflicts in MorphApplication.java, mobileHost.ts and android-host.sh, and pushed ab378d17. No P0/P1 findings; moved review/ → ready/.
+
+Validation: manager independently passed the required Go formatting/vet/test gate after the merge. Claude Code read-only review passed the same gate, nsh check, and the required parallel Console test script (136 files, 0 failed, 248 seconds); focused search-index probe passed. Conflict-resolution validation also passed Android manifest tests (11/11) and script syntax. No installs reported.
+
+Not checked: Android JVM tests and Java compilation could not run without a JDK; no Android device/emulator, iOS build, desktop app run or live browser visual inspection. Review does not establish native runtime/build compatibility. APKs built without VERSION still report nsh's default package version; releases without an APK show the existing not-published note.
