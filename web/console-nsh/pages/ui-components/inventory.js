@@ -323,7 +323,7 @@ const FILES = {
       Part: C("SettingFieldGrid"),
     },
   },
-  "components/settings/SettingsAppPanel.tsx": { group: "forms", items: { SettingsAppPanel: L("live"), SettingsUpdatePanel: L("live") } },
+  "components/settings/SettingsAppPanel.tsx": { group: "forms", items: { SettingsAppPanel: L("live"), SettingsUpdatePanel: L("live"), ReleaseBox: L("part", "SettingsUpdatePanel") } },
   "components/settings/SettingsCreditsPanel.tsx": { group: "forms", items: { SettingsCreditsPanel: L("live") } },
   "components/settings/SetupConnectionTestDialog.tsx": {
     group: "forms",

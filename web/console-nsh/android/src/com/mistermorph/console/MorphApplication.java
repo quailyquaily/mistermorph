@@ -2,6 +2,9 @@ package com.mistermorph.console;
 
 import android.app.Activity;
 import android.app.Application;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,6 +24,9 @@ import java.util.concurrent.Executors;
  * <p>It also answers `morph.notify.*`: the notification permission, the settings of the
  * {@link TaskNotifier} that tells of finished tasks while the app is away (which the activity's
  * stop starts and its start ends) and the topic of a pressed notification.
+ *
+ * <p>And `morph.shell.info`: this installed app's version name and code ({@link ShellInfo}), which
+ * the console shows as its shell's version.
  */
 public final class MorphApplication extends Application implements Application.ActivityLifecycleCallbacks {
     private final Map<Activity, Attached> attached = new WeakHashMap<>();
@@ -78,6 +84,7 @@ public final class MorphApplication extends Application implements Application.A
             voice.release(data instanceof Map ? MultipartUpload.text(((Map<?, ?>) data).get("id")) : "");
             reply.resolve(null);
         });
+        view.handle("morph.shell.info", (data, reply) -> reply.resolve(shellInfo()));
         view.handle("morph.notify.state", (data, reply) -> reply.resolve(AndroidTaskNotifications.state(activity)));
         view.handle("morph.notify.request", (data, reply) -> AndroidTaskNotifications.request(activity, reply::resolve));
         view.handle("morph.notify.configure", (data, reply) -> {
@@ -97,6 +104,18 @@ public final class MorphApplication extends Application implements Application.A
         Attached result = new Attached(voice, executor, view);
         attached.put(activity, result);
         return result;
+    }
+
+    /** This package's version name and code as installed; empty when the package manager cannot tell. */
+    @SuppressWarnings("deprecation")
+    private java.util.Map<String, Object> shellInfo() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            long code = Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
+            return ShellInfo.describe(info.versionName, code);
+        } catch (PackageManager.NameNotFoundException | RuntimeException error) {
+            return ShellInfo.describe("", 0);
+        }
     }
 
     /** The app's own activities over nsh's: asking for a permission, opening a notification. */

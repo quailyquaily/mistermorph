@@ -210,11 +210,14 @@ function AppScenario() {
     endpointState.items = endpoints;
     endpointState.selectedRef = endpoints[0].endpoint_ref;
   }
+  // The Updates card's server; a test switches it with `app.host.send("morph.fixture.endpoint", ref)`.
+  const updateEndpoint = signal(LOCAL);
+  host.on("morph.fixture.endpoint", (ref: unknown) => updateEndpoint.set(String(ref || "")));
   return (
     <View class="gap-4 p-4">
       <SettingsAppPanel />
       <SettingsUpdatePanel
-        endpointRef={LOCAL}
+        endpointRef={updateEndpoint()}
         configRevision="rev-1"
         onConfigRevision={(revision) => report("update.revision", revision)}
         onPartLayout={option("probeUpdate", false) ? (name, frame) => report("update.part", { name, frame }) : undefined}

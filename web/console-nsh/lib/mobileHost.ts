@@ -202,6 +202,21 @@ async function probeNotify(): Promise<boolean> {
   }
 }
 
+/**
+ * The installed app's version name and code as Android has them (`morph.shell.info`, answered by
+ * the native part: MorphApplication), or null without the native part (an APK `nsh package` built
+ * alone, a test, the iOS app): then the app's version is unknown.
+ */
+async function probeShell(): Promise<{ version: string; build: string } | null> {
+  try {
+    const info = (await host.call("morph.shell.info", {})) as { version?: unknown; build?: unknown } | null;
+    return { version: String(info?.version ?? "").trim(), build: String(info?.build ?? "").trim() };
+  } catch (error) {
+    console.warn("app version: no native part in this app:", (error as Error)?.message || error);
+    return null;
+  }
+}
+
 function notifyCall(name: string, data: unknown = {}, fallback: unknown = null) {
   if (!nativeNotify) return Promise.resolve(fallback);
   return host.call(name, data, { timeout: 0 });
@@ -219,6 +234,7 @@ async function bootData() {
   const server = parseServer(kv[SERVER_KEY] || "");
   nativeVoice = await probeVoice();
   nativeNotify = await probeNotify();
+  const shell = await probeShell();
   if (nativeNotify) {
     // A pressed notification brought the app back: the console takes its topic.
     host.on("morph.notify.opened", (data: unknown) => emit("morph.notify.opened", data));
@@ -247,6 +263,7 @@ async function bootData() {
     session: { ...session },
     languages: [locale()],
     desktopVersion: "",
+    shell,
     features: [
       "pickFile",
       ...(nativeVoice ? ["voiceRecord"] : []),

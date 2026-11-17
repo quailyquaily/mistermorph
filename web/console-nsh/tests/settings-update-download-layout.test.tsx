@@ -31,7 +31,7 @@ async function openChecked(width: number, client: Record<string, unknown>, downl
     },
   });
   await fixture.app.waitFor("v0.9.0 · Community");
-  await fixture.app.press("id:settings-update-check");
+  await fixture.app.press("id:settings-update-server-check");
   await fixture.app.waitFor("v1.0.0 is available.");
   /** The last frame each part reported. */
   const frames = () => {
@@ -50,8 +50,8 @@ const square = (button: { w: number; h: number }) => button.w === SM_HEIGHT && b
 
 test("on a phone the download's row takes the release box's width, the icon button at its end", async () => {
   const { app, frames } = await openChecked(390, ANDROID, { status: "available", os: "android", url: "https://downloads.example/MrMorph-android.apk" });
-  await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames()["button:settings-update-download-row"] && frames().downloads && frames().release));
-  const { release, downloads, "button:settings-update-download": button, "button:settings-update-download-row": row } = frames();
+  await app.waitUntil(() => Boolean(frames()["button:settings-update-server-download"] && frames()["button:settings-update-server-download-row"] && frames()["server.downloads"] && frames()["server.release"]));
+  const { "server.release": release, "server.downloads": downloads, "button:settings-update-server-download": button, "button:settings-update-server-download-row": row } = frames();
   expect(near(downloads.x, release.x) && near(downloads.w, release.w)).toBe(true);
   expect(near(row.x, release.x) && near(row.w, release.w)).toBe(true);
   // The button is a square at the row's end.
@@ -59,7 +59,7 @@ test("on a phone the download's row takes the release box's width, the icon butt
   expect(near(button.x + button.w, row.x + row.w)).toBe(true);
   // Its name is not on it: it is the text beside it, once, and the button's accessible name.
   expect(app.texts().filter((text) => text === "Download for Android")).toHaveLength(1);
-  expect(app.shows("id:settings-update-download-label")).toBe(true);
+  expect(app.shows("id:settings-update-server-download-label")).toBe(true);
   expect(app.count("label:Download for Android")).toBe(1);
   // Below the release notes, not beside them.
   expect(downloads.y).toBeGreaterThan(release.y + 20);
@@ -68,8 +68,8 @@ test("on a phone the download's row takes the release box's width, the icon butt
 test("on a narrow phone a long name wraps beside the icon button, inside the row", async () => {
   const { app, frames } = await openChecked(320, MAC, MAC_DOWNLOAD);
   await app.waitFor("Download for macOS (Apple silicon)");
-  await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames()["button:settings-update-download-row"] && frames().release));
-  const { release, "button:settings-update-download": button, "button:settings-update-download-row": row } = frames();
+  await app.waitUntil(() => Boolean(frames()["button:settings-update-server-download"] && frames()["button:settings-update-server-download-row"] && frames()["server.release"]));
+  const { "server.release": release, "button:settings-update-server-download": button, "button:settings-update-server-download-row": row } = frames();
   expect(near(row.x, release.x) && near(row.w, release.w)).toBe(true);
   // The name has the row's width less the button, and wraps there if it must: the button stays a
   // square at the row's end, inside the box.
@@ -88,9 +88,9 @@ test("on a phone each build to pick is a full-width row, told apart by its text;
       { os: "linux", arch: "arm64", url: "https://downloads.example/b.tar.gz" },
     ],
   });
-  const ids = ["button:settings-update-download-linux-amd64", "button:settings-update-download-linux-arm64"];
-  await choose.app.waitUntil(() => ids.every((id) => choose.frames()[id]) && Boolean(choose.frames().release));
-  const { release } = choose.frames();
+  const ids = ["button:settings-update-server-download-linux-amd64", "button:settings-update-server-download-linux-arm64"];
+  await choose.app.waitUntil(() => ids.every((id) => choose.frames()[id]) && Boolean(choose.frames()["server.release"]));
+  const { "server.release": release } = choose.frames();
   await choose.app.waitUntil(() => ids.every((id) => choose.frames()[`${id}-row`]));
   for (const id of ids) {
     const row = choose.frames()[`${id}-row`];
@@ -104,10 +104,10 @@ test("on a phone each build to pick is a full-width row, told apart by its text;
   for (const name of names) expect(choose.app.count(`label:${name}`)).toBe(1);
 
   const none = await openChecked(390, ANDROID, { status: "unavailable", reason: "not_published", os: "android" });
-  await none.app.waitUntil(() => Boolean(none.frames()["button:settings-update-open-releases"] && none.frames().release));
+  await none.app.waitUntil(() => Boolean(none.frames()["button:settings-update-server-open-releases"] && none.frames()["server.release"]));
   // An icon button (the arrow, named "Open releases"): square, at the start, its label not drawn.
-  const button = none.frames()["button:settings-update-open-releases"];
-  expect(near(button.x, none.frames().release.x)).toBe(true);
+  const button = none.frames()["button:settings-update-server-open-releases"];
+  expect(near(button.x, none.frames()["server.release"].x)).toBe(true);
   expect({ w: button.w, h: button.h }).toEqual({ w: SM_HEIGHT, h: SM_HEIGHT });
   expect(none.app.texts()).not.toContain("Open releases");
   expect(none.app.count("label:Open releases")).toBe(1);
@@ -115,10 +115,10 @@ test("on a phone each build to pick is a full-width row, told apart by its text;
 
 test("on a desktop screen the download keeps its own size beside the release notes", async () => {
   const { app, frames } = await openChecked(1280, MAC, MAC_DOWNLOAD);
-  await app.waitUntil(() => Boolean(frames()["button:settings-update-download"] && frames().release));
-  const { release, "button:settings-update-download": button } = frames();
-  await app.waitUntil(() => Boolean(frames()["button:settings-update-download-row"]));
-  const row = frames()["button:settings-update-download-row"];
+  await app.waitUntil(() => Boolean(frames()["button:settings-update-server-download"] && frames()["server.release"]));
+  const { "server.release": release, "button:settings-update-server-download": button } = frames();
+  await app.waitUntil(() => Boolean(frames()["button:settings-update-server-download-row"]));
+  const row = frames()["button:settings-update-server-download-row"];
   expect(square(button)).toBe(true);
   expect(row.w).toBeLessThan(release.w / 2);
   // At the right of the notes column, on its first line.

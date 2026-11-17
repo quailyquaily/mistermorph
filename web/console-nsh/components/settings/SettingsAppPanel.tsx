@@ -1,14 +1,16 @@
 // Settings' App section (the Vue console's SettingsAppPanel: install this agent as an app) and the
-// Updates card of the System section (the Vue SettingsView's auto-update card: the version, the
-// release channel, automatic updates, and the update check with the release it finds).
+// Updates card of the System section (the Vue SettingsView's auto-update card: the release channel,
+// automatic updates, and the shell's and the server's versions, each with its own update check and
+// the release it finds).
 import type { JSX, ViewRef } from "nsh";
 import { cleanup, computed, effect, Image, signal, Text, untracked, View } from "nsh";
 import appLogo from "../../assets/images/app_logo_current.svg";
 import { endpointApiFetch, endpointState, localeState, runtimeEndpointByRef } from "../../lib/core/context.js";
-import { canCheckDesktopUpdate, desktopRuntimeVersion, isDesktopRuntime } from "../../lib/core/desktop-runtime.js";
-import { CONSOLE_LOCAL_ENDPOINT_REF, endpointDisplayItem } from "../../lib/core/endpoints.js";
+import { canCheckDesktopUpdate, isDesktopRuntime } from "../../lib/core/desktop-runtime.js";
+import { endpointDisplayItem } from "../../lib/core/endpoints.js";
 import { pushNotice } from "../../lib/core/notices.js";
-import { checkDesktopUpdate, copyText, downloadTarget, openExternal, origin } from "../../lib/platform";
+import { checkDesktopUpdate, copyText, downloadTarget, openExternal, origin, shellInfo } from "../../lib/platform";
+import { shellCheck, shellReleaseAnswer } from "../../lib/updateTargets";
 import { type DownloadFile, type DownloadTarget, downloadChoice, downloadQuery, systemName, UNKNOWN_TARGET } from "../../lib/downloadTarget";
 import { Button, Markdown } from "../ui";
 import { isMobile } from "../../lib/shell";
@@ -88,7 +90,7 @@ export interface SettingsUpdatePanelProps {
   configRevision?: string;
   /** A change saved: the config file's new revision, for the page's other saves. */
   onConfigRevision?: (revision: string) => void;
-  /** Layout probe for tests: the release box (`release`), its downloads column (`downloads`) and each download button (`button:<testID>`) on the page. */
+  /** Layout probe for tests: a target's release box (`shell.release`, `server.release`), its downloads column (`<target>.downloads`) and each download button (`button:<testID>`) on the page. */
   onPartLayout?: PartLayoutListener;
 }
 
@@ -132,29 +134,83 @@ export function releaseNotesSource(notes: unknown) {
 
 const Row = SettingRow;
 
+/** Which version a row of the Updates card is about: the installed app's (`shell`) or the connected server's. */
+type UpdateTarget = "shell" | "server";
 
+/**
+ * One target's update check: whether it runs, its answer or error, and what the answer's download
+ * is for (the desktop app's own check, a device's system, or none: a server-only check).
+ */
+function createUpdateCheck() {
+  const checking = signal(false);
+  const result = signal<UpdateResult | null>(null);
+  const error = signal("");
+  const native = signal(false);
+  const device = signal<DownloadTarget>(UNKNOWN_TARGET);
+  // The check asked for no device's file (the server's check from a native app): the release box
+  // points at the releases page for the server's builds.
+  const serverOnly = signal(false);
+  const copied = signal(false);
+  return {
+    checking,
+    result,
+    error,
+    native,
+    device,
+    serverOnly,
+    copied,
+    reset() {
+      checking.set(false);
+      result.set(null);
+      error.set("");
+      copied.set(false);
+    },
+    // idle: not checked yet; current, available, unknown (a dev build), or error after a check.
+    state: computed(() => {
+      if (checking()) return "checking";
+      if (error()) return "error";
+      const current = result();
+      if (!current) return "idle";
+      if (current.update_available === true || current.channel_switch === true) return "available";
+      if (current.status === "current_version_unknown") return "unknown";
+      return "current";
+    }),
+  };
+}
+type UpdateCheck = ReturnType<typeof createUpdateCheck>;
+
+/**
+ * The Updates card. Two versions, each from its own source and with its own check:
+ * - Shell version: the installed app the Console runs in (lib/platform.ts `shellInfo`), absent in a
+ *   browser. The desktop app checks for itself; the Android app compares its installed version with
+ *   the release's (the server's check with `download_os=android` reads the release feed and finds the
+ *   APK); elsewhere, or without a known installed version, the row says checking is unavailable.
+ * - Server version: the connected console server's (`GET /settings/auto-update`), checked by the
+ *   server (`POST /settings/auto-update/check`). In a browser that check also names this device's
+ *   download (`download_os`), as there is no shell to update.
+ * A failed or missing lookup of one is "Unknown" there, never the other's version.
+ */
 export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
   const loading = signal(false);
-  const checking = signal(false);
-  const currentVersion = signal(desktopRuntimeVersion() || "dev");
-  const result = signal<UpdateResult | null>(null);
-  const checkError = signal("");
   const buildChannel = signal("");
   const enabled = signal(false);
   const channel = signal("");
   const revision = signal("");
   const saving = signal(false);
-  const checksumCopied = signal(false);
-  // What the last check was for: the desktop app's own check, or this device's system.
-  const checkedNative = signal(false);
-  const checkedDevice = signal<DownloadTarget>(UNKNOWN_TARGET);
+  // The server's version: "loading" until its lookup answers, then "known" or "unknown" (failed,
+  // or an answer without one). Each load starts over, so another server never shows the last one's.
+  const serverLookup = signal<"loading" | "known" | "unknown">("loading");
+  const serverVersion = signal("");
+  // The shell is the host's, fixed for this run; null in a browser.
+  const shell = shellInfo();
+  const shellMode = shell ? shellCheck(shell, { checkUpdate: canCheckDesktopUpdate() }) : null;
+  const checks: Record<UpdateTarget, UpdateCheck> = { shell: createUpdateCheck(), server: createUpdateCheck() };
   const parts = createPartProbe(() => props.onPartLayout);
-  let downloadsNode: ViewRef | undefined;
   let seq = 0;
-  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+  const copiedTimers: Partial<Record<UpdateTarget, ReturnType<typeof setTimeout>>> = {};
   cleanup(() => {
     seq += 1;
-    if (copiedTimer) clearTimeout(copiedTimer);
+    for (const timer of Object.values(copiedTimers)) if (timer) clearTimeout(timer);
   });
 
   const endpointRef = () => untracked(() => trim(props.endpointRef));
@@ -172,18 +228,23 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
     const requestSeq = ++seq;
     const target = endpointRef();
     loading.set(true);
-    checking.set(false);
-    result.set(null);
-    checkError.set("");
+    serverLookup.set("loading");
+    serverVersion.set("");
+    buildChannel.set("");
+    checks.shell.reset();
+    checks.server.reset();
     try {
       const data = await endpointApiFetch(target, "/settings/auto-update");
       if (!isCurrent(requestSeq, target)) return;
-      const nativeVersion = target === CONSOLE_LOCAL_ENDPOINT_REF ? desktopRuntimeVersion() : "";
-      currentVersion.set(nativeVersion || trim(data?.current_version) || "dev");
+      const version = trim(data?.current_version);
+      serverVersion.set(version);
+      serverLookup.set(version ? "known" : "unknown");
       buildChannel.set(trim(data?.build_channel));
       apply(data);
     } catch (e) {
-      if (isCurrent(requestSeq, target)) pushNotice({ type: "error", text: (e as Error)?.message || t("msg_load_failed") });
+      if (!isCurrent(requestSeq, target)) return;
+      serverLookup.set("unknown");
+      pushNotice({ type: "error", text: (e as Error)?.message || t("msg_load_failed") });
     } finally {
       if (isCurrent(requestSeq, target)) loading.set(false);
     }
@@ -215,8 +276,8 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
     if (!next || next === untracked(channel)) return;
     channel.set(next);
     // A result belongs to the channel it checked.
-    result.set(null);
-    checkError.set("");
+    checks.shell.reset();
+    checks.server.reset();
     void save({ channel: next });
   }
 
@@ -226,63 +287,80 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
     void save({ enabled: value });
   }
 
-  const checkDisabled = () => loading() || checking();
+  const checkDisabled = (target: UpdateTarget) => loading() || checks[target].checking();
 
-  async function runCheck() {
-    if (untracked(checkDisabled)) return;
-    checking.set(true);
-    checkError.set("");
-    checksumCopied.set(false);
+  /** The server's check: its release, with the file for `device` when one is named. */
+  async function serverCheck(target: string, selected: string | null, device: DownloadTarget | null) {
+    const query = [selected === null ? "" : `channel=${encodeURIComponent(selected)}`, device ? downloadQuery(device) : ""].filter(Boolean).join("&");
+    return (await endpointApiFetch(target, `/settings/auto-update/check${query ? `?${query}` : ""}`, { method: "POST" })) as UpdateResult;
+  }
+
+  async function runCheck(which: UpdateTarget) {
+    const check = checks[which];
+    if (untracked(() => checkDisabled(which))) return;
+    if (which === "shell" && (!shell || !shellMode || shellMode.mode === "unavailable")) return;
+    check.checking.set(true);
+    check.error.set("");
+    check.copied.set(false);
     const requestSeq = seq;
     const target = endpointRef();
     const selected = trim(untracked(channel)) || null;
-    // The desktop app checks for itself; otherwise the server is asked for its release with the
-    // download for this device, which is not the server's own (a phone, another computer).
-    const native = canCheckDesktopUpdate() && target === CONSOLE_LOCAL_ENDPOINT_REF;
     try {
       let device = UNKNOWN_TARGET;
+      let native = false;
+      let serverOnly = false;
       let answer: UpdateResult;
-      if (native) {
+      if (which === "shell" && shellMode?.mode === "native") {
+        // The desktop app checks for itself: its own version against its release.
+        native = true;
         answer = (await checkDesktopUpdate(selected)) as UpdateResult;
-      } else {
+      } else if (which === "shell" && shellMode?.mode === "release" && shell) {
+        // The release's file for this app's system, its version compared with the installed one.
+        device = { os: shellMode.os, arch: "" };
+        answer = shellReleaseAnswer(shell.version, await serverCheck(target, selected, device));
+      } else if (!shell) {
+        // A browser has no shell: the server's check also names this device's download.
         device = await downloadTarget();
-        const query = [selected === null ? "" : `channel=${encodeURIComponent(selected)}`, downloadQuery(device)].filter(Boolean).join("&");
-        answer = (await endpointApiFetch(target, `/settings/auto-update/check?${query}`, { method: "POST" })) as UpdateResult;
+        answer = await serverCheck(target, selected, device);
+      } else {
+        serverOnly = true;
+        answer = await serverCheck(target, selected, null);
       }
       if (!isCurrent(requestSeq, target)) return;
-      checkedNative.set(native);
-      checkedDevice.set(device);
-      result.set(answer);
-      currentVersion.set(trim(answer?.current_version) || untracked(currentVersion));
+      check.native.set(native);
+      check.device.set(device);
+      check.serverOnly.set(serverOnly);
+      check.result.set(answer);
+      if (which === "server") {
+        const version = trim(answer?.current_version);
+        if (version) {
+          serverVersion.set(version);
+          serverLookup.set("known");
+        }
+      }
     } catch (e) {
       if (isCurrent(requestSeq, target)) {
-        result.set(null);
-        checkError.set((e as Error)?.message || t("msg_load_failed"));
+        check.result.set(null);
+        check.error.set((e as Error)?.message || t("msg_load_failed"));
       }
     } finally {
-      if (isCurrent(requestSeq, target)) checking.set(false);
+      if (isCurrent(requestSeq, target)) check.checking.set(false);
     }
   }
 
-  // idle: not checked yet; current, available, unknown (a dev build), or error after a check.
-  const state = computed(() => {
-    if (checking()) return "checking";
-    if (checkError()) return "error";
-    const current = result();
-    if (!current) return "idle";
-    if (current.update_available === true || current.channel_switch === true) return "available";
-    if (current.status === "current_version_unknown") return "unknown";
-    return "current";
-  });
-  const stateText = () => {
-    const current = result();
+  const stateText = (which: UpdateTarget) => {
+    const check = checks[which];
+    if (which === "shell" && shellMode?.mode === "unavailable") {
+      return shellMode.reason === "unknown_version" ? t("settings_update_shell_unknown_version") : t("settings_update_shell_unsupported");
+    }
+    const current = check.result();
     const version = displayVersion(current?.latest_version);
     const name = channelLabel(current?.channel);
-    switch (state()) {
+    switch (check.state()) {
       case "checking":
         return t("settings_update_checking");
       case "error":
-        return t("settings_update_failed", { error: checkError() });
+        return t("settings_update_failed", { error: check.error() });
       case "available":
         return current?.channel_switch === true
           ? t("settings_update_switch_available", { channel: name, version })
@@ -295,125 +373,54 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
         return t("settings_update_not_checked");
     }
   };
-  const stateTone = () =>
-    state() === "error" ? "text-danger" : state() === "available" ? "text-blue-dark" : state() === "current" ? "text-ok" : "text-muted-foreground";
-  const installedText = () => {
-    const version = displayVersion(trim(result()?.current_version) || trim(currentVersion()) || "dev");
+  const stateTone = (which: UpdateTarget) => {
+    const state = checks[which].state();
+    return state === "error" ? "text-danger" : state === "available" ? "text-blue-dark" : state === "current" ? "text-ok" : "text-muted-foreground";
+  };
+  // The installed app's version, from its host only; "Unknown" when the host cannot tell.
+  const shellText = () => {
+    if (!shell) return "";
+    const fromCheck = checks.shell.native() ? trim(checks.shell.result()?.current_version) : "";
+    const version = shell.version || fromCheck;
+    return `${version ? displayVersion(version) : t("settings_update_version_unknown")} · ${t(`settings_update_shell_${shell.kind}`)}`;
+  };
+  // The connected server's version, from that server only.
+  const serverText = () => {
+    if (serverLookup() === "loading") return t("settings_update_version_loading");
+    if (serverLookup() === "unknown") return t("settings_update_version_unknown");
+    const version = displayVersion(serverVersion());
     const name = channelLabel(buildChannel());
     return name ? `${version} · ${name}` : version;
   };
-  const hasRelease = () => (state() === "available" || state() === "unknown") && Boolean(trim(result()?.latest_version));
-  const releaseTitle = () =>
-    t("settings_update_release_title", { channel: channelLabel(result()?.channel), version: displayVersion(result()?.latest_version) });
-  const releaseDate = () => {
-    const raw = trim(result()?.release_date);
-    const date = raw ? new Date(raw) : null;
-    if (!date || Number.isNaN(date.getTime())) return "";
-    try {
-      return new Intl.DateTimeFormat(localeState.lang || undefined, { dateStyle: "medium" }).format(date);
-    } catch {
-      return date.toISOString().slice(0, 10);
-    }
-  };
-  const notes = () => releaseNotesSource(result()?.release_notes);
-  const choice = computed(() => downloadChoice(result(), checkedDevice(), checkedNative()));
-  const singleFile = () => {
-    const current = choice();
-    return current.kind === "file" ? current.file : null;
-  };
-  const choiceFiles = () => {
-    const current = choice();
-    return current.kind === "choose" ? current.files : [];
-  };
-  const fileSystem = (file: DownloadFile) => systemName(file.os, file.arch, t("settings_update_arch_apple_silicon"));
-  const fileLabel = (file: DownloadFile) => {
-    const system = fileSystem(file);
-    return system ? t("settings_update_download_for", { system }) : t("settings_desktop_update_download_action");
-  };
-  // Why there is no file to download, and what to do instead.
-  const downloadNote = () => {
-    const current = choice();
-    if (current.kind === "choose") return t("settings_update_download_choose");
-    if (current.kind !== "none") return "";
-    const device = checkedDevice();
-    const system = systemName(device.os, device.arch, t("settings_update_arch_apple_silicon"));
-    switch (current.reason) {
-      case "unknown_platform":
-        return t("settings_update_download_unknown");
-      case "unreachable":
-        return t("settings_update_download_unreachable");
-      case "not_published":
-        return system ? t("settings_update_download_missing", { system }) : t("settings_update_download_pick");
-      default:
-        return t("settings_update_download_pick");
-    }
-  };
-  // The checksum of the one file offered: never the server's own when the download is another's.
-  const checksum = () => trim(singleFile()?.checksum);
-  const checksumShort = () => {
-    const value = checksum().replace(/^sha256:/i, "");
-    return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value;
-  };
+  const shellCheckable = () => Boolean(shellMode && shellMode.mode !== "unavailable");
 
-  async function copyChecksum() {
-    const value = untracked(checksum);
-    if (!value) return;
-    try {
-      await copyText(value);
-      checksumCopied.set(true);
-      pushNotice({ type: "success", text: t("settings_desktop_update_checksum_copied") });
-      if (copiedTimer) clearTimeout(copiedTimer);
-      copiedTimer = setTimeout(() => {
-        checksumCopied.set(false);
-        copiedTimer = null;
-      }, 1200);
-    } catch (e) {
-      pushNotice({ type: "error", text: (e as Error)?.message || t("msg_save_failed") });
-    }
-  }
-
-  function openReleases() {
-    const name = trim(untracked(result)?.channel);
-    openExternal(name ? `${UPDATE_RELEASES_URL}?channel=${encodeURIComponent(name)}` : UPDATE_RELEASES_URL);
-  }
-
-  const probeButton = (testID: string) =>
-    props.onPartLayout
-      ? (event: Parameters<typeof boundsFrame>[0]) => parts.report(`button:${testID}`, downloadsNode, () => boundsFrame(event))
-      : undefined;
-
-  function downloadButton(file: DownloadFile | null) {
-    if (!file) {
-      return (
-        <Button
-          variant="outlined"
-          icon="PhArrowUpRight"
-          label={t("settings_update_open_releases")}
-          onPress={openReleases}
-          onLayout={probeButton("settings-update-open-releases")}
-          testID="settings-update-open-releases"
-        />
-      );
-    }
-    // A download is an icon button, named by which file it is (the system and build it is for):
-    // that name is its accessible name and its tooltip. The same words are plain text beside it,
-    // not part of the button: what the reader checks before taking the file, and what tells one of
-    // several from the others. On phones the row takes the card's width and a long name wraps.
-    const testID = choice().kind === "choose" ? `settings-update-download-${file.os}-${file.arch}` : "settings-update-download";
+  function checkRow(which: UpdateTarget) {
     return (
-      <View class={`flex-row items-center gap-2 ${isMobile() ? "" : "justify-end"}`} onLayout={probeButton(`${testID}-row`)} testID={`${testID}-row`}>
-        <Text class={`min-w-0 text-sm text-foreground ${isMobile() ? "flex-1" : "shrink"}`} testID={`${testID}-label`}>
-          {fileLabel(file)}
-        </Text>
-        <Button
-          variant="outlined"
-          icon="PhCloudArrowDown"
-          label={fileLabel(file)}
-          onPress={() => openExternal(file.url)}
-          onLayout={probeButton(testID)}
-          testID={testID}
-        />
-      </View>
+      <Row
+        title={t(which === "shell" ? "settings_update_shell_title" : "settings_update_server_title")}
+        note={which === "shell" ? shellText() : serverText()}
+        testID={`settings-update-${which}`}
+        status={
+          // The view holds the test id, so a test reads which row says what (`id:… >> text:…`).
+          <View testID={`settings-update-${which}-state`}>
+            <Text class={`text-xs leading-[17.4px] ${stateTone(which)}`}>{stateText(which)}</Text>
+          </View>
+        }
+      >
+        <If when={which === "server" || shellCheckable()}>
+          <Button
+            variant="outlined"
+            size="md"
+            icon="PhArrowClockwise"
+            label={t("settings_update_check_action")}
+            accessibilityLabel={t(which === "shell" ? "settings_update_shell_check" : "settings_update_server_check")}
+            loading={checks[which].checking()}
+            disabled={checkDisabled(which)}
+            onPress={() => void runCheck(which)}
+            testID={`settings-update-${which}-check`}
+          />
+        </If>
+      </Row>
     );
   }
 
@@ -450,86 +457,214 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
             testID="settings-update-auto"
           />
         </Row>
-        <Row
-          title={t("settings_update_version_title")}
-          note={installedText()}
-          status={
-            <Text class={`text-xs leading-[17.4px] ${stateTone()}`} testID="settings-update-state">
-              {stateText()}
-            </Text>
-          }
-        >
-          <Button
-            variant="outlined"
-            size="md"
-            icon="PhArrowClockwise"
-            label={t("settings_update_check_action")}
-            loading={checking()}
-            disabled={checkDisabled()}
-            onPress={() => void runCheck()}
-            testID="settings-update-check"
-          />
-        </Row>
-        <If when={hasRelease()}>
-          <View class="flex-row flex-wrap items-start gap-3 border-t border-line-soft py-3" {...parts.probe(() => "release")} testID="settings-update-release">
-            <View class="min-w-60 flex-1 gap-1.5">
-              <Text class="text-sm font-medium text-foreground">{releaseTitle()}</Text>
-              <View class="flex-row flex-wrap items-center gap-2">
-                <If when={releaseDate()}>
-                  <Text class="text-xs text-muted-foreground">{releaseDate()}</Text>
-                </If>
-                <Button variant="plain" size="xxs" icon="PhArrowUpRight" label={t("settings_update_all_releases")} onPress={openReleases} testID="settings-update-all-releases" />
-              </View>
-              <If when={notes()} else={<Text class="text-xs text-muted-foreground">{t("settings_desktop_update_changelog_empty")}</Text>}>
-                <Markdown source={notes()} class="text-xs" />
-              </If>
-              <If when={checksum()}>
-                {/* The checksum is read as text; the button beside it copies it. */}
-                <View class="flex-row items-center gap-1.5">
-                  <Text class="text-xs text-subtle">SHA256</Text>
-                  <Text class="font-mono text-xs text-foreground" testID="settings-update-checksum-value">
-                    {checksumShort()}
-                  </Text>
-                  <Button
-                    variant="plain"
-                    size="xxs"
-                    icon={checksumCopied() ? "PhCheckCircle" : "PhCopy"}
-                    label={t("action_copy")}
-                    title={checksum()}
-                    accessibilityLabel={`${t("action_copy")} SHA256`}
-                    onPress={() => void copyChecksum()}
-                    testID="settings-update-checksum"
-                  />
-                </View>
-              </If>
-            </View>
-            <View
-              class={isMobile() ? "w-full gap-2" : "gap-2"}
-              ref={(node: ViewRef) => (downloadsNode = node)}
-              onLayout={() => parts.report("downloads", downloadsNode)}
-              testID="settings-update-downloads"
-            >
-              <If when={downloadNote()}>
-                <Text class={`text-xs text-muted-foreground ${isMobile() ? "" : "max-w-60"}`} testID="settings-update-download-note">
-                  {downloadNote()}
-                </Text>
-              </If>
-              <If
-                when={choice().kind === "file"}
-                else={
-                  <If when={choice().kind === "choose"} else={downloadButton(null)}>
-                    <Each of={choiceFiles()} key={(file) => file.url}>
-                      {(file) => downloadButton(file())}
-                    </Each>
-                  </If>
-                }
-              >
-                {downloadButton(singleFile())}
-              </If>
-            </View>
-          </View>
+        <If when={shell}>
+          <>
+            {checkRow("shell")}
+            <ReleaseBox target="shell" check={checks.shell} parts={parts} onPartLayout={props.onPartLayout} timers={copiedTimers} />
+          </>
         </If>
+        {checkRow("server")}
+        <ReleaseBox target="server" check={checks.server} parts={parts} onPartLayout={props.onPartLayout} timers={copiedTimers} />
       </View>
     </SettingsCard>
+  );
+}
+
+/** The release a target's check found: its notes, checksum and the download for that target. */
+function ReleaseBox(props: {
+  target: UpdateTarget;
+  check: UpdateCheck;
+  parts: ReturnType<typeof createPartProbe>;
+  onPartLayout?: PartLayoutListener;
+  timers: Partial<Record<UpdateTarget, ReturnType<typeof setTimeout>>>;
+}) {
+  const check = props.check;
+  const id = (name: string) => `settings-update-${props.target}-${name}`;
+  let downloadsNode: ViewRef | undefined;
+  const result = () => check.result();
+  const hasRelease = () => (check.state() === "available" || check.state() === "unknown") && Boolean(trim(result()?.latest_version));
+  const releaseTitle = () =>
+    t("settings_update_release_title", { channel: channelLabel(result()?.channel), version: displayVersion(result()?.latest_version) });
+  const releaseDate = () => {
+    const raw = trim(result()?.release_date);
+    const date = raw ? new Date(raw) : null;
+    if (!date || Number.isNaN(date.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(localeState.lang || undefined, { dateStyle: "medium" }).format(date);
+    } catch {
+      return date.toISOString().slice(0, 10);
+    }
+  };
+  const notes = () => releaseNotesSource(result()?.release_notes);
+  const choice = computed(() =>
+    check.serverOnly() ? ({ kind: "none", reason: "server" } as const) : downloadChoice(result(), check.device(), check.native()),
+  );
+  const singleFile = () => {
+    const current = choice();
+    return current.kind === "file" ? current.file : null;
+  };
+  const choiceFiles = () => {
+    const current = choice();
+    return current.kind === "choose" ? current.files : [];
+  };
+  const fileSystem = (file: DownloadFile) => systemName(file.os, file.arch, t("settings_update_arch_apple_silicon"));
+  const fileLabel = (file: DownloadFile) => {
+    const system = fileSystem(file);
+    return system ? t("settings_update_download_for", { system }) : t("settings_desktop_update_download_action");
+  };
+  // Why there is no file to download, and what to do instead.
+  const downloadNote = () => {
+    const current = choice();
+    if (current.kind === "choose") return t("settings_update_download_choose");
+    if (current.kind !== "none") return "";
+    const device = check.device();
+    const system = systemName(device.os, device.arch, t("settings_update_arch_apple_silicon"));
+    switch (current.reason) {
+      case "server":
+        return t("settings_update_server_download_note");
+      case "unknown_platform":
+        return t("settings_update_download_unknown");
+      case "unreachable":
+        return t("settings_update_download_unreachable");
+      case "not_published":
+        return system ? t("settings_update_download_missing", { system }) : t("settings_update_download_pick");
+      default:
+        return t("settings_update_download_pick");
+    }
+  };
+  // The checksum of the one file offered: never the server's own when the download is another's.
+  const checksum = () => trim(singleFile()?.checksum);
+  const checksumShort = () => {
+    const value = checksum().replace(/^sha256:/i, "");
+    return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value;
+  };
+
+  async function copyChecksum() {
+    const value = untracked(checksum);
+    if (!value) return;
+    try {
+      await copyText(value);
+      check.copied.set(true);
+      pushNotice({ type: "success", text: t("settings_desktop_update_checksum_copied") });
+      const timer = props.timers[props.target];
+      if (timer) clearTimeout(timer);
+      props.timers[props.target] = setTimeout(() => {
+        check.copied.set(false);
+        props.timers[props.target] = undefined;
+      }, 1200);
+    } catch (e) {
+      pushNotice({ type: "error", text: (e as Error)?.message || t("msg_save_failed") });
+    }
+  }
+
+  function openReleases() {
+    const name = trim(untracked(result)?.channel);
+    openExternal(name ? `${UPDATE_RELEASES_URL}?channel=${encodeURIComponent(name)}` : UPDATE_RELEASES_URL);
+  }
+
+  const probeButton = (testID: string) =>
+    props.onPartLayout
+      ? (event: Parameters<typeof boundsFrame>[0]) => props.parts.report(`button:${testID}`, downloadsNode, () => boundsFrame(event))
+      : undefined;
+
+  function downloadButton(file: DownloadFile | null) {
+    if (!file) {
+      return (
+        <Button
+          variant="outlined"
+          icon="PhArrowUpRight"
+          label={t("settings_update_open_releases")}
+          onPress={openReleases}
+          onLayout={probeButton(id("open-releases"))}
+          testID={id("open-releases")}
+        />
+      );
+    }
+    // A download is an icon button, named by which file it is (the system and build it is for):
+    // that name is its accessible name and its tooltip. The same words are plain text beside it,
+    // not part of the button: what the reader checks before taking the file, and what tells one of
+    // several from the others. On phones the row takes the card's width and a long name wraps.
+    const testID = choice().kind === "choose" ? id(`download-${file.os}-${file.arch}`) : id("download");
+    return (
+      <View class={`flex-row items-center gap-2 ${isMobile() ? "" : "justify-end"}`} onLayout={probeButton(`${testID}-row`)} testID={`${testID}-row`}>
+        <Text class={`min-w-0 text-sm text-foreground ${isMobile() ? "flex-1" : "shrink"}`} testID={`${testID}-label`}>
+          {fileLabel(file)}
+        </Text>
+        <Button
+          variant="outlined"
+          icon="PhCloudArrowDown"
+          label={fileLabel(file)}
+          onPress={() => openExternal(file.url)}
+          onLayout={probeButton(testID)}
+          testID={testID}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <If when={hasRelease()}>
+      <View
+        class="flex-row flex-wrap items-start gap-3 border-t border-line-soft py-3"
+        {...props.parts.probe(() => `${props.target}.release`)}
+        testID={id("release")}
+      >
+        <View class="min-w-60 flex-1 gap-1.5">
+          <Text class="text-sm font-medium text-foreground">{releaseTitle()}</Text>
+          <View class="flex-row flex-wrap items-center gap-2">
+            <If when={releaseDate()}>
+              <Text class="text-xs text-muted-foreground">{releaseDate()}</Text>
+            </If>
+            <Button variant="plain" size="xxs" icon="PhArrowUpRight" label={t("settings_update_all_releases")} onPress={openReleases} testID={id("all-releases")} />
+          </View>
+          <If when={notes()} else={<Text class="text-xs text-muted-foreground">{t("settings_desktop_update_changelog_empty")}</Text>}>
+            <Markdown source={notes()} class="text-xs" />
+          </If>
+          <If when={checksum()}>
+            {/* The checksum is read as text; the button beside it copies it. */}
+            <View class="flex-row items-center gap-1.5">
+              <Text class="text-xs text-subtle">SHA256</Text>
+              <Text class="font-mono text-xs text-foreground" testID={id("checksum-value")}>
+                {checksumShort()}
+              </Text>
+              <Button
+                variant="plain"
+                size="xxs"
+                icon={check.copied() ? "PhCheckCircle" : "PhCopy"}
+                label={t("action_copy")}
+                title={checksum()}
+                accessibilityLabel={`${t("action_copy")} SHA256`}
+                onPress={() => void copyChecksum()}
+                testID={id("checksum")}
+              />
+            </View>
+          </If>
+        </View>
+        <View
+          class={isMobile() ? "w-full gap-2" : "gap-2"}
+          ref={(node: ViewRef) => (downloadsNode = node)}
+          onLayout={() => props.parts.report(`${props.target}.downloads`, downloadsNode)}
+          testID={id("downloads")}
+        >
+          <If when={downloadNote()}>
+            <Text class={`text-xs text-muted-foreground ${isMobile() ? "" : "max-w-60"}`} testID={id("download-note")}>
+              {downloadNote()}
+            </Text>
+          </If>
+          <If
+            when={choice().kind === "file"}
+            else={
+              <If when={choice().kind === "choose"} else={downloadButton(null)}>
+                <Each of={choiceFiles()} key={(file) => file.url}>
+                  {(file) => downloadButton(file())}
+                </Each>
+              </If>
+            }
+          >
+            {downloadButton(singleFile())}
+          </If>
+        </View>
+      </View>
+    </If>
   );
 }
