@@ -192,6 +192,7 @@ function History(props: { c: ChatController; topInset: number; endInset: number 
       hasOlder={Boolean(c.historyNextCursor())}
       loadingOlder={c.historyLoadingOlder()}
       olderLabel={t("chat_history_load_older")}
+      olderLoadingLabel={t("chat_history_loading_older")}
       onLoadOlder={() => void c.loadOlderHistory()}
       ctx={c.rowContext}
       onListRef={(list) => c.setHistoryList(list)}

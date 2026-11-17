@@ -2,7 +2,7 @@
 // there while new messages and streamed words arrive; scrolled up, the messages on screen keep their
 // place whatever changes above or below them. While another topic's history loads, a placeholder
 // thread shows instead of the old messages. Ported from web/console/src/components/ChatHistoryList.js.
-import type { ListRef, ViewRef } from "nsh";
+import type { Bounds, ListRef, ViewRef } from "nsh";
 import { cleanup, computed, createMotion, effect, List, signal, Text, untracked, View, windowSize } from "nsh";
 import { createArrivalTracker } from "../../lib/core/arrivals.js";
 import { foldQuietRuns } from "../../lib/core/chat-quiet-runs.js";
@@ -62,6 +62,50 @@ function Skeleton(props: { label: string }) {
   );
 }
 
+/** The height of the row above the oldest loaded message while older ones remain: a touch target's. */
+export const HISTORY_OLDER_ROW_HEIGHT = 44;
+
+// Where the loaded conversation begins while the runtime holds older messages: a quiet button
+// between two faint rules, in the conversation's column (its width and gutters), under the
+// messages and the composer in weight. It keeps its size whether idle or loading (the button
+// turns busy in place, its presses blocked, and says so to assistive tech), so nothing on screen
+// moves while a page loads; with no older page left the row goes (ChatHistoryList's `hasOlder`).
+export function OlderBoundary(props: {
+  label: string;
+  loadingLabel: string;
+  loading: boolean;
+  onPress: () => void;
+  /** Where the row and its parts are in their parents. For tests. */
+  onPartLayout?: (part: "row" | "rule-start" | "button" | "rule-end", bounds: Bounds) => void;
+}) {
+  const report = (part: "row" | "rule-start" | "button" | "rule-end") =>
+    props.onPartLayout ? (event: { bounds: Bounds }) => props.onPartLayout?.(part, event.bounds) : undefined;
+  return (
+    <View
+      class="w-full max-w-[832px] flex-row items-center gap-3 self-center"
+      style={{ height: HISTORY_OLDER_ROW_HEIGHT }}
+      testID="chat-history-older"
+      onLayout={report("row")}
+    >
+      <View accessibilityElementsHidden class="h-px flex-1 bg-line-faint" onLayout={report("rule-start")} />
+      <Button
+        variant="plain"
+        size="xs"
+        align="center"
+        label={props.label}
+        accessibilityLabel={props.loading ? props.loadingLabel : props.label}
+        loading={props.loading}
+        // 32pt tall: the row's 44pt are its target.
+        hitSlop={{ top: 6, bottom: 6 }}
+        onPress={props.onPress}
+        testID="chat-history-load-older"
+        onLayout={report("button")}
+      />
+      <View accessibilityElementsHidden class="h-px flex-1 bg-line-faint" onLayout={report("rule-end")} />
+    </View>
+  );
+}
+
 function historyID(item: HistoryItem) {
   return String(item?.id ?? "");
 }
@@ -78,6 +122,8 @@ export function ChatHistoryList(props: {
   hasOlder: boolean;
   loadingOlder: boolean;
   olderLabel: string;
+  /** The older-messages button's accessible name while a page loads. */
+  olderLoadingLabel: string;
   onLoadOlder: () => void;
   ctx: ChatRowContext;
   onListRef?: (ref: ListRef) => void;
@@ -290,16 +336,12 @@ export function ChatHistoryList(props: {
         testID="chat-history"
         header={() => (
           <If when={props.hasOlder}>
-            <View class="items-center py-2">
-              <Button
-                variant="plain"
-                size="sm"
-                label={props.olderLabel}
-                loading={props.loadingOlder}
-                onPress={props.onLoadOlder}
-                testID="chat-history-load-older"
-              />
-            </View>
+            <OlderBoundary
+              label={props.olderLabel}
+              loadingLabel={props.olderLoadingLabel}
+              loading={props.loadingOlder}
+              onPress={props.onLoadOlder}
+            />
           </If>
         )}
         empty={() => (

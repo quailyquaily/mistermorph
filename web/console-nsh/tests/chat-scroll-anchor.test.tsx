@@ -8,7 +8,7 @@ import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
 
 type Frame = { y: number; h: number };
-type Report = { seq: number; list: Frame; rows: Record<string, Frame> };
+type Report = { seq: number; list: Frame; rows: Record<string, Frame>; requests: number; hasOlder: boolean };
 
 const SCREENS = [
   { name: "desktop", options: { width: 1000, height: 800, platform: "linux" as const } },
@@ -26,13 +26,25 @@ async function openList(options: (typeof SCREENS)[number]["options"]) {
 // the new offset back, so positions (and `onScroll`) lag until the next scroll. A nudge of a point
 // and back reports it: what the reader would see after the update.
 async function snap(app: App): Promise<Report> {
-  await app.scroll("id:chat-history", -1);
-  await app.scroll("id:chat-history", 1);
+  try {
+    await app.scroll("id:chat-history", -1);
+    await app.scroll("id:chat-history", 1);
+  } catch {
+    // At the very top: the other way round.
+    await app.scroll("id:chat-history", 1);
+    await app.scroll("id:chat-history", -1);
+  }
   const current = () => app.texts().find((text) => text.startsWith('{"seq"')) ?? "";
   const before = current();
   await app.press("id:do-probe");
   await app.waitUntil(() => current() !== before);
   return JSON.parse(current()) as Report;
+}
+
+/** Up to the oldest loaded message, the row above it on screen (a point down first, where there is room, reports where the list really is). */
+async function toTop(app: App) {
+  await app.scroll("id:chat-history", 1).catch(() => {});
+  await app.scroll("id:chat-history", -100000);
 }
 
 async function act(app: App, name: string) {
@@ -163,4 +175,68 @@ test("older messages arriving above keep the place", async () => {
   expectInPlace(before, await snap(app));
   await act(app, "stream");
   expectInPlace(before, await snap(app));
+});
+
+// The row above the oldest loaded message (FT145). It keeps its size while a page loads, so
+// nothing on screen moves, and takes no second press. Where the page goes is the list's own
+// anchoring, as before: at the very top (the row in full view) the page shows under the row, which
+// stays where it was for the next press; scrolled past the start, the page arrives out of sight
+// above the messages on screen. With the last page the row goes.
+for (const screen of SCREENS) {
+  test(`${screen.name}: at the top, the row holds still while its page loads, asks once, and the page shows under it`, async () => {
+    const app = await openList(screen.options);
+    await toTop(app);
+    const before = await snap(app);
+    expect(before.rows["a-u1"]).toBeDefined();
+    await app.press("role:button[Load older]");
+    await app.wait(200);
+    const loading = await snap(app);
+    expect(loading.requests).toBe(1);
+    expectInPlace(before, loading);
+    // Busy, it says so, and a press does nothing.
+    await app.waitFor("role:button[Loading older]");
+    await app.press("id:chat-history-load-older").catch(() => {});
+    await app.wait(100);
+    expect((await snap(app)).requests).toBe(1);
+    await act(app, "land");
+    const landed = await snap(app);
+    expect(landed.requests).toBe(1);
+    // The page starts where the conversation started, oldest first, under the row, idle again.
+    expect(Math.abs(landed.rows["old1-u1"].y - before.rows["a-u1"].y)).toBeLessThanOrEqual(1);
+    expect(landed.rows["old1-a1"].y).toBeGreaterThan(landed.rows["old1-u1"].y);
+    await app.waitFor("role:button[Load older]");
+  });
+
+  test(`${screen.name}: the last page landing while scrolled down takes the row away and keeps the place`, async () => {
+    const app = await openList(screen.options);
+    await toTop(app);
+    await app.press("role:button[Load older]");
+    await act(app, "land");
+    // The last page is asked for, and the reader scrolls on down while it loads.
+    await app.press("role:button[Load older]");
+    await app.scroll("id:chat-history", 600);
+    const before = await snap(app);
+    await act(app, "land");
+    const after = await snap(app);
+    expect(after.hasOlder).toBe(false);
+    expect(after.requests).toBe(2);
+    expect(app.shows("id:chat-history-load-older")).toBe(false);
+    expectInPlace(before, after);
+  });
+}
+
+test("the last page landing at the top takes the row away and begins where it was", async () => {
+  const app = await openList(SCREENS[0].options);
+  await toTop(app);
+  await app.press("role:button[Load older]");
+  await act(app, "land");
+  const before = await snap(app);
+  await app.press("role:button[Load older]");
+  await act(app, "land");
+  const after = await snap(app);
+  expect(after.hasOlder).toBe(false);
+  expect(app.shows("id:chat-history-load-older")).toBe(false);
+  // The row's 44pt are gone (the list keeps its 20pt gap under the empty header, as it did before
+  // the row existed): the page's first message starts that much higher.
+  expect(Math.abs(after.rows["old2-u1"].y - (before.rows["old1-u1"].y - 44))).toBeLessThanOrEqual(1);
 });

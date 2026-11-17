@@ -2,7 +2,9 @@
 // with a running reply, changed the way the chat controller changes it. Every update gives the
 // changed messages new objects (a streamed word, a tool step, a finished task), and a reload gives
 // every message a new object under the same id (refreshHistory). The buttons stage those updates;
-// `probe` writes where each row on screen is, and where the list is, into the report text.
+// `probe` writes where each row on screen is, and where the list is, into the report text. The
+// list's own older-messages button starts a load the way `loadOlderHistory` does (counted in the
+// report as `requests`); `land` answers it with the next page.
 import type { ListRef, ViewRef } from "nsh";
 import { batch, mount, signal, Text, View } from "nsh";
 import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
@@ -44,6 +46,8 @@ const topic = signal("a");
 const items = signal<HistoryItem[]>(conversation("a", 8, true));
 const loading = signal(false);
 const hasOlder = signal(true);
+const loadingOlder = signal(false);
+let requests = 0;
 const report = signal("");
 let streamed = 14;
 let olderPages = 0;
@@ -102,6 +106,12 @@ const actions: Record<string, () => void> = {
       hasOlder.set(olderPages < 2);
     });
   },
+  // The page the older-messages button asked for arrives, and the button is idle again.
+  land: () =>
+    batch(() => {
+      actions.older();
+      loadingOlder.set(false);
+    }),
   // Another topic opens: its history loads (`loadHistory`) and the list starts at its newest message.
   topic: () => {
     batch(() => {
@@ -134,7 +144,7 @@ async function probe() {
     out[row.id()] = { y: Math.round(y * 10) / 10, h: Math.round(h * 10) / 10 };
   }
   seq += 1;
-  report.set(JSON.stringify({ seq, list: { y: top, h: height }, rows: out }));
+  report.set(JSON.stringify({ seq, list: { y: top, h: height }, rows: out, requests, hasOlder: hasOlder() }));
 }
 
 const ctx: ChatRowContext = {
@@ -169,7 +179,7 @@ function App() {
     <View class="flex-1 bg-background">
       <View class="h-8 flex-row gap-1">
         {Object.keys(actions).map((name) => (
-          <View testID={`do-${name}`} onPress={actions[name]} class="h-8 w-10 bg-muted">
+          <View testID={`do-${name}`} onPress={actions[name]} class="h-8 w-9 bg-muted">
             <Text class="text-[10px]">{name}</Text>
           </View>
         ))}
@@ -187,9 +197,13 @@ function App() {
           loadingText="Loading"
           emptyText="Nothing yet"
           hasOlder={hasOlder()}
-          loadingOlder={false}
+          loadingOlder={loadingOlder()}
           olderLabel="Load older"
-          onLoadOlder={() => actions.older()}
+          olderLoadingLabel="Loading older"
+          onLoadOlder={() => {
+            requests += 1;
+            loadingOlder.set(true);
+          }}
           ctx={ctx}
           onListRef={(ref) => {
             list = ref;

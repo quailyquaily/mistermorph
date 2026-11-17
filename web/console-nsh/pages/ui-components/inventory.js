@@ -161,7 +161,7 @@ const FILES = {
     group: "chat",
     items: { ChatHistoryItem: D(), Bubble: C("ChatHistoryItem"), CopyButton: C("ChatHistoryItem"), EditButton: C("ChatHistoryItem"), WaitingForAnswer: C("ChatHistoryItem") },
   },
-  "components/chat/ChatHistoryList.tsx": { group: "chat", items: { ChatHistoryList: D(), Skeleton: C("ChatHistoryList") } },
+  "components/chat/ChatHistoryList.tsx": { group: "chat", items: { ChatHistoryList: D(), OlderBoundary: C("ChatHistoryList"), Skeleton: C("ChatHistoryList") } },
   "components/chat/ChatLoadError.tsx": { group: "chat", items: { ChatLoadError: D() } },
   "components/chat/ChatNoticeLine.tsx": { group: "chat", items: { ChatNoticeLine: D() } },
   "components/chat/ChatQuietRuns.tsx": { group: "chat", items: { ChatQuietRuns: D() } },
