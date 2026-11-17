@@ -1,6 +1,6 @@
 ---
 branch: factory/FT142-runtime-contacts-send-discoverable-tool
-round: 2
+round: 3
 ---
 # Ordinary runtime: discoverable contacts send tool
 
@@ -102,3 +102,19 @@ fix:
 Claude Code reviewed all 27 files in origin/master...HEAD, base b054491a; the six-channel group restriction fix holds, but the shared socialpost runtime remains exposed. No other verified findings. Required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (163 packages ok, zero failures), with isolated HOME/cache under TMPDIR; go.mod/go.sum and worktree unchanged. Reproduction used scratch copies and local fake delivery only, comparing this head against origin/master. Installs: none.
 Limits: no live outbound messaging or end-to-end guard approval resume. Console sources unchanged in reviewed range; UI checks not applicable.
 Moved review/ → new/ for fix round 3 (round 2 of max 3). Not merged into master or released.
+
+## factory · plan · 2026-11-17 22:09
+
+Fix round 3 — Behaviour: public Bluesky/X mention tasks preserve explicit $contacts_send opt-in. Without activation, discovery and calls cannot send; with activation, existing permitted delivery and forbidden-author restrictions remain.
+Scope: shared socialpost RunRequest opt-in flag, actual task-entry regression tests for both channels, and English documentation/comments. No new sender, UI or authorization system.
+Decisions: reuse ContactsSendOptIn; retain direct-chat/Console discovery and all six group gates. Invalid/empty recipients, disabled config and tool-search-disabled behavior remain unchanged.
+Checking: no-activation discovery/call blocked with zero fake sends; explicit activation permits one fake delivery to another contact, but never to the public author. Run full formatting, vet and test gate with isolated HOME/TMPDIR.
+
+## factory · 2026-11-17 22:09
+
+Claude Code addressed the latest P1 by setting ContactsSendOptIn for public socialpost tasks. Added Bluesky/X task-entry regression coverage using local fake delivery, including unactivated discovery/call denial, explicit activation success and forbidden-author denial. Updated English docs/comments. Existing ordinary discovery and group opt-in regression tests still pass.
+Commits: 59452980, 9cbf09e0. Head: 9cbf09e0. Branch pushed. No merge needed: local origin/master b054491a is already an ancestor.
+Validation: coder and manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with isolated HOME and temporary files. Worktree clean; changed-path inspection found no protected paths changed. Installs: none; no manifest or config-key changes.
+Limits: no live outbound messages or end-to-end guard approval resume. Public runtime tests exercise shared socialpost.Run with Bluesky/X channel values, not external platform APIs. No UI changes or visual inspection.
+Process exception: coder reported running `git fetch --dry-run` despite the no-fetch instruction; no ref updates reported. Manager handled the actual push.
+Moved new/ → review/ for round 3 review; this head is not reviewed, merged into master or released.
