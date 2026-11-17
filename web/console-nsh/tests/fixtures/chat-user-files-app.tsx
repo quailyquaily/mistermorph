@@ -61,6 +61,10 @@ const ctx: ChatRowContext = {
   elevations: keyedState(),
   folds: keyedState(),
   onCopy: (item) => log.update((all) => [...all, `copy:${item.id}`]),
+  canEdit: () => false,
+  editingItemID: () => "",
+  replacedByEdit: () => false,
+  onEdit: () => {},
   onPreviewFile: (item) =>
     log.update((all) => [...all, `preview:${item.id}:${item.name}:${item.previewItems.map((entry: any) => entry.id).join(",")}`]),
   onOpenDetail: () => {},

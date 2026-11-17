@@ -78,3 +78,6 @@ export const COMPOSER_RADIUS_CLASS = "rounded-[27px]";
  * Its ends are padded past the curve.
  */
 export const COMPOSER_VOICE_BAR_CLASS = `mx-2.5 mt-2.5 flex-row items-center gap-2 overflow-hidden ${COMPOSER_RADIUS_CLASS} bg-paper py-1 pl-3 pr-1.5`;
+
+/** The quote bar of a message being edited (FT140): the voice bar's shape, one line high. */
+export const COMPOSER_QUOTE_BAR_CLASS = COMPOSER_VOICE_BAR_CLASS;

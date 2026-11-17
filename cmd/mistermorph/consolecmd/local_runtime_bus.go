@@ -28,6 +28,12 @@ func (r *consoleLocalRuntime) submitTaskViaBus(ctx context.Context, generation *
 	if err != nil {
 		return daemonruntime.SubmitTaskResponse{}, false, err
 	}
+	return r.publishAcceptedTask(ctx, job, resp)
+}
+
+// publishAcceptedTask hands a recorded task to the bus for its run. The bool reports whether the
+// run took over the generation the caller acquired.
+func (r *consoleLocalRuntime) publishAcceptedTask(ctx context.Context, job consoleLocalTaskJob, resp daemonruntime.SubmitTaskResponse) (daemonruntime.SubmitTaskResponse, bool, error) {
 	if r.consoleExecutionState == nil {
 		err := errConsoleExecutionClosed
 		if stateErr := runtimecore.MarkTaskFailed(r.store, job.TaskID, err.Error(), false); stateErr != nil {
@@ -57,11 +63,19 @@ func (r *consoleLocalRuntime) submitTaskViaBus(ctx context.Context, generation *
 }
 
 func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGeneration, task string, model string, llmProfile string, timeout time.Duration, topicID string, topicTitle string, workspaceDir string, fileReferences []daemonruntime.FileReference, trigger daemonruntime.TaskTrigger) (consoleLocalTaskJob, daemonruntime.SubmitTaskResponse, error) {
+	job, resp, _, err := r.acceptTaskReplacing(generation, task, model, llmProfile, timeout, topicID, topicTitle, workspaceDir, fileReferences, trigger, "")
+	return job, resp, err
+}
+
+// acceptTaskReplacing records a task as acceptTask does; with replaceTaskID it records it in place
+// of that message of the topic and every task after it (ConsoleFileStore.ReplaceTopicTasks), and
+// returns the dropped tasks' IDs.
+func (r *consoleLocalRuntime) acceptTaskReplacing(generation *consoleLocalRuntimeGeneration, task string, model string, llmProfile string, timeout time.Duration, topicID string, topicTitle string, workspaceDir string, fileReferences []daemonruntime.FileReference, trigger daemonruntime.TaskTrigger, replaceTaskID string) (consoleLocalTaskJob, daemonruntime.SubmitTaskResponse, []string, error) {
 	if r == nil || r.store == nil {
-		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, fmt.Errorf("console runtime is not initialized")
+		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, fmt.Errorf("console runtime is not initialized")
 	}
 	if generation == nil {
-		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, fmt.Errorf("console runtime generation is not initialized")
+		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, fmt.Errorf("console runtime generation is not initialized")
 	}
 	now := time.Now().UTC()
 	seq := r.seq.Add(1)
@@ -69,9 +83,9 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 	resolvedRoute, resolvedModel, err := resolveConsoleAdmittedRoute(generation, task, model, llmProfile, taskID)
 	if err != nil {
 		if strings.TrimSpace(llmProfile) != "" {
-			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest(strings.TrimSpace(err.Error()))
+			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, daemonruntime.BadRequest(strings.TrimSpace(err.Error()))
 		}
-		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, err
+		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, err
 	}
 	model = resolvedModel
 	trigger = normalizeConsoleTrigger(&trigger, daemonruntime.TaskTrigger{})
@@ -85,11 +99,11 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 	workspaceStore := r.currentWorkspaceStore()
 	if requestedWorkspaceDir != "" {
 		if workspaceStore == nil {
-			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, fmt.Errorf("workspace store is not configured")
+			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, fmt.Errorf("workspace store is not configured")
 		}
 		dir, err := workspace.ValidateDir(requestedWorkspaceDir, nil)
 		if err != nil {
-			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest(strings.TrimSpace(err.Error()))
+			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, daemonruntime.BadRequest(strings.TrimSpace(err.Error()))
 		}
 		validatedWorkspaceDir = dir
 	}
@@ -109,7 +123,7 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 	resolvedWorkspaceDir := ""
 	if validatedWorkspaceDir != "" {
 		if _, _, err := workspaceStore.Set(conversationKey, workspace.Attachment{WorkspaceDir: validatedWorkspaceDir}); err != nil {
-			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, err
+			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, err
 		}
 		resolvedWorkspaceDir = validatedWorkspaceDir
 	} else if workspaceStore != nil {
@@ -119,7 +133,7 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 		}
 		resolution, err := workspace.Resolve(workspaceStore, conversationKey, defaultWorkspaceDir)
 		if err != nil {
-			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, err
+			return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, err
 		}
 		resolvedWorkspaceDir = resolution.WorkspaceDir
 	}
@@ -129,9 +143,9 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 		consoleFileCacheDir(generation.reader),
 	)
 	if err != nil {
-		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, err
+		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, err
 	}
-	if err := r.store.UpsertWithTrigger(daemonruntime.TaskInfo{
+	info := daemonruntime.TaskInfo{
 		ID:             taskID,
 		Status:         daemonruntime.TaskQueued,
 		Task:           strings.TrimSpace(task),
@@ -150,8 +164,15 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 			"",
 			nil,
 		), audience.Owner()),
-	}, trigger, topicTitle); err != nil {
-		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, err
+	}
+	var removed []string
+	if replaceTaskID == "" {
+		err = r.store.UpsertWithTrigger(info, trigger, topicTitle)
+	} else {
+		removed, err = r.store.ReplaceTopicTasks(replaceTaskID, info, trigger)
+	}
+	if err != nil {
+		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, err
 	}
 	job := consoleLocalTaskJob{
 		TaskID:          taskID,
@@ -173,7 +194,7 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 		ID:      taskID,
 		Status:  daemonruntime.TaskQueued,
 		TopicID: topicID,
-	}, nil
+	}, removed, nil
 }
 
 func consoleBusSessionID(topicID string) string {

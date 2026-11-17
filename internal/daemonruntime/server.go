@@ -46,6 +46,7 @@ import (
 
 type SubmitFunc func(ctx context.Context, req SubmitTaskRequest) (SubmitTaskResponse, error)
 type StopFunc func(ctx context.Context, req StopTaskRequest) (StopTaskResponse, error)
+type ReplaceFunc func(ctx context.Context, req ReplaceTaskRequest) (ReplaceTaskResponse, error)
 type AnswerQuestionFunc func(ctx context.Context, req AnswerQuestionRequest) (AnswerQuestionResponse, error)
 type AnswerElevationFunc func(ctx context.Context, req AnswerElevationRequest) (AnswerElevationResponse, error)
 type OverviewFunc func(ctx context.Context) (map[string]any, error)
@@ -145,6 +146,11 @@ type TaskTopicRoutes struct {
 	CreateTopic func(title string) (TopicInfo, error)
 	Submit      SubmitFunc
 	Stop        StopFunc
+	// Replace edits a person's earlier message (POST /tasks/{id}/replace): the message and every
+	// task after it in its topic go, and the edited text runs in their place. Nil when the runtime
+	// does not edit messages; the route then answers 404, so an older client never mistakes an
+	// edit for a new message.
+	Replace ReplaceFunc
 	// AnswerQuestion answers the question a running task waits on; nil when the runtime's tasks
 	// ask no questions.
 	AnswerQuestion AnswerQuestionFunc

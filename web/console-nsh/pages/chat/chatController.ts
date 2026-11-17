@@ -21,6 +21,7 @@ import {
 } from "../../lib/core/chat-llm-profiles.js";
 import { placeSteeredAgentsAfterUsers } from "../../lib/core/chat-history-steering.js";
 import { rememberLastTopicID } from "../../lib/core/chat-topic-memory.js";
+import { editableMessage, editReplacedItemIDs, historyBeforeEdit, historyItemTaskID } from "../../lib/core/chat-message-edit.js";
 import {
   agentDisplayName,
   applyUserReaction,
@@ -143,6 +144,21 @@ const TOPIC_ACTIVITY_REFRESH_INTERVAL_MS = 5000;
 // "_agentlink_<instance_id>", listed apart from the person's own topics.
 const AGENT_LINK_TOPIC_PREFIX = "_agentlink_";
 const LOCAL_CONSOLE_ENDPOINT_REF = "ep_console_local";
+/**
+ * A sent message being edited (FT140): the message's row and task, where it was sent, its text (the
+ * quote bar's), the files it carried (which go with the edit), and the draft the composer held
+ * before, which comes back when the edit ends.
+ */
+interface MessageEdit {
+  itemID: string;
+  taskID: string;
+  topicID: string;
+  endpointRef: string;
+  text: string;
+  files: any[];
+  draft: string;
+}
+
 // The trigger of a task sent from this chat. The runtime lets only such tasks ask questions.
 const CONSOLE_CHAT_TRIGGER = Object.freeze({ source: "ui", event: "chat_submit", ref: "web/console/chat" });
 const WORKSPACE_SIDEBAR_OPEN_STORAGE_KEY = "mistermorph_console_workspace_sidebar_open_v1";
@@ -488,6 +504,8 @@ export function createChatController() {
   const composerSkillsLoading = signal(false);
   const composerSkillsError = signal("");
   let suppressDraftPersistence = false;
+  // Editing a sent message: the composer holds the edit, its draft waits in the edit (MessageEdit).
+  const messageEdit = signal<MessageEdit | null>(null);
   const rawDialogOpen = signal(false);
   const rawDialogJSON = signal("");
   let rawRevealItemID = "";
@@ -528,11 +546,14 @@ export function createChatController() {
     return null;
   };
   const composerHasInput = () => String(taskInput() || "").trim() !== "";
-  const composerStopMode = () => Boolean(activeTaskItem()) && !composerHasInput();
+  // An edit sends text alone (its message's files go with it), and never turns Send into Stop.
+  const composerStopMode = () => !messageEdit() && Boolean(activeTaskItem()) && !composerHasInput();
   const composerDisabled = () => Boolean(submitBlockedMessage()) || sending();
-  const sendDisabled = () => composerDisabled() || (!composerStopMode() && (composerFilesPending() || !composerHasInput()));
+  const sendDisabled = () =>
+    composerDisabled() || (!composerStopMode() && ((!messageEdit() && composerFilesPending()) || !composerHasInput()));
   const composerActionLabel = () => {
     if (composerStopMode()) return t("chat_action_stop");
+    if (messageEdit()) return mobileMode() ? t("chat_message_edit_send") : `${t("chat_message_edit_send")} (Enter)`;
     return mobileMode() ? t("chat_action_send") : `${t("chat_action_send")} (Enter)`;
   };
   const composerPlaceholder = () => t("chat_input_placeholder", { name: displayAgentName() });
@@ -1058,7 +1079,7 @@ export function createChatController() {
   };
   const workspaceAttachDisabled = () => !workspaceReady() || workspaceBusy();
   const composerWorkspaceAttachDisabled = () => !String(submitEndpointRef() || "").trim() || workspaceBusy();
-  const composerAddDisabled = () => composerDisabled() || !String(submitEndpointRef() || "").trim();
+  const composerAddDisabled = () => composerDisabled() || Boolean(messageEdit()) || !String(submitEndpointRef() || "").trim();
   const workspaceDetachDisabled = () =>
     !workspaceReady() || workspaceBusy() || workspaceSource() !== "attachment" || String(workspaceDir() || "").trim() === "";
   /** The home directory of the host the selected endpoint's workspaces are on; "" when it did not say. */
@@ -1245,7 +1266,8 @@ export function createChatController() {
   /** What the composer's field reports: the draft, remembered for its topic. */
   function setTaskInput(text: string) {
     taskInput.set(text);
-    if (!suppressDraftPersistence) persistComposerDraft();
+    // An edit's text is not the topic's draft: that waits in the edit.
+    if (!suppressDraftPersistence && !untracked(messageEdit)) persistComposerDraft();
   }
 
   // Every change of a draft's attachments goes through here: a picked file the draft no longer
@@ -3023,6 +3045,7 @@ export function createChatController() {
   // send, even where the window is wide enough for the desktop layout.
   async function submitTask(options: { keyboardDismissed?: boolean } = {}) {
     cancelEntryFocus();
+    if (untracked(messageEdit)) return submitMessageEdit(options);
     const draftText = String(untracked(taskInput) || "");
     const task = draftText.trim();
     if (!task || untracked(sending) || untracked(composerFilesPending)) return;
@@ -3143,6 +3166,163 @@ export function createChatController() {
     }
   }
 
+
+  /* ---------- editing a sent message ---------- */
+
+  // Editing one of the person's earlier messages in a topic (FT140). Edit (beside Copy under the
+  // message) puts its text in the composer, the composer's draft waits in the edit, and the quote
+  // bar above the field shows what is being edited with Cancel. Sending asks the runtime to replace
+  // the message (POST /tasks/{id}/replace): the message and everything after it go, and the edited
+  // text runs from the conversation before it. Until the runtime takes the edit, the conversation
+  // on screen stays as it was; a refused edit keeps its text for another try.
+  //
+  // While a reply runs (or waits on an approval or a question) no message can be edited, and an
+  // edit already open cannot be sent: the runtime refuses it too, rather than stopping the work.
+  const messageEditBlocked = () =>
+    sending() ||
+    Boolean(activeTaskItem()) ||
+    chatReadonly() ||
+    !consoleTopicsEnabled() ||
+    creatingTopic() ||
+    !hasSelectedTopic() ||
+    selectedTopicIsCron() ||
+    selectedTopicIsAgent();
+  const canEditMessage = (item: HistoryItem) => {
+    if (messageEditBlocked() || !editableMessage(item)) return false;
+    const topicID = normalizeTopicID(item?.topicID);
+    return !topicID || topicID === normalizeTopicID(selectedTopicID());
+  };
+  // The rows the edit replaces once sent: the edited message's and every one after it.
+  const messageEditReplaced = computed(() => editReplacedItemIDs(chatHistoryItems(), messageEdit()), {
+    equals: (a, b) => a.size === b.size && [...a].every((id) => b.has(id)),
+  });
+
+  function startMessageEdit(item: HistoryItem) {
+    if (!untracked(() => canEditMessage(item))) return;
+    const current = untracked(messageEdit);
+    const scope = untracked(composerDraftScope);
+    const text = String(item?.text ?? "");
+    batch(() => {
+      messageEdit.set({
+        itemID: String(item.id),
+        taskID: historyItemTaskID(item),
+        topicID: normalizeTopicID(untracked(selectedTopicID)),
+        endpointRef: String(scope?.endpointRef || "").trim(),
+        text,
+        files: Array.isArray(item?.files) ? item.files : [],
+        // Another message's edit hands its draft on: the composer's own draft is that one.
+        draft: current ? current.draft : String(untracked(taskInput) || ""),
+      });
+      err.set("");
+      suppressDraftPersistence = true;
+      taskInput.set(text);
+      suppressDraftPersistence = false;
+    });
+    composer?.closeSuggestions();
+    focusComposer();
+  }
+
+  // Ends the edit and gives the composer back its draft. The draft never left the topic's storage,
+  // so nothing is written.
+  function endMessageEdit() {
+    const edit = untracked(messageEdit);
+    if (!edit) return null;
+    batch(() => {
+      messageEdit.set(null);
+      suppressDraftPersistence = true;
+      taskInput.set(edit.draft);
+      suppressDraftPersistence = false;
+    });
+    return edit;
+  }
+
+  /** Cancel (the quote bar's) or Escape: no request, nothing stored, the draft back. */
+  function cancelMessageEdit() {
+    if (untracked(sending) || !endMessageEdit()) return;
+    focusComposerOnDesktop();
+  }
+
+  async function submitMessageEdit(options: { keyboardDismissed?: boolean } = {}) {
+    const edit = untracked(messageEdit);
+    if (!edit || untracked(sending)) return;
+    const text = String(untracked(taskInput) || "").trim();
+    if (!text) {
+      err.set(t("chat_message_edit_empty"));
+      return;
+    }
+    if (untracked(activeTaskItem)) {
+      err.set(t("chat_message_edit_busy"));
+      return;
+    }
+    const endpointRef = edit.endpointRef;
+    const llmProfile = String(untracked(composerLLMProfile) || "").trim();
+    // The edit still belongs to the conversation on screen (the user may leave while it is sent).
+    const current = () => viewActive && untracked(messageEdit) === edit && untracked(submitEndpointRef) === endpointRef;
+    batch(() => {
+      sending.set(true);
+      err.set("");
+    });
+    let submitted: any;
+    try {
+      const body: Record<string, any> = { task: text, topic_id: edit.topicID, trigger: { ...CONSOLE_CHAT_TRIGGER, event: "chat_edit" } };
+      if (llmProfile) body.llm_profile = llmProfile;
+      submitted = await runtimeApiFetchForEndpoint(endpointRef, `/tasks/${encodeURIComponent(edit.taskID)}/replace`, { method: "POST", body });
+      if (!String(submitted?.id || "").trim()) throw new Error(t("chat_missing_task_id"));
+    } catch (error) {
+      sending.set(false);
+      if (!current()) return;
+      err.set(errorMessage(error, t("msg_load_failed")));
+      // What the runtime holds now: the conversation as it was after a refusal (the edit stays,
+      // with its text, for another try), or, when it took the edit and only its run failed to
+      // start, the edited conversation (the edit is over).
+      await loadHistory({ preserveCurrent: true, keepError: true });
+      if (current() && historyBeforeEdit(untracked(chatHistoryItems), edit) === null && !untracked(historyLoadError)) endMessageEdit();
+      if (!options.keyboardDismissed) focusComposerOnDesktop();
+      return;
+    }
+    const taskID = String(submitted.id).trim();
+    try {
+      if (!current()) return;
+      endMessageEdit();
+      applyComposerTopicLLMProfile(llmProfile);
+      // The conversation on screen: what came before the edited message, then the edit and its reply.
+      const before = historyBeforeEdit(untracked(chatHistoryItems), edit);
+      if (before === null) {
+        await loadHistory({ keepError: true });
+        return;
+      }
+      const kept = new Set(before.map((item) => item.id));
+      if (untracked(activityDetail) && !kept.has(String(untracked(activityDetail)?.itemID || ""))) closeActivityDetail();
+      replaceHistoryItems(before);
+      pushHistoryItem({
+        role: "user",
+        text,
+        files: edit.files,
+        endpointRef,
+        topicID: edit.topicID,
+        taskId: taskID,
+        timeText: formatChatHistoryTime(new Date().toISOString(), currentLocale()),
+      });
+      const pendingSeed = newHistoryID();
+      const agentHistoryID = pushHistoryItem({
+        role: "agent",
+        text: buildPollingHint(untracked(activeAgentName), t, pendingSeed),
+        awaiting: true,
+        status: normalizeTaskStatus(submitted?.status),
+        taskId: taskID,
+        timeText: "",
+        pendingSeed,
+      });
+      scrollHistoryToBottom({ smooth: true });
+      void startTaskStream(taskID, agentHistoryID, endpointRef);
+      void loadTopics({ preferredTopicID: edit.topicID, preserveSelection: true });
+      await pollTask(taskID, agentHistoryID, endpointRef);
+    } finally {
+      sending.set(false);
+      if (!options.keyboardDismissed) focusComposerOnDesktop();
+    }
+  }
+
   /* ---------- voice ---------- */
 
   const voice = createVoiceInput({
@@ -3188,6 +3368,10 @@ export function createChatController() {
     elevations: keyedState<ElevationState>(),
     folds: keyedState<boolean>(),
     onCopy: (item) => void copyHistoryItem(item),
+    canEdit: canEditMessage,
+    editingItemID: () => messageEdit()?.itemID ?? "",
+    replacedByEdit: (item) => messageEditReplaced().has(item?.id) && messageEdit()?.itemID !== item?.id,
+    onEdit: startMessageEdit,
     onPreviewFile: previewComposerFile,
     onOpenDetail: openActivityDetail,
     onTimeClick: clickHistoryTime,
@@ -3350,6 +3534,8 @@ export function createChatController() {
   effect(() => {
     const scope = composerDraftScope();
     untracked(() => {
+      // Leaving the conversation ends an edit: its text stays behind, the draft comes back first.
+      endMessageEdit();
       if (previousScope?.endpointRef) persistComposerDraft(previousScope);
       previousScope = scope;
       restoreComposerDraft(scope);
@@ -3369,6 +3555,7 @@ export function createChatController() {
     }
     composerFileDrafts.clear();
     historyLoadVersion += 1;
+    endMessageEdit();
     persistComposerDraft();
     clearPollTimers();
     clearStreamSockets();
@@ -3422,6 +3609,7 @@ export function createChatController() {
     workspaceBrowserOpen,
     pendingWorkspaceDir,
     composerFiles,
+    messageEdit,
     composerCommands,
     composerLLMProfile,
     composerSkills,
@@ -3551,6 +3739,7 @@ export function createChatController() {
     ensureComposerSkillsLoaded,
     submitTask,
     stopActiveTask,
+    cancelMessageEdit,
     selectTopic,
     startNewTopic,
     focusComposer,

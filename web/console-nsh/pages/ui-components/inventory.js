@@ -159,7 +159,7 @@ const FILES = {
   "components/chat/ChatElevationCard.tsx": { group: "chat", items: { ChatElevationCard: D(), Key: C("ChatElevationCard") } },
   "components/chat/ChatHistoryItem.tsx": {
     group: "chat",
-    items: { ChatHistoryItem: D(), Bubble: C("ChatHistoryItem"), CopyButton: C("ChatHistoryItem"), WaitingForAnswer: C("ChatHistoryItem") },
+    items: { ChatHistoryItem: D(), Bubble: C("ChatHistoryItem"), CopyButton: C("ChatHistoryItem"), EditButton: C("ChatHistoryItem"), WaitingForAnswer: C("ChatHistoryItem") },
   },
   "components/chat/ChatHistoryList.tsx": { group: "chat", items: { ChatHistoryList: D(), Skeleton: C("ChatHistoryList") } },
   "components/chat/ChatLoadError.tsx": { group: "chat", items: { ChatLoadError: D() } },

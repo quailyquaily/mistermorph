@@ -20,6 +20,7 @@ import {
   CircleButton,
   circleButtonClass,
   Icon,
+  popupOpen,
   Tip,
   TipButton,
   trackPopup,
@@ -34,7 +35,8 @@ import {
 } from "../../lib/core/chat-composer-suggestions.js";
 import { glassEnabled, glassStyle } from "../../lib/glass";
 import { isMobile } from "../../lib/shell";
-import { COMPOSER_RADIUS, COMPOSER_VOICE_BAR_CLASS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { COMPOSER_QUOTE_BAR_CLASS, COMPOSER_RADIUS, COMPOSER_VOICE_BAR_CLASS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { editQuoteLine } from "../../lib/core/chat-message-edit.js";
 import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
 import { followComposerLayout, ONE_ROW, type ComposerLayout } from "./composerRows";
@@ -119,6 +121,15 @@ export interface ChatComposerProps {
   /** null when there is no live preview. */
   voicePreviewEnabled?: boolean | null;
   voiceLabels?: { recording: string; transcribing: string; discard: string; previewOn: string; previewOff: string };
+  /**
+   * Editing a sent message (FT140): its text, quoted on one line above the field with Cancel at the
+   * right (the quote bar, the voice bar's shape); unset when nothing is being edited. Escape in the
+   * field cancels too.
+   */
+  editQuote?: string;
+  /** The quote bar's words: its title, Cancel, and the bar's name for screen readers. */
+  editLabels?: { title: string; cancel: string; quote: string };
+  onEditCancel?: () => void;
   /** `keyboardDismissed`: Send lowered the touch keyboard, and the field should stay unfocused. */
   onSubmit?: (options?: { keyboardDismissed?: boolean }) => void;
   onStop?: () => void;
@@ -218,6 +229,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const labels = () => props.suggestionLabels ?? { commands: "Commands", skills: "Skills", loading: "Loading...", empty: "No matches" };
   const fileLabels = () =>
     props.fileLabels ?? { files: "Attached files", preview: "Preview file", remove: "Remove from task", uploading: "Uploading...", failed: "Upload failed", retry: "Retry upload" };
+  const editLabels = () =>
+    props.editLabels ?? { title: "Editing", cancel: "Cancel", quote: `Editing your message: ${editQuoteLine(props.editQuote)}` };
   const voiceLabels = () =>
     props.voiceLabels ?? { recording: "Listening...", transcribing: "Transcribing...", discard: "Discard recording", previewOn: "Show live text", previewOff: "Hide live text" };
   const suggestionItems = (): any[] => (buildComposerSuggestionItems as (options: unknown) => any[])({ context: suggestionContext(), commands: props.commands, skills: props.skills });
@@ -412,6 +425,14 @@ export function ChatComposer(props: ChatComposerProps) {
     const browsing = index >= 0 && value() === items[index];
     if (value() === "" || browsing) cleanup(keymap.bind("up", () => historyStep("up"), { when: "always" }));
     if (browsing) cleanup(keymap.bind("down", () => historyStep("down"), { when: "always" }));
+  });
+
+  // Escape leaves an edit, from the field or anywhere on the page (a web field's first Escape only
+  // lets go of the focus). A popup over the page takes Escape instead, the suggestion list too
+  // (trackPopup above): the binding is dropped meanwhile. Not while the edit is being sent.
+  effect(() => {
+    if (props.editQuote === undefined || props.sending || popupOpen()) return;
+    cleanup(keymap.bind("escape", () => props.onEditCancel?.(), { when: "always" }));
   });
 
   // Typing other text leaves the sent message being browsed.
@@ -912,6 +933,33 @@ export function ChatComposer(props: ChatComposerProps) {
                 </View>
               )}
             </Each>
+          </View>
+        </If>
+        {/* The message being edited, on one line however long it is (cut with an ellipsis), Cancel at
+            the right: the voice bar's shape, a pencil where its dot is. */}
+        <If when={props.editQuote !== undefined}>
+          <View class={COMPOSER_QUOTE_BAR_CLASS} testID="chat-composer-edit-quote">
+            <Icon name="PhPencilSimple" size={13} color="blue" />
+            <View
+              role="text"
+              accessibilityLabel={editLabels().quote}
+              class="min-w-0 flex-1 flex-row items-center gap-2"
+              testID="chat-composer-edit-quote-line"
+            >
+              <Text class="shrink-0 font-mono text-[11px] uppercase tracking-[0.04em] text-subtle">{editLabels().title}</Text>
+              <Text class="min-w-0 flex-1 text-sm text-muted-foreground line-clamp-1" testID="chat-composer-edit-quote-text">
+                {editQuoteLine(props.editQuote)}
+              </Text>
+            </View>
+            <Button
+              variant="plain"
+              size="xxs"
+              label={editLabels().cancel}
+              disabled={!!props.sending}
+              onPress={() => props.onEditCancel?.()}
+              class="shrink-0 rounded-full"
+              testID="chat-composer-edit-cancel"
+            />
           </View>
         </If>
         <If when={voiceActive()}>

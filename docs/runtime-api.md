@@ -128,6 +128,17 @@ lists shared suggestions; runtime support can differ. For example, Console
 accepts `/models set <profile>` to change the topic's model profile and `/reset`
 to clear model context while retaining chat history.
 
+In Console, `POST /tasks/{task_id}/replace` with `{"task": "...", "topic_id": "..."}`
+edits one of the person's earlier messages: the message and every later task of
+the topic are removed for good (history, reloads and later prompts), and the new
+text runs as a new task from the conversation before it. The message's file
+references go with it. It answers like a submission, plus `replaced_task_id` and
+`removed_task_ids`. Nothing is removed when it is refused: `409` while any task of
+the topic is queued, running or pending (stop it or wait), `404` for a message no
+longer in the topic, `400` for commands and reserved topics. A runtime that does
+not edit messages answers `404` for the route, never treating the edit as a new
+message.
+
 The API does not implement submission idempotency keys. If a connection fails
 after sending a POST, the task may already exist. Inspect topics and task
 history before retrying, especially when creating a new topic. Disconnecting

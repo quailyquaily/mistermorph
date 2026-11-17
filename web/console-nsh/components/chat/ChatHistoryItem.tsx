@@ -47,7 +47,7 @@ import { t } from "./i18n";
 import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
 import type { KeyedState } from "./rowState";
-import { BUBBLE_CLASS, FILES_CLASS } from "./userBubble";
+import { BUBBLE_CLASS, BUBBLE_EDITING_CLASS, FILES_CLASS } from "./userBubble";
 import { fileIcon, SENT_FILE_PILL_CLASS } from "./filePill";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../shared/partProbe";
 import { CHECK_CORNER_AT, CHECK_DRAW_MS, CHECK_SIZE, checkAction, checkDash, checkDashOffset, checkStroke } from "./copyCheck";
@@ -72,6 +72,13 @@ export interface ChatRowContext {
   elevations: KeyedState<ElevationState>;
   folds: KeyedState<boolean>;
   onCopy: (item: HistoryItem) => void;
+  /** Whether a sent message can be edited now (FT140: an idle topic of the person's own). */
+  canEdit: (item: HistoryItem) => boolean;
+  /** The row of the message being edited, "" when none. */
+  editingItemID: () => string;
+  /** Whether a row goes once the edit is sent: every one after the edited message. */
+  replacedByEdit: (item: HistoryItem) => boolean;
+  onEdit: (item: HistoryItem) => void;
   onPreviewFile: (item: any) => void;
   /** Opens an entry in the detail panel, or closes it when it already shows that entry. */
   onOpenDetail: (detail: ActivityDetailRef) => void;
@@ -107,7 +114,7 @@ const HOVER = platform.desktop;
  * right, which stays 2pt where the tail was (design/ui-refresh.html §3). It is one frame around the
  * text and the files the message carried (userBubble.ts), so its edge and corners stay whole. A system
  * message's: a dashed box. */
-function Bubble(props: { system?: boolean; probe?: Record<string, unknown>; children?: JSX.Element }) {
+function Bubble(props: { system?: boolean; editing?: boolean; probe?: Record<string, unknown>; children?: JSX.Element }) {
   return (
     <If
       when={!props.system}
@@ -117,7 +124,7 @@ function Bubble(props: { system?: boolean; probe?: Record<string, unknown>; chil
         </View>
       }
     >
-      <View class={BUBBLE_CLASS} testID="chat-user-bubble" {...props.probe}>
+      <View class={props.editing ? BUBBLE_EDITING_CLASS : BUBBLE_CLASS} testID={props.editing ? "chat-user-bubble.editing" : "chat-user-bubble"} {...props.probe}>
         {props.children}
       </View>
     </If>
@@ -200,6 +207,32 @@ function CopyButton(props: { copied: boolean; copySeq: number; label: string; on
           cx.lineTo(c[0], c[1]);
           cx.stroke();
         }}
+      />
+    </TipButton>
+  );
+}
+
+/**
+ * Edit, under a sent message just before Copy (FT140): the same quiet 24pt square, a pencil. It puts
+ * the message in the composer to change and send again; while that message is being edited it
+ * stays shown and selected.
+ */
+function EditButton(props: { editing: boolean; label: string; onPress: () => void }) {
+  return (
+    <TipButton
+      onPress={props.onPress}
+      selected={props.editing}
+      accessibilityLabel={props.label}
+      tooltip={<Tip text={props.label} />}
+      testID={props.editing ? "chat-edit.editing" : "chat-edit"}
+      class={`-mt-0.5 size-6 items-center justify-center rounded-(--radius) transition duration-150 hover:bg-press hover:opacity-100 focus:opacity-100 ${
+        props.editing ? "bg-press opacity-100" : HOVER ? "opacity-0 group-hover:opacity-70" : "opacity-70"
+      }`}
+    >
+      <Image
+        src={ICONS.PhPencilSimple}
+        accessibilityElementsHidden
+        style={{ width: CHECK_SIZE, height: CHECK_SIZE, tintColor: token(props.editing ? "blue" : "muted-foreground") as string }}
       />
     </TipButton>
   );
@@ -333,6 +366,10 @@ export function ChatHistoryItem(props: {
     ctx.onOpenDetail({ itemID: item()?.id, taskID: String(item()?.taskId || "").trim() || undefined, kind, workerID });
   const autoPreview = () => item()?.id !== "" && item()?.id === ctx.autoPreviewItemID();
   const copied = () => item()?.id !== "" && item()?.id === ctx.copiedItemID();
+  const editingThis = () => item()?.id !== "" && item()?.id === ctx.editingItemID();
+  const editAvailable = () => role() === "user" && (editingThis() || ctx.canEdit(item()));
+  // A row the edit replaces once sent fades, so what goes is plain before Send.
+  const replaced = () => ctx.replacedByEdit(item());
 
   // The message's time, or for a reply the time it took (ChatStatusMark), alone or first on the
   // reply's summary line.
@@ -522,7 +559,7 @@ export function ChatHistoryItem(props: {
     <View class={`gap-[7px] ${role() === "system" ? "items-center" : "items-end"}`}>
       <If when={statusText()}>{statusMark()}</If>
       <View class={role() === "system" ? "w-full" : "mr-2"}>
-        <Bubble system={role() === "system"} probe={parts.probe(() => "bubble")}>
+        <Bubble system={role() === "system"} editing={editingThis()} probe={parts.probe(() => "bubble")}>
           {/* A message of files alone has no text block: no blank slab above them. */}
           <If when={textBlockVisible()}>
             <View selectable class={role() === "system" ? "" : "px-3.5 pb-[11px] pt-2.5"} testID="chat-message-text" {...parts.probe(() => "text")}>
@@ -573,9 +610,15 @@ export function ChatHistoryItem(props: {
           {String(item()?.reaction ?? "")}
         </Text>
       </If>
-      <If when={copyAvailable()}>
-        <View class="mr-2">
-          <CopyButton copied={copied()} copySeq={ctx.copySeq()} label={t("action_copy")} onPress={() => ctx.onCopy(item())} />
+      {/* Edit, then Copy, at the bubble's right edge (FT140). */}
+      <If when={copyAvailable() || editAvailable()}>
+        <View class="mr-2 flex-row items-center gap-1" testID="chat-message-actions">
+          <If when={editAvailable()}>
+            <EditButton editing={editingThis()} label={t("chat_message_edit")} onPress={() => ctx.onEdit(item())} />
+          </If>
+          <If when={copyAvailable()}>
+            <CopyButton copied={copied()} copySeq={ctx.copySeq()} label={t("action_copy")} onPress={() => ctx.onCopy(item())} />
+          </If>
         </View>
       </If>
     </View>
@@ -590,9 +633,15 @@ export function ChatHistoryItem(props: {
 
   return (
     <View
-      class="group w-full max-w-[832px] gap-[7px] self-center"
-      style={{ ...arrival.style, paddingLeft: role() === "user" ? sideRoom() : 0, paddingRight: isAgent() ? sideRoom() : 0 }}
-      testID={`chat-item-${role() || "system"}`}
+      class="group w-full max-w-[832px] gap-[7px] self-center transition-opacity duration-150"
+      style={{
+        ...arrival.style,
+        paddingLeft: role() === "user" ? sideRoom() : 0,
+        paddingRight: isAgent() ? sideRoom() : 0,
+        ...(replaced() ? { opacity: 0.45 } : {}),
+      }}
+      accessibilityHint={replaced() ? t("chat_message_edit_dropped") : undefined}
+      testID={replaced() ? `chat-item-${role() || "system"}.replaced` : `chat-item-${role() || "system"}`}
       ref={(ref: ViewRef) => props.rowRef?.(ref)}
     >
       <If when={retryNotices().length}>
