@@ -8,7 +8,7 @@ This document describes the built-in and runtime-injected tool parameters curren
 
 - `static` tools (fully constructable from config and Contacts state):
   - `read_file`, `write_file`, `bash`, `powershell`, `url_fetch`, `web_search`, `contacts_send`, `agent_send`.
-  - `contacts_send` is static, but default exposure is limited to awareness runs when enabled, or to explicit `$contacts_send` opt-in.
+  - `contacts_send` is static. Awareness runs (heartbeat, cron) see it when enabled; an explicit `$contacts_send` shows it for that task. Ordinary runs (Console, Telegram, Slack and the other channel runtimes) get it as a deferred tool when enabled and `tools.tool_search.enabled` is on: hidden until `tool_search` finds it. See [`contacts_send`](#contacts_send).
   - `agent_send` is exposed only while at least one active Contact is `kind: agent`.
   - `contacts_list` lists the contacts (in `agent.db`) whenever a contacts folder is configured.
   - `todo_list` lists the TODO list (in `agent.db`) whenever the runtime has a state folder. It only reads, so it does not depend on `tools.todo_update.enabled`.
@@ -455,9 +455,11 @@ Parameters:
 Constraints:
 
 - Can be disabled via `tools.contacts_send.enabled`.
-- Default exposure requires awareness mode and `tools.contacts_send.enabled=true`.
-- Non-awareness runtimes, including Telegram private sessions, do not expose `contacts_send` by default.
+- Awareness runs (heartbeat, cron) see it in every request when `tools.contacts_send.enabled=true`.
+- Ordinary runs (Console chat, Telegram, Slack, Discord, LINE, Lark and the other channel runtimes, the CLI and the embedding runtime) never get it in their first request. With `tools.contacts_send.enabled=true` and `tools.tool_search.enabled=true` (both default on), it is a deferred tool: `tool_search` finds it (for example the query `contacts send` or `contacts_send`), and from the next step it is called like any tool. As with other found tools, it stays visible for the rest of the conversation (`/reset` forgets it). With tool search off, ordinary runs have no `contacts_send` at all. Subtasks never get it.
+- Finding it changes nothing about a send: the same recipient checks, current-conversation block, guard rules, credentials, cooldowns and delivery records apply as in awareness runs.
 - Explicit `$contacts_send` opt-in can expose it for the current task even when `tools.contacts_send.enabled=false`; it does not bypass selected tool allowlists, guard rules, credentials, or runtime prerequisites.
+- Failures: an unknown contact, a contact without a reachable route, a `chat_id` the contact cannot receive in, and a send to the person of the current conversation fail with an error and send nothing. When the channel rejects a delivery (for example a missing channel credential or a blocked bot), the result's `outcome` has `accepted: false` and an `error`.
 - `contacts_send` always uses topic `chat.message` (caller does not pass `topic`).
 - Telegram text messages render Markdown (bold, italic, code, links) as Telegram HTML, as Telegram channel replies do. If Telegram rejects the markup, the text is sent again as plain text. Write plain Markdown, not Telegram MarkdownV2 escapes. File captions stay plain text.
 - If cross-session forwarding is needed in group chat (for example, explicit "DM someone"), trigger it via explicit task/command, not by routing ordinary group replies to `contacts_send`.
