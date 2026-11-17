@@ -11,6 +11,8 @@ import { basePath as hostBasePath, origin as hostOrigin } from "../platform";
 let BASE_PATH = "/";
 let API_BASE = "/api";
 let WS_BASE = "";
+// The console server's origin (`http://127.0.0.1:9080`), "" when the host gave none.
+let ORIGIN = "";
 const RECORD_API_PERF = false;
 const ENDPOINT_HEALTH_RETRY_MS = 500;
 let endpointHealthRetry = 0;
@@ -19,6 +21,7 @@ function configureApiBase() {
   BASE_PATH = normalizeBasePath(hostBasePath());
   const origin = String(hostOrigin() || "").replace(/\/+$/, "");
   API_BASE = `${origin}${joinBasePath(BASE_PATH, "/api")}`;
+  ORIGIN = origin;
   WS_BASE = origin.replace(/^http(s?):/i, "ws$1:");
 }
 
@@ -371,6 +374,30 @@ async function runtimeApiDownloadForEndpoint(endpointRef, pathname, options = {}
   return apiFetchBlob(`/proxy/download?${q.toString()}`, options);
 }
 
+/**
+ * A URL the console server answered with as a path (an artifact preview's `entry_url`,
+ * `/api/artifacts/preview/<ticket>/index.html`), made absolute on the server's origin. The app's
+ * frame has no origin to resolve a path against, and nsh refuses a web view's or an image's URL
+ * that names no host (ERR_ACCESS_DENIED), so a path shows nothing: in the phone app, which reaches
+ * a server elsewhere, and in the browser too. A URL with a scheme stays as it is.
+ */
+function resolveConsoleURL(origin, raw) {
+  const text = String(raw ?? "").trim();
+  if (!text || /^[a-z][a-z0-9+.-]*:/i.test(text)) return text;
+  const base = String(origin || "").trim().replace(/\/+$/, "");
+  if (!base) return text;
+  try {
+    return new URL(text, `${base}/`).href;
+  } catch {
+    return text;
+  }
+}
+
+/** `resolveConsoleURL` on the console server the app talks to. */
+function consoleURL(raw) {
+  return resolveConsoleURL(ORIGIN, raw);
+}
+
 async function createArtifactPreviewTicket(payload) {
   return apiFetch("/artifacts/preview-ticket", {
     method: "POST",
@@ -562,6 +589,8 @@ export {
   runtimeApiFetchForEndpoint,
   endpointApiFetch,
   runtimeApiDownloadForEndpoint,
+  resolveConsoleURL,
+  consoleURL,
   createArtifactPreviewTicket,
   renewArtifactPreviewTicket,
   runtimeApiFetchFirstForEndpoints,

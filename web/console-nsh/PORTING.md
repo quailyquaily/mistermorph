@@ -386,6 +386,22 @@ Headless tests prove behaviour, not the look.
   from `-max` to `max` (`DailyUsagePanel`). The bars join a stack in the order they are attached,
   and a `<Bar>` written beside a list of bars is attached before the list whatever the source
   order: put every bar of the stack in one list.
+- A `WebView`'s `src` (and an `Image`'s, outside the bundle) must be an absolute `http(s)` URL with
+  a host. The core checks it against the `webview` capability and refuses a path such as
+  `/api/artifacts/preview/<ticket>/index.html` ("names no host a grant could add",
+  `ERR_ACCESS_DENIED` on `onError`) on every platform, the browser included: nothing loads and the
+  box stays blank. The console server answers with paths (it does not know the address the client
+  used), so make them absolute with `consoleURL` (`lib/core/context.js`) first. Artifact previews
+  did not, and showed an empty frame in the phone app and the web console alike (FT144). Listen to
+  a web view's `onError`: without a listener a refusal leaves no trace but a log line.
+- What a web view reports differs: on the web the `<iframe>` gives `onLoadStart` and `onLoad` but
+  never an HTTP or network error (a 401 or 404 page simply shows), and a same-origin URL is
+  sandboxed without its origin (the artifact cannot reach the console page). Android's WebView
+  reports `onError` for the main frame only (the 0.4.0 runtime checks `isForMainFrame`) and may
+  still send `onLoad` for its own error page after it, so the artifact card keeps a failure once
+  reported. Headless `nsh test` loads no pages and sends no load events: page states are driven
+  through the store (`tests/fixtures/artifact-preview-app.tsx`), and only a refused URL's `onError`
+  is real there.
 
 ### Android (nsh 0.4.0)
 
