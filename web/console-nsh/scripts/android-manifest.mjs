@@ -11,6 +11,10 @@
 //   transparent activity that asks for the permission and the one a pressed notification starts,
 //   and the network-state permission the job's network constraint needs (Android 14+ refuses to
 //   schedule a job with a network constraint without it for apps targeting API 34+).
+// - saving files (android/src, FileSaver): the transparent activity that shows the system's picker
+//   for a new document (ACTION_CREATE_DOCUMENT, which needs no storage permission), and the
+//   `<queries>` entry that lets the app see that picker (Android 11+ hides other apps from
+//   `resolveActivity` without one), so the app offers saving only where it can.
 // - the display name: the launcher and the system's app settings show "Morph" (LABEL), while nsh
 //   labels the app with nsh.json's name, which the desktop app and the web Console keep. It is a
 //   literal, not a string resource, so no locale's resources can name the app otherwise; a launcher
@@ -25,6 +29,8 @@ export const PERMISSION_ACTIVITY = "com.mistermorph.console.VoicePermissionActiv
 export const NOTIFICATION_PERMISSION_ACTIVITY = "com.mistermorph.console.NotificationPermissionActivity";
 export const NOTIFICATION_OPEN_ACTIVITY = "com.mistermorph.console.NotificationOpenActivity";
 export const NOTIFIER_JOB = "com.mistermorph.console.TaskNotifierJob";
+export const SAVE_ACTIVITY = "com.mistermorph.console.SaveDocumentActivity";
+const CREATE_DOCUMENT = "android.intent.action.CREATE_DOCUMENT";
 export const LABEL = "Morph";
 const LABEL_ATTRIBUTE = /(\sandroid:label\s*=\s*)("[^"]*"|'[^']*')/;
 const LAUNCHER = "android.intent.category.LAUNCHER";
@@ -94,6 +100,25 @@ export function patchManifest(xml) {
       /<\/application>/,
       `    <service android:name="${NOTIFIER_JOB}" android:exported="false"\n` +
         `            android:permission="android.permission.BIND_JOB_SERVICE" />\n    </application>`,
+    );
+  }
+  if (!out.includes(CREATE_DOCUMENT)) {
+    const intent =
+      `<intent>\n            <action android:name="${CREATE_DOCUMENT}" />\n` +
+      `            <category android:name="android.intent.category.OPENABLE" />\n` +
+      `            <data android:mimeType="*/*" />\n        </intent>`;
+    // Into the <queries> nsh declares (0.5 has one for text actions), else a new one.
+    out = /<\/queries>/.test(out)
+      ? out.replace(/<\/queries>/, `    ${intent}\n    </queries>`)
+      : out.replace(/<application\b/, `<queries>\n        ${intent}\n    </queries>\n    <application`);
+  }
+  if (!out.includes(SAVE_ACTIVITY)) {
+    out = out.replace(
+      /<\/application>/,
+      `    <activity android:name="${SAVE_ACTIVITY}" android:exported="false"\n` +
+        `            android:theme="@android:style/Theme.Translucent.NoTitleBar"\n` +
+        `            android:excludeFromRecents="true"\n` +
+        `            android:configChanges="${CONFIG_CHANGES}" />\n    </application>`,
     );
   }
   // The app's label, as a literal (a string resource or another name gives way to it)...

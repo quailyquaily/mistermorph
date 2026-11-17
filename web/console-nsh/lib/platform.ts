@@ -429,9 +429,23 @@ export interface SaveRequest {
   base64?: string;
   type?: string;
 }
-/** Saves a file: a download on the web, a save dialog on the desktop. */
+/** The code of `saveFile`'s error where this app cannot save files (a phone app without the native part). */
+export const SAVE_UNAVAILABLE = "save_unavailable";
+
+/** Whether this app can save files: on the web and the desktop always, in the phone app where its native part can. */
+const canSaveFiles = () => config.runtime !== "mobile" || hasFeature("saveFile");
+
+/**
+ * Saves a file: a download on the web, a save dialog on the desktop, the system's picker for a new
+ * document in the phone app. "saved" once the file is written, "cancelled" when the user backed out;
+ * a failure throws, with `code` SAVE_UNAVAILABLE where the app cannot save files at all.
+ */
 export async function saveFile(request: SaveRequest): Promise<"saved" | "cancelled"> {
-  return (await hostChannel.call("morph.file.save", request, { timeout: 0 })) as "saved" | "cancelled";
+  if (!canSaveFiles()) {
+    throw Object.assign(new Error(mobileHost.SAVE_UNAVAILABLE), { code: SAVE_UNAVAILABLE });
+  }
+  const answer = await hostChannel.call("morph.file.save", request, { timeout: 0 });
+  return answer === "cancelled" ? "cancelled" : "saved";
 }
 
 /* ---------- desktop only ---------- */

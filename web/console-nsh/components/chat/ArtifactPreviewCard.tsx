@@ -4,11 +4,18 @@
 //
 // The card sits in a recycled List row, so its state (expanded, the preview ticket and its renewal
 // timer) lives in an ArtifactPreviews store keyed by the row's item and the block.
+//
+// The server answers a ticket with the preview's path on the console (`/api/artifacts/preview/…`);
+// it is made absolute on the console's origin (consoleURL) before a web view gets it: nsh refuses a
+// web view's or an image's URL that names no host, and the preview stayed blank. The page's own
+// load reports (onLoadStart, onLoad, onError) drive what the card says meanwhile: loading, or why
+// nothing shows, with a retry.
 import { effect, Image, Text, untracked, View, WebView } from "nsh";
-import { Button, Modal, Tip } from "../ui";
-import { createArtifactPreviewTicket, renewArtifactPreviewTicket } from "../../lib/core/context.js";
+import { Button, Modal, Spinner, Tip } from "../ui";
+import { consoleURL, createArtifactPreviewTicket, renewArtifactPreviewTicket } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { keyedState } from "./rowState";
+import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { saveEndpointFile } from "./files";
 
 const PREVIEW_RENEW_MARGIN_MS = 60 * 1000;
@@ -31,6 +38,9 @@ interface PreviewTarget {
   path: string;
 }
 
+/** Where the shown page (or image) is: `""` before one is given, then as its loads report. */
+export type ArtifactPage = "" | "loading" | "loaded" | "failed";
+
 interface ArtifactState {
   expanded: boolean;
   loading: boolean;
@@ -41,6 +51,9 @@ interface ArtifactState {
   frame: number;
   autoStarted: boolean;
   fullscreen: boolean;
+  page: ArtifactPage;
+  /** Why the page failed, as the card says it. */
+  pageError: string;
 }
 
 const EMPTY: ArtifactState = {
@@ -53,7 +66,29 @@ const EMPTY: ArtifactState = {
   frame: 0,
   autoStarted: false,
   fullscreen: false,
+  page: "",
+  pageError: "",
 };
+
+/** What a web view's or an image's `onError` reports. */
+export interface ArtifactLoadError {
+  message?: string;
+  code?: string;
+}
+
+/** What the card says when the page did not load: the platform shows no web views, or why it failed. */
+export function artifactLoadFailure(error: ArtifactLoadError | null | undefined) {
+  if (error?.code === "ERR_FEATURE_UNAVAILABLE_ON_PLATFORM") return t("artifact_preview_unsupported");
+  const reason = cleanText(error?.message);
+  return reason ? `${t("artifact_preview_load_failed")} ${reason}` : t("artifact_preview_load_failed");
+}
+
+/** Where the previews get their tickets and make the preview's URL absolute (tests stand in for them). */
+export interface ArtifactPreviewDeps {
+  createTicket?: (payload: Record<string, string>) => Promise<any>;
+  renewTicket?: (ticket: string) => Promise<any>;
+  resolveURL?: (raw: string) => string;
+}
 
 function cleanText(value: unknown) {
   return String(value ?? "").trim();
@@ -89,7 +124,10 @@ function payload(target: PreviewTarget) {
 }
 
 /** The previews of one chat page; `dispose` stops their renewals when the page goes. */
-export function createArtifactPreviews() {
+export function createArtifactPreviews(deps: ArtifactPreviewDeps = {}) {
+  const createTicket = deps.createTicket ?? createArtifactPreviewTicket;
+  const renewTicket = deps.renewTicket ?? renewArtifactPreviewTicket;
+  const resolveURL = deps.resolveURL ?? consoleURL;
   const states = keyedState<ArtifactState>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const targets = new Map<string, PreviewTarget>();
@@ -117,9 +155,16 @@ export function createArtifactPreviews() {
 
   function applyTicket(key: string, data: any, reload: boolean) {
     const ticket = cleanText(data?.ticket);
-    const entryURL = cleanText(data?.entry_url);
+    const entryURL = resolveURL(cleanText(data?.entry_url));
     if (!ticket || !entryURL) throw new Error(t("artifact_preview_error"));
-    patch(key, { ticket, entryURL, expanded: true, error: "", frame: peek(key).frame + (reload ? 1 : 0) });
+    patch(key, {
+      ticket,
+      entryURL,
+      expanded: true,
+      error: "",
+      frame: peek(key).frame + (reload ? 1 : 0),
+      ...(reload ? { page: "loading" as const, pageError: "" } : {}),
+    });
     scheduleRenew(key, data?.expires_at);
   }
 
@@ -128,7 +173,7 @@ export function createArtifactPreviews() {
     if (!current.expanded || !current.ticket || renewing.has(key)) return;
     renewing.add(key);
     try {
-      const data = await renewArtifactPreviewTicket(current.ticket);
+      const data = await renewTicket(current.ticket);
       patch(key, { ticket: cleanText(data?.ticket) || current.ticket });
       scheduleRenew(key, data?.expires_at);
     } catch {
@@ -138,7 +183,7 @@ export function createArtifactPreviews() {
           clearTimer(key);
           return;
         }
-        applyTicket(key, await createArtifactPreviewTicket(payload(target)), true);
+        applyTicket(key, await createTicket(payload(target)), true);
       } catch (error) {
         patch(key, { error: (error as Error)?.message || t("artifact_preview_error") });
         clearTimer(key);
@@ -153,7 +198,7 @@ export function createArtifactPreviews() {
     targets.set(key, target);
     patch(key, { loading: true, error: "" });
     try {
-      applyTicket(key, await createArtifactPreviewTicket(payload(target)), true);
+      applyTicket(key, await createTicket(payload(target)), true);
     } catch (error) {
       patch(key, { error: (error as Error)?.message || t("artifact_preview_error") });
     } finally {
@@ -170,7 +215,31 @@ export function createArtifactPreviews() {
         return;
       }
       clearTimer(key);
-      patch(key, { expanded: false, fullscreen: false, ticket: "", entryURL: "", error: "", frame: peek(key).frame + 1 });
+      patch(key, { expanded: false, fullscreen: false, ticket: "", entryURL: "", error: "", frame: peek(key).frame + 1, page: "", pageError: "" });
+    },
+    /** A new ticket and a fresh page, after the page or the ticket failed. */
+    async retry(key: string, target: PreviewTarget) {
+      if (!canPreview(target) || peek(key).loading) return;
+      clearTimer(key);
+      // The failed page goes: the frame says it loads until the new ticket's page is there.
+      patch(key, { autoStarted: true, entryURL: "", ticket: "", page: "", pageError: "" });
+      await load(key, target);
+    },
+    /** The shown web view or image started loading its page (again: a navigation in it). */
+    pageStarted(key: string) {
+      if (!peek(key).entryURL) return;
+      patch(key, { page: "loading", pageError: "" });
+    },
+    /** The page loaded. After a failure the web view may still finish its own error page: that stays a failure. */
+    pageLoaded(key: string) {
+      const current = peek(key);
+      if (!current.entryURL || current.page === "failed") return;
+      patch(key, { page: "loaded" });
+    },
+    /** The page did not load (or the app refused its URL): the card says why instead of a blank box. */
+    pageFailed(key: string, error: ArtifactLoadError | null | undefined) {
+      if (!peek(key).entryURL) return;
+      patch(key, { page: "failed", pageError: artifactLoadFailure(error) });
     },
     autoStart(key: string, target: PreviewTarget) {
       const current = peek(key);
@@ -181,7 +250,9 @@ export function createArtifactPreviews() {
     setFullscreen(key: string, fullscreen: boolean) {
       const current = peek(key);
       if (fullscreen && (!current.expanded || !current.entryURL || current.loading)) return;
-      patch(key, { fullscreen });
+      if (current.fullscreen === fullscreen) return;
+      // The page loads again in the web view that takes over (the dialog's, or the card's).
+      patch(key, current.page === "failed" ? { fullscreen } : { fullscreen, page: "loading", pageError: "" });
     },
     async download(key: string, target: PreviewTarget) {
       if (!canPreview(target) || peek(key).downloading) return;
@@ -214,7 +285,10 @@ export function ArtifactPreviewCard(props: {
   autoPreview?: boolean;
   stateKey: string;
   previews: ArtifactPreviews;
+  /** For tests: where the preview's frame lies (`chat-artifact-frame`, `chat-artifact-fullscreen-frame`). */
+  onPartLayout?: PartLayoutListener;
 }) {
+  const parts = createPartProbe(() => props.onPartLayout);
   const target = (): PreviewTarget => ({
     endpointRef: cleanText(props.endpointRef),
     dirName: cleanText(props.artifact?.dir_name || props.artifact?.dirName),
@@ -238,19 +312,79 @@ export function ArtifactPreviewCard(props: {
     untracked(() => props.previews.autoStart(key, next));
   });
 
+  const key = () => props.stateKey;
+  const started = () => props.previews.pageStarted(key());
+  const loaded = () => props.previews.pageLoaded(key());
+  const failed = (error: ArtifactLoadError) => props.previews.pageFailed(key(), error);
+  // The ticket is on its way (first opening, a retry), or the page has not loaded yet.
+  const pending = () => state().loading || state().page === "loading";
+  const part = (tall: boolean, name: string) => `chat-artifact-${tall ? "fullscreen-" : ""}${name}`;
+
+  // The page, or what shows in its place: the loading note while there is none yet, and the reason
+  // when it failed. The note over a page that loads lets touches through to it.
   const frame = (tall: boolean) => (
-    <If
-      when={isImage()}
-      else={
-        <WebView
-          src={state().entryURL}
-          accessibilityLabel={displayPath()}
-          class={`w-full ${tall ? "flex-1" : "h-96"} bg-card`}
-        />
-      }
-    >
-      <Image src={state().entryURL} accessibilityLabel={displayPath()} class="w-full" style={{ height: tall ? "100%" : 360, objectFit: "contain" }} />
-    </If>
+    <View class={`relative w-full ${tall ? "flex-1" : "h-96"}`} testID={part(tall, "frame")} {...parts.probe(() => part(tall, "frame"))}>
+      <If
+        when={state().page === "failed"}
+        else={
+          <If
+            when={state().entryURL}
+            else={<View class="absolute inset-0 bg-card" />}
+          >
+            <If
+              when={isImage()}
+              else={
+                <WebView
+                  src={state().entryURL}
+                  accessibilityLabel={displayPath()}
+                  class="h-full w-full bg-card"
+                  testID={part(tall, "web")}
+                  onLoadStart={started}
+                  onLoad={loaded}
+                  onError={failed}
+                />
+              }
+            >
+              <Image
+                src={state().entryURL}
+                accessibilityLabel={displayPath()}
+                class="h-full w-full"
+                style={{ objectFit: "contain" }}
+                testID={part(tall, "image")}
+                onLoad={loaded}
+                onError={failed}
+              />
+            </If>
+          </If>
+        }
+      >
+        <View class="absolute inset-0 items-center justify-center gap-3 bg-card p-4" testID={part(tall, "failed")}>
+          <Text role="alert" class="text-center text-sm text-danger">
+            {state().pageError || t("artifact_preview_load_failed")}
+          </Text>
+          <Button
+            variant="outlined"
+            size="sm"
+            align="center"
+            label={t("artifact_preview_action_retry")}
+            disabled={!available()}
+            loading={state().loading}
+            onPress={() => void props.previews.retry(key(), target())}
+            testID={part(tall, "retry")}
+          />
+        </View>
+      </If>
+      <If when={pending() && state().page !== "failed"}>
+        <View class="absolute inset-x-0 top-0 items-center p-3" style={{ pointerEvents: "none" }} testID={part(tall, "loading")}>
+          <View class="flex-row items-center gap-2 rounded-full border border-line-faint bg-card px-3 py-1.5">
+            <Spinner size={16} />
+            <Text class="text-xs text-muted-foreground">
+              {t("artifact_preview_loading")}
+            </Text>
+          </View>
+        </View>
+      </If>
+    </View>
   );
 
   return (
@@ -300,7 +434,7 @@ export function ArtifactPreviewCard(props: {
           {state().error}
         </Text>
       </If>
-      <If when={state().expanded && state().entryURL && !state().fullscreen}>
+      <If when={((state().expanded && state().entryURL) || state().loading) && !state().fullscreen}>
         <View class="overflow-hidden rounded-(--radius) border border-line-faint">{frame(false)}</View>
       </If>
       <Modal
@@ -310,6 +444,7 @@ export function ArtifactPreviewCard(props: {
         size="full"
         scroll={false}
         closeLabel={fullscreenLabel()}
+        testID="chat-artifact-fullscreen-dialog"
       >
         <View class="flex-1">{frame(true)}</View>
       </Modal>
