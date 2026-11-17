@@ -60,3 +60,11 @@ notes:
 - Installs: no unpinned tools or manifest changes reported. nsh populated its throwaway TypeScript 7.0.2 cache.
 - Validation limits: no fresh visual inspection, real Android device, GPUI desktop app or live LLM run. Older binaries skip the new task_replace journal event; long-term memories from removed turns remain by documented design.
 - Moved review/ → ready/. No linked GitHub issues or PRs identified.
+
+## factory · 2026-11-17 18:21
+
+Shipped via Claude Code. Conflict-free no-ff merge: 570def5f4e693ce85fba89486dcf7ea52107fe2e. Tag v0.3.116; remote master verified at cf3cb576ec3c41708ef9edc4e60f8fd794c27242.
+- Final combined gate passed: gofmt, go vet ./..., go test ./...; nsh check; required Console parallel runner 132 files, 0 failures, 0 retries; Console Node 286/286 and Cloudflare Node 24/24. Worktree clean.
+- No installs. No fresh visual, live LLM/device or native-platform checks.
+- No linked GitHub issues/PRs identified; branch not deleted (clean not configured).
+- Known nonblocking P2 retained: refused edit of an older paginated message can discard revision draft.

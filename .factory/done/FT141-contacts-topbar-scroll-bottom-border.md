@@ -52,3 +52,10 @@ notes:
 - No unpinned installs or manifest changes; pinned TypeScript 7.0.2 was restored to the throwaway test cache.
 - Headless web checks cover scroll state and geometry, not canvas pixel color/crispness. Native desktop scroll reporting and real Android touch/overscroll/momentum, device blur and pixel-density rendering were not checked.
 - No linked issues or PRs. Moved to ready/.
+
+## factory · 2026-11-17 18:21
+
+Shipped via Claude Code. Conflict-free no-ff merge: cf3cb576ec3c41708ef9edc4e60f8fd794c27242. Tag v0.3.116; remote master verified at cf3cb576ec3c41708ef9edc4e60f8fd794c27242.
+- Final combined gate passed: gofmt, go vet ./..., go test ./...; nsh check; required Console parallel runner 132 files, 0 failures, 0 retries; Console Node 286/286 and Cloudflare Node 24/24. Worktree clean.
+- No installs. No fresh visual, live LLM/device or native-platform checks.
+- No linked GitHub issues/PRs identified; branch not deleted (clean not configured).
