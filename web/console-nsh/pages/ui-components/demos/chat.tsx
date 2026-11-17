@@ -129,7 +129,7 @@ const PLAN = normalizePlan({
 const previews = createArtifactPreviews();
 /** A stand-in for the chat's received-file store: it keeps no state and downloads nothing. */
 const receivedFiles: ReceivedFiles = {
-  state: () => ({ requested: false, previewURL: "", error: "", busy: false }) as never,
+  state: () => ({ requested: false, previewURL: "", error: "", busy: false, saved: false }) as never,
   // The row asks for a preview as soon as it shows: the stand-in answers nothing and fetches nothing.
   preview: async () => {},
   failPreview: () => {},

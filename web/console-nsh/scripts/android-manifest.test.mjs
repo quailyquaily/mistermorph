@@ -8,6 +8,7 @@ import {
   NOTIFICATION_PERMISSION_ACTIVITY,
   NOTIFIER_JOB,
   PERMISSION_ACTIVITY,
+  SAVE_ACTIVITY,
   patchManifest,
 } from "./android-manifest.mjs";
 
@@ -85,6 +86,38 @@ test("keeps a network-state permission the manifest declares already", () => {
   // Its other additions still come.
   assert.match(out, /android\.permission\.POST_NOTIFICATIONS/);
   assert.ok(out.includes(NOTIFIER_JOB));
+  assert.equal(patchManifest(out), out);
+});
+
+test("adds the save activity and makes the system's document picker visible to the app", () => {
+  const out = patchManifest(NSH_MANIFEST);
+  const at = out.indexOf(SAVE_ACTIVITY);
+  assert.ok(at > out.indexOf("com.longbridge.nsh.AppActivity") && at < out.indexOf("</application>"));
+  assert.equal(out.split(SAVE_ACTIVITY).length, 2);
+  assert.match(out, /SaveDocumentActivity" android:exported="false"\s+android:theme="@android:style\/Theme\.Translucent\.NoTitleBar"/);
+  // <queries> is the manifest's, before <application>, and names the picker's intent.
+  const queries = out.slice(out.indexOf("<queries>"), out.indexOf("</queries>"));
+  assert.ok(out.indexOf("<queries>") > 0 && out.indexOf("</queries>") < out.indexOf("<application"));
+  assert.match(queries, /<action android:name="android\.intent\.action\.CREATE_DOCUMENT" \/>/);
+  assert.match(queries, /<category android:name="android\.intent\.category\.OPENABLE" \/>/);
+  assert.match(queries, /<data android:mimeType="\*\/\*" \/>/);
+  // Saving asks for no storage permission: the picker grants the one document.
+  assert.ok(!/STORAGE|MANAGE_EXTERNAL/.test(out));
+  assert.equal(patchManifest(out).split("<queries>").length, 2);
+});
+
+test("puts the picker's intent into the <queries> nsh 0.5 declares, keeping its own", () => {
+  const nsh05 = NSH_MANIFEST.replace(
+    "    <application ",
+    "    <queries>\n        <intent>\n            <action android:name=\"android.intent.action.PROCESS_TEXT\" />\n" +
+      "            <data android:mimeType=\"text/plain\" />\n        </intent>\n    </queries>\n    <application ",
+  );
+  const out = patchManifest(nsh05);
+  assert.equal(out.split("<queries>").length, 2);
+  const queries = out.slice(out.indexOf("<queries>"), out.indexOf("</queries>"));
+  assert.match(queries, /PROCESS_TEXT/);
+  assert.match(queries, /CREATE_DOCUMENT/);
+  assert.equal(queries.split("<intent>").length, 3);
   assert.equal(patchManifest(out), out);
 });
 
