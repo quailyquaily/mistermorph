@@ -52,3 +52,14 @@ Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && 
 Not checked: no live outbound sends; Slack and other routes rely on runtime wiring and existing sender tests. No UI sources changed; no visual inspection needed. Translated documentation remains unchanged.
 Push initially failed because credential lookup omitted the repository path; retry with command-local credential.useHttpPath=true succeeded.
 Moved new/ → review/ for review; not merged into master.
+
+## factory · review · 2026-11-17 19:28
+head: 5af467084dc1940d29d076072eb9dbf9a031bb52
+verdict: pass
+notes:
+- [P2] internal/channelruntime/taskruntime/runtime.go:886-897: searchableStaticToolTriggers restores contacts_send when channel group-chat registries deliberately removed it. Example: a Telegram supergroup run removes the tool in buildTelegramRegistry, then prepareRun re-registers it as deferred, allowing tool_search discovery and sending without explicit $contacts_send activation. Preserve the channel group-chat restriction when adding the searchable trigger and add group-chat regression coverage. Equivalent group registry removals exist in Slack and other channels.
+
+Reviewed by Claude Code against origin/master...HEAD (merge base cf3cb576), all 14 changed files. No P0/P1 findings; P2 remains for the owner to inspect before shipping.
+Validation: required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed with isolated temporary HOME and Go cache. Worktree remained clean; no review commits or code changes. Installs: none beyond existing pinned modules.
+Limits: no live outbound sends, no end-to-end deferred-tool guard approval resume, no CLI/embedding execution. Console UI sources unchanged; UI checks not applicable. Existing delivery tests and fake Telegram API covered sending; other routes checked through shared wiring and existing tests.
+Moved review/ → ready/ under the no-P0/P1 review rule; not merged into master.
