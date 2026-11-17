@@ -418,6 +418,8 @@ export interface ButtonProps {
   class?: string;
   testID?: string;
   onPress?: () => void;
+  /** Room around the button that takes its presses too (a compact button keeps a 44pt target). */
+  hitSlop?: BaseButtonProps["hitSlop"];
   /** The button's frame in its parent. */
   onLayout?: BaseButtonProps["onLayout"];
   /** Its icon's frame in it (layout probes in tests). */
@@ -579,6 +581,7 @@ export function Button(props: ButtonProps) {
       onPress={() => enabled() && props.onPress?.()}
       accessibilityLabel={props.accessibilityLabel || props.label || props.title || props.icon || undefined}
       testID={props.testID}
+      hitSlop={props.hitSlop}
       tooltip={tip() ? <Tip text={tip()!} /> : undefined}
       class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
         square() && !props.block ? `${size().square} px-0` : props.wrap && !glyphFace() ? wrapBox(size().box) : size().box

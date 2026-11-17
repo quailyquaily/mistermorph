@@ -25,6 +25,9 @@ import java.util.concurrent.Executors;
  * {@link TaskNotifier} that tells of finished tasks while the app is away (which the activity's
  * stop starts and its start ends) and the topic of a pressed notification.
  *
+ * <p>And `morph.file.*` saving (nsh has no save dialog on Android): {@link FileSaver} asks where
+ * with the system's picker for a new document (SaveDocumentActivity) and writes the file there.
+ *
  * <p>And `morph.shell.info`: this installed app's version name and code ({@link ShellInfo}), which
  * the console shows as its shell's version.
  */
@@ -36,11 +39,14 @@ public final class MorphApplication extends Application implements Application.A
         final VoiceController voice;
         final ExecutorService executor;
         final NshView view;
+        // Saves download on their own thread: a long one does not hold up a voice upload.
+        final ExecutorService saves;
 
-        Attached(VoiceController voice, ExecutorService executor, NshView view) {
+        Attached(VoiceController voice, ExecutorService executor, NshView view, ExecutorService saves) {
             this.voice = voice;
             this.executor = executor;
             this.view = view;
+            this.saves = saves;
         }
     }
 
@@ -101,7 +107,21 @@ public final class MorphApplication extends Application implements Application.A
             opened.put("topic_id", topicID);
             reply.resolve(opened);
         });
-        Attached result = new Attached(voice, executor, view);
+        ExecutorService saves = Executors.newSingleThreadExecutor();
+        FileSaver saver = new FileSaver(new AndroidFileSavePlatform(activity, saves));
+        view.handle("morph.file.saveSupport", (data, reply) -> reply.resolve(saver.support()));
+        view.handle("morph.file.save", (data, reply) -> saver.save(data instanceof Map ? (Map<?, ?>) data : new java.util.HashMap<>(), new FileSaver.Reply() {
+            @Override
+            public void resolve(Object value) {
+                reply.resolve(value);
+            }
+
+            @Override
+            public void reject(String message) {
+                reply.reject(message);
+            }
+        }));
+        Attached result = new Attached(voice, executor, view, saves);
         attached.put(activity, result);
         return result;
     }
@@ -118,10 +138,10 @@ public final class MorphApplication extends Application implements Application.A
         }
     }
 
-    /** The app's own activities over nsh's: asking for a permission, opening a notification. */
+    /** The app's own activities over nsh's: asking for a permission, opening a notification, asking where to save. */
     private static boolean ours(Activity activity) {
         return activity instanceof VoicePermissionActivity || activity instanceof NotificationPermissionActivity
-            || activity instanceof NotificationOpenActivity;
+            || activity instanceof NotificationOpenActivity || activity instanceof SaveDocumentActivity;
     }
 
     private static VoiceController.Reply answer(NshHostReply reply) {
@@ -174,6 +194,8 @@ public final class MorphApplication extends Application implements Application.A
         if (current == null) return;
         current.voice.close();
         current.executor.shutdown();
+        // A save under way still finishes (its document is the user's); nothing new starts.
+        current.saves.shutdown();
     }
 
     @Override

@@ -192,8 +192,19 @@ button (Android 13 and newer ask; older versions allow notifications unless they
 the system settings). See [the feature notes](feat/feat_20261110_android_task_notifications.md) for how
 it works and its limits.
 
+Saving files works with Android's own picker: a file the agent sent (its download icon button),
+a workspace or artifact download, or a log export asks where to save it in the system's "save to"
+screen (the Storage Access Framework, so the app holds no storage permission), offering the file's
+own name. The app then downloads the file from the console server with the session and writes it
+there; the button stays busy until every byte is written and shows a check once it is. Backing out
+of the picker saves nothing and says nothing; a failed download or write says why, deletes the
+document it had started, and the button tries again. Only the console server's own addresses get
+the session, and the download follows no redirects. nsh has no save dialog on Android, so this also
+comes from the app's own Java; an APK built without it, or a device without a document picker, says
+that saving is not available. Other phones (iOS) have no saving yet.
+
 Not available in the Android app yet: attaching files other than images, other system notifications
-(TODO items' opt-in notifications), changing avatars and saving files (log exports, downloads).
+(TODO items' opt-in notifications) and changing avatars.
 
 ## Shell and Server Versions
 

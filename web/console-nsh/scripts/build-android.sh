@@ -5,7 +5,7 @@
 # android`, added here when missing) and that release's nsh.aar (embedding SDK, fetched and checked
 # here when missing), Node, a JDK, curl, unzip and the Android SDK (build tools and
 # `platforms;android-35`, found through ANDROID_HOME); no NDK, no Gradle. The app's own Java (android/src: voice input's
-# recorder, the task notifications' background watcher) goes into the runtime's classes.dex
+# recorder, the task notifications' background watcher, saving files) goes into the runtime's classes.dex
 # (scripts/android-host.sh).
 #
 #   scripts/build-android.sh [--out FILE] [--abi ABI]... [--format apk|aab] [--run]
@@ -105,8 +105,9 @@ ln -s "$runtime/lib" "$shim/nsh-runtime/android/release/lib"
 # The manifest nsh links lacks what the app adds (scripts/android-manifest.mjs): cleartext HTTP (the
 # console server is usually plain http:// on the local network, nsh's Android runtime fetches through
 # HttpURLConnection, which enforces it, and `nsh package` declares it only for its development
-# builds), voice input's permission, Application and permission activity, and the task
-# notifications' permissions, activities and job; and it labels the app with nsh.json's name, which
+# builds), voice input's permission, Application and permission activity, the task
+# notifications' permissions, activities and job, and the save activity with the `<queries>` entry
+# for the system's document picker; and it labels the app with nsh.json's name, which
 # Android's launcher and app settings show as Morph instead. Nor has it a launcher icon that fits
 # Android's launchers: nsh links one PNG (nsh.json's icon), which they shrink onto a plate, so the link also
 # takes android/res (from design/brand/generator/platforms.py): the adaptive icon
@@ -151,7 +152,8 @@ if [[ "$format" == apk ]]; then
     android.permission.ACCESS_NETWORK_STATE \
     com.mistermorph.console.MorphApplication com.mistermorph.console.VoicePermissionActivity \
     com.mistermorph.console.NotificationPermissionActivity com.mistermorph.console.NotificationOpenActivity \
-    com.mistermorph.console.TaskNotifierJob; do
+    com.mistermorph.console.TaskNotifierJob com.mistermorph.console.SaveDocumentActivity \
+    android.intent.action.CREATE_DOCUMENT; do
     if ! grep -q "$wanted" <<<"$manifest"; then
       echo "the APK's manifest lacks $wanted: did nsh stop linking its manifest with aapt2?" >&2
       exit 1

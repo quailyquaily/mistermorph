@@ -14,7 +14,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
 | `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the pickers (Gallery: the photo picker; File: the document picker), voice input and task notifications through the native part |
-| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) and the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) |
+| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`), the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) and saving files behind `morph.file.save` (`FileSaver`, `SaveDocumentActivity`) |
 | `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
@@ -386,6 +386,22 @@ Headless tests prove behaviour, not the look.
   from `-max` to `max` (`DailyUsagePanel`). The bars join a stack in the order they are attached,
   and a `<Bar>` written beside a list of bars is attached before the list whatever the source
   order: put every bar of the stack in one list.
+- A `WebView`'s `src` (and an `Image`'s, outside the bundle) must be an absolute `http(s)` URL with
+  a host. The core checks it against the `webview` capability and refuses a path such as
+  `/api/artifacts/preview/<ticket>/index.html` ("names no host a grant could add",
+  `ERR_ACCESS_DENIED` on `onError`) on every platform, the browser included: nothing loads and the
+  box stays blank. The console server answers with paths (it does not know the address the client
+  used), so make them absolute with `consoleURL` (`lib/core/context.js`) first. Artifact previews
+  did not, and showed an empty frame in the phone app and the web console alike (FT144). Listen to
+  a web view's `onError`: without a listener a refusal leaves no trace but a log line.
+- What a web view reports differs: on the web the `<iframe>` gives `onLoadStart` and `onLoad` but
+  never an HTTP or network error (a 401 or 404 page simply shows), and a same-origin URL is
+  sandboxed without its origin (the artifact cannot reach the console page). Android's WebView
+  reports `onError` for the main frame only (the 0.4.0 runtime checks `isForMainFrame`) and may
+  still send `onLoad` for its own error page after it, so the artifact card keeps a failure once
+  reported. Headless `nsh test` loads no pages and sends no load events: page states are driven
+  through the store (`tests/fixtures/artifact-preview-app.tsx`), and only a refused URL's `onError`
+  is real there.
 
 ### Android (nsh 0.4.0)
 
@@ -457,7 +473,13 @@ Headless tests prove behaviour, not the look.
 - 0.4.0 had the photo picker but no `Picker.pickFiles`; 0.5.0 has both (`pickFiles` is Android's
   `ACTION_OPEN_DOCUMENT`), so the phone's Upload files asks Gallery or File (`AttachSourceSheet`)
   and `lib/mobileHost.ts` takes the matching picker. Headless tests answer either with
-  `app.onPick` (`pick.kind` says which). There are still no `Notifications`. Avatars (crop and re-encode) and saving files are not available there yet;
-  they say so. Task notifications come from the app's own Java (a JobScheduler job reading
+  `app.onPick` (`pick.kind` says which). There are still no `Notifications`. Avatars (crop and re-encode) are not available there yet;
+  they say so.
+- nsh 0.5.1 has no save dialog for apps on Android: its `SaveDialog` is Rust-only and desktop-only
+  (iOS, Android and the web answer every file request with an error), and `fs/promises` reaches only
+  the app's own files. The phone's `morph.file.save` is the app's Java (`FileSaver`: a transparent
+  `SaveDocumentActivity` shows `ACTION_CREATE_DOCUMENT`, then the file is streamed from the console
+  into the chosen document). `lib/mobileHost.ts` asks `morph.file.saveSupport` at boot and only then
+  lists `saveFile`; headless tests play the native part with those two handlers. Task notifications come from the app's own Java (a JobScheduler job reading
   `/api/notifications/events` while the app is away: the page, and its socket, are suspended then);
   see `docs/feat/feat_20261110_android_task_notifications.md`.
