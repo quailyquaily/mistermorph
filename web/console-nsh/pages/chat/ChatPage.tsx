@@ -6,6 +6,7 @@
 import { signal, Text, token, untracked, View } from "nsh";
 import { BackButton, Fab, Icon, Kicker, MessageDialog, Page, PageBar, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
+import { editQuoteLine } from "../../lib/core/chat-message-edit.js";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
 import { COMPOSER_RADIUS } from "../../components/chat/composerField";
 import { barRoom, underBar } from "../../components/frame/glassBar";
@@ -47,8 +48,9 @@ function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (h
       addLabel={t("chat_composer_add")}
       attachLabel={t("chat_composer_add_workspace")}
       uploadLabel={t("chat_composer_upload_files")}
-      uploading={c.composerUploading()}
-      fileItems={c.composerFiles()}
+      // An edit sends text alone: the draft's files wait with the draft (chatController's MessageEdit).
+      uploading={!c.messageEdit() && c.composerUploading()}
+      fileItems={c.messageEdit() ? [] : c.composerFiles()}
       fileLabels={{
         files: t("chat_composer_files"),
         preview: t("chat_composer_file_preview"),
@@ -75,6 +77,13 @@ function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (h
       llmProfileLabel={t("chat_llm_profile_label")}
       onLLMProfileChange={(value) => c.setLLMProfile(value)}
       footerText={props.landing ? "" : c.chatDisclaimer()}
+      editQuote={c.messageEdit()?.text}
+      editLabels={{
+        title: t("chat_message_edit_title"),
+        cancel: t("chat_message_edit_cancel"),
+        quote: t("chat_message_edit_quote", { text: editQuoteLine(c.messageEdit()?.text) }),
+      }}
+      onEditCancel={() => c.cancelMessageEdit()}
       voiceAvailable={c.voice.available()}
       voiceState={c.voice.state()}
       voiceLabel={

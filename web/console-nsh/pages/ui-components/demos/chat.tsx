@@ -139,6 +139,7 @@ const receivedFiles: ReceivedFiles = {
 function rowContext(): ChatRowContext {
   const copied = signal("");
   const seq = signal(0);
+  const editing = signal("");
   return {
     endpointRef: () => "",
     topicID: () => "uig-topic",
@@ -156,6 +157,14 @@ function rowContext(): ChatRowContext {
       copied.set(item.id);
       seq.update((n) => n + 1);
       act("chat copy", item.id);
+    },
+    // A sent message can be edited here; pressing Edit again on the same one ends the edit.
+    canEdit: (item) => item.role === "user",
+    editingItemID: () => editing(),
+    replacedByEdit: () => false,
+    onEdit: (item) => {
+      editing.set(editing() === item.id ? "" : item.id);
+      act("chat edit", item.id);
     },
     onPreviewFile: (item) => act("chat preview file", item?.name),
     onOpenDetail: (detail) => act("chat open detail", detail.kind),
