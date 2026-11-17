@@ -129,3 +129,16 @@ Apply FT142 to all runtimes, explicitly including awareness, not only ordinary c
 This clarification broadens runtime coverage; it does not waive existing authorization, recipient restrictions, explicit group/public-thread activation gates, or delivery safeguards. Preserve those gates while fixing the latest review finding. No live messages are requested by this comment.
 
 Comment only: item remains at its current board status; this clarification needs implementation/review verification; no implementation or new validation performed.
+
+## factory · review · 2026-11-17 22:14
+head: 9cbf09e08a9830096d4adaf1a1b863db0aee8534
+verdict: pass
+
+Claude Code reviewed all 29 files in origin/master...HEAD against base b054491a, including the latest owner clarification covering awareness. No verified P0/P1 or other concrete introduced defects. The previous public Bluesky/X activation-gate P1 is fixed; shared socialpost tasks now require explicit activation and retain forbidden-author restrictions. Six-channel group opt-in gates and ordinary direct-chat/Console deferred discovery remain intact.
+
+Validation: required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (163 packages passed, 20 without tests, exit 0), using isolated HOME and caches under TMPDIR. Manager checked gate exit and clean unchanged review head. Installs: none beyond cached pinned modules. No review edits or code commits.
+
+Owner attention: awareness/heartbeat/cron contacts_send registration and delivery wiring were traced; the existing enabled tool remains visible/callable. However, the latest clarification explicitly requests awareness registration-and-invocation regression coverage with fake delivery. This branch has awareness registration/helper assertions but no awareness-runtime fake-delivery invocation test. That acceptance-coverage gap remains open; pass here means no P0/P1, not full completion of that requested test coverage.
+
+Limits: no live outbound sends, no end-to-end guard approval resume; awareness delivery assessed by code tracing, not an actual awareness-runtime send test. No Console UI sources changed, so UI checks were not applicable.
+Moved review/ → ready/ under the no-P0/P1 rule. Not merged into master or released.
