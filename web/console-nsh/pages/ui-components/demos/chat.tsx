@@ -273,6 +273,7 @@ function HistoryListDemo() {
           hasOlder={state() === "filled"}
           loadingOlder={older.on()}
           olderLabel={t("uig_fixture_open")}
+          olderLoadingLabel={t("msg_loading")}
           onLoadOlder={() => {
             older.toggle();
             act("ChatHistoryList", "load older");
