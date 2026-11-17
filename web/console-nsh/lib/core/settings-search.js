@@ -52,7 +52,8 @@ const HAND_WRITTEN_FIELDS = {
     "settings_auto_update_card_title",
     "settings_update_channel_title",
     "settings_update_auto_title",
-    "settings_update_version_title",
+    "settings_update_shell_title",
+    "settings_update_server_title",
   ],
   console: ["remote_agents_title"],
 };

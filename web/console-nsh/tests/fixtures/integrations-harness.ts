@@ -21,6 +21,8 @@ export interface FixtureOptions {
   host?: Record<string, unknown>;
   runtime?: "web" | "desktop";
   features?: string[];
+  /** More of `morph.boot`'s answer (a host's `shell`, another `desktopVersion`). */
+  boot?: Record<string, unknown>;
   origin?: string;
   width?: number;
 }
@@ -50,6 +52,7 @@ export async function openFixture(options: FixtureOptions) {
           languages: ["en-US"],
           desktopVersion: options.runtime === "desktop" ? "1.2.3" : "",
           features: options.features ?? ["pickFile", "saveFile"],
+          ...(options.boot || {}),
         },
         "morph.kv.set": null,
         "morph.notify.state": "default",

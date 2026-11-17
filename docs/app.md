@@ -206,6 +206,35 @@ that saving is not available. Other phones (iOS) have no saving yet.
 Not available in the Android app yet: attaching files other than images, other system notifications
 (TODO items' opt-in notifications) and changing avatars.
 
+## Shell and Server Versions
+
+Settings → System → Updates shows two versions, each from its own source and with its own update
+check. Neither ever stands in for the other: a version that cannot be read is shown as Unknown.
+
+- **Shell version**: the installed app the Console runs in (its shell), as that app was built. The
+  host reports it in its boot data (`lib/platform.ts` `shellInfo()`): the desktop app as
+  `desktopVersion` (`MISTERMORPH_DESKTOP_VERSION` at build time, `dev` otherwise), the Android app
+  through its native part (`morph.shell.info`: Android's version name and version code of the
+  installed package, which `build-android.sh` sets from `VERSION`). A browser has no shell, so the
+  row is not shown there.
+- **Server version**: the console server the Console is connected to, from that server's
+  `GET /settings/auto-update` (`current_version`). Each load starts over, so connecting to another
+  server never shows the previous server's version or check result; a failed lookup is Unknown.
+
+The checks follow the same split:
+
+| Where | Shell check | Server check |
+| --- | --- | --- |
+| Desktop app | The desktop app's own check (`morph.desktop.checkUpdate`, its version against the release manifest) and the file for this machine | The server's check (`POST /settings/auto-update/check`), no download for this device |
+| Android app | The release's Android app (`POST /settings/auto-update/check?download_os=android`, which reads the release feed) compared with the installed version; the APK download | The server's check, no download for this device |
+| iOS app | Not available: no iOS app is published and nsh has no store lookup; the version is Unknown unless a host answers `morph.shell.info` | The server's check, no download for this device |
+| Browser | None (no shell) | The server's check with the download for this device (`download_os`, `download_arch`) |
+
+When the shell's version is unknown (an Android build without the native part, an iOS build), the
+row says its updates cannot be checked rather than borrowing the server's result; a desktop host
+without the `checkUpdate` feature says checking is unavailable. The Android app is updated by
+installing the newer APK by hand; nothing installs it in the background.
+
 ## Known Gaps
 
 - Local macOS test packages can still use ad hoc signing; those builds may require testers to manually bypass Gatekeeper on first launch.

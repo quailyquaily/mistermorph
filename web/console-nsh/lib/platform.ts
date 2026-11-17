@@ -6,6 +6,7 @@
 import { Clipboard, host, locale, openUrl, platform } from "nsh";
 import * as mobileHost from "./mobileHost";
 import { type BrowserInfo, browserTarget, type DownloadTarget, nativeTarget, UNKNOWN_TARGET } from "./downloadTarget";
+import { type ShellInfo, shellFromBoot } from "./updateTargets";
 
 /** The phone app: a client of a console server elsewhere, whose address the user enters. */
 const MOBILE = platform.os === "android" || platform.os === "ios";
@@ -28,8 +29,17 @@ export interface Boot {
   session: Record<string, string>;
   /** The user's languages, best first. */
   languages: string[];
-  /** The desktop app's version, `""` on the web. */
+  /**
+   * The desktop app's version, `""` on the web and in the phone app: the desktop host's name for
+   * its shell's version (`shell` below), kept for desktop builds that predate `shell`.
+   */
   desktopVersion: string;
+  /**
+   * The installed native app the Console runs in (its shell), as that app built it: `version` and
+   * `build` ("" when the host cannot tell, as without the phone app's native part). Absent on the
+   * web, which has no shell, and from desktop hosts that report `desktopVersion` instead.
+   */
+  shell?: { version?: string; build?: string } | null;
   /** What the host can do beyond the basics (see `hasFeature`). */
   features: string[];
   /** Whether the browser treats the page as a secure context; absent from older hosts. */
@@ -78,6 +88,13 @@ export const isDesktop = () => config.runtime === "desktop";
 /** The phone app, which reaches a console server at the address the user entered. */
 export const isMobile = () => config.runtime === "mobile";
 export const desktopVersion = () => config.desktopVersion;
+/**
+ * The shell the Console runs in (the desktop app, the Android app, the iOS app) and its version as
+ * its host reports it, or null in a browser. Never the console server's version: a host that
+ * cannot tell leaves the version "".
+ */
+export const shellInfo = (): ShellInfo | null =>
+  shellFromBoot({ runtime: config.runtime, os: platform.os, shell: config.shell, desktopVersion: config.desktopVersion });
 export const languages = () => config.languages;
 export const initialLocation = () => config.location || "/";
 export const basePath = () => config.basePath || "/";
