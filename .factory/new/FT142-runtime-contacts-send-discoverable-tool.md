@@ -14,3 +14,10 @@ Scope and acceptance:
 - Keep existing `contacts_list` and `agent_send` behavior unchanged; this request is not an instruction to send any message now.
 
 Requested status: new. Investigation and implementation are pending.
+
+## factory · 2026-11-17 18:46
+
+Owner clarification: "Ordinary runtime" includes Console, Telegram, Slack, and similar regular conversation runtimes. It does not mean only a CLI/headless runtime or only Console.
+
+- Make the contacts-send tool searchable and callable after discovery in Console, Telegram, and Slack runtimes, while keeping it absent from each runtime's default model-visible tool set.
+- Check registration and discovery/invocation coverage across those runtimes; do not implement this as a Console-only capability. Preserve the existing delivery and authorization safeguards in every runtime.
