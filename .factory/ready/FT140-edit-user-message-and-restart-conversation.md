@@ -49,3 +49,14 @@ Built in bc623174 (server), 7ab7b7c1 (Console), de3a8851 (docs).
 - Coder inspected headless Chrome screenshots at desktop 1280x800 and touch phone 390x844: Edit/Copy order, compact single-line quote and right Cancel, keyboard focus/Tab and Escape. Open tooltip consumes first Escape; next cancels edit.
 - Not checked: real Android device, GPUI desktop application, live LLM end-to-end. Regeneration prompt verified at Go engine level.
 - First branch push credential request lacked repository path; one retry with per-command credential.useHttpPath=true succeeded. No user git settings changed.
+
+## factory · review · 2026-11-17 10:33
+head: de3a88510be1cd2168050ed3064e0a96effda618
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/chat/chatController.ts:3278-3279: after a refused edit of a message loaded from an older history page, loadHistory refreshes only the latest page; the target is absent locally, so endMessageEdit discards the revision and restores the pre-edit draft even though the target still exists on the server. Preserve older pages on refusal and verify target existence server-side before ending editing; add paged-history regression coverage. Verified in a throwaway probe: load [t3,t2], load older [t1], draft "my draft", edit t1 to "What is a red fox?", receive 409 -> composer "my draft", quote closed, t1 row gone.
+- No P0/P1 findings. Factory policy permits ready/ with this nonblocking P2; owner should inspect failed-submission retry behavior before shipping.
+- Claude Code reviewed origin/master...HEAD and all changed surfaces. Required gofmt/vet/go test gate passed (163 packages); nsh check passed; Console scripts/test.sh passed (131 files, zero failures, 333s). Six parallel-test failures passed the script's isolated retry. The separate defect probe intentionally failed and is not part of the required gate.
+- Installs: no unpinned tools or manifest changes reported. nsh populated its throwaway TypeScript 7.0.2 cache.
+- Validation limits: no fresh visual inspection, real Android device, GPUI desktop app or live LLM run. Older binaries skip the new task_replace journal event; long-term memories from removed turns remain by documented design.
+- Moved review/ → ready/. No linked GitHub issues or PRs identified.
