@@ -165,6 +165,7 @@ func runTelegramTask(ctx context.Context, rt *taskruntime.Runtime, api *telegram
 		CurrentMessage:          currentMsg,
 		StickySkills:            stickySkills,
 		Registry:                reg,
+		ContactsSendOptIn:       isGroupChat(job.ChatType),
 		PromptAugment: func(spec *agent.PromptSpec, reg *tools.Registry) {
 			if block := workspace.PromptBlock(job.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)

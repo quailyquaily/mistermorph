@@ -187,6 +187,10 @@ type RunRequest struct {
 	// ReferenceText is where $skill, $tool and $mcp_<name> references are read, when it differs
 	// from Task: a channel that adds a quoted message to the task passes the user's own text here.
 	ReferenceText string
+	// ContactsSendOptIn keeps contacts_send out of the run unless the task names it
+	// ($contacts_send) or ToolTriggers asks for it: tool search does not offer it. Channels set it
+	// for group chats, whose registries leave contacts_send out.
+	ContactsSendOptIn bool
 }
 
 type RunResult struct {
@@ -672,7 +676,11 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			toolTriggers[toolsutil.BuiltinAgentSend] = true
 		}
 		if rt.commonDeps.RegisterTriggeredStaticTools != nil && len(toolTriggers) > 0 {
-			rt.commonDeps.RegisterTriggeredStaticTools(reg, searchableStaticToolTriggers(reg, toolTriggers, runtimeToolsConfig.ToolSearch))
+			staticTriggers := toolTriggers
+			if !req.ContactsSendOptIn {
+				staticTriggers = searchableStaticToolTriggers(reg, toolTriggers, runtimeToolsConfig.ToolSearch)
+			}
+			rt.commonDeps.RegisterTriggeredStaticTools(reg, staticTriggers)
 		}
 		activeImage := rt.imageSessionHasActive(ctx, logger, imageScope)
 		toolTriggers = toolsutil.AddImageToolIntentTriggers(toolTriggers, imageTask, activeImage)
@@ -880,8 +888,8 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 // enabled contacts_send as a deferred tool: absent from the first request, found with tool_search,
 // then called like any tool. A run that already has contacts_send (an awareness registry) keeps it.
 // Without tool search the trigger is left out, so the ordinary run has no contacts_send at all
-// rather than one in every request. triggers itself is not changed: it also drives the run's
-// other tools.
+// rather than one in every request. A run with RunRequest.ContactsSendOptIn (a group chat) does
+// not ask for it. triggers itself is not changed: it also drives the run's other tools.
 func searchableStaticToolTriggers(reg *tools.Registry, triggers map[string]bool, search toolsutil.ToolSearchConfig) map[string]bool {
 	if !search.Enabled || reg == nil {
 		return triggers
