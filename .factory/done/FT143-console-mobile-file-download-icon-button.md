@@ -57,3 +57,12 @@ No findings. Claude Code reviewed all 20 changed files against origin/master...H
 Validation: configured gofmt/vet/go test gate passed; nsh 0.5.1 check passed; required parallel Console test script passed 133 files, 0 failed (7 unrelated files passed the script's isolated reruns); Android host Java suites passed 15/15 each; Android manifest tests passed 11/11. Worktree stayed clean. Installs: none; no dependency manifest changes.
 
 Residual risks: Android-dependent classes and a real nsh 0.5.1 APK could not be compiled/built in this review because the Android SDK android.jar and nsh 0.5.1 AAR were unavailable. No device/emulator end-to-end save, cloud-provider destination or visual check. Real runtime manifest integration, storage-provider write-mode behavior and Android automatic gzip/length handling remain unverified platform details, not confirmed defects. iOS saving remains explicitly unsupported. Owner should verify a genuine 0.5.1 Android build and on-device saving before release.
+
+
+## factory · 2026-11-17 21:17
+
+Shipped with Claude Code. Conflict-free merge into master: 5888d1597cb87cc47563cfd7ffc9fc708bcef305. Annotated release tag: v0.3.117. Atomic master/tag push succeeded; remote master and peeled tag verified at b054491a2860a8aeebb698cf41d56b94e814d297. No fix commits; forbidden paths unchanged.
+
+Final merged-base validation: gofmt, go vet ./..., go test ./... passed (163 packages ok, 19 without tests); nsh 0.5.1 check passed; required parallel Console runner 135/135 files, zero failures/retries; Console Node helpers/manifest/inventory 288/288; Cloudflare Node tests 24/24; native Java host tests three suites of 15/15. No installs or manifest dependency changes.
+
+Limits: no genuine nsh 0.5.1 Android APK build, physical device/emulator saving/preview or new visual validation. FT144 fullscreen retry/ticket-error P2 and FT145 gallery accessibility translation P3 remain unchanged. No linked issues or PRs identified. Branch retained (clean is not configured). Moved ready/ → done/.

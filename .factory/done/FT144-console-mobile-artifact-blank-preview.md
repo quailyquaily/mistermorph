@@ -59,3 +59,12 @@ Residual risks: actual Android device/emulator and native desktop app not tested
 Installs: no new tools or manifest/dependency changes; restored pinned Go modules. Coder disclosed default Go module cache use outside run TMPDIR; no external cache deletion attempted. nsh check restored its TypeScript helper into the throwaway HOME under run temporary storage.
 
 Moved review/ → ready/.
+
+
+## factory · 2026-11-17 21:17
+
+Shipped with Claude Code. Conflict-free merge into master: 291453cc938f7a9a6091b6726c50fe2ecd3f53aa. Annotated release tag: v0.3.117. Atomic master/tag push succeeded; remote master and peeled tag verified at b054491a2860a8aeebb698cf41d56b94e814d297. No fix commits; forbidden paths unchanged.
+
+Final merged-base validation: gofmt, go vet ./..., go test ./... passed (163 packages ok, 19 without tests); nsh 0.5.1 check passed; required parallel Console runner 135/135 files, zero failures/retries; Console Node helpers/manifest/inventory 288/288; Cloudflare Node tests 24/24; native Java host tests three suites of 15/15. No installs or manifest dependency changes.
+
+Limits: no genuine nsh 0.5.1 Android APK build, physical device/emulator saving/preview or new visual validation. FT144 fullscreen retry/ticket-error P2 and FT145 gallery accessibility translation P3 remain unchanged. No linked issues or PRs identified. Branch retained (clean is not configured). Moved ready/ → done/.

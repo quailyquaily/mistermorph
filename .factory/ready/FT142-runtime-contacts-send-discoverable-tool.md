@@ -63,3 +63,14 @@ Reviewed by Claude Code against origin/master...HEAD (merge base cf3cb576), all 
 Validation: required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed with isolated temporary HOME and Go cache. Worktree remained clean; no review commits or code changes. Installs: none beyond existing pinned modules.
 Limits: no live outbound sends, no end-to-end deferred-tool guard approval resume, no CLI/embedding execution. Console UI sources unchanged; UI checks not applicable. Existing delivery tests and fake Telegram API covered sending; other routes checked through shared wiring and existing tests.
 Moved review/ → ready/ under the no-P0/P1 review rule; not merged into master.
+
+
+## factory · review · 2026-11-17 21:17
+head: 5af467084dc1940d29d076072eb9dbf9a031bb52
+verdict: fix
+fix:
+- [P1] internal/channelruntime/taskruntime/runtime.go:886-897: searchableStaticToolTriggers re-registers contacts_send after Telegram/Slack/Discord/LINE/Lark/Mixin group registries deliberately remove it. Preserve the explicit group-chat activation restriction and add regression tests across channels.
+
+Shipping assessment by Claude Code reproduced search followed by a successful fake Telegram send to another contact on this head, versus tool unavailable and zero sends on master cf3cb576. ForbiddenTargetIDs only blocks current-sender targets; no text-send guard restores the missing group activation gate. This violates the request to preserve recipient restrictions. Existing explicit $contacts_send activation was already available; this is loss of explicit opt-in, not an owner-only authorization bypass. Supersedes the previous P2 severity/pass assessment.
+
+Not merged or tagged; branch unchanged, remains in ready/ pending correction/owner disposition. No fix applied during shipment. FT143–FT145 shipped separately in v0.3.117 without FT142. Reproduction and assessment logs retained in the shipment logs.

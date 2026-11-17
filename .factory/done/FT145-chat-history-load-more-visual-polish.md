@@ -44,3 +44,12 @@ notes:
 - Required gofmt gate, go vet ./... and go test ./... passed (163 packages). nsh check passed with pinned nsh 0.5.1. Required concurrent scripts/test.sh passed: 133 files, 0 failed; chat-attachments passed the runner's isolated retry after one parallel failure.
 - No unpinned installs or manifest changes. Tests used an absolute throwaway HOME and temporary files within the review run's temporary directory.
 - Residual risks: reviewer did not visually inspect Android, desktop or theme variants. Actual 44pt touch hitSlop beyond TipButton's 32pt wrapper needs device/mobile-web verification. Absolute-top prepend pushes existing messages downward as on master; scrolled-reader anchoring is covered and preserved. Build's recorded visual checks are not independent reviewer validation.
+
+
+## factory · 2026-11-17 21:17
+
+Shipped with Claude Code. Conflict-free merge into master: b054491a2860a8aeebb698cf41d56b94e814d297. Annotated release tag: v0.3.117. Atomic master/tag push succeeded; remote master and peeled tag verified at b054491a2860a8aeebb698cf41d56b94e814d297. No fix commits; forbidden paths unchanged.
+
+Final merged-base validation: gofmt, go vet ./..., go test ./... passed (163 packages ok, 19 without tests); nsh 0.5.1 check passed; required parallel Console runner 135/135 files, zero failures/retries; Console Node helpers/manifest/inventory 288/288; Cloudflare Node tests 24/24; native Java host tests three suites of 15/15. No installs or manifest dependency changes.
+
+Limits: no genuine nsh 0.5.1 Android APK build, physical device/emulator saving/preview or new visual validation. FT144 fullscreen retry/ticket-error P2 and FT145 gallery accessibility translation P3 remain unchanged. No linked issues or PRs identified. Branch retained (clean is not configured). Moved ready/ → done/.
