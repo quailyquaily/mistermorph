@@ -189,7 +189,7 @@ type RunRequest struct {
 	ReferenceText string
 	// ContactsSendOptIn keeps contacts_send out of the run unless the task names it
 	// ($contacts_send) or ToolTriggers asks for it: tool search does not offer it. Channels set it
-	// for group chats, whose registries leave contacts_send out.
+	// for group chats, whose registries leave contacts_send out, and for public social threads.
 	ContactsSendOptIn bool
 }
 
@@ -888,8 +888,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 // enabled contacts_send as a deferred tool: absent from the first request, found with tool_search,
 // then called like any tool. A run that already has contacts_send (an awareness registry) keeps it.
 // Without tool search the trigger is left out, so the ordinary run has no contacts_send at all
-// rather than one in every request. A run with RunRequest.ContactsSendOptIn (a group chat) does
-// not ask for it. triggers itself is not changed: it also drives the run's other tools.
+// rather than one in every request. A run with RunRequest.ContactsSendOptIn (a group chat, a
+// public thread) does not ask for it. triggers itself is not changed: it also drives the run's
+// other tools.
 func searchableStaticToolTriggers(reg *tools.Registry, triggers map[string]bool, search toolsutil.ToolSearchConfig) map[string]bool {
 	if !search.Enabled || reg == nil {
 		return triggers

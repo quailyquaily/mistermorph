@@ -76,6 +76,58 @@ func CheckContactsSendOptIn(t *testing.T, run ChannelRun) {
 	})
 }
 
+// PublicThreadRun answers text as one public post that mentions the account, through a social
+// network's runtime started with deps, and returns once the task has finished. The post's author is
+// never Ann (tg:1001).
+type PublicThreadRun func(t testing.TB, deps depsutil.CommonDependencies, text string) error
+
+// CheckPublicThreadContactsSendOptIn checks that run keeps a public thread's contacts_send opt-in
+// with tool search on: without $contacts_send, contacts_send can be neither seen, found nor called;
+// with it, the task can message Ann but still not the post's author, authorContactID (a public
+// reply is the only answer to the author). Messages go to a fake Telegram Bot API.
+func CheckPublicThreadContactsSendOptIn(t *testing.T, run PublicThreadRun, authorContactID string) {
+	t.Helper()
+	channelRun := func(t testing.TB, deps depsutil.CommonDependencies, text string) error { return run(t, deps, text) }
+	t.Run("public post without $contacts_send", func(t *testing.T) {
+		got := attemptWithDeps(t, channelRun, "tell Ann the build is green", annContactID)
+		for i, req := range got.requests {
+			if hasTool(req, "contacts_send") {
+				t.Fatalf("request %d offers contacts_send in a public thread without $contacts_send", i)
+			}
+		}
+		if got.searchResult != "" && foundTool(got.searchResult, "contacts_send") {
+			t.Fatalf("tool_search found contacts_send in a public thread: %s", got.searchResult)
+		}
+		if !strings.Contains(got.sendResult, "tool 'contacts_send' not found") {
+			t.Fatalf("contacts_send call in a public thread = %q, want an unknown tool", got.sendResult)
+		}
+		if len(got.delivered) != 0 {
+			t.Fatalf("a public thread without $contacts_send delivered %v", got.delivered)
+		}
+	})
+	t.Run("public post with $contacts_send", func(t *testing.T) {
+		got := attemptWithDeps(t, channelRun, "$contacts_send tell Ann the build is green", annContactID)
+		if len(got.requests) == 0 || !hasTool(got.requests[0], "contacts_send") {
+			t.Fatal("$contacts_send in a public thread did not offer contacts_send from the start")
+		}
+		if !got.deliveredToAnn() {
+			t.Fatalf("$contacts_send in a public thread: result %q, delivered %v; want one delivery", got.sendResult, got.delivered)
+		}
+	})
+	t.Run("public post with $contacts_send to its author", func(t *testing.T) {
+		got := attemptWithDeps(t, channelRun, "$contacts_send message me privately", authorContactID)
+		if !strings.Contains(got.sendResult, "contacts_send blocked") || !strings.Contains(got.sendResult, "current conversation counterpart") {
+			t.Fatalf("contacts_send to the post's author = %q, want blocked", got.sendResult)
+		}
+		if len(got.delivered) != 0 {
+			t.Fatalf("contacts_send to the post's author delivered %v", got.delivered)
+		}
+	})
+}
+
+// annContactID is the contact the checks try to message.
+const annContactID = "tg:1001"
+
 type contactsSendAttempt struct {
 	requests     []llm.Request
 	searchResult string
@@ -85,10 +137,29 @@ type contactsSendAttempt struct {
 
 func attemptContactsSend(t *testing.T, run ChannelRun, text string, group bool) contactsSendAttempt {
 	t.Helper()
+	return attemptContactsSendTo(t, run, text, group, annContactID)
+}
+
+// attemptContactsSendTo is attemptContactsSend with the model messaging contactID.
+func attemptContactsSendTo(t *testing.T, run ChannelRun, text string, group bool, contactID string) contactsSendAttempt {
+	t.Helper()
+	return attemptWithDeps(t, func(t testing.TB, deps depsutil.CommonDependencies, text string) error {
+		rt, err := taskruntime.Bootstrap(deps, taskruntime.BootstrapOptions{AgentConfig: agent.Config{MaxSteps: 4}})
+		if err != nil {
+			t.Fatalf("taskruntime.Bootstrap() error = %v", err)
+		}
+		defer func() { _ = rt.Close() }()
+		return run(t, rt, text, group)
+	}, text, contactID)
+}
+
+// attemptWithDeps runs text through run with dependencies whose model messages contactID.
+func attemptWithDeps(t *testing.T, run func(t testing.TB, deps depsutil.CommonDependencies, text string) error, text string, contactID string) contactsSendAttempt {
+	t.Helper()
 	stateDir := t.TempDir()
 	contactsDir := filepath.Join(stateDir, "contacts")
 	store := contacts.NewStoreInStateDir(stateDir, contactsDir)
-	ann := contacts.Contact{ContactID: "tg:1001", Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, ContactNickname: "Ann", TGUserID: 1001, TGPrivateChatID: 1001}
+	ann := contacts.Contact{ContactID: annContactID, Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, ContactNickname: "Ann", TGUserID: 1001, TGPrivateChatID: 1001}
 	if err := store.PutContact(context.Background(), ann); err != nil {
 		t.Fatalf("PutContact() error = %v", err)
 	}
@@ -117,9 +188,9 @@ func attemptContactsSend(t *testing.T, run ChannelRun, text string, group bool) 
 	}}
 	base := tools.NewRegistry()
 	toolsutil.RegisterStaticTools(base, cfg, nil, nil)
-	client := &optInClient{}
+	client := &optInClient{to: contactID}
 	route := llmutil.ResolvedRoute{ClientConfig: llmconfig.ClientConfig{Provider: "openai", Model: "gpt-5.2"}}
-	rt, err := taskruntime.Bootstrap(depsutil.CommonDependencies{
+	deps := depsutil.CommonDependencies{
 		Logger:          func() (*slog.Logger, error) { return slog.New(slog.NewTextHandler(io.Discard, nil)), nil },
 		LogOptions:      func() agent.LogOptions { return agent.LogOptions{} },
 		ResolveLLMRoute: func(string) (llmutil.ResolvedRoute, error) { return route, nil },
@@ -130,19 +201,19 @@ func attemptContactsSend(t *testing.T, run ChannelRun, text string, group bool) 
 			toolsutil.RegisterStaticTools(reg, cfg, nil, triggers)
 		},
 		RuntimeToolsConfig: toolsutil.RuntimeToolsRegisterConfig{ToolSearch: toolsutil.ToolSearchConfig{Enabled: true}},
-		RuntimePaths:       runtimepaths.Paths{CheckpointRoot: stateDir, StateDir: stateDir, ContactsDir: contactsDir},
+		RuntimePaths: runtimepaths.Paths{
+			CheckpointRoot: stateDir, StateDir: stateDir, ContactsDir: contactsDir,
+			TasksDir: filepath.Join(stateDir, "tasks"), JournalDir: filepath.Join(stateDir, "journal"),
+			WorkspaceAttachmentsPath: filepath.Join(stateDir, "workspace_attachments.json"),
+		},
 		PromptSpec: func(context.Context, *slog.Logger, agent.LogOptions, string, llm.Client, string, []string) (agent.PromptSpec, []string, error) {
 			return agent.DefaultPromptSpec(), nil, nil
 		},
-	}, taskruntime.BootstrapOptions{AgentConfig: agent.Config{MaxSteps: 4}})
-	if err != nil {
-		t.Fatalf("taskruntime.Bootstrap() error = %v", err)
 	}
-	defer func() { _ = rt.Close() }()
 	if _, ok := base.Get(toolsutil.BuiltinContactsSend); ok {
 		t.Fatal("the base registry has contacts_send")
 	}
-	if err := run(t, rt, text, group); err != nil {
+	if err := run(t, deps, text); err != nil {
 		t.Fatalf("channel run error = %v", err)
 	}
 
@@ -168,9 +239,11 @@ func attemptContactsSend(t *testing.T, run ChannelRun, text string, group bool) 
 	return out
 }
 
-// optInClient tries to message Ann: it calls contacts_send when it sees it, searches for it first
-// when it does not but tool_search is offered, and calls it after the search either way.
+// optInClient tries to message to (Ann unless a check says otherwise): it calls contacts_send when
+// it sees it, searches for it first when it does not but tool_search is offered, and calls it after
+// the search either way.
 type optInClient struct {
+	to       string
 	mu       sync.Mutex
 	requests []llm.Request
 	searched bool
@@ -189,7 +262,7 @@ func (c *optInClient) Chat(_ context.Context, req llm.Request) (llm.Result, erro
 		return llm.Result{ToolCalls: []llm.ToolCall{{ID: "search", Name: "tool_search", Arguments: map[string]any{"query": "contacts_send"}}}}, nil
 	default:
 		c.sent = true
-		return llm.Result{ToolCalls: []llm.ToolCall{{ID: "send", Name: "contacts_send", Arguments: map[string]any{"contact_id": "tg:1001", "message_text": "The build is green."}}}}, nil
+		return llm.Result{ToolCalls: []llm.ToolCall{{ID: "send", Name: "contacts_send", Arguments: map[string]any{"contact_id": c.to, "message_text": "The build is green."}}}}, nil
 	}
 }
 
