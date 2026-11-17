@@ -119,6 +119,7 @@ func runLineTask(
 		CurrentMessage:          currentMsg,
 		StickySkills:            stickySkills,
 		Registry:                buildLineRegistry(rt.BaseRegistry, job.ChatType),
+		ContactsSendOptIn:       isLineGroupChat(job.ChatType),
 		PromptAugment: func(spec *agent.PromptSpec, reg *tools.Registry) {
 			if block := workspace.PromptBlock(job.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)

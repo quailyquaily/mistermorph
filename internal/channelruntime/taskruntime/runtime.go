@@ -187,6 +187,10 @@ type RunRequest struct {
 	// ReferenceText is where $skill, $tool and $mcp_<name> references are read, when it differs
 	// from Task: a channel that adds a quoted message to the task passes the user's own text here.
 	ReferenceText string
+	// ContactsSendOptIn keeps contacts_send out of the run unless the task names it
+	// ($contacts_send) or ToolTriggers asks for it: tool search does not offer it. Channels set it
+	// for group chats, whose registries leave contacts_send out, and for public social threads.
+	ContactsSendOptIn bool
 }
 
 type RunResult struct {
@@ -672,7 +676,11 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			toolTriggers[toolsutil.BuiltinAgentSend] = true
 		}
 		if rt.commonDeps.RegisterTriggeredStaticTools != nil && len(toolTriggers) > 0 {
-			rt.commonDeps.RegisterTriggeredStaticTools(reg, toolTriggers)
+			staticTriggers := toolTriggers
+			if !req.ContactsSendOptIn {
+				staticTriggers = searchableStaticToolTriggers(reg, toolTriggers, runtimeToolsConfig.ToolSearch)
+			}
+			rt.commonDeps.RegisterTriggeredStaticTools(reg, staticTriggers)
 		}
 		activeImage := rt.imageSessionHasActive(ctx, logger, imageScope)
 		toolTriggers = toolsutil.AddImageToolIntentTriggers(toolTriggers, imageTask, activeImage)
@@ -874,6 +882,28 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		audience:            memoryAudience,
 		memoriesReadOnly:    memoriesReadOnly,
 	}, nil
+}
+
+// searchableStaticToolTriggers adds, for a run with tool search on, the trigger that registers an
+// enabled contacts_send as a deferred tool: absent from the first request, found with tool_search,
+// then called like any tool. A run that already has contacts_send (an awareness registry) keeps it.
+// Without tool search the trigger is left out, so the ordinary run has no contacts_send at all
+// rather than one in every request. A run with RunRequest.ContactsSendOptIn (a group chat, a
+// public thread) does not ask for it. triggers itself is not changed: it also drives the run's
+// other tools.
+func searchableStaticToolTriggers(reg *tools.Registry, triggers map[string]bool, search toolsutil.ToolSearchConfig) map[string]bool {
+	if !search.Enabled || reg == nil {
+		return triggers
+	}
+	if _, ok := reg.Get(toolsutil.BuiltinContactsSend); ok {
+		return triggers
+	}
+	out := make(map[string]bool, len(triggers)+1)
+	for name, triggered := range triggers {
+		out[name] = triggered
+	}
+	out[toolsutil.SearchableContactsSendTrigger] = true
+	return out
 }
 
 func toolNameSet(reg *tools.Registry) map[string]bool {

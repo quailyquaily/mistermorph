@@ -382,6 +382,9 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, logger *slog.Logger, 
 		ContextCheckpointStore: checkpoint.Store,
 		HistoryBoundaries:      checkpoint.HistoryBoundaries,
 		CurrentMessageBoundary: checkpoint.CurrentMessageBoundary,
+		// A public thread, like a group chat, gets contacts_send only from $contacts_send: tool
+		// search does not offer it to anyone who mentions the account.
+		ContactsSendOptIn: true,
 	})
 }
 

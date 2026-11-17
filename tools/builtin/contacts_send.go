@@ -52,19 +52,31 @@ type ContactsSendToolOptions struct {
 }
 
 type ContactsSendTool struct {
-	opts ContactsSendToolOptions
+	opts     ContactsSendToolOptions
+	deferred bool
 }
 
 func NewContactsSendTool(opts ContactsSendToolOptions) *ContactsSendTool {
 	return &ContactsSendTool{opts: opts}
 }
 
+// NewDeferredContactsSendTool is contacts_send as a tools.Deferred tool: with tool search on, it
+// stays out of requests until the model finds it with tool_search. It sends exactly as
+// NewContactsSendTool's does.
+func NewDeferredContactsSendTool(opts ContactsSendToolOptions) *ContactsSendTool {
+	return &ContactsSendTool{opts: opts, deferred: true}
+}
+
 func (t *ContactsSendTool) Name() string { return "contacts_send" }
+
+// Deferred reports whether tool search hides the tool until the model finds it.
+func (t *ContactsSendTool) Deferred() bool { return t != nil && t.deferred }
 
 func (t *ContactsSendTool) Description() string {
 	return `Sends a message or a file to one or more contacts.
-		IF sending to multiple contacts THEN pass comma-separated contact_id values.
-	  Message routes automatically across Slack, Telegram, LINE, Lark, and Mixin based on chat_id/contact reachability.
+		IF sending to multiple contacts THEN pass comma-separated contact_id values. Find contact_id values with contacts_list.
+	  Message goes to the contact's own reachable route (Telegram, Slack, LINE, Lark, Discord, Mixin, WeChat, WhatsApp, Bluesky, X or Agent Link), or to the chat_id given; it is never sent to another contact. A contact_id with a channel prefix (tg:, slack:, ...) sends only on that channel.
+		An unknown contact, a contact with no reachable route, or a chat_id the contact cannot receive in fails with an error. In the result, outcome.accepted=false with outcome.error means the channel did not deliver the message.
 		To send a file, pass its path; message_text becomes an optional caption. One file per call, at most 20 MiB (64 MiB to Agent Link agents on a route that streams files).
 		Files can be sent on Telegram, Slack, Lark, Discord, Mixin, WeChat, WhatsApp and Agent Link (at most 2 MiB there when the route does not stream files), not LINE.
 		The file must be under file_cache_dir or workspace_dir; copy a file from anywhere else into file_cache_dir first.

@@ -214,6 +214,51 @@ func TestRegisterStaticToolsContactsSendDisabledRequiresExplicitTrigger(t *testi
 	}
 }
 
+func TestRegisterStaticToolsSearchableContactsSend(t *testing.T) {
+	searchable := map[string]bool{SearchableContactsSendTrigger: true}
+	cases := []struct {
+		name         string
+		awareness    bool
+		enabled      bool
+		selected     map[string]bool
+		triggers     map[string]bool
+		wantTool     bool
+		wantDeferred bool
+	}{
+		{name: "ordinary run without the trigger", enabled: true},
+		{name: "ordinary run with tool search", enabled: true, triggers: searchable, wantTool: true, wantDeferred: true},
+		{name: "disabled stays unavailable", triggers: searchable},
+		{name: "awareness keeps the visible tool", awareness: true, enabled: true, triggers: searchable, wantTool: true},
+		{name: "explicit $contacts_send keeps the visible tool", enabled: true, triggers: map[string]bool{SearchableContactsSendTrigger: true, BuiltinContactsSend: true}, wantTool: true},
+		{name: "selected allowlist without contacts_send", enabled: true, selected: map[string]bool{BuiltinReadFile: true}, triggers: searchable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := tools.NewRegistry()
+			RegisterStaticTools(reg, StaticRegistryConfig{
+				Common:       StaticCommonConfig{Awareness: tc.awareness},
+				ContactsSend: StaticContactsSendConfig{Enabled: tc.enabled},
+			}, tc.selected, tc.triggers)
+			tool, ok := reg.Get(BuiltinContactsSend)
+			if ok != tc.wantTool {
+				t.Fatalf("contacts_send registered = %v, want %v", ok, tc.wantTool)
+			}
+			if ok && tools.IsDeferred(tool) != tc.wantDeferred {
+				t.Fatalf("contacts_send deferred = %v, want %v", tools.IsDeferred(tool), tc.wantDeferred)
+			}
+			if _, ok := reg.Get(SearchableContactsSendTrigger); ok {
+				t.Fatal("the trigger was registered as a tool")
+			}
+		})
+	}
+	if IsKnownBuiltinToolName(SearchableContactsSendTrigger) {
+		t.Fatal("the searchable trigger must not be a tool name a task can reference")
+	}
+	if refs := ExplicitBuiltinToolRefs("$"+SearchableContactsSendTrigger+" hi", nil); refs[SearchableContactsSendTrigger] {
+		t.Fatalf("a task reference set the searchable trigger: %v", refs)
+	}
+}
+
 func TestRegisterStaticToolsTodoList(t *testing.T) {
 	cronPath := filepath.Join(t.TempDir(), "cron.yaml")
 	cases := []struct {
