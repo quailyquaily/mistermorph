@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
+	"github.com/quailyquaily/mistermorph/internal/channelruntime/runtimetest"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -61,5 +62,43 @@ func TestSharedDependenciesRetainCommonCapabilities(t *testing.T) {
 		if _, ok := reg.Get(toolsutil.BuiltinWriteFile); !ok {
 			t.Fatalf("%s dependencies did not register a triggered static tool", name)
 		}
+	}
+}
+
+// The embedding runtime's Telegram and Slack bots run ordinary messages with these dependencies.
+func TestChannelDependenciesOfferContactsSendThroughToolSearch(t *testing.T) {
+	cases := []struct {
+		name       string
+		enabled    bool
+		toolSearch bool
+		want       runtimetest.ContactsSendDiscovery
+	}{
+		{name: "enabled", enabled: true, toolSearch: true, want: runtimetest.ContactsSendDiscovery{SearchOffered: true, Found: true, VisibleAfterSearch: true}},
+		{name: "disabled", enabled: false, toolSearch: true},
+		{name: "tool search off", enabled: true, toolSearch: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Set("file_state_dir", t.TempDir())
+			cfg.Set("file_cache_dir", t.TempDir())
+			cfg.Set("tools.contacts_send.enabled", tc.enabled)
+			cfg.Set("tools.tool_search.enabled", tc.toolSearch)
+			rt := New(cfg)
+			snap := rt.snapshot()
+			for name, deps := range map[string]depsutil.CommonDependencies{
+				"telegram": rt.telegramDependencies(snap).CommonDependencies,
+				"slack":    rt.slackDependencies(snap).CommonDependencies,
+			} {
+				if _, ok := deps.Registry().Get(toolsutil.BuiltinContactsSend); ok {
+					t.Fatalf("%s base registry has contacts_send", name)
+				}
+				got := runtimetest.DiscoverContactsSend(t, deps)
+				got.SearchOffered = got.SearchOffered && tc.want.SearchOffered
+				if got != tc.want {
+					t.Fatalf("%s discovery = %+v, want %+v", name, got, tc.want)
+				}
+			}
+		})
 	}
 }
