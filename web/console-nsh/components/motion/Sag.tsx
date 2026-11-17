@@ -100,10 +100,12 @@ function dipGradient(cx: CanvasRenderingContext2D, half: number) {
  * A horizontal hairline along the bottom of a head that sags under the selected control.
  * `center` is the x of that control's centre in the canvas (null: none, a straight line);
  * `color` is the straight line's colour (it may be transparent). Place it absolutely, its top on
- * the line: it draws the line 0.7pt down and the dip below it.
+ * the line: it draws the 1pt line with its middle `line` points down (0.7 unless given) and the
+ * dip below it. At 0.5 the line fills the canvas's first point exactly.
  */
-export function SagRule(props: { center: () => number | null; half: number; color: string; depth?: number; class?: string }) {
+export function SagRule(props: { center: () => number | null; half: number; color: string; depth?: number; line?: number; class?: string }) {
   const depth = untracked(() => props.depth ?? DEPTH);
+  const y = untracked(() => props.line ?? 0.7);
   const sag = createSag(props.center, () => props.half, depth);
   return (
     <Canvas
@@ -111,7 +113,6 @@ export function SagRule(props: { center: () => number | null; half: number; colo
       class={props.class}
       style={{ pointerEvents: "none" }}
       draw={(cx, size) => {
-        const y = 0.7;
         const far = size.width + 64;
         const point = (u: number, across: number) => [sag.span.mul(u), sag.deep.mul(across).add(y)] as const;
         cx.beginPath();

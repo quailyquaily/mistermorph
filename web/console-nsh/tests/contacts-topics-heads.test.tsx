@@ -5,9 +5,11 @@
 // tab's circle is a Topics toggle's 38pt circle with its 16pt icon, at the same height in its head
 // and as far from the head's bottom edge; on phones the last circle ends where the Topics head's
 // last button ends; and the Contacts head's hairline lies on its bottom edge, as the Topics head's
-// does, with nothing left in the head's middle. Headless runs read no fills or tints: the selected
+// does, with nothing left in the head's middle: its 1pt line fills the head's last point, its bottom
+// edge the head's own (tests/contacts-head-rule.test.tsx: when it shows). Showing it moves nothing. Headless runs read no fills or tints: the selected
 // look is the shared classes (tests/contact-kind-tabs.test.tsx) and the selected-state test ids.
 import { expect, open, test } from "nsh/test";
+import { INDEX_HEAD_RULE_LINE } from "../components/knowledge/parts";
 import { contactKindSagCenter } from "../pages/contacts/ContactKindTabs";
 
 type Frame = { x: number; y: number; w: number; h: number };
@@ -98,7 +100,10 @@ function expectHeadsMatch(all: Record<string, Frame>, width: number, mobile: boo
   // The hairline: across the head on its bottom edge (as the Topics head's: a 7pt canvas from 1pt
   // above the foot), below the circles, the dip under the selected tab's middle.
   const rule = all["contacts:head-rule"];
-  check(rule.x === head.x && rule.w === head.w && rule.h === 7 && rule.y === head.y + HEAD - 1, "the hairline on the head's bottom edge", { rule, head });
+  check(rule.x === head.x && rule.w === head.w && rule.h === 7 && rule.y === head.y + HEAD - 1, "the hairline's canvas from 1pt above the head's foot", { rule, head });
+  // The 1pt straight line, its middle INDEX_HEAD_RULE_LINE down the canvas: the head's last point.
+  const line = { top: rule.y + INDEX_HEAD_RULE_LINE - 0.5, bottom: rule.y + INDEX_HEAD_RULE_LINE + 0.5 };
+  check(line.top === head.y + HEAD - 1 && line.bottom === head.y + HEAD, "the hairline's bottom edge on the head's bottom edge", { line, head });
   check(rule.y >= human.y + human.h, "the hairline below the circles", { rule, human });
   const dip = rule.x + all["contacts:head-actions"].x + contactKindSagCenter(kind, mobile);
   check(near(dip, centre(all[`contacts:tab-${kind}-box`]).x), `the dip under the ${kind} tab`, { dip, circle: all[`contacts:tab-${kind}-box`] });
@@ -146,3 +151,25 @@ test("a window resized between a desktop and a phone keeps the heads matching", 
   await app.waitUntil(() => JSON.parse(app.texts().find((text) => text.startsWith("{")) ?? "{}")["contacts:head"]?.w === 1280);
   expectHeadsMatch(await settle(), 1280, false, "agent");
 });
+
+for (const item of [
+  { name: "a desktop", width: 1280, platform: "linux" as const, mobile: false },
+  { name: "a phone", width: 390, platform: "android" as const, mobile: true },
+]) {
+  test(`on ${item.name} the hairline showing (the list scrolled) moves nothing in the head`, async () => {
+    const { app, settle } = await openHeads(item.width, item.platform);
+    const before = await settle();
+    expect(app.shows("id:index-column-rule-hidden")).toBe(true);
+    expect(app.count("id:index-column-rule-shown")).toBe(0);
+    await app.press("id:toggle-scrolled");
+    await app.waitFor("text:scrolled=true");
+    await app.waitFor("id:index-column-rule-shown");
+    expect(app.count("id:index-column-rule-hidden")).toBe(0);
+    const after = await settle();
+    expectHeadsMatch(after, item.width, item.mobile, "human");
+    for (const name of NAMES) check(JSON.stringify(after[name]) === JSON.stringify(before[name]), `${name} stays put`, { before: before[name], after: after[name] });
+    await app.press("id:toggle-scrolled");
+    await app.waitFor("id:index-column-rule-hidden");
+    expect(app.count("id:index-column-rule-shown")).toBe(0);
+  });
+}

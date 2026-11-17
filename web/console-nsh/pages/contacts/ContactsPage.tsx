@@ -707,6 +707,11 @@ export function ContactsPage(props: {
 
   let list: ListRef | undefined;
   const scrollY = signal(0);
+  // Whether the library list is scrolled from its top at all (any offset above 0, a fraction of a
+  // point too; a pull past the top is not): the head's hairline shows while it is. Only the list's
+  // own reports set it, and a list made again (the page or the phone's library coming back) starts
+  // without it, so a restored place shows it once the list reports being there.
+  const libraryScrolled = signal(false);
   // Where the library and the open contact are scrolled, across visits of the page. The library's
   // place belongs to the tab it was left on: the other tab is another list, and starts at its top
   // (the page opens on people again, never where the agents were left).
@@ -843,6 +848,7 @@ export function ContactsPage(props: {
       <List
         ref={(node: ListRef) => {
           list = node;
+          libraryScrolled.set(false);
           libraryMemory.ref(node);
         }}
         footer={MobileBarSpacer}
@@ -871,6 +877,7 @@ export function ContactsPage(props: {
         }}
         onScroll={(event) => {
           scrollY.set(event.offset.y);
+          libraryScrolled.set(event.offset.y > 0);
           libraryMemory.onScroll(event);
         }}
         scrollValue={scrollValue}
@@ -1132,6 +1139,7 @@ export function ContactsPage(props: {
             title={t("contacts_title")}
             actions={<ContactKindTabs value={kind()} onChange={showKind} mobile={isMobile()} onPartLayout={props.onPartLayout} />}
             sag={() => contactKindSagCenter(kind(), isMobile())}
+            scrolled={libraryScrolled}
             onPartLayout={props.onPartLayout}
             fill
             style={panes.style(0)}

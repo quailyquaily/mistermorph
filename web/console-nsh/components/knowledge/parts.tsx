@@ -213,6 +213,12 @@ export function HeadButton(props: { icon: IconName; title: string; disabled?: bo
 }
 
 /**
+ * Where the middle of the head's hairline lies down its 7pt canvas, which starts 1pt above the
+ * head's bottom edge: the 1pt line fills the head's last point, so its bottom edge is the head's.
+ */
+export const INDEX_HEAD_RULE_LINE = 0.5;
+
+/**
  * The index column of a workspace page: its head (the page title and actions, 57pt), an optional
  * search under it, then the list, which scrolls on its own and fades at an edge that hides rows.
  * Once rows have gone under the head, the head's hairline shows. On a phone it fills the page
@@ -248,10 +254,18 @@ export function IndexColumn(props: {
    * line in place of its bottom border.
    */
   sag?: () => number | null;
+  /**
+   * Whether the list is scrolled from its top, for a body drawn yourself (`scroll={false}`, a List
+   * of its own): the head's hairline follows it in place of the column's own scroller. Contacts
+   * passes its library List's offset being above 0.
+   */
+  scrolled?: () => boolean;
   /** Hears where the head's parts lie in the column (tests): `head` (the whole bar), `head-row`, `head-title`, `head-actions` and `head-rule` (the sag's canvas). */
   onPartLayout?: PartLayoutListener;
 }) {
   const edges = createScrollEdges({ start: false });
+  // Whether rows have gone under the head: the body's own word, else the column's scroller's.
+  const scrolled = () => (props.scrolled ? props.scrolled() : edges.scrolled());
   const parts = createPartProbe(() => props.onPartLayout);
   // Where the actions' box starts along the head, for the sag.
   const actionsX = signal<number | null>(null);
@@ -299,7 +313,7 @@ export function IndexColumn(props: {
           style={{
             paddingLeft: gutterX(),
             paddingRight: props.headRight === "none" && !props.fill ? 0 : gutterX(),
-            borderColor: edges.scrolled() ? "#a5bad040" : "#a5bad000",
+            borderColor: scrolled() ? "#a5bad040" : "#a5bad000",
             transitionProperty: "colors",
             transitionDuration: motionMs(MOTION_NORMAL),
             transitionTimingFunction: MOTION_EASE_CSS,
@@ -323,14 +337,22 @@ export function IndexColumn(props: {
             </View>
           </If>
         </View>
-        {/* The hairline on the head's bottom edge, as under the Topics head: shown once the list has
-            scrolled beneath, and dipping (in blue) under the action that is on. */}
+        {/* The hairline on the head's bottom edge, as under the Topics head (its colour and weight):
+            shown once the list has scrolled beneath, and dipping (in blue) under the action that is
+            on. Its straight line fills the head's last point (INDEX_HEAD_RULE_LINE), so it ends
+            exactly where the head does. The test id tells whether it shows. */}
         <If when={props.sag}>
-          <View class="absolute -bottom-[6px] left-0 right-0 h-[7px]" style={{ pointerEvents: "none" }} {...parts.probe(() => "head-rule")}>
+          <View
+            class="absolute -bottom-[6px] left-0 right-0 h-[7px]"
+            style={{ pointerEvents: "none" }}
+            testID={`${props.testID ?? "index-column"}-rule-${scrolled() ? "shown" : "hidden"}`}
+            {...parts.probe(() => "head-rule")}
+          >
             <SagRule
               center={sagCenter}
               half={sagHalf(38)}
-              color={edges.scrolled() ? String(token("line-faint")) : "rgba(0, 0, 0, 0)"}
+              color={scrolled() ? String(token("line-faint")) : "rgba(0, 0, 0, 0)"}
+              line={INDEX_HEAD_RULE_LINE}
               class="h-[7px]"
             />
           </View>

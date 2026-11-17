@@ -3,7 +3,8 @@
 // stand-in controller, each across the window, so the two heads can be compared whole. Their parts'
 // frames are read out beside them, the Contacts ones as `contacts:<part>` (IndexColumn's and the
 // tabs' `onPartLayout`), the Topics ones as `topics:<part>` (the sidebar's), with the Contacts tab
-// and the Topics view that are on.
+// and the Topics view that are on. `scrolled` stands in for the Contacts library being scrolled
+// from its top (IndexColumn's `scrolled`), toggled by pressing `toggle-scrolled`.
 import { mount, signal, Text, View } from "nsh";
 import { isMobile } from "../../lib/shell";
 import { topicIcon } from "../../lib/core/topic-metadata.js";
@@ -18,6 +19,7 @@ const frames = signal<Record<string, PartFrame>>({});
 const record = (prefix: string) => (name: string, frame: PartFrame) => frames.update((all) => ({ ...all, [`${prefix}:${name}`]: frame }));
 const kind = signal<ContactKind>("human");
 const view = signal<SidebarView>("date");
+const scrolled = signal(false);
 
 const topics = [
   { id: "plain", title: "A topic", status: "" },
@@ -78,6 +80,7 @@ function Page() {
           sag={() => contactKindSagCenter(kind(), isMobile())}
           fill
           scroll={false}
+          scrolled={scrolled}
           onPartLayout={record("contacts")}
         >
           <View class="flex-1" />
@@ -88,6 +91,9 @@ function Page() {
       </View>
       <Text testID="out-kind">kind={kind()}</Text>
       <Text testID="out-view">view={view()}</Text>
+      <View testID="toggle-scrolled" onPress={() => scrolled.set(!scrolled())}>
+        <Text>scrolled={String(scrolled())}</Text>
+      </View>
       <Text class="text-[6px]">{JSON.stringify(frames())}</Text>
     </View>
   );
