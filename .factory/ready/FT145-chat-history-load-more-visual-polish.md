@@ -33,3 +33,14 @@ Tests: manager independently passed gofmt gate, go vet ./..., go test ./.... Cod
 Visual inspection reported by coder: headless Chrome at 1400x1000, 700x900, 390x844 with touch; idle/hover/loading/landed/final states and repeat-press behavior, compared with starting revision. Light and dark checked; current Console dark palette renders the same colors as light. Mouse hit box remains 32pt; touch hit slop extends it to 44pt. Native Android and desktop application not visually verified (no device/emulator/display); phone layout tests use Android platform mode. Owner/reviewer should inspect the history boundary on native Android and assess preserved absolute-top prepend behavior.
 
 First code push failed because the credential helper required repository HTTP path; retry with per-command credential.useHttpPath=true succeeded. No global configuration changed.
+
+
+## factory · review · 2026-11-17 20:54
+head: a40e50dba7d0d53a74aec691e586bef41eac1e58
+verdict: pass
+notes:
+- [P3] web/console-nsh/pages/ui-components/demos/chat.tsx:276: the gallery's new olderLoadingLabel uses undefined translation key msg_loading. In the filled ChatHistoryList demo, pressing the older-history button announces the literal key while busy because translate() falls back to its input. Use chat_history_loading_older, as the real chat page does. The nearby loadingText already has the same pre-existing mistake; this finding concerns only the new property.
+- Reviewed origin/master...HEAD (cf3cb576...a40e50db), all 10 changed files. No P0/P1/P2 findings. Shared Button compatibility, paging cursors/order/retries, duplicate-request guards, loading/hidden geometry and scrolled-reader anchoring checked.
+- Required gofmt gate, go vet ./... and go test ./... passed (163 packages). nsh check passed with pinned nsh 0.5.1. Required concurrent scripts/test.sh passed: 133 files, 0 failed; chat-attachments passed the runner's isolated retry after one parallel failure.
+- No unpinned installs or manifest changes. Tests used an absolute throwaway HOME and temporary files within the review run's temporary directory.
+- Residual risks: reviewer did not visually inspect Android, desktop or theme variants. Actual 44pt touch hitSlop beyond TipButton's 32pt wrapper needs device/mobile-web verification. Absolute-top prepend pushes existing messages downward as on master; scrolled-reader anchoring is covered and preserved. Build's recorded visual checks are not independent reviewer validation.
