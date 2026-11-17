@@ -41,3 +41,14 @@ Checks: nsh check (repository-pinned 0.5.1; board rule still names 0.5.0) passes
 Coder reports headless Chrome visual checks at desktop 1280x800 and touch-phone 390x844: faint line aligned to the head bottom, 57pt head height unchanged, matching topic line color. Not checked: native GPUI, physical/emulated Android, dark theme; fractional scroll verified headlessly because Chrome rounds it.
 
 Installs: none; existing pinned toolchain/caches reused. No linked issues or PRs. Branch push initially lacked a repository credential path; command-scoped credential.useHttpPath fixed it on the one retry. No user settings changed.
+
+
+## factory · review · 2026-11-17 10:54
+head: 0e1eafb84951524543dab200992f8301d10b521f
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (base 75ac75cd), all six changed files and relevant IndexColumn/SagRule callers. No findings. Clean merge with current base; worktree and reviewed head unchanged.
+- Configured gofmt/vet/go test gate passed (exit 0); nsh check passed with repository-pinned nsh 0.5.1. Required scripts/test.sh passed: 131 files, 0 failed, 258s. chat-attachments.test.tsx failed once under parallel load then passed its isolated retry; changed contacts tests passed.
+- No unpinned installs or manifest changes; pinned TypeScript 7.0.2 was restored to the throwaway test cache.
+- Headless web checks cover scroll state and geometry, not canvas pixel color/crispness. Native desktop scroll reporting and real Android touch/overscroll/momentum, device blur and pixel-density rendering were not checked.
+- No linked issues or PRs. Moved to ready/.
