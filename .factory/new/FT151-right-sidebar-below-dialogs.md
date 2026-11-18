@@ -39,3 +39,16 @@ Installs: none. No prohibited paths changed.
 Not checked: visual rendering on a desktop browser/window or real Android device/emulator (none available). Android translucent status bar behavior matches nsh sheets but needs device confirmation. Pre-existing focused Rename input Escape behavior was left unchanged.
 
 Next: review shared layering and verify Rename/Delete with the right sidebar open on desktop/mobile/Android; note the pre-existing Go formatting failure.
+
+## factory · review · 2026-11-19 00:34
+head: 1aae9017d08f6f62748c9e6a523bc37a7498b7c4
+verdict: fix
+fix:
+- [P1] internal/proctrack/proctrack_test.go:210: The configured test command exits 1 at its formatting gate because of an extra blank line. Example: `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` stops before vet/tests. Factory policy treats a failing configured test as P1. This is a confirmed pre-existing baseline failure, not a defect introduced by FT151; restore the baseline gate through an authorized change, then incorporate the corrected base and rerun the required command. Do not broaden this UI branch to fix unrelated Go code.
+notes:
+- No introduced code defects found in the 11 changed Console files against base 8d217db44ca21aaf7a024254e2a2f081b69a345b. Clean merge verified; no code edits or commits made during review.
+- Validation: separate go vet ./... and go test ./... passed (165 packages); nsh 0.6.0 check passed; required parallel Console test script passed 140 files, 0 failed in 248s on an isolated rerun. An initial concurrent run was killed before retries; its result was discarded. Manager independently confirmed gofmt still lists the unchanged baseline file.
+- Current app dialogs are declared after their sheets and pass stacking checks. Probes show declaration order remains essential: a dialog declared before a sheet is covered even on this head. That hypothetical ordering is not present in the current app.
+- Pane Escape priority changes after a popup in a synthetic inline-prompt fixture; the actual Settings Telegram secret prompt passes on both base and head, so this is an unconfirmed risk rather than a finding.
+- Not visually checked in a desktop browser/window or on an Android device/emulator. Android navigation-bar inset handling, keyboard-first Back behavior and visual hit coordinates remain unconfirmed.
+- Installs: none. No linked GitHub issues or PRs. Round 1 of 3: returned to new/ under the mandatory failing-test policy, solely for the baseline formatting blocker.
