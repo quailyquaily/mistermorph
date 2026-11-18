@@ -63,3 +63,13 @@ Independent Claude Code review covered origin/master...HEAD: five commits, 98 fi
 Validation: configured gofmt check, go vet ./... and go test ./... all passed with fresh Go cache; pinned nsh 0.5.1 check passed; required Console scripts/test.sh passed, 136 files and 0 failures. Reviewer verified the finding with a scratch-only probe. Manager confirmed unchanged review head, clean worktree and clean merge with current fetched master. No code changes or commits from review. Installs: none; pinned nsh fetched its routine TypeScript cache only.
 
 Residual risks: no interactive browser, desktop or Android build/JVM tests; Todo/Topics UI only headless-tested. Cross-process sharing checked by unit tests, not two running binaries. Downgrade behavior documented but not exercised. Secret-bearing data paths not exhaustively verified; jobs.db-wal deny matching is not covered (agent.db-wal had a preexisting equivalent gap). No linked GitHub issues or PRs in this item. Not merged or shipped.
+
+## factory · 2026-11-18 13:59
+Owner requested a storage correction and return to new/ for implementation: use the existing `agent.db`, not a dedicated `jobs.db`. This supersedes the separate-database requirement and plan above.
+
+- Store job definitions in a `jobs` table in the configured state directory's existing `agent.db`. Scheduler, Console and job_manage must share this store; do not introduce a separate authoritative jobs.db.
+- Preserve stable job IDs, topic job_id links, distinct run IDs, ordering, all job fields and enabled/disabled state. Preserve existing agent.db data and schema/migration conventions.
+- Import cron.yaml once, transactionally and retryably, retaining the original file and the existing idempotence, rollback, rejected-record reporting and no-resurrection guarantees. Preserve already-imported database jobs rather than importing stale YAML. If a previous jobs.db exists, migrate its data safely into agent.db without silently overwriting or losing jobs; define and test precedence/conflict handling.
+- Update the implementation, migration tests, snapshots, prompts and English docs for agent.db. Verify concurrent access and that upgrades with existing explicit deny lists protect sensitive job data, including SQLite sidecar files; address the review's deny-list exposure rather than merely renaming its path.
+
+Move ready/ → new/ on the existing branch for the next fix round. The previous passing review applies to the old implementation only; run the required checks and obtain a new review after this change. No code changes or shipping performed by this board update.
