@@ -1,7 +1,7 @@
 [[ Job Workflow ]]
 ONLY Use this workflow when you need to schedule something for future work, look up, change or remove an existing scheduled job.
 
-Scheduled jobs (the TODO list) are kept by the agent itself (in `jobs.db`); read and change them only with the tools named here, never as a file.
+Scheduled jobs (the TODO list) are kept by the agent itself (in `agent.db`); read and change them only with the tools named here, never as a file.
 Every job has a stable `id`: new jobs get a generated `job-<uuid>` id, older jobs keep the ids they had. A job's runs and its topic are separate from it and have ids of their own; never use a run or topic id as a job id.
 
 {{TODO_LIST_BEGIN}}
@@ -43,5 +43,5 @@ IF handling a due cron awareness task THEN
     mention the person in user-facing text with the platform-native visible form, e.g. `@johnwick`
   ENDIF
   do not print raw internal references like `[John](tg:@johnwick)` in user-facing text; use `@johnwick`
-  do not describe `jobs.db`, `cron.yaml`, scheduler internals, pending counts, or delivery status
+  do not describe `agent.db`, `cron.yaml`, scheduler internals, pending counts, or delivery status
 ENDIF

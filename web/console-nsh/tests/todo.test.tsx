@@ -916,7 +916,7 @@ test("an agent that reports no revision gets saves without one", async () => {
 });
 
 test("a TODO list that could not be imported shows the agent's report of each rejected record", async () => {
-  const report = "cron.yaml was not imported into jobs.db (nothing was imported; fix or remove the records named here and the import runs again): record 2: task id is missing";
+  const report = "cron.yaml was not imported into agent.db (nothing was imported; fix or remove the records named here and the import runs again): record 2: task id is missing";
   const { app } = await openTodo({ "GET /proxy:/todo/tasks": { status: 409, body: { error: report } } });
   await app.waitFor(report);
 });

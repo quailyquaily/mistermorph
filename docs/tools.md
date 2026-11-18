@@ -11,7 +11,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `contacts_send` is static. Awareness runs (heartbeat, cron) see it when enabled; an explicit `$contacts_send` shows it for that task. Ordinary runs (Console, Telegram, Slack and the other channel runtimes) get it as a deferred tool when enabled and `tools.tool_search.enabled` is on: hidden until `tool_search` finds it. Group chats and Bluesky/X public threads still need `$contacts_send`. See [`contacts_send`](#contacts_send).
   - `agent_send` is exposed only while at least one active Contact is `kind: agent`.
   - `contacts_list` lists the contacts (in `agent.db`) whenever a contacts folder is configured.
-  - `todo_list` lists the TODO list (the jobs in `jobs.db`) whenever the runtime has a state folder. It only reads, so it does not depend on `tools.job_manage.enabled`.
+  - `todo_list` lists the TODO list (the jobs in `agent.db`) whenever the runtime has a state folder. It only reads, so it does not depend on `tools.job_manage.enabled`.
 - `engine-scoped` tools:
   - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner and parent tool lookup. See [`spawn`](#spawn).
   - `list_model_profiles`: registered next to `spawn` when more than one model profile can run a subtask. See [`list_model_profiles`](#list_model_profiles).
@@ -132,7 +132,7 @@ Parameters:
 
 Constraints:
 
-- Access can be blocked by `tools.read_file.deny_paths`.
+- Access can be blocked by `tools.read_file.deny_paths`, which also matches a symlink's target. `agent.db`, `jobs.db`, `config.yaml.imported` and the SQLite `-wal`, `-shm` and `-journal` files of those and of every listed entry are always denied, whatever the list says, so a list written by an older config template still protects them. `send_file`, `bash` and `powershell` apply the same rule to their lists.
 - Alias paths must include a relative file path; passing only `file_cache_dir` or `file_state_dir` is invalid.
 
 ## `write_file`
@@ -285,7 +285,7 @@ Parameters:
 
 ## `job_manage`
 
-Purpose: manage jobs, the scheduled tasks of the TODO list kept in `file_state_dir/jobs.db`: add them, read one, edit one in place, or delete one.
+Purpose: manage jobs, the scheduled tasks of the TODO list kept in `file_state_dir/agent.db`: add them, read one, edit one in place, or delete one.
 
 The tool was called `todo_update`. The earlier name still works: a call named `todo_update` (from an older prompt, a skill or conversation history) runs `job_manage`, `todo_update` in `BuiltinToolNames` or in a task's `$todo_update` reference selects it, and while `tools.job_manage.enabled` is not set, `tools.todo_update.enabled` switches it.
 
@@ -328,7 +328,7 @@ A task in a result never includes `bash_env` values: `bash_env` is left out and 
 Constraints:
 
 - Controlled by `tools.job_manage.enabled`; while that is not set, by the earlier `tools.todo_update.enabled` (default `true`).
-- The jobs are shared with the scheduler, the Console and `todo_list` through `jobs.db`, in this process or another: each change is one transaction, and every read sees what the others committed.
+- The jobs are shared with the scheduler, the Console and `todo_list` through `agent.db`'s `jobs` table, in this process or another: each change is one transaction, and every read sees what the others committed.
 - Add actions require an LLM client and model when `people` resolution is needed.
 - Add actions validate markdown reference IDs before writing.
 - `get`, `update` and delete by `id` do not require an LLM.
@@ -346,7 +346,7 @@ Errors (string matching):
 | `job_manage unavailable (missing llm client)` | LLM client not injected. |
 | `job_manage unavailable (missing llm model)` | LLM model not configured. |
 | `no TODO task with that id` | `get` or `update` named an `id` the list does not have. |
-| `was not imported into jobs.db` | The one-time import of `cron.yaml` failed; the error names every rejected record (see [TODO and Heartbeat](../web/vitepress/docs/guide/todo-and-heartbeat.md)). |
+| `was not imported into agent.db` | The one-time import of `cron.yaml` failed; the error names every rejected record (see [TODO and Heartbeat](../web/vitepress/docs/guide/todo-and-heartbeat.md)). |
 | `invalid reference id:` | Invalid `(...)` reference exists in text. |
 | `missing_reference_id` | Mentioned person cannot be uniquely resolved to a reference ID. |
 | `people must be an array of strings` | `people` is not a string array. |
@@ -393,7 +393,7 @@ Returns `status` (`created` or `replaced`), `id`, `subject`, `name`, `visibility
 
 Purpose: list the scheduled TODO tasks, the jobs `job_manage` maintains: one-time and recurring, enabled and disabled.
 
-Parameters: none. The tool always reads the runtime's own TODO list (`<file_state_dir>/jobs.db`); a caller cannot name another path, and other parameters are ignored.
+Parameters: none. The tool always reads the runtime's own TODO list (the `jobs` table of `<file_state_dir>/agent.db`); a caller cannot name another path, and other parameters are ignored.
 
 Returns JSON:
 
@@ -418,7 +418,7 @@ Notes:
 
 - Read-only: it never adds, changes, enables, disables or runs a task, and does not compute next run times.
 - Registered whenever the runtime has a state folder, with or without `job_manage`. With `BuiltinToolNames` set, it must be named there.
-- A list that cannot be read (for example a damaged `jobs.db`, or a `cron.yaml` whose import failed) is an error, never an empty result.
+- A list that cannot be read (for example a damaged `agent.db`, or a `cron.yaml` whose import failed) is an error, never an empty result.
 
 ## `contacts_list`
 

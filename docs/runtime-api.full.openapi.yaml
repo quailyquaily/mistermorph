@@ -1894,7 +1894,7 @@ paths:
       tags:
       - Schedules
       summary: Read scheduled and system tasks
-      description: The jobs (the TODO list) are read from the state folder's jobs.db. While the one-time
+      description: The jobs (the TODO list) are read from the jobs table of the state folder's agent.db. While the one-time
         import of an earlier cron.yaml cannot complete (a record without an id, a repeated id, or one that
         does not validate), the response is 409 and its text names every rejected record.
       responses:

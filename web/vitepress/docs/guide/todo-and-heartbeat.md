@@ -1,6 +1,6 @@
 ---
 title: TODO and Heartbeat
-description: How scheduled jobs (the TODO list in jobs.db) and HEARTBEAT.md let the agent track work outside the current chat.
+description: How scheduled jobs (the TODO list in agent.db) and HEARTBEAT.md let the agent track work outside the current chat.
 ---
 
 # TODO and Heartbeat
@@ -37,18 +37,19 @@ A job's runs are listed in its own topic on the Topics page. The topic's ID is `
 
 ### Storage
 
-TODOs are stored in `file_state_dir/jobs.db`, an SQLite database. The scheduler, the Console and the tools all use it, from one process or several: each change is one transaction, every read sees what the others committed, and the Console refuses to save a list that changed after it loaded it (for example a job the agent added meanwhile) instead of overwriting the change; reload the page and make the edit again.
+TODOs are stored in the `jobs` table of `file_state_dir/agent.db`, the SQLite database that also holds the agent's config, persona and contacts. The scheduler, the Console and the tools all use it, from one process or several: each change is one transaction, every read sees what the others committed, and the Console refuses to save a list that changed after it loaded it (for example a job the agent added meanwhile) instead of overwriting the change; reload the page and make the edit again.
 
-#### Moving from cron.yaml
+#### Moving from an earlier list
 
-The first time `jobs.db` is opened, the earlier list is imported into it once:
+The first time this version opens the TODO list, the earlier list is imported into `agent.db` once, in one transaction:
 
-- If an earlier version had already moved the list into `agent.db`, those jobs are imported, in their order and with their last runs. Any `cron.yaml` beside it is out of date and is not read.
-- Otherwise `file_state_dir/cron.yaml`, if there is one, is imported: every job's `id`, order, fields and enabled or disabled state are kept.
+- A `jobs.db` in the state folder (the job store of an earlier build) is the newest list: all its jobs are imported first, in their order, with their fields, enabled or disabled state and last runs.
+- The `cron_tasks` rows of `agent.db`, where earlier versions kept the list, are imported in their order when there is no `jobs.db`. Beside a `jobs.db`, only rows that `jobs.db` cannot already have are added: rows an older version made after `jobs.db` took the list over. A job `jobs.db` took over and then changed or deleted keeps that change; it is not brought back. A row that an older version changed after that, and that `jobs.db` deleted or holds differently, cannot be reconciled: it is rejected (not imported), `jobs.db`'s version stands, a warning is logged, and the row is listed in `agent.db`'s `meta` table under `import_rejects:jobs`.
+- `file_state_dir/cron.yaml` is imported only when no database has taken the list over yet. Once one has, any `cron.yaml` beside it is out of date and is not read.
 
-The import runs in one transaction: it either imports everything or nothing. `cron.yaml` is only read; it is not renamed, changed or deleted, and once the import has run it is never read again, so a job you delete afterwards does not come back. A `cron.yaml` that does not parse, or that has a job without an `id`, a repeated `id`, or a job that does not validate, imports nothing: the TODO page, the tools and the scheduler report an error that names every rejected job by its position in the file. Fix or remove those jobs in `cron.yaml` and the import runs again on the next use.
+Every job keeps its `id`, so the topics of its runs stay linked to it. The import is one transaction: if it fails, nothing is imported and it runs again on the next use. `cron.yaml`, `jobs.db` and the `cron_tasks` rows are only read: they are not renamed, changed or deleted, and once the import has run they are never read again, so a job you delete afterwards does not come back. A `cron.yaml` that does not parse, or that has a job without an `id`, a repeated `id`, an `id` already imported, or a job that does not validate, imports nothing: the TODO page, the tools and the scheduler report an error that names every rejected job by its position in the file (the rest of `agent.db` keeps working). Fix or remove those jobs in `cron.yaml` and the import runs again on the next use. A `jobs.db` that cannot be read stops the import the same way; move it aside to import without it.
 
-> Downgrades: an earlier version run on the same state folder does not read `jobs.db`. It sees its own list as it was before the import (`cron.yaml`, or the copy in `agent.db`), without the changes made since.
+> Downgrades: this version adds the `jobs` table to `agent.db`, and an earlier version refuses to open an `agent.db` with a newer schema. To go back, restore a state snapshot taken before the upgrade (`morph state snapshot`, or `morph state export`). The earlier list files it imported are still in place, but they do not have the changes made since.
 
 To move a list between state folders, use `morph state export` and `morph state import`, which read and write the list in the `cron.yaml` format below.
 
@@ -82,7 +83,7 @@ Fields:
 - `content`: task content passed to the agent when the TODO is due.
 - `chat_id`: optional channel context, kept only as metadata and not used for routing.
 - `workspace_dir`: optional absolute directory (`~/...` allowed) attached as the workspace for that TODO's runs, instead of the default `workspace_dir`. File tools, `bash`, and `coder` then resolve `workspace_dir` against it. If the directory is missing when the TODO is due, that run fails.
-- `bash_env`: optional environment variables injected into the `bash` tool for that TODO run only. Each entry has `name` and `value`. Values support `${ENV}` interpolation (same `${NAME}` syntax as `config.yaml`), including embedded forms such as `"Bearer ${API_KEY}"`. Literal values are stored in `jobs.db`; prefer `${ENV}` for secrets.
+- `bash_env`: optional environment variables injected into the `bash` tool for that TODO run only. Each entry has `name` and `value`. Values support `${ENV}` interpolation (same `${NAME}` syntax as `config.yaml`), including embedded forms such as `"Bearer ${API_KEY}"`. Literal values are stored in `agent.db`; prefer `${ENV}` for secrets.
 
 Example:
 
@@ -112,7 +113,7 @@ Each heartbeat tick works like this:
 
 If `HEARTBEAT.md` is empty, no agent task is started.
 
-If `cron.enabled` is false, Heartbeat does not run. Heartbeat does not read user TODOs; user TODOs are triggered by the same cron service reading `jobs.db`.
+If `cron.enabled` is false, Heartbeat does not run. Heartbeat does not read user TODOs; user TODOs are triggered by the same cron service reading the job list in `agent.db`.
 
 ### HEARTBEAT.md
 

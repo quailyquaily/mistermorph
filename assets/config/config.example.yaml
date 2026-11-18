@@ -335,11 +335,13 @@ tools:
     # Note: currently always enabled; this section configures limits/policy.
     max_bytes: 262144
     # Denylist for sensitive local files. Basenames match anywhere (e.g. "config.yaml" blocks "./x/config.yaml").
+    # send_file applies this list too.
+    # agent.db, jobs.db and config.yaml.imported, and the SQLite -wal/-shm/-journal files of those and
+    # of every entry here, are always denied, even with a list that leaves them out.
     deny_paths:
       - "config.yaml"
       - "config.yaml.imported"
       - "agent.db"
-      - "jobs.db"
   write_file:
     # Enable the write_file tool (writes text to a local file).
     # Note: writes are restricted to `file_cache_dir` or `file_state_dir`.
@@ -401,7 +403,7 @@ tools:
     enabled: true
   job_manage:
     # Enable the job_manage tool: the agent adds (add_once, add_recurring), reads (get), changes
-    # (update) and deletes (delete) scheduled jobs, the TODO list kept in <file_state_dir>/jobs.db.
+    # (update) and deletes (delete) scheduled jobs, the TODO list kept in <file_state_dir>/agent.db.
     # get, update and delete take a job's stable id; new jobs get a generated `job-<uuid>` id.
     # The tool was called todo_update: calls, tool lists and $todo_update references by that name
     # still reach it, and while this key is not set the earlier `tools.todo_update.enabled` applies.
@@ -476,11 +478,12 @@ tools:
     max_output_bytes: 262144
     # Denylist for sensitive local files. If a command references one of these paths, the tool errors.
     # (Best-effort string match; not a full sandbox.)
+    # agent.db, jobs.db and config.yaml.imported, and the SQLite -wal/-shm/-journal files of those and
+    # of every entry here, are always denied, even with a list that leaves them out.
     deny_paths:
       - "config.yaml"
       - "config.yaml.imported"
       - "agent.db"
-      - "jobs.db"
     # Extra directories prepended to PATH for bash execution.
     # Useful when the service manager starts mistermorph with a minimal PATH.
     # The coder tool's CLIs (codex / claude) get them too, after tools.coder.path_extra.
@@ -542,11 +545,12 @@ tools:
     # Max combined output bytes kept per stream (stdout/stderr) before truncation.
     max_output_bytes: 262144
     # Denylist for sensitive local files. If a command references one of these paths, the tool errors.
+    # agent.db, jobs.db and config.yaml.imported, and the SQLite -wal/-shm/-journal files of those and
+    # of every entry here, are always denied, even with a list that leaves them out.
     deny_paths:
       - "config.yaml"
       - "config.yaml.imported"
       - "agent.db"
-      - "jobs.db"
     # Extra environment variables to inject into powershell execution.
     # Each entry can be either a variable name or an object with name/value.
     # On Windows the coder tool's CLIs (codex / claude) get them too.
@@ -1014,17 +1018,19 @@ heartbeat:
   # - `morph discord`: `discord.allowed_channel_ids`
   interval: "30m"
 
-# Cron task service: runs the scheduled jobs (the TODO list) kept in `file_state_dir/jobs.db`,
-# which the scheduler, the Console and the job_manage/todo_list tools share, across processes.
-# The first time jobs.db is opened it imports the earlier list once, in one transaction: the jobs
-# agent.db held (versions that kept the list there), otherwise `file_state_dir/cron.yaml`, keeping
-# ids, order, fields and enabled state. cron.yaml is only read: it is left as it is and never read
-# again after the import, so a job deleted later does not come back. A cron.yaml with a record that
-# has no id, repeats one or does not validate imports nothing; the error names every such record,
-# and the import runs again once the file is fixed. An earlier version run on the same state folder
-# afterwards reads its own, now stale, list (cron.yaml or agent.db) and not jobs.db.
+# Cron task service: runs the scheduled jobs (the TODO list) kept in the jobs table of
+# `file_state_dir/agent.db`, which the scheduler, the Console and the job_manage/todo_list tools
+# share, across processes. The first time the list is opened it imports the earlier list once, in
+# one transaction: a jobs.db an earlier build kept it in, the cron_tasks rows agent.db held
+# (versions that kept the list there), otherwise `file_state_dir/cron.yaml`, keeping ids, order,
+# fields and enabled state. Rows that cannot be reconciled with jobs.db are left out and listed in
+# agent.db's meta (import_rejects:jobs). The earlier files are only read: they are left as they are
+# and never read again after the import, so a job deleted later does not come back. A cron.yaml
+# with a record that has no id, repeats one or does not validate imports nothing; the error names
+# every such record, and the import runs again once the file is fixed. An earlier version refuses
+# the migrated agent.db: restore a state snapshot taken before upgrading to go back.
 cron:
-  # Enable cron scheduling. An empty jobs.db is an empty schedule.
+  # Enable cron scheduling. An empty job list is an empty schedule.
   enabled: true
   # How many TODO items may run at once. Items beyond it wait in order. An item never overlaps
   # itself: an occurrence that comes due while it is still waiting or running is skipped. The

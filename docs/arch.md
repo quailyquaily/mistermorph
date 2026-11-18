@@ -272,10 +272,10 @@ Telegram progress updates:
 
 ```text
 file_state_dir (default ~/.morph; --state-dir or MISTER_MORPH_FILE_STATE_DIR)
-├── agent.db              config, identity and soul, heartbeat workflows, contacts and their
+├── agent.db              config, identity and soul, heartbeat workflows, the jobs (the TODO
+│                         list) the scheduler, Console and tools share, contacts and their
 │                         handles, bus inbox/outbox, Console sessions, Agent Link peers,
 │                         topic context use, request snapshots and workspaces
-├── jobs.db               the jobs (the TODO list) the scheduler, Console and tools share
 ├── usage.db              LLM usage, one row per call
 ├── memory.db             memories
 ├── journal/journal.db    task and topic events
@@ -292,7 +292,8 @@ file_state_dir (default ~/.morph; --state-dir or MISTER_MORPH_FILE_STATE_DIR)
 Additional notes:
 
 - `internal/agentdb` opens `agent.db` (one list of migrations for every table); each store registers the one-time import of the files it replaced, which are renamed `*.imported`. See `docs/feat/feat_20261108_agent_db.md`.
-- `internal/cron` opens `jobs.db`. Its first open imports the earlier list once, in one transaction recorded in its `meta` table: the `cron_tasks` rows of `agent.db` when an earlier version had imported the list there, otherwise `cron.yaml`. Neither is changed or read again afterwards; `agent.db` keeps its now unused `cron_tasks` table. A `cron.yaml` that cannot be imported whole imports nothing and fails every open with an error naming the rejected records, until it is fixed.
+- `internal/cron` keeps the job list in `agent.db`'s `jobs` table. The first time it opens an `agent.db` it imports the earlier lists once, in one transaction marked `imported:jobs` in `meta` (run with `agentdb.RunImport`, apart from the registered imports, so a failure stops only the job list): a `jobs.db` an earlier build kept the list in first, then the `cron_tasks` rows that `jobs.db` cannot already have (when there is no `jobs.db`, all of them), then `cron.yaml` when no database had taken the list over. Rows that cannot be reconciled with `jobs.db` are rejected into `import_rejects:jobs` (rules in `internal/cron/jobs_import.go`). None of the sources is changed or read again afterwards; `agent.db` keeps its now unused `cron_tasks` table. A `cron.yaml` that cannot be imported whole imports nothing and fails every open of the job list with an error naming the rejected records, until it is fixed.
+- `read_file`, `send_file`, `bash` and `powershell` always deny `agent.db`, `jobs.db` and `config.yaml.imported`, and the SQLite `-wal`, `-shm` and `-journal` files of those and of every configured `deny_paths` entry (`builtin.EffectiveDenyPaths`), so a deny list written by an older config template still protects them.
 - New job IDs are `job-<uuid v4>` (`cron.NewJobID`, and `lib/core/job-id.js` in the Console). A job's topic is `_cron_<job id>` and names the job in its `job_id`; each run has its own task ID and scheduler run ID.
 - The heartbeat's task comes from the enabled `heartbeat_workflows` rows.
 - Contacts bus dedupe keys:

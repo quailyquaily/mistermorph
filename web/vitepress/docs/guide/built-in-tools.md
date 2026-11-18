@@ -126,7 +126,7 @@ Generates structured execution-plan JSON, typically for complex task decompositi
 
 ### `job_manage`
 
-Manages jobs, the scheduled TODOs kept in `file_state_dir/jobs.db`. It was called `todo_update`; calls, tool lists and `$todo_update` references by that name still reach it, and `tools.todo_update.enabled` still switches it while `tools.job_manage.enabled` is not set.
+Manages jobs, the scheduled TODOs kept in `file_state_dir/agent.db`. It was called `todo_update`; calls, tool lists and `$todo_update` references by that name still reach it, and `tools.todo_update.enabled` still switches it while `tools.job_manage.enabled` is not set.
 
 - IDs: every job has a stable `id`. A new job always gets a generated `job-<uuid>` ID, which the add's result returns; an `id` passed to an add is not used. IDs from earlier versions (`cron-<uuid>`, `task-<n>`, or one chosen in `cron.yaml`) keep working.
 - Reading: use `action=get` with a job's `id` to read that job, including whether it is enabled.
