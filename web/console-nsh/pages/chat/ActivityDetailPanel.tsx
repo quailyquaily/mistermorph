@@ -24,6 +24,7 @@ import type { HistoryItem } from "../../components/chat/ChatHistoryItem";
 import { activityEntries, ChatActivityEntries, ChatPlanSteps, planProgress } from "../../components/chat/ChatStatusCard";
 import { ChatTerminal, TERMINAL_BG, TERMINAL_FG, TERMINAL_MUTED, TERMINAL_NOTE } from "../../components/chat/ChatTerminal";
 import { ChatWorkerOutput, replyWorkers, WorkerAvatar } from "../../components/chat/ChatWorkerRoster";
+import { ChatProcessTree } from "../../components/chat/ChatProcessTree";
 import { OverflowWraps } from "../../components/chat/OverflowLine";
 import { t } from "../../components/chat/i18n";
 import { PinnedScroll } from "../../components/chat/PinnedScroll";
@@ -106,6 +107,7 @@ export function ActivityDetailPanel(props: {
   const steps = (): any[] => (Array.isArray(item()?.plan?.steps) ? item()!.plan.steps : []);
   const entries = () => activityEntries(item()?.activity).filter((entry: any) => entry?.kind !== "retry");
   const reasoning = () => String(item()?.reasoning ?? "").trim();
+  const taskID = () => String(item()?.taskId || props.detail.taskID || "").trim();
 
   const title = () => {
     switch (kind()) {
@@ -115,6 +117,8 @@ export function ActivityDetailPanel(props: {
         return t("chat_activity_title");
       case "reasoning":
         return t("chat_reasoning_title");
+      case "processes":
+        return t("chat_processes_title");
       default:
         return worker()?.displayName || t("chat_workers_title");
     }
@@ -136,6 +140,8 @@ export function ActivityDetailPanel(props: {
         return entries().length > 0;
       case "reasoning":
         return reasoning() !== "";
+      case "processes":
+        return taskID() !== "";
       default:
         return worker() !== null;
     }
@@ -149,7 +155,7 @@ export function ActivityDetailPanel(props: {
   // and a subagent still name what they answer.
   const showContext = () => {
     if (!props.context) return false;
-    if (kind() === "activity" || kind() === "reasoning") return false;
+    if (kind() === "activity" || kind() === "reasoning" || kind() === "processes") return false;
     if (kind() === "worker" && worker()?.kind === "coder") return false;
     return true;
   };
@@ -227,6 +233,11 @@ export function ActivityDetailPanel(props: {
                     {reasoning()}
                   </Text>
                 </View>
+              </ChatTerminal>
+            </If>
+            <If when={kind() === "processes"}>
+              <ChatTerminal flush={props.dark}>
+                <ChatProcessTree endpointRef={String(item()?.endpointRef || props.endpointRef || "")} taskID={taskID()} />
               </ChatTerminal>
             </If>
             <If when={kind() === "worker" && worker()}>

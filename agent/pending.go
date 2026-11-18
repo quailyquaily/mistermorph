@@ -32,3 +32,15 @@ func PendingApprovalToolFromResumeState(data []byte) (PendingApprovalTool, bool)
 		Params: state.PendingTool.ToolCall.Params,
 	}, true
 }
+
+// isPending tells whether a run paused for an approval (it goes on when resumed).
+func isPending(final *Final) bool {
+	if final == nil {
+		return false
+	}
+	switch final.Output.(type) {
+	case PendingOutput, *PendingOutput:
+		return true
+	}
+	return false
+}

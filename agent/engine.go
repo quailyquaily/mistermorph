@@ -12,6 +12,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/platformutil"
+	"github.com/quailyquaily/mistermorph/internal/proctrack"
 	"github.com/quailyquaily/mistermorph/internal/runtimeclock"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -317,6 +318,14 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 }
 
 func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final, *Context, error) {
+	// The outermost run stops what its commands and coders left running when it ends.
+	ctx, procs := proctrack.Default.Begin(ctx)
+	final, agentCtx, err := e.run(ctx, task, opts)
+	procs.End(isPending(final))
+	return final, agentCtx, err
+}
+
+func (e *Engine) run(ctx context.Context, task string, opts RunOptions) (*Final, *Context, error) {
 	ctx = withWorkerScope(ctx, e.engineToolsConfig.WorkerNameSet)
 	agentCtx := NewContext(task, e.config.MaxSteps)
 	if err := e.config.ContextCompaction.Validate(); err != nil {
@@ -339,6 +348,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		runID = newRunID()
 	}
 	ctx = llmstats.WithRunID(ctx, runID)
+	proctrack.Attach(ctx, runID)
 	log := e.log.With("run_id", runID, "model", model)
 	toolLog := e.log.With("run_id", runID)
 	log.Info("run_start", "task_len", len(task))

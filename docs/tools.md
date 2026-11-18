@@ -166,6 +166,7 @@ Parameters:
 | `timeout_seconds` | `number` | No | `tools.bash.timeout` | Timeout override in seconds. |
 | `run_in_subtask` | `boolean` | No | `false` | If `true`, run the command inside the direct bash subtask boundary and return the structured subtask envelope JSON. In a subtask at the depth limit (depth 2), the command runs in the current subtask instead. |
 | `elevated` | `boolean` | No | `false` | Linux and macOS: run the command as root after the user approves it in a system dialog (see [Elevated commands](#elevated-commands)). Offered only when elevation is available. |
+| `keep_running` | `boolean` | No | `false` | Linux and macOS: leave what the command starts running after the task ends (a dev server, a tunnel, a watcher, or an app or browser it opens: `xdg-open` starts the browser as the command's child when it is not running yet). Without it, those processes are stopped when the task ends (see [Leftover processes](#leftover-processes)). |
 
 Constraints:
 
@@ -189,6 +190,7 @@ Parameters:
 | `cwd` | `string` | No | Current directory | Working directory for command execution. Supports `file_cache_dir/...` and `file_state_dir/...` aliases. |
 | `timeout_seconds` | `number` | No | `tools.powershell.timeout` | Timeout override in seconds. |
 | `elevated` | `boolean` | No | `false` | Windows: run the command as administrator after the user approves the UAC prompt (see [Elevated commands](#elevated-commands)). Its output arrives when it ends. |
+| `keep_running` | `boolean` | No | `false` | Linux and macOS (`pwsh`): as for `bash`. Not offered on Windows. |
 
 Constraints:
 
@@ -197,6 +199,32 @@ Constraints:
 - Runs with an allowlisted environment instead of inheriting the full parent process environment.
 - Extra environment variables can be injected via `tools.powershell.injected_env_vars`, using the same string or `{name, value}` object forms as `tools.bash.injected_env_vars`.
 - Unlike `bash`, it does not currently support `run_in_subtask`.
+
+### Leftover processes
+
+A command can start programs that outlive it: `loop.sh &`, `nohup server &`, a daemon. When the
+command exits they are re-parented (to init, or a subreaper), so their parent no longer says where
+they came from. On Linux and macOS each task marks what it starts and stops what is left when it
+ends (`internal/proctrack`):
+
+- `bash` and `powershell` run each command in its own session with `MISTERMORPH_RUN_ID` (the task)
+  and `MISTERMORPH_TOOL_CALL` in its environment. Every descendant inherits both, also one that
+  starts a session of its own; one that clears its environment still keeps the session id.
+- A coding CLI's server (`coder`) outlives the task that starts it, since the next task reuses it.
+  It runs with its own `MISTERMORPH_CODER_SESSION` tag. What it starts and leaves behind during a
+  task (no longer under the live server) is the task's; what stays under the server (its MCP
+  servers, its own terminals) is the server's.
+- When the task ends, not when it pauses for an approval, the processes it left are sent `SIGTERM`,
+  then `SIGKILL` after 2 seconds. This holds for every task: a Console or chat reply, an awareness
+  (cron) run, `mistermorph run`. A command run with `keep_running: true` is left alone.
+- Only the user's own processes are seen: one run with `sudo` (`elevated`) can be neither found
+  nor stopped.
+- The Console shows a reply's processes under **Processes**, beside Progress: what runs now, as a
+  tree under the call that started it ("left behind" when it was re-parented), and what was
+  stopped. Each process has a Stop, which ends it and what it started. The API is
+  `GET /tasks/{id}/processes` and `POST /tasks/{id}/processes/kill` (`{"pid": n}`); a runtime only
+  knows the tasks it ran since it started.
+- Windows: not tracked yet.
 
 ### Elevated commands
 

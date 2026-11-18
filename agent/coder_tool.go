@@ -12,6 +12,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/proctrack"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
@@ -127,7 +128,10 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 			var run coderusage.Run
 			var quota *coderusage.Quota
 			req.Report = func(r coderusage.Run, q *coderusage.Quota) { run, quota = r, q }
-			req.Process = func(pid int) { RecordWorkerProcess(runCtx, req.Backend, pid) }
+			req.Process = func(pid int) {
+				RecordWorkerProcess(runCtx, req.Backend, pid)
+				proctrack.AddRoot(runCtx, proctrack.Root{PID: pid, Kind: proctrack.KindCoder, Program: req.Backend, ActivityID: ToolActivityID(ctx)})
+			}
 			req.Progress = func(summary, text, step string) {
 				EmitEvent(runCtx, nil, Event{
 					Kind: EventKindToolOutput, ToolName: coderToolName, Stream: req.Backend,

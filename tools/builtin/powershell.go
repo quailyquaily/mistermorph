@@ -72,6 +72,7 @@ func (t *PowerShellTool) ParameterSchema() string {
 		},
 		"required": []string{"cmd"},
 	}
+	addKeepRunningParam(s)
 	if t.elevationOffered() {
 		s["properties"].(map[string]any)["elevated"] = map[string]any{
 			"type":        "boolean",

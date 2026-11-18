@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/pagination"
+	"github.com/quailyquaily/mistermorph/internal/proctrack"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
@@ -264,6 +265,12 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// A task's processes: what its commands and coders have running, and what was stopped.
+		if strings.HasSuffix(suffix, "/processes") || strings.HasSuffix(suffix, "/processes/kill") {
+			serveTaskProcesses(w, r, suffix)
 			return
 		}
 
@@ -778,4 +785,58 @@ func topicActivity(reader TaskReader, awaiting func(taskID string) bool) []Topic
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// KillProcessRequest names a process of the task to stop, with its descendants.
+type KillProcessRequest struct {
+	PID int `json:"pid"`
+}
+
+// serveTaskProcesses answers GET /tasks/{id}/processes (the task's process tree) and
+// POST /tasks/{id}/processes/kill.
+func serveTaskProcesses(w http.ResponseWriter, r *http.Request, suffix string) {
+	kill := strings.HasSuffix(suffix, "/processes/kill")
+	taskID := strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(suffix, "/kill"), "/processes"))
+	if taskID == "" || strings.Contains(taskID, "/") {
+		http.Error(w, "missing task_id", http.StatusBadRequest)
+		return
+	}
+	if !kill {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		tree, err := proctrack.Default.Tree(taskID)
+		if err != nil {
+			http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(tree)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req KillProcessRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil || req.PID <= 0 {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	stopped, err := proctrack.Default.Kill(taskID, req.PID)
+	if errors.Is(err, proctrack.ErrNotFound) {
+		http.Error(w, "process not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+		return
+	}
+	out := make([]proctrack.StoppedProc, 0, len(stopped))
+	for _, s := range stopped {
+		out = append(out, proctrack.StoppedProc{PID: s.Proc.PID, Name: s.Proc.Name, By: s.By, At: s.At, Error: s.Error})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"stopped": out})
 }

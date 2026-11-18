@@ -86,6 +86,7 @@ func (t *BashTool) ParameterSchema() string {
 		},
 		"required": []string{"cmd"},
 	}
+	addKeepRunningParam(s)
 	if t.elevationOffered() {
 		s["properties"].(map[string]any)["elevated"] = map[string]any{
 			"type":        "boolean",
@@ -115,10 +116,10 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 	runInSubtask, _ := asBool(params["run_in_subtask"])
 	// At the subtask depth limit the command runs here, in the current subtask.
 	if runInSubtask && agent.CanStartSubtask(ctx) {
-		return t.executeInSubtask(ctx, inv.Command, inv.CWD, inv.Timeout)
+		return t.executeInSubtask(ctx, inv)
 	}
 
-	payload, err := t.runCommand(ctx, inv.Command, inv.CWD, inv.Timeout)
+	payload, err := t.runCommand(ctx, inv)
 	observation := formatShellObservation(payload)
 	if err != nil {
 		if t.elevationOffered() && sudoWantsTerminal(payload.Stderr+"\n"+payload.Stdout) {
@@ -239,11 +240,11 @@ func (t *BashTool) emitChunk(ctx context.Context, stream, text string) {
 	})
 }
 
-func (t *BashTool) executeInSubtask(ctx context.Context, cmdStr string, cwd string, timeout time.Duration) (string, error) {
+func (t *BashTool) executeInSubtask(ctx context.Context, inv shellInvocation) (string, error) {
 	runner, ok := agent.SubtaskRunnerFromContext(ctx)
 	if !ok {
 		taskID, runCtx, _ := agent.PrepareSubtaskContext(ctx, nil)
-		payload, err := t.runCommand(runCtx, cmdStr, cwd, timeout)
+		payload, err := t.runCommand(runCtx, inv)
 		result := buildBashSubtaskResult(taskID, payload, err)
 		result.Worker = agent.WorkerFromContext(runCtx)
 		return marshalBashSubtaskResult(result, err)
@@ -252,7 +253,7 @@ func (t *BashTool) executeInSubtask(ctx context.Context, cmdStr string, cwd stri
 		OutputSchema:   "subtask.bash.result.v1",
 		ObserveProfile: agent.ObserveProfileLongShell,
 		RunFunc: func(runCtx context.Context) (*agent.SubtaskResult, error) {
-			payload, err := t.runCommand(runCtx, cmdStr, cwd, timeout)
+			payload, err := t.runCommand(runCtx, inv)
 			return buildBashSubtaskResult("", payload, err), nil
 		},
 	}
@@ -263,12 +264,8 @@ func (t *BashTool) executeInSubtask(ctx context.Context, cmdStr string, cwd stri
 	return marshalBashSubtaskResult(result, bashSubtaskError(result))
 }
 
-func (t *BashTool) runCommand(ctx context.Context, cmdStr string, cwd string, timeout time.Duration) (bashExecutionPayload, error) {
-	payload, _, err := runShellCommand(ctx, t.commonConfig(), t.runnerSpec(), shellInvocation{
-		Command: cmdStr,
-		CWD:     cwd,
-		Timeout: timeout,
-	})
+func (t *BashTool) runCommand(ctx context.Context, inv shellInvocation) (bashExecutionPayload, error) {
+	payload, _, err := runShellCommand(ctx, t.commonConfig(), t.runnerSpec(), inv)
 	return payload, err
 }
 

@@ -19,6 +19,7 @@ import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_V
 export const PANEL_PLAN = "plan";
 export const PANEL_ACTIVITY = "activity";
 export const PANEL_REASONING = "reasoning";
+export const PANEL_PROCESSES = "processes";
 
 function cleanText(value: unknown) {
   return String(value ?? "").trim();
@@ -471,6 +472,8 @@ export function ChatStatusCard(props: {
   plan: any;
   activity: any;
   hasReasoning: boolean;
+  /** Whether the reply called a tool that starts processes (its Processes column). */
+  hasProcesses?: boolean;
   status: string;
   /** The panel of this reply the detail panel shows ("" for none of them). */
   selectedPanel: string;
@@ -481,7 +484,7 @@ export function ChatStatusCard(props: {
 }) {
   const panel = () => {
     const value = cleanText(props.selectedPanel);
-    return value === PANEL_PLAN || value === PANEL_ACTIVITY || value === PANEL_REASONING ? value : "";
+    return value === PANEL_PLAN || value === PANEL_ACTIVITY || value === PANEL_REASONING || value === PANEL_PROCESSES ? value : "";
   };
   const focus = (name: string) => cleanText(props.focusPanel) === name;
 
@@ -505,6 +508,15 @@ export function ChatStatusCard(props: {
           focus={focus(PANEL_ACTIVITY)}
           onPress={() => props.onOpen(PANEL_ACTIVITY)}
           testID="chat-status-activity"
+        />
+      </If>
+      <If when={props.activity && props.hasProcesses}>
+        <Column
+          label={t("chat_processes_title")}
+          selected={panel() === PANEL_PROCESSES}
+          focus={focus(PANEL_PROCESSES)}
+          onPress={() => props.onOpen(PANEL_PROCESSES)}
+          testID="chat-status-processes"
         />
       </If>
       <If when={props.hasReasoning}>

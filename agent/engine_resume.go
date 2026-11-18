@@ -8,6 +8,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
+	"github.com/quailyquaily/mistermorph/internal/proctrack"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -20,6 +21,13 @@ func (e *Engine) ResumeWithOptions(ctx context.Context, approvalRequestID string
 }
 
 func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunOptions) (*Final, *Context, error) {
+	ctx, procs := proctrack.Default.Begin(ctx)
+	final, agentCtx, err := e.resumeRun(ctx, approvalRequestID, opts)
+	procs.End(isPending(final))
+	return final, agentCtx, err
+}
+
+func (e *Engine) resumeRun(ctx context.Context, approvalRequestID string, opts RunOptions) (*Final, *Context, error) {
 	// Approvals can come from an approvals-only guard (forced-approval tools), so resuming needs
 	// the approval store, not an enabled guard.
 	if e == nil || !e.guard.ApprovalsAvailable() {
@@ -62,6 +70,7 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 	}
 
 	ctx = llmstats.WithRunID(ctx, rs.RunID)
+	proctrack.Attach(ctx, rs.RunID)
 	// One worker scope for the resumed run, as Run has, continuing the names and avatars given
 	// out before the pause, from the name set the task started with.
 	ctx = withResumedWorkerScope(ctx, rs.WorkersAllocated, rs.WorkerSeed, rs.WorkerNameSet, e.engineToolsConfig.WorkerNameSet)

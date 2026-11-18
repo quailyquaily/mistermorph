@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/proctrack"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
 
@@ -40,6 +42,9 @@ type shellInvocation struct {
 	Command string
 	CWD     string
 	Timeout time.Duration
+	// Keep leaves what the command starts running after the run ends (keep_running); otherwise
+	// the run stops it then (internal/proctrack).
+	Keep bool
 }
 
 type shellRunnerSpec struct {
@@ -112,10 +117,12 @@ func prepareShellInvocation(ctx context.Context, params map[string]any, common s
 		}
 	}
 
+	keep, _ := asBool(params["keep_running"])
 	return shellInvocation{
 		Command: cmdStr,
 		CWD:     cwd,
 		Timeout: timeout,
+		Keep:    keep,
 	}, nil
 }
 
@@ -160,6 +167,13 @@ func runShellCommand(ctx context.Context, common shellToolCommon, spec shellRunn
 	if spec.BuildEnv != nil {
 		cmd.Env = spec.BuildEnv(common.InjectedEnvVars)
 	}
+	// The run's tags let it find what the command leaves running (internal/proctrack).
+	if proctrack.RunID(ctx) != "" {
+		if cmd.Env == nil {
+			cmd.Env = os.Environ()
+		}
+		cmd.Env = proctrack.ShellEnv(ctx, cmd.Env, agent.ToolActivityID(ctx))
+	}
 
 	var stdout limitedBuffer
 	var stderr limitedBuffer
@@ -172,6 +186,7 @@ func runShellCommand(ctx context.Context, common shellToolCommon, spec shellRunn
 	err := cmd.Start()
 	if err == nil {
 		agent.RecordWorkerProcess(ctx, spec.Program, cmd.Process.Pid)
+		proctrack.AddRoot(ctx, proctrack.Root{PID: cmd.Process.Pid, Kind: proctrack.KindShell, Program: common.ToolName, ActivityID: agent.ToolActivityID(ctx), Keep: inv.Keep})
 		if spec.OnStart != nil {
 			spec.OnStart(cmd.Process.Pid)
 		}
@@ -450,5 +465,19 @@ func shellResultFromPayload(payload shellExecutionPayload) ShellResult {
 		Stderr:          payload.Stderr,
 		StdoutTruncated: payload.StdoutTruncated,
 		StderrTruncated: payload.StderrTruncated,
+	}
+}
+
+// keepRunningParamDescription is the shell tools' keep_running parameter.
+const keepRunningParamDescription = "Optional. Set true when what this command starts must keep running after your reply: a dev server, a tunnel or a watcher the user asked for, or an app or browser window it opens (xdg-open, open). Start a server in the background with its output redirected (e.g. `npm run dev > /tmp/dev.log 2>&1 &`). Without it, processes the command leaves running are stopped when the task ends."
+
+// addKeepRunningParam offers keep_running where leftover processes are stopped.
+func addKeepRunningParam(schema map[string]any) {
+	if !proctrack.Supported {
+		return
+	}
+	schema["properties"].(map[string]any)["keep_running"] = map[string]any{
+		"type":        "boolean",
+		"description": keepRunningParamDescription,
 	}
 }

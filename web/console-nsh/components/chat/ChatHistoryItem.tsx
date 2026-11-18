@@ -44,6 +44,7 @@ import { ChatStatusMark } from "./ChatStatusMark";
 import { ChatSystemMessage } from "./ChatSystemMessage";
 import { ChatWorkerRoster } from "./ChatWorkerRoster";
 import { t } from "./i18n";
+import { activityStartsProcesses } from "./ChatProcessTree";
 import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
 import type { KeyedState } from "./rowState";
@@ -360,7 +361,7 @@ export function ChatHistoryItem(props: {
     const key = ctx.focusReturn();
     return key !== "" && key === activityDetailKey({ itemID: item()?.id, kind: kind as ActivityDetailRef["kind"], workerID });
   };
-  const focusPanel = () => (["plan", "activity", "reasoning"].find((kind) => focusEntry(kind)) ?? "");
+  const focusPanel = () => (["plan", "activity", "reasoning", "processes"].find((kind) => focusEntry(kind)) ?? "");
   const focusWorker = () => activityDetailWorkerID(ctx.focusReturn(), item()?.id);
   const openDetail = (kind: ActivityDetailRef["kind"], workerID?: string) =>
     ctx.onOpenDetail({ itemID: item()?.id, taskID: String(item()?.taskId || "").trim() || undefined, kind, workerID });
@@ -404,6 +405,7 @@ export function ChatHistoryItem(props: {
           plan={item()?.plan}
           activity={taskActivity()}
           hasReasoning={reasoningVisible()}
+          hasProcesses={String(item()?.taskId || "").trim() !== "" && activityStartsProcesses(item()?.activity)}
           status={item()?.status}
           selectedPanel={selectedPanel()}
           focusPanel={focusPanel()}

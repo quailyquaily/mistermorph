@@ -8,9 +8,9 @@
 // so a plan, progress or output still streaming keeps growing there.
 import { signal, untracked } from "nsh";
 
-export type ActivityDetailKind = "plan" | "activity" | "reasoning" | "worker";
+export type ActivityDetailKind = "plan" | "activity" | "reasoning" | "processes" | "worker";
 
-export const ACTIVITY_DETAIL_KINDS: readonly ActivityDetailKind[] = ["plan", "activity", "reasoning", "worker"];
+export const ACTIVITY_DETAIL_KINDS: readonly ActivityDetailKind[] = ["plan", "activity", "reasoning", "processes", "worker"];
 
 export interface ActivityDetailRef {
   /** The reply's history item id. */

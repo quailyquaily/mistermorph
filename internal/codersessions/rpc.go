@@ -7,10 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/quailyquaily/mistermorph/internal/proctrack"
 )
 
 type message struct {
@@ -78,7 +82,9 @@ func startProcess(req Request, lines bool, args ...string) (*rpc, error) {
 	cmd := exec.CommandContext(context.Background(), req.Command, args...)
 	configureCoderProcess(cmd)
 	cmd.Dir = req.CWD
-	cmd.Env = req.Env
+	// The server outlives the run that starts it: it carries its own tag, not the run's, so a run
+	// can tell what the server left behind from what it keeps (internal/proctrack).
+	cmd.Env = append(proctrack.WithoutTags(envOrProcess(req.Env)), proctrack.EnvCoder+"="+uuid.NewString())
 	cmd.WaitDelay = time.Second
 	in, err := cmd.StdinPipe()
 	if err != nil {
@@ -223,4 +229,11 @@ func (r *rpc) call(ctx context.Context, method string, params any, handle func(m
 			return nil, fmt.Errorf("unexpected coder request %s: %s", m.Method, m.Params)
 		}
 	}
+}
+
+func envOrProcess(env []string) []string {
+	if env == nil {
+		return os.Environ()
+	}
+	return env
 }

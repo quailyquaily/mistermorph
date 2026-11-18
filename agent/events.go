@@ -138,3 +138,12 @@ func emitEvent(ctx context.Context, sink EventSink, event Event, deliveryCtx con
 	}
 	sink.HandleEvent(deliveryCtx, event)
 }
+
+// ToolActivityID is the activity id of the tool call ctx belongs to ("" outside one).
+func ToolActivityID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	call, _ := ctx.Value(toolActivityContextKey{}).(toolActivity)
+	return call.id
+}
