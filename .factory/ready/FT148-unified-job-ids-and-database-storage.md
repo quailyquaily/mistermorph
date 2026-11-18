@@ -96,3 +96,16 @@ Validation: coder passed configured gofmt check, go vet ./..., go test ./..., pi
 Not checked: interactive browser, desktop, Android, or live Console with running scheduler; UI has headless test coverage only. Downgrades fail the existing schema-version guard; restore pre-upgrade snapshots. Rejected records may contain sensitive raw fields, retained only in the protected database. A new independent review is required; the prior pass covers only round 1.
 
 Branch pushed; moved new/ → review/. Not merged or shipped.
+
+
+## factory · review · 2026-11-18 14:55
+head: d389ccaad103566a01ef6fbae4d3561c350e7a63
+verdict: pass
+notes:
+- [P2] internal/cron/jobs_import.go:263-277: A job deleted from round-1 dedicated job storage is resurrected enabled if released master subsequently imports the stale cron.yaml into cron_tasks before this upgrade. Those imported rows have created_at later than the takeover mark and are mistaken for genuinely new legacy additions. Account for the shared database imported:cron mark and YAML-origin takeover when classifying these rows; add a round-1 → master → current migration regression test. Verified with scratch real binaries: YAML keep-me/deleted-job → round-1 import and delete deleted-job → master reimports stale YAML → current head lists both, deleted-job enabled=true, no rejects. Control without master preserves deletion.
+
+Independent Claude Code review of origin/master (77ebe88a)...HEAD: 8 commits, 104 files; emphasis on round-2 migration and sensitive-file protection, lighter pass on retained round-1 tool/topic/Console changes. No P0/P1 findings. Per factory policy, P2 is nonblocking; moved review/ → ready/. Owner should inspect the stale-YAML resurrection finding before shipping. Prior old-explicit-deny-list/SQLite-sidecar exposure is addressed by the effective protected paths.
+
+Validation: reviewer ran configured gofmt check, go vet ./... and go test ./... successfully (164 packages, no failures), pinned nsh 0.5.1 check passed, and required concurrent Console scripts/test.sh passed (136 files, 0 failed). chat-attachments failed in the parallel pass and passed the runner's isolated retry, matching previous observed flakiness. Scratch real-binary migration probes verified the finding. Manager confirmed review head unchanged, clean worktree, clean whitespace diff and clean merge with fetched master. No review code changes or commits. Installs: none.
+
+Residual risks: interactive browser, desktop/Android UI and JVM tests not exercised (no JDK); Todo/Topics UI has headless coverage only. Second-resolution takeover timestamps can ambiguously classify same-second writes. Shell protection remains documented best-effort string matching, not a sandbox; glob bypass is not solved. Case-insensitive-filesystem basename behavior is preexisting. Import rejects remain logged and stored in protected database metadata, not surfaced in UI. No linked GitHub issues or PRs. Not merged or shipped.
