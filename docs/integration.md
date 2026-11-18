@@ -11,7 +11,7 @@ For Go-library embedding with built-in wiring, use `integration`:
 
 ```go
 cfg := integration.DefaultConfig()
-cfg.BuiltinToolNames = []string{"read_file", "url_fetch", "todo_update"} // optional; empty = all built-ins
+cfg.BuiltinToolNames = []string{"read_file", "url_fetch", "job_manage"} // optional; empty = all built-ins
 cfg.AddPromptBlock(`[[ Project Policy ]]
 - Keep answers under 3 sentences unless asked for detail.`) // optional; appended under "Additional Policies"
 cfg.Inspect.Prompt = true   // optional

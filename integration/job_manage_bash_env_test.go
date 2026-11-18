@@ -11,14 +11,13 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/agent"
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
 // A run whose model edits a scheduled task through todo_update keeps the task's bash_env and
 // other settings, and the bash_env values appear in no tool result, tool event or log line.
-func TestRunTaskTodoUpdateKeepsBashEnvAndKeepsValuesOutOfOutput(t *testing.T) {
+func TestRunTaskJobManageKeepsBashEnvAndKeepsValuesOutOfOutput(t *testing.T) {
 	const secret = "synthetic-secret-value-0004"
 	stateDir := t.TempDir()
 	logDir := t.TempDir()
@@ -42,7 +41,7 @@ func TestRunTaskTodoUpdateKeepsBashEnvAndKeepsValuesOutOfOutput(t *testing.T) {
 		{ID: "edit", Name: "todo_update", Arguments: map[string]any{
 			"action": "update", "id": "weekly-report", "content": "Write the weekly report with charts",
 		}},
-		{ID: "add", Name: "todo_update", Arguments: map[string]any{
+		{ID: "add", Name: "job_manage", Arguments: map[string]any{
 			"action": "add_once", "id": "standup", "content": "Prepare the standup notes", "at": "2030-01-02 09:00",
 			"bash_env": []any{map[string]any{"name": "API_TOKEN", "value": secret}},
 		}},
@@ -75,9 +74,7 @@ func TestRunTaskTodoUpdateKeepsBashEnvAndKeepsValuesOutOfOutput(t *testing.T) {
 		t.Fatalf("RunTask() error = %v", err)
 	}
 
-	if err := agentdb.CachedBeside(cronPath).Close(); err != nil {
-		t.Fatal(err)
-	}
+	cronstore.NewStore(cronPath).Close()
 	file, _, err := cronstore.NewStore(cronPath).Read()
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +88,8 @@ func TestRunTaskTodoUpdateKeepsBashEnvAndKeepsValuesOutOfOutput(t *testing.T) {
 	if !reflect.DeepEqual(file.Tasks[0], want) {
 		t.Fatalf("edited task = %#v\nwant %#v", file.Tasks[0], want)
 	}
-	if got := file.Tasks[1]; got.ID != "standup" || !reflect.DeepEqual(got.BashEnv, []cronstore.BashEnvRef{{Name: "API_TOKEN", Value: secret}}) {
+	// The add named an id; the job has a generated one instead.
+	if got := file.Tasks[1]; !cronstore.IsGeneratedJobID(got.ID) || !reflect.DeepEqual(got.BashEnv, []cronstore.BashEnvRef{{Name: "API_TOKEN", Value: secret}}) {
 		t.Fatalf("added task = %#v", got)
 	}
 

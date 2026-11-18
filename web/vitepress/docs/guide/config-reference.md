@@ -115,7 +115,7 @@ Shell defaults are platform-specific:
 - You can still override either value explicitly.
 
 - `tools.read_file.max_bytes`
-- `tools.read_file.deny_paths`
+- `tools.read_file.deny_paths` (also applies to `send_file`) (`agent.db`, `jobs.db`, `config.yaml.imported` and the SQLite `-wal`, `-shm` and `-journal` files of those and of every listed entry are always denied, even by a list that leaves them out)
 - `tools.write_file.enabled`
 - `tools.write_file.max_bytes`
 - `tools.spawn.enabled`
@@ -124,7 +124,8 @@ Shell defaults are platform-specific:
 - `tools.coder.bypass_approvals.codex`
 - `tools.coder.bypass_approvals.claude`
 - `tools.contacts_send.enabled`
-- `tools.todo_update.enabled`
+- `tools.job_manage.enabled`
+- `tools.todo_update.enabled` (the earlier switch of `job_manage`; it applies while `tools.job_manage.enabled` is not set)
 - `tools.plan_create.enabled`
 - `tools.plan_create.max_steps`
 - `tools.image_generate.enabled`
@@ -140,12 +141,12 @@ Shell defaults are platform-specific:
 - `tools.bash.enabled`
 - `tools.bash.timeout`
 - `tools.bash.max_output_bytes`
-- `tools.bash.deny_paths`
+- `tools.bash.deny_paths` (`agent.db`, `jobs.db`, `config.yaml.imported` and the SQLite `-wal`, `-shm` and `-journal` files of those and of every listed entry are always denied, even by a list that leaves them out)
 - `tools.bash.injected_env_vars` (string name or `{name, value}` object; string names are resolved from the parent environment at config load time)
 - `tools.powershell.enabled`
 - `tools.powershell.timeout`
 - `tools.powershell.max_output_bytes`
-- `tools.powershell.deny_paths`
+- `tools.powershell.deny_paths` (`agent.db`, `jobs.db`, `config.yaml.imported` and the SQLite `-wal`, `-shm` and `-journal` files of those and of every listed entry are always denied, even by a list that leaves them out)
 - `tools.powershell.injected_env_vars` (same format as `tools.bash.injected_env_vars`)
 
 ## MCP

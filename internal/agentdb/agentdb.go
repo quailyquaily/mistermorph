@@ -1,5 +1,6 @@
 // Package agentdb opens agent.db, the SQLite database that holds the agent's own state: config,
-// persona and heartbeat, contacts, TODO, Console sessions, Agent Link peers and topic state.
+// persona and heartbeat, contacts, the job list (the TODO list, in jobs; see internal/cron),
+// Console sessions, Agent Link peers and topic state.
 //
 // The schema of every table is here, in one list of migrations, so the database has one
 // user_version whichever store opens it first. The stores themselves live with the code that uses
@@ -121,6 +122,12 @@ func registered() []Importer {
 
 var shared = sqlitedb.NewShared()
 
+// retiredImports are the imports an earlier version ran into agent.db that this one no longer
+// finishes: the TODO list's (cron), which put cron.yaml into cron_tasks and renamed the file. The
+// jobs table's import (internal/cron) reads cron.yaml and leaves it as it is, so a cron.yaml that
+// shows up again is not renamed to cron.yaml.imported either.
+var retiredImports = map[string]bool{"cron": true}
+
 // Path is agent.db in the configured state folder.
 func Path() string {
 	return statepaths.AgentDBPath()
@@ -161,7 +168,7 @@ func open(ctx context.Context, path string) (*DB, error) {
 		if err != nil {
 			return nil, fmt.Errorf("open agent database: %w", err)
 		}
-		if err := stateimport.FinishRenames(ctx, db, filepath.Dir(path), logger); err != nil {
+		if err := stateimport.FinishRenamesExcept(ctx, db, filepath.Dir(path), logger, retiredImports); err != nil {
 			logger.Warn("agent_db_import_rename_failed", "error", err)
 		}
 		return db, nil
@@ -254,7 +261,7 @@ func runImport(ctx context.Context, db *sql.DB, stateDir string, importer Import
 	if len(result.Rejects) > 0 {
 		logger.Warn("agent_db_import_rejects", "store", importer.Name, "count", len(result.Rejects))
 	}
-	if err := stateimport.FinishRenames(ctx, db, stateDir, logger); err != nil {
+	if err := stateimport.FinishRenamesExcept(ctx, db, stateDir, logger, retiredImports); err != nil {
 		logger.Warn("agent_db_import_rename_failed", "store", importer.Name, "error", err)
 	}
 	return true, nil

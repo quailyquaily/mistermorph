@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/assets"
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 )
 
@@ -75,61 +74,16 @@ func TestStoreRejectsAnInvalidListWhole(t *testing.T) {
 	if len(file.Tasks) != 1 || file.Tasks[0].ID != "ok" {
 		t.Fatalf("list changed by a rejected write: %+v", file.Tasks)
 	}
-	// The table's own check refuses a row with both or neither schedule.
-	db, err := agentdb.Cached(filepath.Join(filepath.Dir(store.Path), "agent.db")).Get(context.Background())
+	// The table's own checks refuse a row with both or neither schedule, or without an ID.
+	db, err := store.handle(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO cron_tasks (id, position, content, at, cron, created_at, updated_at) VALUES ('x', 9, 'c', '', '', 'now', 'now')`); err == nil {
+	if _, err := db.Exec(`INSERT INTO jobs (id, position, content, at, cron, created_at, updated_at) VALUES ('x', 9, 'c', '', '', 'now', 'now')`); err == nil {
 		t.Fatal("a row without at or cron was stored")
 	}
-}
-
-func TestImportCronYAMLKeepsOrderAndListsRejects(t *testing.T) {
-	dir := t.TempDir()
-	raw := `version: 1
-tasks:
-  - id: remind-standup
-    at: "2026-05-12 09:00"
-    tz: Asia/Tokyo
-    content: "Remind John"
-    chat_id: "tg:-1001234567890"
-  - id: broken
-    content: "No schedule"
-  - id: weekly-report
-    cron: "0 10 * * 1"
-    tz: UTC+8
-    llm_profile: batch
-    content: "Weekly report"
-    bash_env:
-      - REPORT_MODE: weekly
-      - name: API_KEY
-        value: "${OPENAI_API_KEY}"
-`
-	if err := os.WriteFile(filepath.Join(dir, "cron.yaml"), []byte(raw), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	store := NewStore(filepath.Join(dir, "cron.yaml"))
-	file, _, err := store.Read()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(file.Tasks) != 2 || file.Tasks[0].ID != "remind-standup" || file.Tasks[1].ID != "weekly-report" {
-		t.Fatalf("tasks = %+v", file.Tasks)
-	}
-	if got := file.Tasks[1].BashEnv; len(got) != 2 || got[0] != (BashEnvRef{Name: "REPORT_MODE", Value: "weekly"}) || got[1].Value != "${OPENAI_API_KEY}" {
-		t.Fatalf("bash_env = %+v", got)
-	}
-	db, err := agentdb.Cached(filepath.Join(dir, "agent.db")).Get(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	rejects, err := agentdb.Rejects(context.Background(), db, "cron")
-	if err != nil || rejects.Count != 1 || rejects.Rejects[0].Line != 2 || !strings.Contains(rejects.Rejects[0].Error, "exactly one of at or cron") {
-		t.Fatalf("rejects = %+v, %v", rejects, err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "cron.yaml.imported")); err != nil {
-		t.Fatalf("cron.yaml not renamed: %v", err)
+	if _, err := db.Exec(`INSERT INTO jobs (id, position, content, at, cron, created_at, updated_at) VALUES ('', 9, 'c', '', '* * * * *', 'now', 'now')`); err == nil {
+		t.Fatal("a row without an id was stored")
 	}
 }
 

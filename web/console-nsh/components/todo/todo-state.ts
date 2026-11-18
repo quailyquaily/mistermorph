@@ -35,6 +35,7 @@ import {
   TODO_TOPIC_READY,
   TODO_TOPIC_UNAVAILABLE,
 } from "../../lib/core/todo-topic.js";
+import { newJobID } from "../../lib/core/job-id.js";
 import { modelVendorMeta } from "../../lib/core/model-vendor.js";
 import { isDesktop, isVisible } from "../../lib/platform";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
@@ -790,14 +791,13 @@ export function createTodoState() {
     });
   }
 
+  // A new item's ID: job-<uuid v4>, as the runtime makes them. It never reuses a deleted item's
+  // ID, so an item's topic and runs stay its own.
   function nextID() {
-    const list = untracked(tasks);
-    const used = new Set(list.map((task) => trimText(task.id)).filter(Boolean));
-    let index = list.length + 1;
-    let id = `task-${index}`;
+    const used = new Set(untracked(tasks).map((task) => trimText(task.id)));
+    let id = newJobID() as string;
     while (used.has(id)) {
-      index += 1;
-      id = `task-${index}`;
+      id = newJobID() as string;
     }
     return id;
   }
@@ -861,6 +861,34 @@ export function createTodoState() {
     llmProfiles.set(model.normalizeLLMProfiles(data?.llm_profiles) as any[]);
   }
 
+  // The list's revision as the agent last reported it (GET and PUT /todo/tasks), sent with each save
+  // so a save of a list that changed meanwhile (a job the agent added, another window's save) is
+  // refused rather than overwriting it. null when the agent reports none (an earlier version).
+  let listRevision: number | null = null;
+
+  function applyRevision(data: any) {
+    listRevision = typeof data?.revision === "number" ? data.revision : null;
+  }
+
+  function saveBody(list: TodoTask[]) {
+    const body: Record<string, unknown> = { tasks: list.map((task) => model.serializeTask(task, t("todo_untitled"))) };
+    if (listRevision !== null) {
+      body.revision = listRevision;
+    }
+    return body;
+  }
+
+  // saveErrorMessage is what a failed save says: a list that changed since it was loaded is told
+  // apart from other failures.
+  function saveErrorMessage(e: unknown, fallback: string) {
+    const status = (e as { status?: number } | null)?.status;
+    const message = errorMessage(e);
+    if (status === 409 && message.includes("changed since it was read")) {
+      return t("todo_save_conflict");
+    }
+    return message || fallback;
+  }
+
   function signatures(list: TodoTask[]) {
     return new Map(list.map((task) => [task._key, JSON.stringify(model.serializeTask(task, t("todo_untitled")))]));
   }
@@ -886,9 +914,10 @@ export function createTodoState() {
     try {
       const data = await runtimeApiFetch("/todo/tasks", {
         method: "PUT",
-        body: { tasks: nextTasks.map((task) => model.serializeTask(task, t("todo_untitled"))) },
+        body: saveBody(nextTasks),
       });
       if (disposed) return;
+      applyRevision(data);
       batch(() => {
         applyOptions(data);
         tasks.set(nextTasks);
@@ -901,7 +930,7 @@ export function createTodoState() {
       });
       notice.success(t("msg_delete_success"));
     } catch (e) {
-      notice.error(errorMessage(e) || t("msg_delete_failed"));
+      notice.error(saveErrorMessage(e, t("msg_delete_failed")));
     } finally {
       batch(() => {
         saving.set(false);
@@ -1092,6 +1121,7 @@ export function createTodoState() {
       const systemRows = Array.isArray(data?.system_tasks) ? data.system_tasks : [];
       const heartbeatRow = systemRows.find((item: any) => trimText(item?.id) === model.HEARTBEAT_ITEM_KEY);
       const loadedTasks = rows.map((item: any) => model.normalizeTask(item, t("todo_untitled"))) as TodoTask[];
+      applyRevision(data);
       batch(() => {
         applyOptions(data);
         tasks.set(loadedTasks);
@@ -1139,9 +1169,10 @@ export function createTodoState() {
     try {
       const data = await runtimeApiFetch("/todo/tasks", {
         method: "PUT",
-        body: { tasks: nextTasks.map((task) => model.serializeTask(task, t("todo_untitled"))) },
+        body: saveBody(nextTasks),
       });
       if (disposed) return false;
+      applyRevision(data);
       batch(() => {
         applyOptions(data);
         persistedTaskSignatures.set(signatures(nextTasks));
@@ -1152,7 +1183,7 @@ export function createTodoState() {
       notice.success(t("msg_save_success"));
       return true;
     } catch (e) {
-      notice.error(errorMessage(e) || t("msg_save_failed"));
+      notice.error(saveErrorMessage(e, t("msg_save_failed")));
       return false;
     } finally {
       saving.set(false);

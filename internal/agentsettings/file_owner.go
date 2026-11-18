@@ -22,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/configrevision"
 	"github.com/quailyquaily/mistermorph/internal/configsettings"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
@@ -964,8 +965,17 @@ func applyAgentSettingsUpdateDocument(doc *yaml.Node, current FileSettings, valu
 		if enabled := toolEnabledUpdateValue(values.Tools.ContactsSend); enabled != nil {
 			configbootstrap.SetMappingBoolPath(toolsNode, "contacts_send", "enabled", *enabled)
 		}
-		if enabled := toolEnabledUpdateValue(values.Tools.TodoUpdate); enabled != nil {
-			configbootstrap.SetMappingBoolPath(toolsNode, "todo_update", "enabled", *enabled)
+		jobManage := toolEnabledUpdateValue(values.Tools.JobManage)
+		if jobManage == nil {
+			jobManage = toolEnabledUpdateValue(values.Tools.LegacyTodoUpdate)
+		}
+		if jobManage != nil {
+			configbootstrap.SetMappingBoolPath(toolsNode, "job_manage", "enabled", *jobManage)
+			// A config that still has the earlier switch keeps it in step, so an earlier
+			// version reading the file agrees.
+			if legacy := configbootstrap.FindMappingValue(toolsNode, "todo_update"); legacy != nil && legacy.Kind == yaml.MappingNode {
+				configbootstrap.SetMappingBoolValue(legacy, "enabled", *jobManage)
+			}
 		}
 		if enabled := toolEnabledUpdateValue(values.Tools.CodeMode); enabled != nil {
 			configbootstrap.SetMappingBoolPath(toolsNode, "codemode", "enabled", *enabled)
@@ -2552,6 +2562,7 @@ func agentSettingsYAMLHasLLMKey(doc *yaml.Node, key string) bool {
 func readAgentSettingsFromReader(r interface {
 	llmutil.ConfigReader
 	GetBool(string) bool
+	IsSet(string) bool
 }) (FileSettings, error) {
 	if r == nil {
 		return FileSettings{}, fmt.Errorf("config reader is nil")
@@ -2563,21 +2574,22 @@ func readAgentSettingsFromReader(r interface {
 	return FileSettings{
 		LLM: SettingsPayloadFromRuntimeValues(values),
 		Tools: ToolsSettingsPayload{
-			WriteFile:     ToolEnabledPayload{Enabled: r.GetBool("tools.write_file.enabled")},
-			Spawn:         ToolEnabledPayload{Enabled: r.GetBool("tools.spawn.enabled")},
-			Coder:         ToolEnabledPayload{Enabled: r.GetBool("tools.coder.enabled")},
-			ContactsSend:  ToolEnabledPayload{Enabled: r.GetBool("tools.contacts_send.enabled")},
-			TodoUpdate:    ToolEnabledPayload{Enabled: r.GetBool("tools.todo_update.enabled")},
-			PlanCreate:    ToolEnabledPayload{Enabled: r.GetBool("tools.plan_create.enabled")},
-			CodeMode:      ToolEnabledPayload{Enabled: r.GetBool("tools.codemode.enabled")},
-			ToolSearch:    ToolEnabledPayload{Enabled: r.GetBool("tools.tool_search.enabled")},
-			URLFetch:      ToolEnabledPayload{Enabled: r.GetBool("tools.url_fetch.enabled")},
-			WebSearch:     ToolEnabledPayload{Enabled: r.GetBool("tools.web_search.enabled")},
-			Bash:          ToolEnabledPayload{Enabled: r.GetBool("tools.bash.enabled")},
-			PowerShell:    ToolEnabledPayload{Enabled: r.GetBool("tools.powershell.enabled")},
-			ImageGenerate: ToolEnabledPayload{Enabled: r.GetBool("tools.image_generate.enabled")},
-			ImageEdit:     ToolEnabledPayload{Enabled: r.GetBool("tools.image_edit.enabled")},
-			AgentNameSet:  agent.NormalizeWorkerNameSet(r.GetString(agentNameSetConfigPath)),
+			WriteFile:        ToolEnabledPayload{Enabled: r.GetBool("tools.write_file.enabled")},
+			Spawn:            ToolEnabledPayload{Enabled: r.GetBool("tools.spawn.enabled")},
+			Coder:            ToolEnabledPayload{Enabled: r.GetBool("tools.coder.enabled")},
+			ContactsSend:     ToolEnabledPayload{Enabled: r.GetBool("tools.contacts_send.enabled")},
+			JobManage:        ToolEnabledPayload{Enabled: jobconfig.ToolEnabled(r)},
+			LegacyTodoUpdate: ToolEnabledPayload{Enabled: jobconfig.ToolEnabled(r)},
+			PlanCreate:       ToolEnabledPayload{Enabled: r.GetBool("tools.plan_create.enabled")},
+			CodeMode:         ToolEnabledPayload{Enabled: r.GetBool("tools.codemode.enabled")},
+			ToolSearch:       ToolEnabledPayload{Enabled: r.GetBool("tools.tool_search.enabled")},
+			URLFetch:         ToolEnabledPayload{Enabled: r.GetBool("tools.url_fetch.enabled")},
+			WebSearch:        ToolEnabledPayload{Enabled: r.GetBool("tools.web_search.enabled")},
+			Bash:             ToolEnabledPayload{Enabled: r.GetBool("tools.bash.enabled")},
+			PowerShell:       ToolEnabledPayload{Enabled: r.GetBool("tools.powershell.enabled")},
+			ImageGenerate:    ToolEnabledPayload{Enabled: r.GetBool("tools.image_generate.enabled")},
+			ImageEdit:        ToolEnabledPayload{Enabled: r.GetBool("tools.image_edit.enabled")},
+			AgentNameSet:     agent.NormalizeWorkerNameSet(r.GetString(agentNameSetConfigPath)),
 		},
 	}, nil
 }

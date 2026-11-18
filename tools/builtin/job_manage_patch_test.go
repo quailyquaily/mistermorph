@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -19,7 +18,7 @@ import (
 // todoSyntheticSecret stands for a credential in bash_env; no tool result, error or log may show it.
 const todoSyntheticSecret = "synthetic-secret-value-0002"
 
-// todoDispatch runs todo_update the way the agent does: looked up by name in a registry, with
+// todoDispatch runs job_manage the way the agent does: looked up by name in a registry, with
 // arguments decoded from the model's JSON.
 type todoDispatch struct {
 	t        *testing.T
@@ -36,14 +35,20 @@ func newTodoDispatch(t *testing.T) *todoDispatch {
 
 func newTodoDispatchAt(t *testing.T, cronPath string) *todoDispatch {
 	t.Helper()
+	return newTodoDispatchNamed(t, cronPath, "job_manage")
+}
+
+// newTodoDispatchNamed looks the tool up by name, which may be its earlier name todo_update.
+func newTodoDispatchNamed(t *testing.T, cronPath, name string) *todoDispatch {
+	t.Helper()
 	reg := tools.NewRegistry()
 	contactsDir := filepath.Join(filepath.Dir(cronPath), "contacts")
-	if err := reg.Register(NewTodoUpdateToolWithLLM(true, cronPath, contactsDir, &stubTodoToolLLMClient{}, "gpt-5.2")); err != nil {
+	if err := reg.Register(NewJobManageToolWithLLM(true, cronPath, contactsDir, &stubTodoToolLLMClient{}, "gpt-5.2")); err != nil {
 		t.Fatal(err)
 	}
-	tool, ok := reg.Get("todo_update")
+	tool, ok := reg.Get(name)
 	if !ok {
-		t.Fatal("todo_update not registered")
+		t.Fatalf("%s not registered", name)
 	}
 	var logs bytes.Buffer
 	prev := slog.Default()
@@ -75,7 +80,7 @@ func (d *todoDispatch) mustCall(args string) map[string]any {
 	d.t.Helper()
 	out, err := d.call(context.Background(), args)
 	if err != nil {
-		d.t.Fatalf("todo_update %s: %v", args, err)
+		d.t.Fatalf("job_manage %s: %v", args, err)
 	}
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
@@ -87,9 +92,7 @@ func (d *todoDispatch) mustCall(args string) map[string]any {
 // reload reads the list from agent.db after dropping the open handle.
 func (d *todoDispatch) reload() []cronstore.Task {
 	d.t.Helper()
-	if err := agentdb.CachedBeside(d.cronPath).Close(); err != nil {
-		d.t.Fatal(err)
-	}
+	cronstore.NewStore(d.cronPath).Close()
 	file, _, err := cronstore.NewStore(d.cronPath).Read()
 	if err != nil {
 		d.t.Fatal(err)
@@ -117,8 +120,8 @@ func mustJSON(t *testing.T, v any) string {
 	return string(b)
 }
 
-func TestTodoUpdateSchemaOffersUpdateAndBashEnv(t *testing.T) {
-	tool := NewTodoUpdateTool(true, "", "")
+func TestJobManageSchemaOffersUpdateAndBashEnv(t *testing.T) {
+	tool := NewJobManageTool(true, "", "")
 	var schema struct {
 		Properties map[string]struct {
 			Enum        []string `json:"enum"`
@@ -134,7 +137,7 @@ func TestTodoUpdateSchemaOffersUpdateAndBashEnv(t *testing.T) {
 	if err := json.Unmarshal([]byte(tool.ParameterSchema()), &schema); err != nil {
 		t.Fatal(err)
 	}
-	if got := schema.Properties["action"].Enum; !reflect.DeepEqual(got, []string{"add_once", "add_recurring", "update", "delete"}) {
+	if got := schema.Properties["action"].Enum; !reflect.DeepEqual(got, []string{"add_once", "add_recurring", "get", "update", "delete"}) {
 		t.Fatalf("action enum = %v", got)
 	}
 	env := schema.Properties["bash_env"]
@@ -145,12 +148,12 @@ func TestTodoUpdateSchemaOffersUpdateAndBashEnv(t *testing.T) {
 		t.Fatalf("bash_env description = %q", env.Description)
 	}
 	if !strings.Contains(schema.Properties["action"].Description, "Do not delete and re-add") ||
-		!strings.Contains(tool.Description(), "use update with the task id") {
+		!strings.Contains(tool.Description(), "use update with the job id") {
 		t.Fatal("tool help does not steer edits to update")
 	}
 }
 
-func TestTodoUpdateAddKeepsBashEnvAndRedactsIt(t *testing.T) {
+func TestJobManageAddKeepsBashEnvAndRedactsIt(t *testing.T) {
 	workspaceDir := t.TempDir()
 	for _, kind := range []string{"add_once", "add_recurring"} {
 		t.Run(kind, func(t *testing.T) {
@@ -173,14 +176,21 @@ func TestTodoUpdateAddKeepsBashEnvAndRedactsIt(t *testing.T) {
 			if names := task["bash_env_names"]; !reflect.DeepEqual(names, []any{"REPORT_MODE", "API_TOKEN"}) {
 				t.Fatalf("bash_env_names = %v", names)
 			}
-			stored := todoTaskByID(t, d.reload(), "report")
+			id, _ := task["id"].(string)
+			if !cronstore.IsGeneratedJobID(id) {
+				t.Fatalf("added job id = %q, want a generated job-<uuid>", id)
+			}
+			if warnings, _ := result["warnings"].([]any); len(warnings) != 1 || !strings.HasPrefix(warnings[0].(string), "id_generated") {
+				t.Fatalf("an add that named an id was not warned: %v", result)
+			}
+			stored := todoTaskByID(t, d.reload(), id)
 			want := []cronstore.BashEnvRef{{Name: "REPORT_MODE", Value: "weekly"}, {Name: "API_TOKEN", Value: todoSyntheticSecret}}
 			if !reflect.DeepEqual(stored.BashEnv, want) || stored.WorkspaceDir != workspaceDir || stored.ChatID != "tg:-1001" || stored.TZ != "Asia/Tokyo" {
 				t.Fatalf("stored = %#v", stored)
 			}
 
 			// Delete's result does not show the values either.
-			result = d.mustCall(`{"action":"delete","id":"report"}`)
+			result = d.mustCall(`{"action":"delete","id":"` + id + `"}`)
 			if names := result["deleted"].(map[string]any)["bash_env_names"]; !reflect.DeepEqual(names, []any{"REPORT_MODE", "API_TOKEN"}) {
 				t.Fatalf("deleted bash_env_names = %v", names)
 			}
@@ -191,7 +201,7 @@ func TestTodoUpdateAddKeepsBashEnvAndRedactsIt(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateRejectsMalformedBashEnvOnAdd(t *testing.T) {
+func TestJobManageRejectsMalformedBashEnvOnAdd(t *testing.T) {
 	for name, env := range map[string]string{
 		"not an array":   `"API_TOKEN=` + todoSyntheticSecret + `"`,
 		"shorthand":      `[{"API_TOKEN":"` + todoSyntheticSecret + `"}]`,
@@ -241,7 +251,7 @@ func seedTodoTask(t *testing.T, cronPath string, kind string) cronstore.Task {
 	return stored
 }
 
-func TestTodoUpdateContentEditKeepsBashEnvAndEverythingElse(t *testing.T) {
+func TestJobManageContentEditKeepsBashEnvAndEverythingElse(t *testing.T) {
 	for _, kind := range []string{"once", "recur"} {
 		t.Run(kind, func(t *testing.T) {
 			d := newTodoDispatch(t)
@@ -267,7 +277,7 @@ func TestTodoUpdateContentEditKeepsBashEnvAndEverythingElse(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateSetsReplacesClearsAndKeepsBashEnv(t *testing.T) {
+func TestJobManageSetsReplacesClearsAndKeepsBashEnv(t *testing.T) {
 	for _, kind := range []string{"once", "recur"} {
 		t.Run(kind, func(t *testing.T) {
 			d := newTodoDispatch(t)
@@ -299,7 +309,7 @@ func TestTodoUpdateSetsReplacesClearsAndKeepsBashEnv(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateClearsAndSwitchesExplicitly(t *testing.T) {
+func TestJobManageClearsAndSwitchesExplicitly(t *testing.T) {
 	workspaceDir := t.TempDir()
 	d := newTodoDispatch(t)
 	seedTodoTask(t, d.cronPath, "once")
@@ -318,7 +328,7 @@ func TestTodoUpdateClearsAndSwitchesExplicitly(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateRejectsInvalidUpdatesWithoutChanges(t *testing.T) {
+func TestJobManageRejectsInvalidUpdatesWithoutChanges(t *testing.T) {
 	for _, kind := range []string{"once", "recur"} {
 		t.Run(kind, func(t *testing.T) {
 			d := newTodoDispatch(t)
@@ -359,7 +369,7 @@ func TestTodoUpdateRejectsInvalidUpdatesWithoutChanges(t *testing.T) {
 
 // A cron.yaml from before agent.db, with bash_env in its shorthand form, is imported when the
 // tool first opens the list; editing a task's content then keeps its settings.
-func TestTodoUpdateEditsATaskImportedFromCronYAML(t *testing.T) {
+func TestJobManageEditsATaskImportedFromCronYAML(t *testing.T) {
 	dir := t.TempDir()
 	raw := `version: 1
 tasks:
@@ -387,7 +397,7 @@ tasks:
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("task = %#v\nwant %#v", got, want)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "cron.yaml.imported")); err != nil {
-		t.Fatalf("cron.yaml not imported: %v", err)
+	if data, err := os.ReadFile(filepath.Join(dir, "cron.yaml")); err != nil || string(data) != raw {
+		t.Fatalf("cron.yaml changed by the import: %q, %v", data, err)
 	}
 }

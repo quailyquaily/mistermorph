@@ -8,6 +8,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/caprefs"
 	"github.com/quailyquaily/mistermorph/internal/elevate"
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
@@ -26,7 +27,7 @@ const (
 	BuiltinURLFetch      = "url_fetch"
 	BuiltinWebSearch     = "web_search"
 	BuiltinPlanCreate    = "plan_create"
-	BuiltinTodoUpdate    = "todo_update"
+	BuiltinJobManage     = "job_manage"
 	BuiltinTodoList      = "todo_list"
 	BuiltinImageGenerate = "image_generate"
 	BuiltinImageEdit     = "image_edit"
@@ -52,7 +53,7 @@ var builtinToolNameSet = map[string]struct{}{
 	BuiltinURLFetch:      {},
 	BuiltinWebSearch:     {},
 	BuiltinPlanCreate:    {},
-	BuiltinTodoUpdate:    {},
+	BuiltinJobManage:     {},
 	BuiltinTodoList:      {},
 	BuiltinImageGenerate: {},
 	BuiltinImageEdit:     {},
@@ -76,7 +77,7 @@ type StaticRegistryConfig struct {
 }
 
 // StaticTodoListConfig is todo_list's: the cron.yaml path of the runtime's own TODO list, the
-// one todo_update changes.
+// one job_manage changes.
 type StaticTodoListConfig struct {
 	CronPath string
 }
@@ -299,10 +300,17 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 	}, nil
 }
 
+// IsKnownBuiltinToolName reports whether name is a built-in tool, by its name or an earlier one
+// (todo_update for job_manage).
 func IsKnownBuiltinToolName(name string) bool {
-	name = strings.ToLower(strings.TrimSpace(name))
-	_, ok := builtinToolNameSet[name]
+	_, ok := builtinToolNameSet[CanonicalBuiltinToolName(name)]
 	return ok
+}
+
+// CanonicalBuiltinToolName is name in lower case, with a tool's earlier name replaced by its
+// current one: todo_update is job_manage.
+func CanonicalBuiltinToolName(name string) string {
+	return jobconfig.CanonicalToolName(strings.ToLower(strings.TrimSpace(name)))
 }
 
 func ExplicitBuiltinToolRefs(task string, consumed map[string]bool) map[string]bool {
@@ -316,6 +324,10 @@ func ExplicitBuiltinToolRefs(task string, consumed map[string]bool) map[string]b
 		if name == "" {
 			continue
 		}
+		if consumed[name] {
+			continue
+		}
+		name = CanonicalBuiltinToolName(name)
 		if consumed[name] {
 			continue
 		}
@@ -438,8 +450,8 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		_ = reg.Replace(builtin.NewContactsListTool(cfg.ContactsSend.StateDir, cfg.ContactsSend.ContactsDir))
 	}
 
-	// todo_list reads the TODO list in agent.db. It only reads, so it does not depend on
-	// tools.todo_update.enabled.
+	// todo_list reads the TODO list in jobs.db. It only reads, so it does not depend on
+	// tools.job_manage.enabled.
 	if isSelected(BuiltinTodoList) && strings.TrimSpace(cfg.TodoList.CronPath) != "" {
 		_ = reg.Replace(builtin.NewTodoListTool(cfg.TodoList.CronPath))
 	}

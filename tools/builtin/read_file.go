@@ -63,8 +63,15 @@ func (t *ReadFileTool) Execute(ctx context.Context, params map[string]any) (stri
 		return "", err
 	}
 
-	if offending, ok := denyPath(path, t.DenyPaths); ok {
+	denied := EffectiveDenyPaths(t.DenyPaths)
+	if offending, ok := denyPath(path, denied); ok {
 		return "", fmt.Errorf("read_file denied for path %q (matched %q)", path, offending)
+	}
+	// A symlink to a denied file is denied too.
+	if real, err := filepath.EvalSymlinks(path); err == nil && real != path {
+		if offending, ok := denyPath(real, denied); ok {
+			return "", fmt.Errorf("read_file denied for path %q (it resolves to %q, which matched %q)", path, real, offending)
+		}
 	}
 
 	data, err := os.ReadFile(path)
@@ -112,9 +119,10 @@ func (t *ReadFileTool) resolvePath(ctx context.Context, rawPath string) (string,
 }
 
 // DeniedPath reports whether path matches one of denyPaths, as tools.read_file.deny_paths are
-// matched, and returns the entry that matched. Other tools that read files apply the same list.
+// matched (with the protected state files and SQLite sidecars of EffectiveDenyPaths), and returns
+// the entry that matched. Other tools that read files apply the same list.
 func DeniedPath(path string, denyPaths []string) (string, bool) {
-	return denyPath(path, denyPaths)
+	return denyPath(path, EffectiveDenyPaths(denyPaths))
 }
 
 func denyPath(path string, denyPaths []string) (string, bool) {

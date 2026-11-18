@@ -11,18 +11,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/stateimport"
+	"github.com/quailyquaily/mistermorph/internal/statepaths"
 )
 
 type SemanticResolver interface {
 	MatchTaskIndex(ctx context.Context, query string, tasks []Task) (int, error)
 }
 
-// Store is the TODO list, the cron_tasks rows of agent.db. Path names cron.yaml, which the list
-// was; agent.db is in the same folder, and the file is imported from there the first time the
-// database opens. Each change is one transaction; the list's order is the rows' position.
+// Store is the job list (the TODO list), the jobs rows of agent.db. Path names cron.yaml, which
+// the list was; agent.db is in the same folder, and the earlier stores are imported from there the
+// first time the store opens it (see jobs_import.go). Each change is one transaction; the list's
+// order is the rows' position.
 type Store struct {
 	Path      string
 	Semantics SemanticResolver
@@ -39,11 +41,45 @@ func NewStore(path string) *Store {
 	return store
 }
 
-func (s *Store) handle(ctx context.Context) (*agentdb.DB, error) {
+// DBPath is the agent.db that holds the job list beside the cron.yaml path cronPath.
+func DBPath(cronPath string) string {
+	cronPath = strings.TrimSpace(cronPath)
+	if cronPath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(filepath.Clean(pathutil.ExpandHomePath(cronPath))), statepaths.AgentDBFilename)
+}
+
+func (s *Store) handle(ctx context.Context) (*sql.DB, error) {
 	if s == nil || strings.TrimSpace(s.Path) == "" || s.db == nil {
 		return nil, fmt.Errorf("cron path is not configured")
 	}
-	return s.db.Get(ctx)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	db, err := s.db.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureJobsImported(ctx, db); err != nil {
+		return nil, err
+	}
+	return db.DB, nil
+}
+
+// Close releases the process's handle on the store's agent.db; the next use opens the file again.
+func (s *Store) Close() {
+	if s != nil && s.db != nil {
+		_ = s.db.Close()
+	}
+}
+
+// DBPath is the agent.db the store keeps its list in, or "" without a path.
+func (s *Store) DBPath() string {
+	if s == nil || s.db == nil {
+		return ""
+	}
+	return s.db.Path()
 }
 
 // Read returns the list in order. It reports exists as true: the list is always there, empty or
@@ -70,13 +106,65 @@ func (s *Store) Tasks(ctx context.Context) ([]Task, error) {
 	return readTasks(ctx, db)
 }
 
+// Snapshot returns the list in order with its revision, read at one moment.
+func (s *Store) Snapshot(ctx context.Context) ([]Task, int64, error) {
+	db, err := s.handle(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	tasks, err := readTasks(ctx, tx)
+	if err != nil {
+		return nil, 0, err
+	}
+	revision, err := readRevision(ctx, tx)
+	if err != nil {
+		return nil, 0, err
+	}
+	return tasks, revision, nil
+}
+
+// Revision is the list's revision: it changes with every change to the jobs themselves, and not
+// with the runs the scheduler records.
+func (s *Store) Revision(ctx context.Context) (int64, error) {
+	db, err := s.handle(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return readRevision(ctx, db)
+}
+
+// Import reports what the one-time import into the store's agent.db did, running it when it has
+// not run yet.
+func (s *Store) Import(ctx context.Context) (ImportStatus, error) {
+	db, err := s.handle(ctx)
+	if err != nil {
+		return ImportStatus{}, err
+	}
+	var mark importMark
+	ok, err := getMeta(ctx, db, jobsImportDetailKey, &mark)
+	if err != nil || !ok {
+		return ImportStatus{}, err
+	}
+	rejects, err := stateimport.Rejects(ctx, db, jobsImportStore)
+	if err != nil {
+		return ImportStatus{}, err
+	}
+	return ImportStatus{Imported: true, At: mark.At, Source: mark.Source, Jobs: mark.Jobs, IgnoredYAML: mark.IgnoredYAML,
+		Rejects: rejects.Rejects}, nil
+}
+
 type rowsQueryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
 func readTasks(ctx context.Context, q rowsQueryer) ([]Task, error) {
 	rows, err := q.QueryContext(ctx, `SELECT id, title, enabled, at, cron, tz, content, chat_id, mention, llm_profile,
-		workspace_dir, bash_env, last_run_at, last_run_status FROM cron_tasks ORDER BY position, id`)
+		workspace_dir, bash_env, last_run_at, last_run_status FROM jobs ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -95,10 +183,8 @@ func readTasks(ctx context.Context, q rowsQueryer) ([]Task, error) {
 			off := false
 			task.Enabled = &off
 		}
-		if bashEnv != "" && bashEnv != "[]" {
-			if err := json.Unmarshal([]byte(bashEnv), &task.BashEnv); err != nil {
-				return nil, fmt.Errorf("task %s bash_env: %w", task.ID, err)
-			}
+		if err := decodeBashEnv(bashEnv, &task); err != nil {
+			return nil, err
 		}
 		task.LastRunAt = lastRun.String
 		task.Title = normalizeTaskTitle(task.Title)
@@ -107,12 +193,58 @@ func readTasks(ctx context.Context, q rowsQueryer) ([]Task, error) {
 	return tasks, rows.Err()
 }
 
+func decodeBashEnv(raw string, task *Task) error {
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	if err := json.Unmarshal([]byte(raw), &task.BashEnv); err != nil {
+		return fmt.Errorf("task %s bash_env: %w", task.ID, err)
+	}
+	return nil
+}
+
+func encodeBashEnv(refs []BashEnvRef) (string, error) {
+	if len(refs) == 0 {
+		return "[]", nil
+	}
+	data, err := json.Marshal(refs)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// ErrRevisionConflict is a save of a list read at an older revision: the list changed since
+// (another Console, a tool or another process). Nothing is saved.
+var ErrRevisionConflict = errors.New("the job list changed since it was read; nothing was saved, reload it and try again")
+
 // Write replaces the list with file's tasks, in their order, in one transaction. The list is
 // validated first, as cron.yaml was. A task keeps its created_at and its last run.
 func (s *Store) Write(file File) error {
 	return s.mutate(context.Background(), func(ctx context.Context, tx *sql.Tx, _ []Task) error {
 		return writeTasks(ctx, tx, file)
 	})
+}
+
+// WriteAtRevision is Write for a list read at revision: when the list has changed since, nothing
+// is written and ErrRevisionConflict is returned. It returns the new revision.
+func (s *Store) WriteAtRevision(ctx context.Context, file File, revision int64) (int64, error) {
+	var next int64
+	err := s.mutate(ctx, func(ctx context.Context, tx *sql.Tx, _ []Task) error {
+		current, err := readRevision(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if current != revision {
+			return fmt.Errorf("%w (read at revision %d, now %d)", ErrRevisionConflict, revision, current)
+		}
+		if err := writeTasks(ctx, tx, file); err != nil {
+			return err
+		}
+		next = current + 1
+		return nil
+	})
+	return next, err
 }
 
 func writeTasks(ctx context.Context, tx *sql.Tx, file File) error {
@@ -133,7 +265,7 @@ func writeTasks(ctx context.Context, tx *sql.Tx, file File) error {
 		lastRunAt                sql.NullString
 	}
 	existing := map[string]kept{}
-	rows, err := tx.QueryContext(ctx, `SELECT id, created_at, last_run_at, last_run_status FROM cron_tasks`)
+	rows, err := tx.QueryContext(ctx, `SELECT id, created_at, last_run_at, last_run_status FROM jobs`)
 	if err != nil {
 		return err
 	}
@@ -149,42 +281,25 @@ func writeTasks(ctx context.Context, tx *sql.Tx, file File) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM cron_tasks`); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM jobs`); err != nil {
 		return err
 	}
-	now := agentdb.Now()
+	now := nowText()
 	for i, task := range file.Tasks {
-		bashEnv := "[]"
-		if len(task.BashEnv) > 0 {
-			data, err := json.Marshal(task.BashEnv)
-			if err != nil {
-				return err
-			}
-			bashEnv = string(data)
-		}
 		id := strings.TrimSpace(task.ID)
-		k, had := existing[id]
+		task.LastRunAt, task.LastRunStatus = "", ""
 		createdAt := now
-		var lastRunAt any
-		lastRunStatus := ""
-		if had {
+		var lastRunAt sql.NullString
+		if k, had := existing[id]; had {
 			createdAt = k.createdAt
-			if k.lastRunAt.Valid {
-				lastRunAt = k.lastRunAt.String
-			}
-			lastRunStatus = k.lastRunStatus
+			lastRunAt = k.lastRunAt
+			task.LastRunStatus = k.lastRunStatus
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO cron_tasks (id, position, title, enabled, at, cron, tz, content, chat_id,
-			mention, llm_profile, workspace_dir, bash_env, created_at, updated_at, last_run_at, last_run_status)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, i, task.Title, agentdb.Bool(TaskEnabled(task)), strings.TrimSpace(task.At), strings.TrimSpace(task.Cron),
-			strings.TrimSpace(task.TZ), strings.TrimSpace(task.Content), strings.TrimSpace(task.ChatID),
-			strings.TrimSpace(task.Mention), strings.TrimSpace(task.LLMProfile), strings.TrimSpace(task.WorkspaceDir),
-			bashEnv, createdAt, now, lastRunAt, lastRunStatus); err != nil {
+		if err := insertJob(ctx, tx, i, task, createdAt, now, lastRunAt); err != nil {
 			return fmt.Errorf("save task %s: %w", id, err)
 		}
 	}
-	return nil
+	return bumpRevision(ctx, tx)
 }
 
 // mutate runs fn on the current list in one transaction.
@@ -215,8 +330,8 @@ func (s *Store) RecordRunStart(id string, at time.Time) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(context.Background(), `UPDATE cron_tasks SET last_run_at = ?, last_run_status = '' WHERE id = ?`,
-		agentdb.FormatTime(at), strings.TrimSpace(id))
+	_, err = db.ExecContext(context.Background(), `UPDATE jobs SET last_run_at = ?, last_run_status = '' WHERE id = ?`,
+		formatTime(at), strings.TrimSpace(id))
 	return err
 }
 
@@ -227,7 +342,7 @@ func (s *Store) RecordRunResult(id string, status string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(context.Background(), `UPDATE cron_tasks SET last_run_status = ? WHERE id = ?`,
+	_, err = db.ExecContext(context.Background(), `UPDATE jobs SET last_run_status = ? WHERE id = ?`,
 		strings.TrimSpace(status), strings.TrimSpace(id))
 	return err
 }
@@ -523,5 +638,5 @@ func normalizeTaskID(raw string) string {
 	if id != "" {
 		return id
 	}
-	return "cron-" + uuid.NewString()
+	return NewJobID()
 }

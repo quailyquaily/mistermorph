@@ -83,7 +83,7 @@ func writeAgentSettings(configPath string, values agentSettingsPayload) ([]byte,
 			Spawn:         toolUpdate(values.Tools.Spawn.Enabled),
 			Coder:         toolUpdate(values.Tools.Coder.Enabled),
 			ContactsSend:  toolUpdate(values.Tools.ContactsSend.Enabled),
-			TodoUpdate:    toolUpdate(values.Tools.TodoUpdate.Enabled),
+			JobManage:     toolUpdate(values.Tools.JobManage.Enabled),
 			PlanCreate:    toolUpdate(values.Tools.PlanCreate.Enabled),
 			URLFetch:      toolUpdate(values.Tools.URLFetch.Enabled),
 			WebSearch:     toolUpdate(values.Tools.WebSearch.Enabled),
@@ -172,7 +172,7 @@ func TestReadAgentSettings(t *testing.T) {
 	if len(got.LLM.FallbackProfiles) != 2 || got.LLM.FallbackProfiles[0] != "cheap" || got.LLM.FallbackProfiles[1] != "burst" {
 		t.Fatalf("got.LLM.FallbackProfiles = %+v", got.LLM.FallbackProfiles)
 	}
-	if !got.Tools.WriteFile.Enabled || !got.Tools.ContactsSend.Enabled || !got.Tools.TodoUpdate.Enabled ||
+	if !got.Tools.WriteFile.Enabled || !got.Tools.ContactsSend.Enabled || !got.Tools.JobManage.Enabled ||
 		got.Tools.PlanCreate.Enabled || !got.Tools.URLFetch.Enabled || !got.Tools.WebSearch.Enabled {
 		t.Fatalf("got.Tools defaults not applied: %+v", got.Tools)
 	}
@@ -217,7 +217,7 @@ func TestWriteAgentSettingsPreservesOtherConfig(t *testing.T) {
 			Spawn:         toolEnabledPayload{Enabled: true},
 			Coder:         toolEnabledPayload{Enabled: true},
 			ContactsSend:  toolEnabledPayload{Enabled: true},
-			TodoUpdate:    toolEnabledPayload{Enabled: true},
+			JobManage:     toolEnabledPayload{Enabled: true},
 			PlanCreate:    toolEnabledPayload{Enabled: false},
 			URLFetch:      toolEnabledPayload{Enabled: true},
 			WebSearch:     toolEnabledPayload{Enabled: false},

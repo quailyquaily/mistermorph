@@ -149,6 +149,7 @@ func normalizeJournalTask(task TaskInfo, now time.Time) TaskInfo {
 
 func normalizeJournalTopic(topic TopicInfo) TopicInfo {
 	topic.ID = strings.TrimSpace(topic.ID)
+	topic.JobID = strings.TrimSpace(topic.JobID)
 	topic.Title = strings.TrimSpace(topic.Title)
 	if !topic.CreatedAt.IsZero() {
 		topic.CreatedAt = topic.CreatedAt.UTC()

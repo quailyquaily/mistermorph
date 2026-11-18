@@ -231,7 +231,7 @@ func runDiscordTask(ctx context.Context, rt *taskruntime.Runtime, env discordTas
 			if block := workspace.PromptBlock(job.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)
 			}
-			toolsutil.SetTodoUpdateToolAddContext(reg, todoResolveContextForDiscord(job))
+			toolsutil.SetJobManageToolAddContext(reg, todoResolveContextForDiscord(job))
 			promptprofile.AppendDiscordRuntimeBlocks(spec, job.isGroup())
 		},
 		PlanStepUpdate:         planStepUpdate,

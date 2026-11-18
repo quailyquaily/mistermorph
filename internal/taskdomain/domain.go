@@ -94,10 +94,14 @@ type TaskTrigger struct {
 }
 
 type TopicInfo struct {
-	ID                  string     `json:"id"`
-	Title               string     `json:"title,omitempty"`
-	Icon                string     `json:"icon,omitempty"`
-	TitleCustomized     bool       `json:"title_customized,omitempty"`
+	ID              string `json:"id"`
+	Title           string `json:"title,omitempty"`
+	Icon            string `json:"icon,omitempty"`
+	TitleCustomized bool   `json:"title_customized,omitempty"`
+	// JobID is the job whose runs the topic holds (a TODO item's topic), and "" for any other
+	// topic. The topic keeps its own ID and each run its own task ID; the job's ID is only this
+	// link. A topic recorded before the link existed gets it from its "_cron_<job id>" ID.
+	JobID               string     `json:"job_id,omitempty"`
 	Tags                []string   `json:"tags,omitempty"`
 	TitleRevision       uint64     `json:"title_revision,omitempty"`
 	LLMTitleGeneratedAt *time.Time `json:"llm_title_generated_at,omitempty"`

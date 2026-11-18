@@ -55,7 +55,7 @@ type registrySnapshot struct {
 	ToolsAgentNameSet         string
 	ToolsPlanCreateEnabled    bool
 	ToolsPlanCreateMaxSteps   int
-	ToolsTodoUpdateEnabled    bool
+	ToolsJobManageEnabled     bool
 	ToolsImageGenerateEnabled bool
 	ToolsImageEditEnabled     bool
 	TaskPersistenceTargets    []string

@@ -3,6 +3,7 @@ package toolsutil
 import (
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/todo"
@@ -11,7 +12,7 @@ import (
 	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
-type TodoUpdateRegisterConfig struct {
+type JobManageRegisterConfig struct {
 	Enabled  bool
 	CronPath string
 	// StateDir is the state folder whose agent.db keeps the contacts of ContactsDir.
@@ -22,11 +23,12 @@ type TodoUpdateRegisterConfig struct {
 type todoRegisterConfigReader interface {
 	GetBool(string) bool
 	GetString(string) string
+	IsSet(string) bool
 }
 
-func BuildTodoUpdateRegisterConfig(enabled bool, fileStateDir, contactsDirName string) TodoUpdateRegisterConfig {
+func BuildJobManageRegisterConfig(enabled bool, fileStateDir, contactsDirName string) JobManageRegisterConfig {
 	fileStateDir = strings.TrimSpace(fileStateDir)
-	return TodoUpdateRegisterConfig{
+	return JobManageRegisterConfig{
 		Enabled:     enabled,
 		CronPath:    pathutil.ResolveStateFile(fileStateDir, statepaths.CronFilename),
 		StateDir:    pathutil.ResolveStateDir(fileStateDir),
@@ -34,25 +36,25 @@ func BuildTodoUpdateRegisterConfig(enabled bool, fileStateDir, contactsDirName s
 	}
 }
 
-func LoadTodoUpdateRegisterConfigFromReader(r todoRegisterConfigReader) TodoUpdateRegisterConfig {
+func LoadJobManageRegisterConfigFromReader(r todoRegisterConfigReader) JobManageRegisterConfig {
 	if r == nil {
-		return BuildTodoUpdateRegisterConfig(false, "", "")
+		return BuildJobManageRegisterConfig(false, "", "")
 	}
-	return BuildTodoUpdateRegisterConfig(
-		r.GetBool("tools.todo_update.enabled"),
+	return BuildJobManageRegisterConfig(
+		jobconfig.ToolEnabled(r),
 		r.GetString("file_state_dir"),
 		r.GetString("contacts.dir_name"),
 	)
 }
 
-func RegisterTodoUpdateTool(reg *tools.Registry, cfg TodoUpdateRegisterConfig, client llm.Client, model string) {
+func RegisterJobManageTool(reg *tools.Registry, cfg JobManageRegisterConfig, client llm.Client, model string) {
 	if reg == nil {
 		return
 	}
 	if !cfg.Enabled {
 		return
 	}
-	tool := builtin.NewTodoUpdateToolWithLLM(
+	tool := builtin.NewJobManageToolWithLLM(
 		true,
 		cfg.CronPath,
 		cfg.ContactsDir,
@@ -63,15 +65,15 @@ func RegisterTodoUpdateTool(reg *tools.Registry, cfg TodoUpdateRegisterConfig, c
 	_ = reg.Replace(tool)
 }
 
-func SetTodoUpdateToolAddContext(reg *tools.Registry, ctx todo.AddResolveContext) {
+func SetJobManageToolAddContext(reg *tools.Registry, ctx todo.AddResolveContext) {
 	if reg == nil {
 		return
 	}
-	raw, ok := reg.Get("todo_update")
+	raw, ok := reg.Get(BuiltinJobManage)
 	if !ok {
 		return
 	}
-	tool, ok := raw.(*builtin.TodoUpdateTool)
+	tool, ok := raw.(*builtin.JobManageTool)
 	if !ok || tool == nil {
 		return
 	}

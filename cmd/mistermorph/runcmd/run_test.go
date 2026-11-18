@@ -203,7 +203,7 @@ func TestCLIRunPreparerPreservesRoutePromptHeartbeatAndClientOwnership(t *testin
 		return mainClient, nil
 	})
 	prep.workspaceDir = "/workspace/project"
-	prep.runtimeToolsConfig.TodoUpdate.Enabled = true
+	prep.runtimeToolsConfig.JobManage.Enabled = true
 
 	runtime, err := newCLIRunPreparer(prep, Dependencies{})
 	if err != nil {
@@ -242,7 +242,7 @@ func TestCLIRunPreparerPreservesRoutePromptHeartbeatAndClientOwnership(t *testin
 	if !strings.Contains(systemPrompt, "## Workspace Context") || !strings.Contains(systemPrompt, "workspace_dir: /workspace/project") {
 		t.Fatalf("system prompt is missing workspace block: %q", systemPrompt)
 	}
-	if strings.Contains(systemPrompt, "[[ Cron Task Workflow ]]") {
+	if strings.Contains(systemPrompt, "[[ Job Workflow ]]") {
 		t.Fatalf("heartbeat prompt includes todo workflow: %q", systemPrompt)
 	}
 
@@ -254,7 +254,7 @@ func TestCLIRunPreparerPreservesRoutePromptHeartbeatAndClientOwnership(t *testin
 	}); err != nil {
 		t.Fatalf("regular Run() error = %v", err)
 	}
-	if len(mainClient.requests) != 2 || !strings.Contains(mainClient.requests[1].Messages[0].Content, "[[ Cron Task Workflow ]]") {
+	if len(mainClient.requests) != 2 || !strings.Contains(mainClient.requests[1].Messages[0].Content, "[[ Job Workflow ]]") {
 		t.Fatalf("regular run prompt is missing todo workflow: %#v", mainClient.requests)
 	}
 	if mainClient.closeCalls != 2 || planClient.closeCalls != 2 {

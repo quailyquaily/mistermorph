@@ -156,6 +156,12 @@ func SetMark(ctx context.Context, tx Execer, store, root string, rename, remove 
 // crash between the two leaves files this finishes. A file whose .imported name is taken is left
 // alone and logged rather than overwriting the earlier original.
 func FinishRenames(ctx context.Context, db *sql.DB, root string, logger *slog.Logger) error {
+	return FinishRenamesExcept(ctx, db, root, logger, nil)
+}
+
+// FinishRenamesExcept is FinishRenames leaving alone the files of the stores named in retired:
+// stores whose import a later version no longer finishes, and whose files it leaves in place.
+func FinishRenamesExcept(ctx context.Context, db *sql.DB, root string, logger *slog.Logger, retired map[string]bool) error {
 	rows, err := db.QueryContext(ctx, `SELECT key, value FROM meta WHERE key LIKE 'imported:%' ORDER BY key`)
 	if err != nil {
 		return err
@@ -166,6 +172,9 @@ func FinishRenames(ctx context.Context, db *sql.DB, root string, logger *slog.Lo
 		if err := rows.Scan(&key, &raw); err != nil {
 			_ = rows.Close()
 			return err
+		}
+		if retired[strings.TrimPrefix(key, markPrefix)] {
+			continue
 		}
 		var mark Mark
 		if err := json.Unmarshal([]byte(raw), &mark); err != nil {

@@ -335,6 +335,9 @@ tools:
     # Note: currently always enabled; this section configures limits/policy.
     max_bytes: 262144
     # Denylist for sensitive local files. Basenames match anywhere (e.g. "config.yaml" blocks "./x/config.yaml").
+    # send_file applies this list too.
+    # agent.db, jobs.db and config.yaml.imported, and the SQLite -wal/-shm/-journal files of those and
+    # of every entry here, are always denied, even with a list that leaves them out.
     deny_paths:
       - "config.yaml"
       - "config.yaml.imported"
@@ -398,8 +401,12 @@ tools:
     # Enable contacts_send tool. Awareness runs (heartbeat, cron) see it; ordinary runs
     # (Console, Telegram, Slack, ...) find it with tool_search when tools.tool_search is on.
     enabled: true
-  todo_update:
-    # Enable cron task update tool (todo_update).
+  job_manage:
+    # Enable the job_manage tool: the agent adds (add_once, add_recurring), reads (get), changes
+    # (update) and deletes (delete) scheduled jobs, the TODO list kept in <file_state_dir>/agent.db.
+    # get, update and delete take a job's stable id; new jobs get a generated `job-<uuid>` id.
+    # The tool was called todo_update: calls, tool lists and $todo_update references by that name
+    # still reach it, and while this key is not set the earlier `tools.todo_update.enabled` applies.
     enabled: true
   tool_search:
     # Hide MCP tools until the model finds them with tool_search, so each request carries fewer
@@ -471,6 +478,8 @@ tools:
     max_output_bytes: 262144
     # Denylist for sensitive local files. If a command references one of these paths, the tool errors.
     # (Best-effort string match; not a full sandbox.)
+    # agent.db, jobs.db and config.yaml.imported, and the SQLite -wal/-shm/-journal files of those and
+    # of every entry here, are always denied, even with a list that leaves them out.
     deny_paths:
       - "config.yaml"
       - "config.yaml.imported"
@@ -536,6 +545,8 @@ tools:
     # Max combined output bytes kept per stream (stdout/stderr) before truncation.
     max_output_bytes: 262144
     # Denylist for sensitive local files. If a command references one of these paths, the tool errors.
+    # agent.db, jobs.db and config.yaml.imported, and the SQLite -wal/-shm/-journal files of those and
+    # of every entry here, are always denied, even with a list that leaves them out.
     deny_paths:
       - "config.yaml"
       - "config.yaml.imported"
@@ -1007,9 +1018,19 @@ heartbeat:
   # - `morph discord`: `discord.allowed_channel_ids`
   interval: "30m"
 
-# Cron task service (`file_state_dir/cron.yaml`).
+# Cron task service: runs the scheduled jobs (the TODO list) kept in the jobs table of
+# `file_state_dir/agent.db`, which the scheduler, the Console and the job_manage/todo_list tools
+# share, across processes. The first time the list is opened it imports the earlier list once, in
+# one transaction: a jobs.db an earlier build kept it in, the cron_tasks rows agent.db held
+# (versions that kept the list there), otherwise `file_state_dir/cron.yaml`, keeping ids, order,
+# fields and enabled state. Rows that cannot be reconciled with jobs.db are left out and listed in
+# agent.db's meta (import_rejects:jobs). The earlier files are only read: they are left as they are
+# and never read again after the import, so a job deleted later does not come back. A cron.yaml
+# with a record that has no id, repeats one or does not validate imports nothing; the error names
+# every such record, and the import runs again once the file is fixed. An earlier version refuses
+# the migrated agent.db: restore a state snapshot taken before upgrading to go back.
 cron:
-  # Enable cron scheduling. Missing cron.yaml is treated as an empty schedule.
+  # Enable cron scheduling. An empty job list is an empty schedule.
   enabled: true
   # How many TODO items may run at once. Items beyond it wait in order. An item never overlaps
   # itself: an occurrence that comes due while it is still waiting or running is skipped. The

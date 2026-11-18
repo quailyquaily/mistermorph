@@ -9,6 +9,7 @@ import (
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/logutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
@@ -77,7 +78,7 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 			ToolsAgentNameSet:         agent.NormalizeWorkerNameSet(v.GetString("tools.agent_name_set")),
 			ToolsPlanCreateEnabled:    v.GetBool("tools.plan_create.enabled"),
 			ToolsPlanCreateMaxSteps:   v.GetInt("tools.plan_create.max_steps"),
-			ToolsTodoUpdateEnabled:    v.GetBool("tools.todo_update.enabled"),
+			ToolsJobManageEnabled:     jobconfig.ToolEnabled(v),
 			ToolsImageGenerateEnabled: v.GetBool("tools.image_generate.enabled"),
 			ToolsImageEditEnabled:     v.GetBool("tools.image_edit.enabled"),
 			TaskPersistenceTargets:    append([]string(nil), v.GetStringSlice("tasks.persistence_targets")...),

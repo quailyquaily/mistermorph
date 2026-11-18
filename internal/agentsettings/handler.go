@@ -89,41 +89,46 @@ type ToolEnabledUpdate struct {
 }
 
 type ToolsSettingsPayload struct {
-	WriteFile     ToolEnabledPayload `json:"write_file"`
-	Spawn         ToolEnabledPayload `json:"spawn"`
-	Coder         ToolEnabledPayload `json:"coder"`
-	ContactsSend  ToolEnabledPayload `json:"contacts_send"`
-	TodoUpdate    ToolEnabledPayload `json:"todo_update"`
-	PlanCreate    ToolEnabledPayload `json:"plan_create"`
-	CodeMode      ToolEnabledPayload `json:"codemode"`
-	ToolSearch    ToolEnabledPayload `json:"tool_search"`
-	URLFetch      ToolEnabledPayload `json:"url_fetch"`
-	WebSearch     ToolEnabledPayload `json:"web_search"`
-	Bash          ToolEnabledPayload `json:"bash"`
-	PowerShell    ToolEnabledPayload `json:"powershell"`
-	ImageGenerate ToolEnabledPayload `json:"image_generate"`
-	ImageEdit     ToolEnabledPayload `json:"image_edit"`
+	WriteFile    ToolEnabledPayload `json:"write_file"`
+	Spawn        ToolEnabledPayload `json:"spawn"`
+	Coder        ToolEnabledPayload `json:"coder"`
+	ContactsSend ToolEnabledPayload `json:"contacts_send"`
+	JobManage    ToolEnabledPayload `json:"job_manage"`
+	// LegacyTodoUpdate repeats JobManage under the tool's earlier name, for clients of an
+	// earlier version.
+	LegacyTodoUpdate ToolEnabledPayload `json:"todo_update"`
+	PlanCreate       ToolEnabledPayload `json:"plan_create"`
+	CodeMode         ToolEnabledPayload `json:"codemode"`
+	ToolSearch       ToolEnabledPayload `json:"tool_search"`
+	URLFetch         ToolEnabledPayload `json:"url_fetch"`
+	WebSearch        ToolEnabledPayload `json:"web_search"`
+	Bash             ToolEnabledPayload `json:"bash"`
+	PowerShell       ToolEnabledPayload `json:"powershell"`
+	ImageGenerate    ToolEnabledPayload `json:"image_generate"`
+	ImageEdit        ToolEnabledPayload `json:"image_edit"`
 	// AgentNameSet is tools.agent_name_set: the set new spawn and coder workers are named
 	// from, shared by both tools. A missing or unknown stored value reads as the default.
 	AgentNameSet string `json:"agent_name_set"`
 }
 
 type ToolsSettingsUpdate struct {
-	WriteFile     *ToolEnabledUpdate `json:"write_file,omitempty"`
-	Spawn         *ToolEnabledUpdate `json:"spawn,omitempty"`
-	Coder         *ToolEnabledUpdate `json:"coder,omitempty"`
-	ContactsSend  *ToolEnabledUpdate `json:"contacts_send,omitempty"`
-	TodoUpdate    *ToolEnabledUpdate `json:"todo_update,omitempty"`
-	PlanCreate    *ToolEnabledUpdate `json:"plan_create,omitempty"`
-	CodeMode      *ToolEnabledUpdate `json:"codemode,omitempty"`
-	ToolSearch    *ToolEnabledUpdate `json:"tool_search,omitempty"`
-	URLFetch      *ToolEnabledUpdate `json:"url_fetch,omitempty"`
-	WebSearch     *ToolEnabledUpdate `json:"web_search,omitempty"`
-	Bash          *ToolEnabledUpdate `json:"bash,omitempty"`
-	PowerShell    *ToolEnabledUpdate `json:"powershell,omitempty"`
-	ImageGenerate *ToolEnabledUpdate `json:"image_generate,omitempty"`
-	ImageEdit     *ToolEnabledUpdate `json:"image_edit,omitempty"`
-	AgentNameSet  *string            `json:"agent_name_set,omitempty"`
+	WriteFile    *ToolEnabledUpdate `json:"write_file,omitempty"`
+	Spawn        *ToolEnabledUpdate `json:"spawn,omitempty"`
+	Coder        *ToolEnabledUpdate `json:"coder,omitempty"`
+	ContactsSend *ToolEnabledUpdate `json:"contacts_send,omitempty"`
+	JobManage    *ToolEnabledUpdate `json:"job_manage,omitempty"`
+	// LegacyTodoUpdate is JobManage by the tool's earlier name; JobManage wins when both are set.
+	LegacyTodoUpdate *ToolEnabledUpdate `json:"todo_update,omitempty"`
+	PlanCreate       *ToolEnabledUpdate `json:"plan_create,omitempty"`
+	CodeMode         *ToolEnabledUpdate `json:"codemode,omitempty"`
+	ToolSearch       *ToolEnabledUpdate `json:"tool_search,omitempty"`
+	URLFetch         *ToolEnabledUpdate `json:"url_fetch,omitempty"`
+	WebSearch        *ToolEnabledUpdate `json:"web_search,omitempty"`
+	Bash             *ToolEnabledUpdate `json:"bash,omitempty"`
+	PowerShell       *ToolEnabledUpdate `json:"powershell,omitempty"`
+	ImageGenerate    *ToolEnabledUpdate `json:"image_generate,omitempty"`
+	ImageEdit        *ToolEnabledUpdate `json:"image_edit,omitempty"`
+	AgentNameSet     *string            `json:"agent_name_set,omitempty"`
 }
 
 type SkillsSettingsPayload struct {

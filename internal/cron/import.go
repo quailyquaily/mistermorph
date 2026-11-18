@@ -1,64 +1,11 @@
 package cron
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
-	"github.com/quailyquaily/mistermorph/internal/stateimport"
 	"gopkg.in/yaml.v3"
 )
-
-func init() {
-	agentdb.Register(agentdb.Importer{Name: "cron", Order: 40, Run: importCronFile})
-}
-
-// importCronFile reads cron.yaml into cron_tasks, in its order. A task that does not validate (or
-// repeats an id) is listed as a reject and the others are imported. A file that does not parse is
-// listed whole and left in place.
-func importCronFile(ctx context.Context, tx *sql.Tx, env agentdb.ImportEnv) (agentdb.ImportResult, error) {
-	var result agentdb.ImportResult
-	raw, err := os.ReadFile(filepath.Join(env.StateDir, DefaultFilename))
-	if os.IsNotExist(err) {
-		return result, nil
-	}
-	if err != nil {
-		return result, err
-	}
-	file, err := ParseFile(string(raw))
-	if err != nil {
-		result.Rejects = append(result.Rejects, stateimport.Reject{Source: DefaultFilename, Error: err.Error(), Raw: string(raw)})
-		return result, nil
-	}
-	var kept []Task
-	seen := map[string]bool{}
-	for i, task := range file.Tasks {
-		task.ID = strings.TrimSpace(task.ID)
-		if task.ID == "" {
-			task.ID = normalizeTaskID("")
-		}
-		err := ValidateTask(task)
-		if err == nil && seen[task.ID] {
-			err = fmt.Errorf("duplicate task id: %s", task.ID)
-		}
-		if err != nil {
-			encoded, _ := yaml.Marshal(task)
-			result.Rejects = append(result.Rejects, stateimport.Reject{Source: DefaultFilename, Line: i + 1, Error: err.Error(), Raw: string(encoded)})
-			continue
-		}
-		seen[task.ID] = true
-		kept = append(kept, task)
-	}
-	if err := writeTasks(ctx, tx, File{Version: Version, Tasks: kept}); err != nil {
-		return result, err
-	}
-	result.Rename = append(result.Rename, DefaultFilename)
-	return result, nil
-}
 
 // ParseFile reads cron.yaml text. Empty text is an empty list.
 func ParseFile(text string) (File, error) {

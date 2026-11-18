@@ -13,7 +13,7 @@ import (
 
 type RuntimeToolsRegisterConfig struct {
 	PlanCreate PlanCreateRegisterConfig
-	TodoUpdate TodoUpdateRegisterConfig
+	JobManage  JobManageRegisterConfig
 	Image      ImageToolsRegisterConfig
 	ToolSearch ToolSearchConfig
 	CodeMode   CodeModeConfig
@@ -74,7 +74,7 @@ func LoadRuntimeToolsRegisterConfigFromViper() RuntimeToolsRegisterConfig {
 func LoadRuntimeToolsRegisterConfigFromReader(r runtimeRegisterConfigReader) RuntimeToolsRegisterConfig {
 	return RuntimeToolsRegisterConfig{
 		PlanCreate: LoadPlanCreateRegisterConfigFromReader(r),
-		TodoUpdate: LoadTodoUpdateRegisterConfigFromReader(r),
+		JobManage:  LoadJobManageRegisterConfigFromReader(r),
 		Image:      LoadImageToolsRegisterConfigFromReader(r),
 		ToolSearch: ToolSearchConfig{
 			Enabled: r.GetBool("tools.tool_search.enabled"),
@@ -106,8 +106,8 @@ func RegisterRuntimeTools(reg *tools.Registry, cfg RuntimeToolsRegisterConfig, o
 	if opts.ToolTriggers[BuiltinPlanCreate] {
 		cfg.PlanCreate.Enabled = true
 	}
-	if opts.ToolTriggers[BuiltinTodoUpdate] {
-		cfg.TodoUpdate.Enabled = true
+	if opts.ToolTriggers[BuiltinJobManage] {
+		cfg.JobManage.Enabled = true
 	}
 	imageCfg := cfg.Image
 	if opts.ToolTriggers[BuiltinImageGenerate] {
@@ -126,10 +126,10 @@ func RegisterRuntimeTools(reg *tools.Registry, cfg RuntimeToolsRegisterConfig, o
 		opts.ToolTriggers[BuiltinImageEdit]
 	RegisterImageTools(reg, imageCfg, opts.ImageClient, imageTriggered)
 	RegisterPlanTool(reg, cfg.PlanCreate, planClient, planModel, opts.PersonaDir)
-	RegisterTodoUpdateTool(reg, cfg.TodoUpdate, opts.DefaultClient, opts.DefaultModel)
+	RegisterJobManageTool(reg, cfg.JobManage, opts.DefaultClient, opts.DefaultModel)
 	if opts.DecisionClient != nil {
-		if tool, ok := reg.Get(BuiltinTodoUpdate); ok {
-			if todoTool, ok := tool.(*builtin.TodoUpdateTool); ok {
+		if tool, ok := reg.Get(BuiltinJobManage); ok {
+			if todoTool, ok := tool.(*builtin.JobManageTool); ok {
 				todoTool.DecisionClient = opts.DecisionClient
 				todoTool.DecisionModel = opts.DecisionModel
 			}

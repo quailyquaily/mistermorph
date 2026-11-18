@@ -205,7 +205,9 @@ func (e *Engine) lookupTool(st *engineLoopState, name string) (tools.Tool, bool)
 	}
 	st.search.mu.Lock()
 	defer st.search.mu.Unlock()
-	return tool, st.search.visible[name]
+	// The registry finds a tool by an earlier name too (todo_update for job_manage); its
+	// visibility is kept under the name it has now.
+	return tool, st.search.visible[tool.Name()]
 }
 
 // unknownToolMessage tells the model a tool is not callable, listing only what it may call.
@@ -227,7 +229,7 @@ func (st *engineLoopState) noteToolUsed(e *Engine, name string) {
 		return
 	}
 	st.search.mu.Lock()
-	st.search.touched = append(st.search.touched, name)
+	st.search.touched = append(st.search.touched, tool.Name())
 	st.search.mu.Unlock()
 }
 

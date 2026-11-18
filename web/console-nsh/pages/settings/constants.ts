@@ -42,7 +42,7 @@ export const TOOL_ITEMS: ToolItem[] = [
   { id: "coder", icon: "PhCodeBlock", titleKey: "settings_tool_coder", noteKey: "settings_tool_note_coder" },
   { id: "contacts_send", icon: "PhPaperPlaneTilt", titleKey: "settings_tool_contacts_send", noteKey: "settings_tool_note_contacts_send" },
   { id: "agent_send", icon: "PhRobot", titleKey: "settings_tool_agent_send", noteKey: "settings_tool_note_agent_send", automatic: true },
-  { id: "todo_update", icon: "PhCalendarCheck", titleKey: "settings_tool_todo_update", noteKey: "settings_tool_note_todo_update" },
+  { id: "job_manage", icon: "PhCalendarCheck", titleKey: "settings_tool_job_manage", noteKey: "settings_tool_note_job_manage" },
   { id: "plan_create", icon: "PhListChecks", titleKey: "settings_tool_plan_create", noteKey: "settings_tool_note_plan_create" },
   { id: "codemode", icon: "PhCode", titleKey: "settings_tool_codemode", noteKey: "settings_tool_note_codemode" },
   { id: "tool_search", icon: "PhBinoculars", titleKey: "settings_tool_tool_search", noteKey: "settings_tool_note_tool_search" },
@@ -58,7 +58,7 @@ export const TOOL_ITEMS: ToolItem[] = [
 export const TOOL_GROUPS = [
   { id: "files", titleKey: "settings_tool_group_files", items: ["read_file", "write_file", "bash", "powershell"] },
   { id: "web", titleKey: "settings_tool_group_web", items: ["url_fetch", "web_search"] },
-  { id: "workflow", titleKey: "settings_tool_group_workflow", items: ["plan_create", "todo_update", "codemode", "tool_search"] },
+  { id: "workflow", titleKey: "settings_tool_group_workflow", items: ["plan_create", "job_manage", "codemode", "tool_search"] },
   { id: "delegation", titleKey: "settings_tool_group_delegation", items: ["spawn", "coder"] },
   { id: "messaging", titleKey: "settings_tool_group_messaging", items: ["contacts_send", "agent_send"] },
   { id: "images", titleKey: "settings_tool_group_images", items: ["image_generate", "image_edit"] },

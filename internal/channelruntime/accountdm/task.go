@@ -207,7 +207,7 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, env taskEnv, j dmJob,
 			if block := workspace.PromptBlock(j.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)
 			}
-			toolsutil.SetTodoUpdateToolAddContext(reg, todo.AddResolveContext{
+			toolsutil.SetJobManageToolAddContext(reg, todo.AddResolveContext{
 				Channel: string(env.channel), ChatType: "private", SpeakerUsername: j.userRef(), UserInputRaw: j.Text,
 			})
 			if env.promptBlocks != nil {

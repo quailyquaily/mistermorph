@@ -1894,6 +1894,9 @@ paths:
       tags:
       - Schedules
       summary: Read scheduled and system tasks
+      description: The jobs (the TODO list) are read from the jobs table of the state folder's agent.db. While the one-time
+        import of an earlier cron.yaml cannot complete (a record without an id, a repeated id, or one that
+        does not validate), the response is 409 and its text names every rejected record.
       responses:
         '200':
           description: Success
@@ -1905,6 +1908,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '405':
           $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          description: The earlier cron.yaml could not be imported; nothing was imported. Plain text naming
+            each rejected record.
         '500':
           $ref: '#/components/responses/InternalError'
     put:
@@ -1913,7 +1919,10 @@ paths:
       - Schedules
       summary: Replace the full scheduled task list
       description: Not a patch. Missing or null tasks writes an empty list. The decoder reads up to 4
-        MiB. System tasks are returned separately and are not replaced here.
+        MiB. System tasks are returned separately and are not replaced here. A task without an id gets a
+        generated job-<uuid v4> id; ids that are sent are kept. With revision, the save is refused with
+        409 when the list has changed since it was read at that revision (a tool, another window or
+        another process changed it); without revision the list is replaced as it is.
       requestBody:
         required: true
         content:
@@ -1926,6 +1935,10 @@ paths:
                   items:
                     $ref: '#/components/schemas/CronTask'
                   nullable: true
+                revision:
+                  type: integer
+                  format: int64
+                  description: The revision the list was read at (TodoTasks.revision).
       responses:
         '200':
           description: Success
@@ -1939,6 +1952,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '405':
           $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          description: The list changed since it was read at revision, or the earlier cron.yaml could not be
+            imported. Nothing was saved. Plain text.
         '500':
           $ref: '#/components/responses/InternalError'
   /todo/tasks/{id}/run:
@@ -4955,6 +4971,11 @@ components:
       properties:
         id:
           type: string
+        job_id:
+          type: string
+          description: The job whose runs the topic holds (a TODO item's topic, _cron_<job id>); absent
+            for any other topic. The topic's id, the job's id and each run's task id are separate. Topics
+            recorded before this field existed get it from their _cron_ id.
         title:
           type: string
         icon:
@@ -5776,6 +5797,11 @@ components:
           type: integer
         exists:
           type: boolean
+        revision:
+          type: integer
+          format: int64
+          description: The list's revision. It changes with every change to the jobs (not with the runs
+            the scheduler records); send it back with PUT to save only the list that was read.
         task_count:
           type: integer
         tasks:
@@ -6417,8 +6443,11 @@ components:
           $ref: '#/components/schemas/AgentsettingsToolEnabledPayload'
         contacts_send:
           $ref: '#/components/schemas/AgentsettingsToolEnabledPayload'
+        job_manage:
+          $ref: '#/components/schemas/AgentsettingsToolEnabledPayload'
         todo_update:
           $ref: '#/components/schemas/AgentsettingsToolEnabledPayload'
+          description: job_manage's switch under the tool's earlier name, the same value, for earlier clients.
         plan_create:
           $ref: '#/components/schemas/AgentsettingsToolEnabledPayload'
         url_fetch:
@@ -6450,6 +6479,7 @@ components:
       - spawn
       - coder
       - contacts_send
+      - job_manage
       - todo_update
       - plan_create
       - url_fetch
@@ -6747,8 +6777,11 @@ components:
           $ref: '#/components/schemas/AgentsettingsToolEnabledUpdate'
         contacts_send:
           $ref: '#/components/schemas/AgentsettingsToolEnabledUpdate'
+        job_manage:
+          $ref: '#/components/schemas/AgentsettingsToolEnabledUpdate'
         todo_update:
           $ref: '#/components/schemas/AgentsettingsToolEnabledUpdate'
+          description: job_manage's switch by the tool's earlier name; job_manage wins when both are sent.
         plan_create:
           $ref: '#/components/schemas/AgentsettingsToolEnabledUpdate'
         url_fetch:

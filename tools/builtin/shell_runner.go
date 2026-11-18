@@ -121,7 +121,7 @@ func prepareShellInvocation(ctx context.Context, params map[string]any, common s
 
 func validateShellCommandAllowed(cmdStr string, common shellToolCommon, spec shellRunnerSpec) error {
 	if spec.MatchDeniedPath != nil {
-		if offending, ok := spec.MatchDeniedPath(cmdStr, common.DenyPaths); ok {
+		if offending, ok := spec.MatchDeniedPath(cmdStr, EffectiveDenyPaths(common.DenyPaths)); ok {
 			return fmt.Errorf("%s command references denied path %q (configure via tools.%s.deny_paths)", common.ToolName, offending, common.ToolName)
 		}
 	}

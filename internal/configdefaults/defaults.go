@@ -329,6 +329,8 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.web_search.base_url", "https://duckduckgo.com/html/")
 
 	v.SetDefault("tools.contacts_send.enabled", true)
+	// job_manage is on by default. Its switch, tools.job_manage.enabled, has no default here: while
+	// a config does not set it, the earlier tools.todo_update.enabled applies (jobconfig.ToolEnabled).
 	v.SetDefault("tools.todo_update.enabled", true)
 	// On: MCP tools stay hidden until the model finds them. Without MCP tools to hide, tool_search
 	// is not offered, so nothing changes.

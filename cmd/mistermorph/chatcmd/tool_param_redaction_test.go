@@ -13,7 +13,6 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/quailyquaily/mistermorph/agent"
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -66,7 +65,7 @@ func runChatRedaction(t *testing.T, call llm.ToolCall) chatRedactionRun {
 		t.Fatal(err)
 	}
 	reg := tools.NewRegistry()
-	if err := reg.Register(builtin.NewTodoUpdateToolWithLLM(true, cronPath, filepath.Join(filepath.Dir(cronPath), "contacts"), chatRedactionTodoLLM{}, "gpt-5.2")); err != nil {
+	if err := reg.Register(builtin.NewJobManageToolWithLLM(true, cronPath, filepath.Join(filepath.Dir(cronPath), "contacts"), chatRedactionTodoLLM{}, "gpt-5.2")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -104,9 +103,7 @@ func runChatRedaction(t *testing.T, call llm.ToolCall) chatRedactionRun {
 			run.activity = append(run.activity, activity.message)
 		}
 	}
-	if err := agentdb.CachedBeside(cronPath).Close(); err != nil {
-		t.Fatal(err)
-	}
+	cronstore.NewStore(cronPath).Close()
 	file, _, err := cronstore.NewStore(cronPath).Read()
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +142,7 @@ func (r chatRedactionRun) assertUpdated(t *testing.T, content string, env []cron
 	}
 }
 
-func TestChatToolDisplayHidesTodoUpdateBashEnvAndCodeModeSource(t *testing.T) {
+func TestChatToolDisplayHidesJobManageBashEnvAndCodeModeSource(t *testing.T) {
 	stored := []cronstore.BashEnvRef{{Name: "API_TOKEN", Value: chatRedactionSecret}}
 
 	t.Run("direct todo_update", func(t *testing.T) {

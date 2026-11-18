@@ -209,7 +209,7 @@ const DEFAULT_TOOLS = {
   spawn: true,
   coder: false,
   contacts_send: true,
-  todo_update: true,
+  job_manage: true,
   plan_create: false,
   codemode: true,
   tool_search: true,
@@ -219,6 +219,12 @@ const DEFAULT_TOOLS = {
   powershell: false,
   image_generate: true,
   image_edit: true,
+};
+
+// Tools that had another name: an agent of an earlier version reports and takes their switch under
+// the earlier one (todo_update is job_manage now).
+const LEGACY_TOOL_IDS: Record<string, string[]> = {
+  job_manage: ["todo_update"],
 };
 
 const MANAGED_RUNTIME_DEFAULTS = Object.fromEntries(MANAGED_RUNTIME_ITEMS.map((item) => [item.id, false])) as Record<string, boolean>;
@@ -1666,7 +1672,7 @@ export function createSettingsStore() {
         });
       });
       state.llm.fallback_profiles = normalizeNamedList(llm.fallback_profiles);
-      for (const id of Object.keys(DEFAULT_TOOLS)) state.tools[id] = toolEnabledValue(tools[id]);
+      for (const id of Object.keys(DEFAULT_TOOLS)) state.tools[id] = toolEnabledValue(tools[id] ?? LEGACY_TOOL_IDS[id]?.map((legacy) => tools[legacy]).find((entry) => entry !== undefined));
       agentNameSet.set(normalizeWorkerNameSet(tools.agent_name_set));
       agentNameSetSupported.set(typeof tools.agent_name_set === "string");
       skillsEnabledSupported.set(typeof data?.skills?.enabled === "boolean");
@@ -2096,6 +2102,10 @@ export function createSettingsStore() {
 
   function buildSavePayload(target = "all") {
     const tools: Record<string, unknown> = Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, { enabled: !!state.tools[id] }]));
+    // An agent of an earlier version knows a renamed tool's switch by its earlier name only.
+    for (const [id, legacyIDs] of Object.entries(LEGACY_TOOL_IDS)) {
+      for (const legacy of legacyIDs) tools[legacy] = { enabled: !!state.tools[id] };
+    }
     if (agentNameSetSupported()) tools.agent_name_set = agentNameSet();
     // Only `enabled`: the skills to load are the Skills page's, and stay as they are.
     const skills = skillsEnabledSupported() ? { skills: { enabled: skillsEnabled() } } : {};

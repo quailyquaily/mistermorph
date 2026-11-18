@@ -189,6 +189,14 @@ func CronTopicID(taskID string) string {
 	return CronTopicPrefix + strings.TrimSpace(taskID)
 }
 
+// CronTopicJobID is the ID of the job whose topic is id, or "" when id is not a job's topic.
+func CronTopicJobID(id string) string {
+	if !IsCronTopicID(id) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(id), CronTopicPrefix))
+}
+
 // IsCronTopicID reports whether id is a TODO item's topic.
 func IsCronTopicID(id string) bool {
 	id = strings.TrimSpace(id)

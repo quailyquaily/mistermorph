@@ -11,14 +11,14 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `contacts_send` is static. Awareness runs (heartbeat, cron) see it when enabled; an explicit `$contacts_send` shows it for that task. Ordinary runs (Console, Telegram, Slack and the other channel runtimes) get it as a deferred tool when enabled and `tools.tool_search.enabled` is on: hidden until `tool_search` finds it. Group chats and Bluesky/X public threads still need `$contacts_send`. See [`contacts_send`](#contacts_send).
   - `agent_send` is exposed only while at least one active Contact is `kind: agent`.
   - `contacts_list` lists the contacts (in `agent.db`) whenever a contacts folder is configured.
-  - `todo_list` lists the TODO list (in `agent.db`) whenever the runtime has a state folder. It only reads, so it does not depend on `tools.todo_update.enabled`.
+  - `todo_list` lists the TODO list (the jobs in `agent.db`) whenever the runtime has a state folder. It only reads, so it does not depend on `tools.job_manage.enabled`.
 - `engine-scoped` tools:
   - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner and parent tool lookup. See [`spawn`](#spawn).
   - `list_model_profiles`: registered next to `spawn` when more than one model profile can run a subtask. See [`list_model_profiles`](#list_model_profiles).
   - `coder`: registered when an agent engine is assembled for a run; depends on the current subtask runner and starts the local Codex, Claude Code or Antigravity (`agy`) CLI.
   - `codemode`: registered by the engine when `tools.codemode.enabled` (default on); runs a JavaScript program that calls the run's tools. Never given to subtasks. See [`codemode`](#codemode).
 - `runtime-dependent` tools:
-  - `todo_update`: runtime-injected, depends on active LLM client/model plus cron/contacts paths from runtime config.
+  - `job_manage` (formerly `todo_update`): runtime-injected, depends on active LLM client/model plus the state folder and contacts paths from runtime config.
   - `plan_create`: runtime-injected, depends on active LLM client/model.
   - `image_generate`, `image_edit`: per-task runtime tools. They depend on usable image LLM config, `file_cache_dir`, and image intent/retention state.
   - `send_voice`, `send_photo`, `send_file`: runtime-injected, depend on active Telegram API context/chat metadata.
@@ -103,7 +103,7 @@ Flow notes:
   - Telegram, Slack, Lark, and LINE conversations keep image tools for 16 subsequent turns; another image-intent task refreshes the counter.
 - First-principles invariants:
   - correctness: task toolset matches chat/channel context.
-  - isolation: `todo_update` context is task-scoped.
+  - isolation: `job_manage` context is task-scoped.
   - determinism: no hidden fallback registration path.
   - minimality: Phase C shapes task registry only.
 
@@ -117,7 +117,7 @@ Flow notes:
 
 - `tools` command prints:
   - `Core tools`: from base registry.
-  - `Extra tools`: preview of engine-scoped and runtime-dependent tools (currently `spawn`, `coder`, `plan_create`, `todo_update`, and image tools when task intent allows them). `list_model_profiles` depends on the configured profiles and is not previewed.
+  - `Extra tools`: preview of engine-scoped and runtime-dependent tools (currently `spawn`, `coder`, `plan_create`, `job_manage`, and image tools when task intent allows them). `list_model_profiles` depends on the configured profiles and is not previewed.
   - `Telegram tools`: static preview rows for Telegram runtime tools.
 
 ## `read_file`
@@ -132,7 +132,7 @@ Parameters:
 
 Constraints:
 
-- Access can be blocked by `tools.read_file.deny_paths`.
+- Access can be blocked by `tools.read_file.deny_paths`, which also matches a symlink's target. `agent.db`, `jobs.db`, `config.yaml.imported` and the SQLite `-wal`, `-shm` and `-journal` files of those and of every listed entry are always denied, whatever the list says, so a list written by an older config template still protects them. `send_file`, `bash` and `powershell` apply the same rule to their lists.
 - Alias paths must include a relative file path; passing only `file_cache_dir` or `file_state_dir` is invalid.
 
 ## `write_file`
@@ -283,16 +283,20 @@ Parameters:
 | `q` | `string` | Yes | None | Search keywords. |
 | `max_results` | `integer` | No | `tools.web_search.max_results` | Maximum returned results (hard-capped at 20 in code). |
 
-## `todo_update`
+## `job_manage`
 
-Purpose: maintain scheduled TODO tasks in `file_state_dir/cron.yaml`: add, edit in place, or delete them.
+Purpose: manage jobs, the scheduled tasks of the TODO list kept in `file_state_dir/agent.db`: add them, read one, edit one in place, or delete one.
+
+The tool was called `todo_update`. The earlier name still works: a call named `todo_update` (from an older prompt, a skill or conversation history) runs `job_manage`, `todo_update` in `BuiltinToolNames` or in a task's `$todo_update` reference selects it, and while `tools.job_manage.enabled` is not set, `tools.todo_update.enabled` switches it.
+
+Every job has a stable `id`. New jobs get a generated `job-<uuid>` ID (a random, version 4 UUID in lower case), the same form the Console gives new TODO items; the ID names the job only and says nothing about what starts its runs. IDs from earlier versions (such as `cron-<uuid>`, the Console's `task-<n>`, or one chosen in `cron.yaml`) stay valid and are never rewritten. A job's topic (`_cron_<job id>`) and each of its runs have IDs of their own; see [TODO and Heartbeat](../web/vitepress/docs/guide/todo-and-heartbeat.md).
 
 Parameters:
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `action` | `string` | Yes | None | `add_once`, `add_recurring`, `update`, or `delete`. |
-| `id` | `string` | Yes for `update`; preferred for `delete`; no for add | Generated for add | Stable task ID. |
+| `action` | `string` | Yes | None | `add_once`, `add_recurring`, `get`, `update`, or `delete`. |
+| `id` | `string` | Yes for `get` and `update`; preferred for `delete`; not used on add | Generated for add | Stable job ID. An add always generates the ID (`job-<uuid>`); an `id` passed to an add is not used, and the result carries an `id_generated` warning. |
 | `title` | `string` | No | Default task title | Short task title. For `update`, `""` resets it to the default title. |
 | `content` | `string` | Yes for add actions; required for delete without `id` | None | Task content, or semantic delete query when `id` is omitted. For `update`, the new content, stored exactly as given (surrounding whitespace trimmed; `people` references are not resolved). |
 | `at` | `string` | Yes for `add_once` | None | One-time schedule in `YYYY-MM-DD HH:mm`. For `update`, setting `at` alone makes the task one-time and clears its `cron`. |
@@ -303,6 +307,8 @@ Parameters:
 | `workspace_dir` | `string` | No | Runtime default workspace | Workspace directory for the task's runs: an absolute path or `~/...`, or the literal `workspace_dir` for the workspace attached to the current conversation. The directory must exist when the task is added or updated. For `update`, `""` clears it back to the runtime default. |
 | `bash_env` | `array<object>` | No | None | Environment variables injected into `bash` when the task runs, in the task's stored form: `[{"name": "REPORT_MODE", "value": "weekly"}]`. Names are letters, digits and underscores, not starting with a digit; values may reference environment variables as `${NAME}`, which is preferred over literal secrets. For `update`, the list replaces the whole `bash_env`, `[]` clears it, and omitting `bash_env` keeps it unchanged. |
 
+`get` returns the job with this `id`, with an explicit `enabled` boolean. An unknown `id` is an error.
+
 `update` edits a task in place by `id` and changes only the parameters passed: every omitted field (including `bash_env`, `workspace_dir`, schedule, `tz`, `chat_id` and `title`) and the task's run metadata keep their values, and the `id` stays the same. Edit tasks with `update`, not by deleting and re-adding them. Pass at least one field to change; `null` is rejected for every field rather than read as "keep" or "clear" (omit a field to keep it, pass `""` or `[]` to clear it). Parameters `update` does not use are ignored.
 
 Returns:
@@ -312,19 +318,20 @@ All actions return JSON with:
 - `ok`: whether the operation succeeded (boolean).
 - `action`: executed action.
 - `task_count`: number of tasks after the operation.
-- `task`: the added or updated task (add actions and `update`).
+- `task`: the added, read or updated job (add actions, `get` and `update`), with an explicit `enabled` boolean.
 - `deleted`: the deleted task (`delete`).
 - `fields`: the fields `update` changed, for example `["content", "bash_env"]` (`update` only).
-- `warnings`: optional reference-resolution warnings (add actions).
+- `warnings`: optional warnings (add actions): reference resolution, and `id_generated` when an `id` was passed.
 
-A task in a result never includes `bash_env` values: `bash_env` is left out and `bash_env_names` lists the variable names, for example `"bash_env_names": ["API_TOKEN"]`. Errors name a bad entry by its index, never its value. In tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript, `todo_update` arguments show each `bash_env` name with its value as `"[redacted]"`; a [`codemode`](#codemode) script that calls `todo_update` is shown by its size only.
+A task in a result never includes `bash_env` values: `bash_env` is left out and `bash_env_names` lists the variable names, for example `"bash_env_names": ["API_TOKEN"]`. Errors name a bad entry by its index, never its value. In tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript, `job_manage` arguments (also when called as `todo_update`) show each `bash_env` name with its value as `"[redacted]"`; a [`codemode`](#codemode) script that calls `job_manage` is shown by its size only.
 
 Constraints:
 
-- Controlled by `tools.todo_update.enabled`.
+- Controlled by `tools.job_manage.enabled`; while that is not set, by the earlier `tools.todo_update.enabled` (default `true`).
+- The jobs are shared with the scheduler, the Console and `todo_list` through `agent.db`'s `jobs` table, in this process or another: each change is one transaction, and every read sees what the others committed.
 - Add actions require an LLM client and model when `people` resolution is needed.
 - Add actions validate markdown reference IDs before writing.
-- `update` and delete by `id` do not require an LLM.
+- `get`, `update` and delete by `id` do not require an LLM.
 - `update` runs in one transaction: an unknown `id`, an invalid field, or a resulting task that does not validate (for example a bad schedule or `bash_env` name) returns an error and leaves the stored task unchanged.
 - Delete without `id` uses LLM semantic matching on `content`; no match and ambiguous match both return errors.
 
@@ -332,12 +339,14 @@ Errors (string matching):
 
 | Error substring | Trigger |
 |---|---|
-| `todo_update tool is disabled` | Tool is disabled. |
+| `job_manage tool is disabled` | Tool is disabled. |
 | `action is required` | Missing `action`. |
 | `content is required` | Missing or empty `content` for an add action. |
-| `invalid action:` | `action` is not `add_once/add_recurring/update/delete`. |
-| `todo_update unavailable (missing llm client)` | LLM client not injected. |
-| `todo_update unavailable (missing llm model)` | LLM model not configured. |
+| `invalid action:` | `action` is not `add_once/add_recurring/get/update/delete`. |
+| `job_manage unavailable (missing llm client)` | LLM client not injected. |
+| `job_manage unavailable (missing llm model)` | LLM model not configured. |
+| `no TODO task with that id` | `get` or `update` named an `id` the list does not have. |
+| `was not imported into agent.db` | The one-time import of `cron.yaml` failed; the error names every rejected record (see [TODO and Heartbeat](../web/vitepress/docs/guide/todo-and-heartbeat.md)). |
 | `invalid reference id:` | Invalid `(...)` reference exists in text. |
 | `missing_reference_id` | Mentioned person cannot be uniquely resolved to a reference ID. |
 | `people must be an array of strings` | `people` is not a string array. |
@@ -382,9 +391,9 @@ Returns `status` (`created` or `replaced`), `id`, `subject`, `name`, `visibility
 
 ## `todo_list`
 
-Purpose: list the scheduled TODO tasks, the ones `todo_update` maintains: one-time and recurring, enabled and disabled.
+Purpose: list the scheduled TODO tasks, the jobs `job_manage` maintains: one-time and recurring, enabled and disabled.
 
-Parameters: none. The tool always reads the runtime's own TODO list (`<file_state_dir>/agent.db`); a caller cannot name another path, and other parameters are ignored.
+Parameters: none. The tool always reads the runtime's own TODO list (the `jobs` table of `<file_state_dir>/agent.db`); a caller cannot name another path, and other parameters are ignored.
 
 Returns JSON:
 
@@ -408,8 +417,8 @@ Example:
 Notes:
 
 - Read-only: it never adds, changes, enables, disables or runs a task, and does not compute next run times.
-- Registered whenever the runtime has a state folder, with or without `todo_update`. With `BuiltinToolNames` set, it must be named there.
-- A list that cannot be read (for example a damaged `agent.db`) is an error, never an empty result.
+- Registered whenever the runtime has a state folder, with or without `job_manage`. With `BuiltinToolNames` set, it must be named there.
+- A list that cannot be read (for example a damaged `agent.db`, or a `cron.yaml` whose import failed) is an error, never an empty result.
 
 ## `contacts_list`
 
@@ -666,7 +675,7 @@ Rules:
 - Limits: `timeout` (default 120s, also bounded by the task deadline), `max_tool_calls` (256, including searches), `max_parallel_calls` (4); source 64 KiB, one tool argument object 256 KiB, one result 1 MiB, all results 8 MiB, output 64 KiB or 256 items.
 - Memory is watched, not capped: while scripts run, the process heap is sampled every 100 ms, each result logs its approximate heap growth, and running scripts stop with `memory_limit` when the heap passes 90% of `GOMEMLIMIT` (2 GiB without one). A single large allocation can still exhaust the process. Set `tools.codemode.enabled: false` to turn it off.
 - In the Console activity panel a script is one entry with its calls listed under it; the CLI prints them indented under `▸ codemode`.
-- Tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript never show a script's source, only `code_chars` and `code_lines`: a script can pass secrets to its calls (such as `todo_update` `bash_env` values) through any expression, which is only known once it runs. Each call the script makes is shown on its own, with that tool's redaction. The conversation and run state keep the source.
+- Tool events, `tool_call_params` logs and the `chat` command's tool activity line and transcript never show a script's source, only `code_chars` and `code_lines`: a script can pass secrets to its calls (such as `job_manage` `bash_env` values) through any expression, which is only known once it runs. Each call the script makes is shown on its own, with that tool's redaction. The conversation and run state keep the source.
 
 ## `plan_create`
 

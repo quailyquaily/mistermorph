@@ -12,6 +12,7 @@ import (
 
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/todo"
@@ -19,7 +20,7 @@ import (
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
-type TodoUpdateTool struct {
+type JobManageTool struct {
 	Enabled  bool
 	CronPath string
 	Contacts string
@@ -34,14 +35,14 @@ type TodoUpdateTool struct {
 	DecisionModel  string
 }
 
-var todoUpdateEnglishSpeakerWordPattern = regexp.MustCompile(`(?i)\b(i|me|my|myself)\b`)
+var jobManageEnglishSpeakerWordPattern = regexp.MustCompile(`(?i)\b(i|me|my|myself)\b`)
 
-func NewTodoUpdateTool(enabled bool, cronPath string, contactsDir string) *TodoUpdateTool {
-	return NewTodoUpdateToolWithLLM(enabled, cronPath, contactsDir, nil, "")
+func NewJobManageTool(enabled bool, cronPath string, contactsDir string) *JobManageTool {
+	return NewJobManageToolWithLLM(enabled, cronPath, contactsDir, nil, "")
 }
 
-func NewTodoUpdateToolWithLLM(enabled bool, cronPath string, contactsDir string, client llm.Client, model string) *TodoUpdateTool {
-	return &TodoUpdateTool{
+func NewJobManageToolWithLLM(enabled bool, cronPath string, contactsDir string, client llm.Client, model string) *JobManageTool {
+	return &JobManageTool{
 		Enabled:  enabled,
 		CronPath: strings.TrimSpace(cronPath),
 		Contacts: strings.TrimSpace(contactsDir),
@@ -50,7 +51,7 @@ func NewTodoUpdateToolWithLLM(enabled bool, cronPath string, contactsDir string,
 	}
 }
 
-func (t *TodoUpdateTool) BindLLM(client llm.Client, model string) {
+func (t *JobManageTool) BindLLM(client llm.Client, model string) {
 	if t == nil {
 		return
 	}
@@ -58,7 +59,7 @@ func (t *TodoUpdateTool) BindLLM(client llm.Client, model string) {
 	t.Model = strings.TrimSpace(model)
 }
 
-func (t *TodoUpdateTool) Clone() *TodoUpdateTool {
+func (t *JobManageTool) Clone() *JobManageTool {
 	if t == nil {
 		return nil
 	}
@@ -67,35 +68,37 @@ func (t *TodoUpdateTool) Clone() *TodoUpdateTool {
 	return &cp
 }
 
-func (t *TodoUpdateTool) SetAddContext(ctx todo.AddResolveContext) {
+func (t *JobManageTool) SetAddContext(ctx todo.AddResolveContext) {
 	if t == nil {
 		return
 	}
 	ctx.Channel = strings.ToLower(strings.TrimSpace(ctx.Channel))
 	ctx.ChatType = strings.ToLower(strings.TrimSpace(ctx.ChatType))
 	ctx.SpeakerUsername = strings.TrimPrefix(strings.TrimSpace(ctx.SpeakerUsername), "@")
-	ctx.MentionUsernames = normalizeTodoUpdateUsernames(ctx.MentionUsernames)
+	ctx.MentionUsernames = normalizeJobManageUsernames(ctx.MentionUsernames)
 	ctx.UserInputRaw = strings.TrimSpace(ctx.UserInputRaw)
 	t.AddContext = ctx
 }
 
-func (t *TodoUpdateTool) Name() string { return "todo_update" }
+func (t *JobManageTool) Name() string { return jobconfig.ToolName }
 
-func (t *TodoUpdateTool) Description() string {
-	return "Updates the TODO list (scheduled agent tasks). Supports add_once, add_recurring, update, and delete actions. " +
-		"To change an existing task (its content, schedule, title, or bash_env), use update with the task id: " +
-		"it changes only the fields you pass and keeps everything else. Never delete and re-add a task to edit it."
+func (t *JobManageTool) Description() string {
+	return "Manages jobs: the scheduled agent tasks of the TODO list. Supports add_once, add_recurring, get, update, and delete actions. " +
+		"Every job has a stable id (new jobs get a generated `job-<uuid>` id, returned by add); get, update and delete take that id. " +
+		"To change an existing job (its content, schedule, title, or bash_env), use update with the job id: " +
+		"it changes only the fields you pass and keeps everything else, including the id. Never delete and re-add a job to edit it."
 }
 
-func (t *TodoUpdateTool) ParameterSchema() string {
+func (t *JobManageTool) ParameterSchema() string {
 	s := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type": "string",
-				"enum": []string{"add_once", "add_recurring", "update", "delete"},
-				"description": "Action: add_once|add_recurring|update|delete. " +
-					"update edits an existing task by id in place: pass only the fields to change; every omitted field " +
+				"enum": []string{"add_once", "add_recurring", "get", "update", "delete"},
+				"description": "Action: add_once|add_recurring|get|update|delete. " +
+					"get returns the job with this id (bash_env values are left out, only their names are listed). " +
+					"update edits an existing job by id in place: pass only the fields to change; every omitted field " +
 					"(including bash_env, workspace_dir, schedule, tz, chat_id and title) keeps its current value, and the id stays the same. " +
 					"Do not delete and re-add a task to edit it.",
 			},
@@ -123,8 +126,9 @@ func (t *TodoUpdateTool) ParameterSchema() string {
 				"description": "Optional IANA timezone or UTC offset, for example Asia/Tokyo or UTC+8. Omit to use runtime local timezone. For update, \"\" clears it.",
 			},
 			"id": map[string]any{
-				"type":        "string",
-				"description": "Stable task id. Required for update and for precise delete; optional on add, generated when omitted.",
+				"type": "string",
+				"description": "Stable job id. Required for get, update and delete. Not used on add: a new job always gets a generated " +
+					"`job-<uuid>` id, which the result returns. Older ids (such as `cron-...` or `task-3`) stay valid.",
 			},
 			"bash_env": map[string]any{
 				"type": "array",
@@ -167,9 +171,9 @@ func (t *TodoUpdateTool) ParameterSchema() string {
 	return string(b)
 }
 
-func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (string, error) {
+func (t *JobManageTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if !t.Enabled {
-		return "", fmt.Errorf("todo_update tool is disabled")
+		return "", fmt.Errorf("job_manage tool is disabled")
 	}
 	action, _ := params["action"].(string)
 	action = strings.ToLower(strings.TrimSpace(action))
@@ -198,44 +202,44 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 			return "", fmt.Errorf("content is required")
 		}
 		if t.Client == nil {
-			return "", fmt.Errorf("todo_update unavailable (missing llm client)")
+			return "", fmt.Errorf("job_manage unavailable (missing llm client)")
 		}
 		if strings.TrimSpace(t.Model) == "" {
-			return "", fmt.Errorf("todo_update unavailable (missing llm model)")
+			return "", fmt.Errorf("job_manage unavailable (missing llm model)")
 		}
-		chatID, chatIDErr := parseTodoUpdateChatID(params, t.AddContext)
+		chatID, chatIDErr := parseJobManageChatID(params, t.AddContext)
 		if chatIDErr != nil {
 			return "", chatIDErr
 		}
-		at, atErr := parseTodoUpdateString(params, "at")
+		at, atErr := parseJobManageString(params, "at")
 		if atErr != nil {
 			return "", atErr
 		}
-		tz, tzErr := parseTodoUpdateOptionalString(params, "tz")
+		tz, tzErr := parseJobManageOptionalString(params, "tz")
 		if tzErr != nil {
 			return "", tzErr
 		}
-		id, idErr := parseTodoUpdateOptionalString(params, "id")
+		idWarnings, idErr := jobManageAddIDWarnings(params)
 		if idErr != nil {
 			return "", idErr
 		}
-		title, titleErr := parseTodoUpdateOptionalString(params, "title")
+		title, titleErr := parseJobManageOptionalString(params, "title")
 		if titleErr != nil {
 			return "", titleErr
 		}
-		people, peopleErr := parseTodoUpdatePeopleOptional(params)
+		people, peopleErr := parseJobManagePeopleOptional(params)
 		if peopleErr != nil {
 			return "", peopleErr
 		}
-		workspaceDir, workspaceErr := parseTodoUpdateWorkspaceDir(ctx, params)
+		workspaceDir, workspaceErr := parseJobManageWorkspaceDir(ctx, params)
 		if workspaceErr != nil {
 			return "", workspaceErr
 		}
-		bashEnv, bashEnvErr := parseTodoUpdateBashEnvOptional(params)
+		bashEnv, bashEnvErr := parseJobManageBashEnvOptional(params)
 		if bashEnvErr != nil {
 			return "", bashEnvErr
 		}
-		slog.Default().Debug("todo_update_add_start",
+		slog.Default().Debug("job_manage_add_start",
 			"content_len", len(content),
 			"chat_id", chatID,
 			"people_count", len(people),
@@ -252,48 +256,48 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		addResult, addErr := store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
-		addResult.Warnings = append(addResult.Warnings, warnings...)
-		result, err = todoUpdateAddOutput(addResult), addErr
+		addResult, addErr := store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: cronstore.NewJobID(), ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
+		addResult.Warnings = append(append(addResult.Warnings, warnings...), idWarnings...)
+		result, err = jobManageAddOutput(addResult), addErr
 	case "add_recurring":
 		if content == "" {
 			return "", fmt.Errorf("content is required")
 		}
 		if t.Client == nil {
-			return "", fmt.Errorf("todo_update unavailable (missing llm client)")
+			return "", fmt.Errorf("job_manage unavailable (missing llm client)")
 		}
 		if strings.TrimSpace(t.Model) == "" {
-			return "", fmt.Errorf("todo_update unavailable (missing llm model)")
+			return "", fmt.Errorf("job_manage unavailable (missing llm model)")
 		}
-		chatID, chatIDErr := parseTodoUpdateChatID(params, t.AddContext)
+		chatID, chatIDErr := parseJobManageChatID(params, t.AddContext)
 		if chatIDErr != nil {
 			return "", chatIDErr
 		}
-		cronExpr, cronErr := parseTodoUpdateString(params, "cron")
+		cronExpr, cronErr := parseJobManageString(params, "cron")
 		if cronErr != nil {
 			return "", cronErr
 		}
-		tz, tzErr := parseTodoUpdateOptionalString(params, "tz")
+		tz, tzErr := parseJobManageOptionalString(params, "tz")
 		if tzErr != nil {
 			return "", tzErr
 		}
-		id, idErr := parseTodoUpdateOptionalString(params, "id")
+		idWarnings, idErr := jobManageAddIDWarnings(params)
 		if idErr != nil {
 			return "", idErr
 		}
-		title, titleErr := parseTodoUpdateOptionalString(params, "title")
+		title, titleErr := parseJobManageOptionalString(params, "title")
 		if titleErr != nil {
 			return "", titleErr
 		}
-		people, peopleErr := parseTodoUpdatePeopleOptional(params)
+		people, peopleErr := parseJobManagePeopleOptional(params)
 		if peopleErr != nil {
 			return "", peopleErr
 		}
-		workspaceDir, workspaceErr := parseTodoUpdateWorkspaceDir(ctx, params)
+		workspaceDir, workspaceErr := parseJobManageWorkspaceDir(ctx, params)
 		if workspaceErr != nil {
 			return "", workspaceErr
 		}
-		bashEnv, bashEnvErr := parseTodoUpdateBashEnvOptional(params)
+		bashEnv, bashEnvErr := parseJobManageBashEnvOptional(params)
 		if bashEnvErr != nil {
 			return "", bashEnvErr
 		}
@@ -301,15 +305,35 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		addResult, addErr := store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
-		addResult.Warnings = append(addResult.Warnings, warnings...)
-		result, err = todoUpdateAddOutput(addResult), addErr
+		addResult, addErr := store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: cronstore.NewJobID(), ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
+		addResult.Warnings = append(append(addResult.Warnings, warnings...), idWarnings...)
+		result, err = jobManageAddOutput(addResult), addErr
+	case "get":
+		id, idErr := parseJobManageString(params, "id")
+		if idErr != nil {
+			return "", fmt.Errorf("get needs the id of the job: %w", idErr)
+		}
+		tasks, readErr := store.Tasks(ctx)
+		if readErr != nil {
+			return "", readErr
+		}
+		var found *cronstore.Task
+		for i := range tasks {
+			if strings.TrimSpace(tasks[i].ID) == id {
+				found = &tasks[i]
+				break
+			}
+		}
+		if found == nil {
+			return "", fmt.Errorf("%w: %s", cronstore.ErrTaskNotFound, id)
+		}
+		result = jobManageOutput{OK: true, Action: "get", TaskCount: len(tasks), Task: redactJobManageTask(found)}
 	case "update":
-		id, idErr := parseTodoUpdateString(params, "id")
+		id, idErr := parseJobManageString(params, "id")
 		if idErr != nil {
 			return "", fmt.Errorf("update needs the id of the task to change: %w", idErr)
 		}
-		patch, patchErr := parseTodoUpdatePatch(ctx, params)
+		patch, patchErr := parseJobManagePatch(ctx, params)
 		if patchErr != nil {
 			return "", patchErr
 		}
@@ -317,16 +341,16 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if updateErr != nil {
 			return "", updateErr
 		}
-		slog.Default().Debug("todo_update_update", "id", id, "fields", strings.Join(updateResult.Fields, ","))
-		result = todoUpdateOutput{
+		slog.Default().Debug("job_manage_update", "id", id, "fields", strings.Join(updateResult.Fields, ","))
+		result = jobManageOutput{
 			OK:        updateResult.OK,
 			Action:    updateResult.Action,
 			TaskCount: updateResult.TaskCount,
-			Task:      redactTodoUpdateTask(updateResult.Task),
+			Task:      redactJobManageTask(updateResult.Task),
 			Fields:    updateResult.Fields,
 		}
 	case "delete":
-		id, idErr := parseTodoUpdateOptionalString(params, "id")
+		id, idErr := parseJobManageOptionalString(params, "id")
 		if idErr != nil {
 			return "", idErr
 		}
@@ -335,10 +359,10 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 				return "", fmt.Errorf("id or content is required")
 			}
 			if t.Client == nil {
-				return "", fmt.Errorf("todo_update unavailable (missing llm client)")
+				return "", fmt.Errorf("job_manage unavailable (missing llm client)")
 			}
 			if strings.TrimSpace(t.Model) == "" {
-				return "", fmt.Errorf("todo_update unavailable (missing llm model)")
+				return "", fmt.Errorf("job_manage unavailable (missing llm model)")
 			}
 			resolver := cronstore.NewLLMSemanticResolver(t.Client, t.Model)
 			resolver.Decision = t.DecisionClient
@@ -346,11 +370,11 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 			store.Semantics = resolver
 		}
 		deleteResult, deleteErr := store.Delete(ctx, id, content)
-		result, err = todoUpdateOutput{
+		result, err = jobManageOutput{
 			OK:        deleteResult.OK,
 			Action:    deleteResult.Action,
 			TaskCount: deleteResult.TaskCount,
-			Deleted:   redactTodoUpdateTask(deleteResult.Deleted),
+			Deleted:   redactJobManageTask(deleteResult.Deleted),
 		}, deleteErr
 	default:
 		return "", fmt.Errorf("invalid action: %s", action)
@@ -362,7 +386,7 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 	return string(out), nil
 }
 
-func (t *TodoUpdateTool) resolveAddContent(ctx context.Context, content string, people []string, contactsDir string, enforceRequiredReferences bool) (string, []string, error) {
+func (t *JobManageTool) resolveAddContent(ctx context.Context, content string, people []string, contactsDir string, enforceRequiredReferences bool) (string, []string, error) {
 	if _, preErr := todo.ExtractReferenceIDs(content); preErr != nil {
 		return "", nil, preErr
 	}
@@ -389,14 +413,14 @@ func (t *TodoUpdateTool) resolveAddContent(ctx context.Context, content string, 
 			fallbackRawWrite = true
 			rewritten = content
 			warnings = appendIfMissingWarning(warnings, "reference_unresolved_write_raw")
-			slog.Default().Debug("todo_update_add_reference_unresolved_fallback",
+			slog.Default().Debug("job_manage_add_reference_unresolved_fallback",
 				"missing_count", len(missingErr.Items),
 			)
 		} else {
 			return "", nil, resolveErr
 		}
 	}
-	slog.Default().Debug("todo_update_add_resolved",
+	slog.Default().Debug("job_manage_add_resolved",
 		"rewritten", rewritten,
 		"warnings_count", len(warnings),
 		"fallback_raw_write", fallbackRawWrite,
@@ -413,7 +437,7 @@ func (t *TodoUpdateTool) resolveAddContent(ctx context.Context, content string, 
 					firstSuggestion = strings.TrimSpace(missingErr.Items[0].Suggestion)
 					firstReason = strings.TrimSpace(missingErr.Items[0].Reason)
 				}
-				slog.Default().Debug("todo_update_add_required_reference_fallback_detail",
+				slog.Default().Debug("job_manage_add_required_reference_fallback_detail",
 					"rewritten_before_fallback", rewritten,
 					"fallback_target_content", content,
 					"first_missing_mention", firstMention,
@@ -422,7 +446,7 @@ func (t *TodoUpdateTool) resolveAddContent(ctx context.Context, content string, 
 				)
 				rewritten = content
 				warnings = appendIfMissingWarning(warnings, "reference_unresolved_write_raw")
-				slog.Default().Debug("todo_update_add_required_reference_fallback",
+				slog.Default().Debug("job_manage_add_required_reference_fallback",
 					"missing_count", len(missingErr.Items),
 				)
 			} else {
@@ -437,7 +461,7 @@ func (t *TodoUpdateTool) resolveAddContent(ctx context.Context, content string, 
 	return rewritten, warnings, nil
 }
 
-func (t *TodoUpdateTool) resolveBuiltinPeople(content string, people []string, warnings []string) (string, []string, []string, error) {
+func (t *JobManageTool) resolveBuiltinPeople(content string, people []string, warnings []string) (string, []string, []string, error) {
 	if len(people) == 0 {
 		return content, nil, warnings, nil
 	}
@@ -446,7 +470,7 @@ func (t *TodoUpdateTool) resolveBuiltinPeople(content string, people []string, w
 	for _, raw := range people {
 		value := strings.TrimSpace(raw)
 		switch {
-		case todoUpdateIsSpeakerPlaceholder(value):
+		case jobManageIsSpeakerPlaceholder(value):
 			speakerRequested = true
 		case strings.EqualFold(value, "$AGENT"):
 			continue
@@ -464,12 +488,12 @@ func (t *TodoUpdateTool) resolveBuiltinPeople(content string, people []string, w
 	return rewritten, remaining, warnings, nil
 }
 
-func (t *TodoUpdateTool) resolveSpeakerBuiltinContent(content string) (string, error) {
-	speakerRef := todoUpdateSpeakerReferenceID(t.AddContext)
+func (t *JobManageTool) resolveSpeakerBuiltinContent(content string) (string, error) {
+	speakerRef := jobManageSpeakerReferenceID(t.AddContext)
 	if speakerRef == "" {
 		return content, nil
 	}
-	label := todoUpdateSpeakerReferenceLabel(content)
+	label := jobManageSpeakerReferenceLabel(content)
 	formatted, err := refid.FormatMarkdownReference(label, speakerRef)
 	if err != nil {
 		return "", err
@@ -479,21 +503,21 @@ func (t *TodoUpdateTool) resolveSpeakerBuiltinContent(content string) (string, e
 		content = strings.ReplaceAll(content, "$USER", formatted)
 		return content, nil
 	}
-	if replaced, ok := todoUpdateReplaceFirstSpeakerWord(content, formatted); ok {
+	if replaced, ok := jobManageReplaceFirstSpeakerWord(content, formatted); ok {
 		return replaced, nil
 	}
 	return content, nil
 }
 
-func (t *TodoUpdateTool) resolveAddPlaceholders(original string, rewritten string, warnings []string) (string, []string, error) {
+func (t *JobManageTool) resolveAddPlaceholders(original string, rewritten string, warnings []string) (string, []string, error) {
 	rewritten = strings.TrimSpace(rewritten)
 	if rewritten == "" {
 		return "", nil, fmt.Errorf("content is required")
 	}
 	if strings.Contains(rewritten, "$SPEAKER") || strings.Contains(rewritten, "$USER") {
-		speakerRef := todoUpdateSpeakerReferenceID(t.AddContext)
+		speakerRef := jobManageSpeakerReferenceID(t.AddContext)
 		if speakerRef != "" {
-			label := todoUpdateSpeakerReferenceLabel(rewritten)
+			label := jobManageSpeakerReferenceLabel(rewritten)
 			formatted, err := refid.FormatMarkdownReference(label, speakerRef)
 			if err != nil {
 				return "", nil, err
@@ -502,9 +526,9 @@ func (t *TodoUpdateTool) resolveAddPlaceholders(original string, rewritten strin
 			rewritten = strings.ReplaceAll(rewritten, "$USER", formatted)
 		}
 	}
-	if containsTodoUpdateReferencePlaceholder(rewritten) {
+	if containsJobManageReferencePlaceholder(rewritten) {
 		original = strings.TrimSpace(original)
-		if containsTodoUpdateReferencePlaceholder(original) {
+		if containsJobManageReferencePlaceholder(original) {
 			return "", nil, fmt.Errorf("unresolved reference placeholder in content")
 		}
 		warnings = appendIfMissingWarning(warnings, "reference_placeholder_unresolved_write_raw")
@@ -513,7 +537,7 @@ func (t *TodoUpdateTool) resolveAddPlaceholders(original string, rewritten strin
 	return rewritten, warnings, nil
 }
 
-func todoUpdateSpeakerReferenceID(ctx todo.AddResolveContext) string {
+func jobManageSpeakerReferenceID(ctx todo.AddResolveContext) string {
 	if ref, ok := refid.Normalize(ctx.SpeakerUsername); ok {
 		return ref
 	}
@@ -532,7 +556,7 @@ func todoUpdateSpeakerReferenceID(ctx todo.AddResolveContext) string {
 	return ""
 }
 
-func todoUpdateSpeakerReferenceLabel(content string) string {
+func jobManageSpeakerReferenceLabel(content string) string {
 	for _, r := range content {
 		if unicode.In(r, unicode.Han) {
 			return "我"
@@ -541,27 +565,27 @@ func todoUpdateSpeakerReferenceLabel(content string) string {
 	return "me"
 }
 
-func containsTodoUpdateReferencePlaceholder(content string) bool {
+func containsJobManageReferencePlaceholder(content string) bool {
 	return strings.Contains(content, "$SPEAKER") || strings.Contains(content, "$USER") || strings.Contains(content, "$AGENT")
 }
 
-func todoUpdateIsSpeakerPlaceholder(value string) bool {
+func jobManageIsSpeakerPlaceholder(value string) bool {
 	return strings.EqualFold(value, "$SPEAKER") || strings.EqualFold(value, "$USER")
 }
 
-func todoUpdateReplaceFirstSpeakerWord(content string, formatted string) (string, bool) {
+func jobManageReplaceFirstSpeakerWord(content string, formatted string) (string, bool) {
 	for _, token := range []string{"本人", "我"} {
 		if idx := strings.Index(content, token); idx >= 0 {
 			return content[:idx] + formatted + content[idx+len(token):], true
 		}
 	}
-	if loc := todoUpdateEnglishSpeakerWordPattern.FindStringIndex(content); loc != nil {
+	if loc := jobManageEnglishSpeakerWordPattern.FindStringIndex(content); loc != nil {
 		return content[:loc[0]] + formatted + content[loc[1]:], true
 	}
 	return content, false
 }
 
-func normalizeTodoUpdateUsernames(input []string) []string {
+func normalizeJobManageUsernames(input []string) []string {
 	if len(input) == 0 {
 		return nil
 	}
@@ -582,18 +606,18 @@ func normalizeTodoUpdateUsernames(input []string) []string {
 	return out
 }
 
-func parseTodoUpdatePeopleOptional(params map[string]any) ([]string, error) {
+func parseJobManagePeopleOptional(params map[string]any) ([]string, error) {
 	raw, exists := params["people"]
 	if !exists || raw == nil {
 		return nil, nil
 	}
-	return parseTodoUpdatePeopleValue(raw)
+	return parseJobManagePeopleValue(raw)
 }
 
-func parseTodoUpdatePeopleValue(raw any) ([]string, error) {
+func parseJobManagePeopleValue(raw any) ([]string, error) {
 	switch v := raw.(type) {
 	case []string:
-		return normalizeTodoUpdateUsernames(v), nil
+		return normalizeJobManageUsernames(v), nil
 	case []any:
 		items := make([]string, 0, len(v))
 		for _, item := range v {
@@ -603,14 +627,14 @@ func parseTodoUpdatePeopleValue(raw any) ([]string, error) {
 			}
 			items = append(items, s)
 		}
-		return normalizeTodoUpdateUsernames(items), nil
+		return normalizeJobManageUsernames(items), nil
 	default:
 		return nil, fmt.Errorf("people must be an array of strings")
 	}
 }
 
-func parseTodoUpdateString(params map[string]any, names ...string) (string, error) {
-	value, err := parseTodoUpdateOptionalString(params, names...)
+func parseJobManageString(params map[string]any, names ...string) (string, error) {
+	value, err := parseJobManageOptionalString(params, names...)
 	if err != nil {
 		return "", err
 	}
@@ -620,7 +644,7 @@ func parseTodoUpdateString(params map[string]any, names ...string) (string, erro
 	return value, nil
 }
 
-func parseTodoUpdateOptionalString(params map[string]any, names ...string) (string, error) {
+func parseJobManageOptionalString(params map[string]any, names ...string) (string, error) {
 	for _, name := range names {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -639,17 +663,17 @@ func parseTodoUpdateOptionalString(params map[string]any, names ...string) (stri
 	return "", nil
 }
 
-// parseTodoUpdateWorkspaceDir returns the task's workspace directory, or "" when none is
+// parseJobManageWorkspaceDir returns the task's workspace directory, or "" when none is
 // given. The `workspace_dir` alias names the workspace attached to the current run.
-func parseTodoUpdateWorkspaceDir(ctx context.Context, params map[string]any) (string, error) {
-	raw, err := parseTodoUpdateOptionalString(params, "workspace_dir")
+func parseJobManageWorkspaceDir(ctx context.Context, params map[string]any) (string, error) {
+	raw, err := parseJobManageOptionalString(params, "workspace_dir")
 	if err != nil || raw == "" {
 		return "", err
 	}
-	return resolveTodoUpdateWorkspaceDir(ctx, raw)
+	return resolveJobManageWorkspaceDir(ctx, raw)
 }
 
-func resolveTodoUpdateWorkspaceDir(ctx context.Context, raw string) (string, error) {
+func resolveJobManageWorkspaceDir(ctx context.Context, raw string) (string, error) {
 	if strings.EqualFold(raw, "workspace_dir") {
 		current, ok := pathroots.WorkspaceDirFromContext(ctx)
 		if !ok {
@@ -664,7 +688,7 @@ func resolveTodoUpdateWorkspaceDir(ctx context.Context, raw string) (string, err
 	return resolved, nil
 }
 
-func parseTodoUpdateChatID(params map[string]any, addContext todo.AddResolveContext) (string, error) {
+func parseJobManageChatID(params map[string]any, addContext todo.AddResolveContext) (string, error) {
 	if raw, exists := params["chat_id"]; exists && raw != nil {
 		value, ok := raw.(string)
 		if !ok {
@@ -678,6 +702,23 @@ func parseTodoUpdateChatID(params map[string]any, addContext todo.AddResolveCont
 		return cronstore.ConsoleNotificationChatID, nil
 	}
 	return "", nil
+}
+
+// jobManageAddIDWarning tells the caller of an add that named an id that it was not used: a new
+// job's id is always generated, and the result has it.
+const jobManageAddIDWarning = "id_generated: the id passed to add was not used; the job has the generated id in the result"
+
+// jobManageAddIDWarnings checks the id an add may pass (a string, or nothing) and warns when one
+// was given.
+func jobManageAddIDWarnings(params map[string]any) ([]string, error) {
+	id, err := parseJobManageOptionalString(params, "id")
+	if err != nil {
+		return nil, err
+	}
+	if id == "" {
+		return nil, nil
+	}
+	return []string{jobManageAddIDWarning}, nil
 }
 
 func appendIfMissingWarning(warnings []string, v string) []string {

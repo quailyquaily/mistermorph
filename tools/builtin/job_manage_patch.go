@@ -9,30 +9,34 @@ import (
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 )
 
-// todoUpdateOutput is the tool's result for every action. Tasks in it never carry bash_env
+// jobManageOutput is the tool's result for every action. Tasks in it never carry bash_env
 // values, only their names.
-type todoUpdateOutput struct {
-	OK        bool                  `json:"ok"`
-	Action    string                `json:"action"`
-	TaskCount int                   `json:"task_count"`
-	Task      *todoUpdateTaskOutput `json:"task,omitempty"`
-	Deleted   *todoUpdateTaskOutput `json:"deleted,omitempty"`
-	Fields    []string              `json:"fields,omitempty"`
-	Warnings  []string              `json:"warnings,omitempty"`
+type jobManageOutput struct {
+	OK        bool                 `json:"ok"`
+	Action    string               `json:"action"`
+	TaskCount int                  `json:"task_count"`
+	Task      *jobManageTaskOutput `json:"task,omitempty"`
+	Deleted   *jobManageTaskOutput `json:"deleted,omitempty"`
+	Fields    []string             `json:"fields,omitempty"`
+	// Enabled is the job's state, for get: a job that is off does not run on its schedule.
+	Enabled  *bool    `json:"enabled,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
-// todoUpdateTaskOutput is a task with its bash_env reduced to the variable names: the values
+// jobManageTaskOutput is a task with its bash_env reduced to the variable names: the values
 // may be secrets.
-type todoUpdateTaskOutput struct {
+type jobManageTaskOutput struct {
 	cronstore.Task
+	// Enabled is always shown: a job that is off does not run on its schedule.
+	Enabled      bool     `json:"enabled"`
 	BashEnvNames []string `json:"bash_env_names,omitempty"`
 }
 
-func redactTodoUpdateTask(task *cronstore.Task) *todoUpdateTaskOutput {
+func redactJobManageTask(task *cronstore.Task) *jobManageTaskOutput {
 	if task == nil {
 		return nil
 	}
-	out := &todoUpdateTaskOutput{Task: *task}
+	out := &jobManageTaskOutput{Task: *task, Enabled: cronstore.TaskEnabled(*task)}
 	for _, ref := range task.BashEnv {
 		out.BashEnvNames = append(out.BashEnvNames, strings.TrimSpace(ref.Name))
 	}
@@ -40,39 +44,39 @@ func redactTodoUpdateTask(task *cronstore.Task) *todoUpdateTaskOutput {
 	return out
 }
 
-func todoUpdateAddOutput(result cronstore.AddResult) todoUpdateOutput {
-	return todoUpdateOutput{
+func jobManageAddOutput(result cronstore.AddResult) jobManageOutput {
+	return jobManageOutput{
 		OK:        result.OK,
 		Action:    result.Action,
 		TaskCount: result.TaskCount,
-		Task:      redactTodoUpdateTask(result.Task),
+		Task:      redactJobManageTask(result.Task),
 		Warnings:  result.Warnings,
 	}
 }
 
-// todoUpdatePatchFields are the parameters update accepts besides action and id.
-var todoUpdatePatchFields = map[string]bool{
+// jobManagePatchFields are the parameters update accepts besides action and id.
+var jobManagePatchFields = map[string]bool{
 	"title": true, "content": true, "at": true, "cron": true, "tz": true,
 	"chat_id": true, "workspace_dir": true, "bash_env": true,
 }
 
-// parseTodoUpdatePatch reads the fields an update sets. A parameter that is absent is left as
+// parseJobManagePatch reads the fields an update sets. A parameter that is absent is left as
 // it is; a present one is written, "" (or [] for bash_env) clearing it. null is refused rather
 // than read as either.
-func parseTodoUpdatePatch(ctx context.Context, params map[string]any) (cronstore.TaskPatch, error) {
+func parseJobManagePatch(ctx context.Context, params map[string]any) (cronstore.TaskPatch, error) {
 	var patch cronstore.TaskPatch
-	for _, name := range sortedTodoUpdateParamNames(params) {
+	for _, name := range sortedJobManageParamNames(params) {
 		if name == "action" || name == "id" {
 			continue
 		}
 		raw := params[name]
 		if name == "people" {
-			if people, err := parseTodoUpdatePeopleValue(raw); err != nil || len(people) > 0 {
+			if people, err := parseJobManagePeopleValue(raw); err != nil || len(people) > 0 {
 				return cronstore.TaskPatch{}, fmt.Errorf("people is not used by update: content is stored exactly as given, so write people references such as [John](tg:@john) in content")
 			}
 			continue
 		}
-		if !todoUpdatePatchFields[name] {
+		if !jobManagePatchFields[name] {
 			continue
 		}
 		if raw == nil {
@@ -82,7 +86,7 @@ func parseTodoUpdatePatch(ctx context.Context, params map[string]any) (cronstore
 			return cronstore.TaskPatch{}, fmt.Errorf("%s must be a string; omit it to keep the current value, or pass \"\" to clear it", name)
 		}
 		if name == "bash_env" {
-			refs, err := parseTodoUpdateBashEnvValue(raw)
+			refs, err := parseJobManageBashEnvValue(raw)
 			if err != nil {
 				return cronstore.TaskPatch{}, err
 			}
@@ -109,7 +113,7 @@ func parseTodoUpdatePatch(ctx context.Context, params map[string]any) (cronstore
 			patch.ChatID = &value
 		case "workspace_dir":
 			if value != "" {
-				resolved, err := resolveTodoUpdateWorkspaceDir(ctx, value)
+				resolved, err := resolveJobManageWorkspaceDir(ctx, value)
 				if err != nil {
 					return cronstore.TaskPatch{}, err
 				}
@@ -124,7 +128,7 @@ func parseTodoUpdatePatch(ctx context.Context, params map[string]any) (cronstore
 	return patch, nil
 }
 
-func sortedTodoUpdateParamNames(params map[string]any) []string {
+func sortedJobManageParamNames(params map[string]any) []string {
 	names := make([]string, 0, len(params))
 	for name := range params {
 		names = append(names, name)
@@ -133,18 +137,18 @@ func sortedTodoUpdateParamNames(params map[string]any) []string {
 	return names
 }
 
-// parseTodoUpdateBashEnvOptional reads bash_env for an add: absent or null is none.
-func parseTodoUpdateBashEnvOptional(params map[string]any) ([]cronstore.BashEnvRef, error) {
+// parseJobManageBashEnvOptional reads bash_env for an add: absent or null is none.
+func parseJobManageBashEnvOptional(params map[string]any) ([]cronstore.BashEnvRef, error) {
 	raw, exists := params["bash_env"]
 	if !exists || raw == nil {
 		return nil, nil
 	}
-	return parseTodoUpdateBashEnvValue(raw)
+	return parseJobManageBashEnvValue(raw)
 }
 
-// parseTodoUpdateBashEnvValue reads bash_env as the task stores it, a list of {name, value}
+// parseJobManageBashEnvValue reads bash_env as the task stores it, a list of {name, value}
 // objects. Errors name the entry, never its value.
-func parseTodoUpdateBashEnvValue(raw any) ([]cronstore.BashEnvRef, error) {
+func parseJobManageBashEnvValue(raw any) ([]cronstore.BashEnvRef, error) {
 	const shape = "bash_env must be an array of {\"name\": ..., \"value\": ...} objects"
 	switch v := raw.(type) {
 	case []cronstore.BashEnvRef:

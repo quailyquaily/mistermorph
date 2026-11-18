@@ -937,10 +937,10 @@ func (rt *Runtime) saveFoundTools(prepared preparedRuntimeRun, runCtx *agent.Con
 }
 
 // decisionClientForRun returns the decision route's client for runtime tools that make
-// structured judgments (todo_update's delete matching), when the route has its own profile.
+// structured judgments (job_manage's delete matching), when the route has its own profile.
 // Otherwise those tools keep using the main client, and nil is returned.
 func (rt *Runtime) decisionClientForRun(ctx context.Context, logger *slog.Logger, mainRoute llmutil.ResolvedRoute, cfg toolsutil.RuntimeToolsRegisterConfig, owners *runtimeClientOwners) (llm.Client, string) {
-	if !cfg.TodoUpdate.Enabled {
+	if !cfg.JobManage.Enabled {
 		return nil, ""
 	}
 	route, err := rt.ResolveRouteForRun(ctx, llmutil.RoutePurposeDecision)
@@ -950,7 +950,7 @@ func (rt *Runtime) decisionClientForRun(ctx context.Context, logger *slog.Logger
 	client, err := rt.createClientForRoute(route, owners)
 	if err != nil {
 		if logger != nil {
-			logger.Warn("decision_client_unavailable", "purpose", "todo_update", "error", err.Error())
+			logger.Warn("decision_client_unavailable", "purpose", "job_manage", "error", err.Error())
 		}
 		return nil, ""
 	}

@@ -184,7 +184,7 @@ func wrapChatToolSummary(summary string, width int) []string {
 }
 
 // chatToolDisplayParams is what the chat shows of a call's parameters: the agent's display
-// redaction, as in tool events and logs (todo_update's bash_env values and a codemode script's
+// redaction, as in tool events and logs (job_manage's bash_env values and a codemode script's
 // source are hidden). The hooks pass the call as it runs, so its own Params are left unchanged.
 func chatToolDisplayParams(call agent.ToolCall) map[string]any {
 	return agent.RedactToolParamsForDisplay(call.Name, call.Params)

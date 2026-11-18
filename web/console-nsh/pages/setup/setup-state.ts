@@ -168,7 +168,7 @@ function buildDefaultPayload() {
       write_file: { enabled: true },
       spawn: { enabled: true },
       contacts_send: { enabled: true },
-      todo_update: { enabled: true },
+      job_manage: { enabled: true },
       plan_create: { enabled: false },
       url_fetch: { enabled: true },
       web_search: { enabled: true },
