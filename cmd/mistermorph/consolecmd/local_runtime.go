@@ -1045,7 +1045,14 @@ func (r *consoleLocalRuntime) workspaceForCronTopic(topicID string, defaultWorks
 		return daemonruntime.WorkspaceResolution{}, fmt.Errorf("console runtime generation is not initialized")
 	}
 	none := daemonruntime.WorkspaceResolution{Source: string(workspace.SourceNone)}
-	task, ok, err := cronstore.NewStore(generation.paths.CronPath).FindByID(strings.TrimPrefix(topicID, daemonruntime.CronTopicPrefix))
+	// The topic names its job; a topic recorded before it did has the job in its ID.
+	jobID := daemonruntime.CronTopicJobID(topicID)
+	if r.store != nil {
+		if topic, ok := r.store.GetTopic(topicID); ok && topic != nil && strings.TrimSpace(topic.JobID) != "" {
+			jobID = strings.TrimSpace(topic.JobID)
+		}
+	}
+	task, ok, err := cronstore.NewStore(generation.paths.CronPath).FindByID(jobID)
 	if err != nil {
 		return none, err
 	}

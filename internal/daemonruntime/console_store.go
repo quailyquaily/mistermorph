@@ -1645,6 +1645,11 @@ func normalizeConsoleTaskInfo(info TaskInfo) TaskInfo {
 func normalizeTopicInfo(topic TopicInfo) TopicInfo {
 	topic.ID = strings.TrimSpace(topic.ID)
 	topic.Title = strings.TrimSpace(topic.Title)
+	topic.JobID = strings.TrimSpace(topic.JobID)
+	if topic.JobID == "" {
+		// A job's topic from before topics named their job: its ID is "_cron_<job id>".
+		topic.JobID = CronTopicJobID(topic.ID)
+	}
 	if topic.ID == ConsoleAwarenessTopicID && topic.Title == "" {
 		topic.Title = ConsoleAwarenessTopicTitle
 	}
