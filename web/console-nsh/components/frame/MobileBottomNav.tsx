@@ -28,7 +28,6 @@ import {
   EDGE_TO_EDGE,
   type NavItem,
 } from "../../lib/shell";
-import { glassClass, glassEnabled, glassStyle } from "../../lib/glass";
 import { onSystemBack } from "../../lib/systemBack";
 import { MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SHEET_OUT, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
@@ -38,14 +37,13 @@ import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
 import { uiSlots } from "./slots";
-import { BAR_BELOW, BAR_INSET, BAR_SIDE, mobileBarRoom, mobileNavSlots, mobileSheetFrame, MOBILE_NAV_HEIGHT } from "./mobileBar";
+import { BAR_BELOW, BAR_INSET, BAR_SIDE, GlassCapsule, mobileBarRoom, mobileNavSlots, mobileSheetFrame, MOBILE_NAV_HEIGHT } from "./mobileBar";
 
 export { MOBILE_NAV_HEIGHT };
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
 const PRIMARY_PAGE_PATHS = ["/chat", "/contacts", "/todo"];
-const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
 
 // The agents' sheet; More's state is lib/shell's (navigation closes it).
 const agentMenuOpen = signal(false);
@@ -356,18 +354,9 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
         pointerEvents: "box-none",
       }}
     >
-      <View
-        // Glass where the window draws it (lib/glass.ts): the page shows through, blurred; else the
-        // card's own fill, opaque (a tint alone left the page's text under the icons).
-        class={`max-w-full rounded-full border-[0.5px] border-line ${glassClass("nav")}`}
-        testID={glassEnabled() ? "mobile-nav-capsule.glass" : "mobile-nav-capsule"}
-        style={{
-          padding: BAR_INSET,
-          marginBottom: systemInsets() ? 0 : BAR_BELOW,
-          ...glassStyle(),
-          boxShadow: platform.os === "android" ? undefined : BAR_SHADOW,
-        }}
-      >
+      {/* Glass where the window draws it (lib/glass.ts): the page shows through, blurred; else the
+          card's own fill, opaque (a tint alone left the page's text under the icons). */}
+      <GlassCapsule testID="mobile-nav-capsule" style={{ marginBottom: systemInsets() ? 0 : BAR_BELOW }}>
         <View class="relative flex-row" style={{ width: slots().rowWidth, height: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }}>
           <If when={activeSlot() >= 0}>
             <View
@@ -426,7 +415,7 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
             <AgentAvatar image={selectedAvatar()} size={28} />
           </TipButton>
         </View>
-      </View>
+      </GlassCapsule>
     </View>
   );
 }
