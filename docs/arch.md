@@ -113,7 +113,7 @@ TODO semantics / references:
 
 - Reference-id rewrite, complete-target semantic match, and WIP dedupe keep-index selection.
   tools: `none`
-  files: `builtin/todo_update.go`, `todo/reference_llm.go`, `todo/semantic_llm.go`, `todo/ops.go`
+  files: `builtin/job_manage.go`, `todo/reference_llm.go`, `todo/semantic_llm.go`, `todo/ops.go`
 
 Skills / installer:
 
@@ -273,8 +273,9 @@ Telegram progress updates:
 ```text
 file_state_dir (default ~/.morph; --state-dir or MISTER_MORPH_FILE_STATE_DIR)
 ├── agent.db              config, identity and soul, heartbeat workflows, contacts and their
-│                         handles, bus inbox/outbox, TODO list, Console sessions, Agent Link
-│                         peers, topic context use, request snapshots and workspaces
+│                         handles, bus inbox/outbox, Console sessions, Agent Link peers,
+│                         topic context use, request snapshots and workspaces
+├── jobs.db               the jobs (the TODO list) the scheduler, Console and tools share
 ├── usage.db              LLM usage, one row per call
 ├── memory.db             memories
 ├── journal/journal.db    task and topic events
@@ -291,6 +292,8 @@ file_state_dir (default ~/.morph; --state-dir or MISTER_MORPH_FILE_STATE_DIR)
 Additional notes:
 
 - `internal/agentdb` opens `agent.db` (one list of migrations for every table); each store registers the one-time import of the files it replaced, which are renamed `*.imported`. See `docs/feat/feat_20261108_agent_db.md`.
+- `internal/cron` opens `jobs.db`. Its first open imports the earlier list once, in one transaction recorded in its `meta` table: the `cron_tasks` rows of `agent.db` when an earlier version had imported the list there, otherwise `cron.yaml`. Neither is changed or read again afterwards; `agent.db` keeps its now unused `cron_tasks` table. A `cron.yaml` that cannot be imported whole imports nothing and fails every open with an error naming the rejected records, until it is fixed.
+- New job IDs are `job-<uuid v4>` (`cron.NewJobID`, and `lib/core/job-id.js` in the Console). A job's topic is `_cron_<job id>` and names the job in its `job_id`; each run has its own task ID and scheduler run ID.
 - The heartbeat's task comes from the enabled `heartbeat_workflows` rows.
 - Contacts bus dedupe keys:
   - inbox: `(channel, platform_message_id)`

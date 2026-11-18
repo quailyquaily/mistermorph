@@ -124,7 +124,8 @@ Shell defaults are platform-specific:
 - `tools.coder.bypass_approvals.codex`
 - `tools.coder.bypass_approvals.claude`
 - `tools.contacts_send.enabled`
-- `tools.todo_update.enabled`
+- `tools.job_manage.enabled`
+- `tools.todo_update.enabled` (the earlier switch of `job_manage`; it applies while `tools.job_manage.enabled` is not set)
 - `tools.plan_create.enabled`
 - `tools.plan_create.max_steps`
 - `tools.image_generate.enabled`
