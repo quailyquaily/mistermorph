@@ -2,9 +2,10 @@
 // HTML artifact, with stand-in preview tickets the test answers (`id:ticket-ok`, `id:ticket-fail`)
 // in the shape the console server gives them (`entry_url` a path on the console). Headless runs
 // load no pages, so the web view's own load reports are played by buttons (`id:page-*`). The
-// card's state, the URL its web view got and the frames of the preview are read out below it.
+// card's state, the URL its web view got and the frames of the preview are read out below it, with
+// the full-screen dialog's panel (`fullscreen-panel`, from its layout in the dialog's layer).
 import { mount, signal, Text, View } from "nsh";
-import { Button } from "../../components/ui";
+import { Button, watchDialogs } from "../../components/ui";
 import { ArtifactPreviewCard, createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
 import { resolveConsoleURL } from "../../lib/core/context.js";
 import type { PartFrame } from "../../components/shared/partProbe";
@@ -15,6 +16,19 @@ const ARTIFACT = { dir_name: "file_cache_dir", path: "hello-world-20261117-18543
 
 const tickets = signal(0);
 const frames = signal<Record<string, PartFrame>>({});
+// The panel is made with the card (the dialog is mounted shut), so the watcher comes first.
+watchDialogs((name) =>
+  name === "chat-artifact-fullscreen-dialog"
+    ? {
+        layout: (bounds) =>
+          frames.update((all) => ({
+            ...all,
+            "fullscreen-panel": { x: bounds.origin.x, y: bounds.origin.y, w: bounds.size.width, h: bounds.size.height },
+          })),
+      }
+    : undefined,
+);
+
 let answer: { resolve: (data: unknown) => void; reject: (error: Error) => void } | null = null;
 
 const previews = createArtifactPreviews({

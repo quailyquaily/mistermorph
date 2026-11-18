@@ -437,16 +437,19 @@ export function ArtifactPreviewCard(props: {
       <If when={((state().expanded && state().entryURL) || state().loading) && !state().fullscreen}>
         <View class="overflow-hidden rounded-(--radius) border border-line-faint">{frame(false)}</View>
       </If>
+      {/* Full screen: the page fills the dialog below its title bar, edge to edge (`flush`, no body
+          padding); the panel keeps its place inside the system's insets, and its close button. */}
       <Modal
         open={state().fullscreen}
         onClose={() => props.previews.setFullscreen(props.stateKey, false)}
         title={name() || label()}
         size="full"
         scroll={false}
+        flush
         closeLabel={fullscreenLabel()}
         testID="chat-artifact-fullscreen-dialog"
       >
-        <View class="flex-1">{frame(true)}</View>
+        {frame(true)}
       </Modal>
     </View>
   );
