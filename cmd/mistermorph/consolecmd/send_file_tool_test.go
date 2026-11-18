@@ -322,6 +322,32 @@ func TestConsoleSendFileRefusesDeniedPaths(t *testing.T) {
 	}
 }
 
+// A deny list written before agent.db or jobs.db existed (an older config template) still keeps
+// the agent's state databases, their SQLite sidecars and the imported config from being sent.
+func TestConsoleSendFileRefusesProtectedStateFilesWithAnOldDenyList(t *testing.T) {
+	for _, list := range [][]string{nil, {"config.yaml"}, {"config.yaml", "config.yaml.imported", "agent.db"}} {
+		tool, _ := attachmentFixture(t)
+		tool.denyPaths = list
+		for _, name := range []string{"agent.db", "agent.db-wal", "agent.db-shm", "agent.db-journal", "jobs.db", "jobs.db-wal",
+			"config.yaml.imported", "state/agent.db-wal"} {
+			path := filepath.Join(tool.workspaceDir, name)
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte("API_TOKEN=literal-secret"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tool.Execute(context.Background(), map[string]any{"dir_name": "workspace_dir", "path": name}); err == nil ||
+				!strings.Contains(err.Error(), "send_file denied") {
+				t.Fatalf("deny_paths %v: send_file %s = %v", list, name, err)
+			}
+		}
+		if task, _ := tool.store.Get("task"); len(task.Attachments) != 0 {
+			t.Fatalf("deny_paths %v: a protected file was stored: %+v", list, task.Attachments)
+		}
+	}
+}
+
 func TestConsoleRuntimeSendFileAppliesReadFileDenyPaths(t *testing.T) {
 	rt, job, _ := newConsoleProgressPersistenceRuntime(t, []consoleProgressPersistenceLLMStep{
 		{result: llm.Result{ToolCalls: []llm.ToolCall{{ID: "send", Name: "send_file", Arguments: map[string]any{"dir_name": "workspace_dir", "path": "config.yaml"}}}}},

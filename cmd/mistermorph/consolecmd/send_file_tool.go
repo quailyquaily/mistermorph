@@ -89,7 +89,8 @@ const maxSendFileSymlinks = 16
 
 var errSendFileChanged = errors.New("file changed while it was being opened; try again")
 
-// openAllowedFile opens path under root unless tools.read_file.deny_paths denies it. It resolves
+// openAllowedFile opens path under root unless tools.read_file.deny_paths (or a protected state
+// file, see builtin.EffectiveDenyPaths) denies it. It resolves
 // the path one component at a time, as the kernel does, so a relative symlink target applies to
 // the directory the link really sits in, even when an earlier component was itself a symlink.
 // deny_paths is checked on the requested path, on every symlink met and on the resolved path, so
@@ -101,7 +102,7 @@ func openAllowedFile(root *os.Root, dir, path string, denyPaths []string) (*os.F
 	requested := path
 	deny := func(rel string) error {
 		if offending, denied := builtin.DeniedPath(filepath.Join(dir, rel), denyPaths); denied {
-			return fmt.Errorf("send_file denied for path %q (matched %q in tools.read_file.deny_paths)", requested, offending)
+			return fmt.Errorf("send_file denied for path %q (matched %q; see tools.read_file.deny_paths)", requested, offending)
 		}
 		return nil
 	}
