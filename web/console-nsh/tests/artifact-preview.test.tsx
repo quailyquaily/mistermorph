@@ -85,6 +85,79 @@ test("full screen shows the page in a frame of the window's size, loading again 
   expect(app.texts()).toContain("tickets=1");
 });
 
+// Full screen, edge to edge: the page fills the dialog's panel below its title bar, from side to side
+// and down to the bottom edge (the panel's hairline aside), with no body padding around it; the
+// panel keeps its own place (inside the system's insets on phones) and its close button. Resizing
+// keeps it so; leaving full screen gives the card back its framed 384pt preview.
+type Box = { x: number; y: number; w: number; h: number };
+/** The panel's hairline. */
+const BORDER = 1;
+/** From the panel's top to below its title bar: the hairline, the 44pt bar with its rule. */
+const HEAD = 45;
+
+function expectEdgeToEdge(frame: Box, panel: Box) {
+  expect(frame.x).toBe(panel.x + BORDER);
+  expect(frame.w).toBe(panel.w - 2 * BORDER);
+  expect(frame.y).toBe(panel.y + HEAD);
+  expect(frame.y + frame.h).toBe(panel.y + panel.h - BORDER);
+}
+
+for (const [name, options, resized, insets] of [
+  ["on a phone", PHONE, [844, 390], null],
+  ["on a phone with a navigation bar", { ...PHONE, safeArea: { top: 24, right: 0, bottom: 48, left: 0 } }, [844, 390], { top: 24, bottom: 48 }],
+  ["on a desktop", { width: 1280, height: 800, platform: "linux" as const, locale: "en-US" }, [960, 640], null],
+] as const) {
+  test(`full screen fills the dialog below its title bar edge to edge ${name}, resized and back`, async () => {
+    const app = await open("./fixtures/artifact-preview-app.tsx", options);
+    await app.waitUntil(() => app.texts().includes("tickets=1"));
+    await app.press("id:ticket-ok");
+    await app.press("id:page-load");
+    await app.waitUntil(() => !!frames(app)["chat-artifact-frame"]);
+    const inline = frames(app)["chat-artifact-frame"];
+
+    await app.press("label:Fullscreen preview");
+    await app.waitUntil(() => !!frames(app)["chat-artifact-fullscreen-frame"] && !!frames(app)["fullscreen-panel"]);
+    const panel = frames(app)["fullscreen-panel"];
+    expectEdgeToEdge(frames(app)["chat-artifact-fullscreen-frame"], panel);
+    // The panel stays clear of the status bar and the navigation bar (the layer's, not the page's).
+    if (insets) {
+      expect(panel.y).toBeGreaterThanOrEqual(insets.top);
+      expect(panel.y + panel.h).toBeLessThanOrEqual(options.height - insets.bottom);
+    }
+    expect(app.shows("id:chat-artifact-fullscreen-dialog-close")).toBe(true);
+    expect(app.shows("id:chat-artifact-fullscreen-loading")).toBe(true);
+
+    // A turned phone, a smaller window: the frame follows the panel.
+    const [width, height] = resized;
+    await app.setViewport(width, height);
+    await app.waitUntil(() => frames(app)["fullscreen-panel"].w !== panel.w && frames(app)["chat-artifact-fullscreen-frame"].w !== panel.w - 2 * BORDER);
+    expectEdgeToEdge(frames(app)["chat-artifact-fullscreen-frame"], frames(app)["fullscreen-panel"]);
+    expect(app.shows("id:chat-artifact-fullscreen-dialog-close")).toBe(true);
+    await app.setViewport(options.width, options.height);
+    await app.waitUntil(() => frames(app)["fullscreen-panel"].w === panel.w);
+    await app.waitUntil(() => frames(app)["chat-artifact-fullscreen-frame"].w === panel.w - 2 * BORDER);
+    expectEdgeToEdge(frames(app)["chat-artifact-fullscreen-frame"], frames(app)["fullscreen-panel"]);
+
+    // Out of full screen, the card's own framed preview is back, as tall and as wide as before.
+    await app.press("id:chat-artifact-fullscreen-dialog-close");
+    await app.waitUntil(() => app.count("id:chat-artifact-fullscreen-frame") === 0);
+    expect(app.count("id:chat-artifact-frame")).toBe(1);
+    expect(frames(app)["chat-artifact-frame"]).toEqual(inline);
+
+    // Back in full screen with a page that failed: the reason takes the same slot.
+    await app.press("id:page-fail");
+    await app.waitFor("id:chat-artifact-failed");
+    await app.press("label:Fullscreen preview");
+    await app.waitFor("id:chat-artifact-fullscreen-failed");
+    expect(app.shows("id:chat-artifact-fullscreen-retry")).toBe(true);
+    await app.waitUntil(() => !!frames(app)["chat-artifact-fullscreen-frame"]);
+    expectEdgeToEdge(frames(app)["chat-artifact-fullscreen-frame"], frames(app)["fullscreen-panel"]);
+    expect(frames(app)["fullscreen-panel"]).toEqual(panel);
+    await app.press("id:chat-artifact-fullscreen-dialog-close");
+    await app.waitFor("id:chat-artifact-failed");
+  });
+}
+
 test("a page that fails says why instead of a blank box, and retries with a new ticket", async () => {
   const app = await openCard();
   await app.press("id:ticket-ok");

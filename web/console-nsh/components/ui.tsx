@@ -2062,6 +2062,11 @@ export function Modal(props: {
   headerActions?: JSX.Element;
   /** Whether the body scrolls (default true). */
   scroll?: boolean;
+  /**
+   * A body without its own padding: the children reach the panel's sides and bottom edge, right
+   * under the title bar (a full-screen preview). Their own spacing is theirs.
+   */
+  flush?: boolean;
   children?: JSX.Element;
   testID?: string;
   closeLabel?: string;
@@ -2105,8 +2110,8 @@ export function Modal(props: {
           />
         </View>
       </View>
-      <If when={props.scroll !== false} else={<View class="flex-1 p-4">{props.children}</View>}>
-        <EdgeScroll class="shrink" contentClass="p-4 gap-3">
+      <If when={props.scroll !== false} else={<View class={props.flush ? "flex-1" : "flex-1 p-4"}>{props.children}</View>}>
+        <EdgeScroll class="shrink" contentClass={props.flush ? "gap-3" : "p-4 gap-3"}>
           {props.children}
         </EdgeScroll>
       </If>
