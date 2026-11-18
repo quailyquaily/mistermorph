@@ -38,3 +38,12 @@ Tests: manager independently passed test -z "$(gofmt -l .)" && go vet ./... && g
 UI verification: coder inspected standalone Chrome renders at widths 390 and 1400, state screenshots, hover tooltips and keyboard focus; measured equal 4.5pt outer insets including border. Headless geometry also checked 320pt. Limitations: visual probe used installed nsh 0.5.1 web runtime, not 0.6; full Console against a live server, real Android and desktop app were not inspected.
 
 Incident: coder used an overly broad pkill pattern while stopping its own test and also terminated the parent scripts/test.sh of concurrent review-FT151. Child tests continued but that invocation's retry/final summary may be missing; its review test result should be independently confirmed or rerun. Coder subsequently used scoped process IDs. No unrelated files were changed by this incident.
+
+## factory · review · 2026-11-19 00:53
+head: 8f755144897779402375701d5e986101999f8a72
+verdict: pass
+notes:
+- Claude Code reviewed all 12 changed files against origin/master (8d217db44ca21aaf7a024254e2a2f081b69a345b); no actionable findings. Worktree remained clean.
+- Validation passed: gofmt gate, go vet ./..., go test ./..., nsh 0.6.0 check, and scripts/test.sh (140 files, 0 failures, inventory check passed). Four unrelated parallel Console test files passed on isolated retry; both toolbar-related files passed first time.
+- Installs: none.
+- Residual checks for owner: no fresh visual inspection during review, no live Console/native Android/desktop inspection. Build visual probe used nsh 0.5.1 runtime. Confirm the opaque pale-red Stop fill matches the intended primary treatment; light/dark tokens currently match, so those tests cannot validate a future dark palette.
