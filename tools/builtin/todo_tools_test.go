@@ -35,7 +35,7 @@ func (s *stubTodoToolLLMClient) Chat(_ context.Context, req llm.Request) (llm.Re
 	return llm.Result{Text: reply}, nil
 }
 
-func TestTodoUpdateAddOnceAndDeleteSemantic(t *testing.T) {
+func TestJobManageAddOnceAndDeleteSemantic(t *testing.T) {
 	root := t.TempDir()
 	cronPath := filepath.Join(root, "cron.yaml")
 	contactsDir := filepath.Join(root, "contacts")
@@ -47,7 +47,7 @@ func TestTodoUpdateAddOnceAndDeleteSemantic(t *testing.T) {
 			`{"status":"matched","index":0}`,
 		},
 	}
-	update := NewTodoUpdateToolWithLLM(true, cronPath, contactsDir, client, "gpt-5.2")
+	update := NewJobManageToolWithLLM(true, cronPath, contactsDir, client, "gpt-5.2")
 	out, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add_once",
 		"id":      "submit-report",
@@ -76,7 +76,7 @@ func TestTodoUpdateAddOnceAndDeleteSemantic(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &addParsed); err != nil {
 		t.Fatalf("todo_update add_once json parse error = %v", err)
 	}
-	if !addParsed.OK || addParsed.TaskCount != 1 || addParsed.Task.ID != "submit-report" {
+	if !addParsed.OK || addParsed.TaskCount != 1 || !cronstore.IsGeneratedJobID(addParsed.Task.ID) {
 		t.Fatalf("unexpected add_once result: %s", out)
 	}
 	if addParsed.Task.Title != "Submit report" {
@@ -105,12 +105,12 @@ func TestTodoUpdateAddOnceAndDeleteSemantic(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateAddRecurringWritesCronYAML(t *testing.T) {
+func TestJobManageAddRecurringWritesCronYAML(t *testing.T) {
 	root := t.TempDir()
 	cronPath := filepath.Join(root, "cron.yaml")
 	contactsDir := filepath.Join(root, "contacts")
 	client := &stubTodoToolLLMClient{}
-	update := NewTodoUpdateToolWithLLM(true, cronPath, contactsDir, client, "gpt-5.2")
+	update := NewJobManageToolWithLLM(true, cronPath, contactsDir, client, "gpt-5.2")
 	out, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add_recurring",
 		"id":      "tennis",
@@ -136,7 +136,7 @@ func TestTodoUpdateAddRecurringWritesCronYAML(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("todo_update add_recurring json parse error = %v", err)
 	}
-	if !parsed.OK || parsed.TaskCount != 1 || parsed.Task.ID != "tennis" || parsed.Task.Cron != "0 15 * * 4" {
+	if !parsed.OK || parsed.TaskCount != 1 || !cronstore.IsGeneratedJobID(parsed.Task.ID) || parsed.Task.Cron != "0 15 * * 4" {
 		t.Fatalf("unexpected add_recurring result: %s", out)
 	}
 	if parsed.Task.Title != "Tennis practice" {
@@ -154,7 +154,7 @@ func TestTodoUpdateAddRecurringWritesCronYAML(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateAddDefaultsConsoleNotificationChatID(t *testing.T) {
+func TestJobManageAddDefaultsConsoleNotificationChatID(t *testing.T) {
 	tests := []struct {
 		name       string
 		params     map[string]any
@@ -196,7 +196,7 @@ func TestTodoUpdateAddDefaultsConsoleNotificationChatID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
-			update := NewTodoUpdateToolWithLLM(
+			update := NewJobManageToolWithLLM(
 				true,
 				filepath.Join(root, "cron.yaml"),
 				filepath.Join(root, "contacts"),
@@ -224,7 +224,7 @@ func TestTodoUpdateAddDefaultsConsoleNotificationChatID(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateDeleteByIDDoesNotRequireLLM(t *testing.T) {
+func TestJobManageDeleteByIDDoesNotRequireLLM(t *testing.T) {
 	root := t.TempDir()
 	cronPath := filepath.Join(root, "cron.yaml")
 	contactsDir := filepath.Join(root, "contacts")
@@ -232,7 +232,7 @@ func TestTodoUpdateDeleteByIDDoesNotRequireLLM(t *testing.T) {
 	if _, err := store.AddOnceWithChatID("", "Review invoices.", "2026-05-12 09:00", "UTC", "invoice-review", ""); err != nil {
 		t.Fatalf("seed cron task: %v", err)
 	}
-	update := NewTodoUpdateTool(true, cronPath, contactsDir)
+	update := NewJobManageTool(true, cronPath, contactsDir)
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action": "delete",
 		"id":     "invoice-review",
@@ -249,9 +249,9 @@ func TestTodoUpdateDeleteByIDDoesNotRequireLLM(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateCompleteActionRemoved(t *testing.T) {
+func TestJobManageCompleteActionRemoved(t *testing.T) {
 	root := t.TempDir()
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "cron.yaml"), filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
+	update := NewJobManageToolWithLLM(true, filepath.Join(root, "cron.yaml"), filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "complete",
 		"content": "旧任务",
@@ -261,10 +261,10 @@ func TestTodoUpdateCompleteActionRemoved(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateAddRejectsInvalidReferenceBeforeLLM(t *testing.T) {
+func TestJobManageAddRejectsInvalidReferenceBeforeLLM(t *testing.T) {
 	root := t.TempDir()
 	client := &stubTodoToolLLMClient{}
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "cron.yaml"), filepath.Join(root, "contacts"), client, "gpt-5.2")
+	update := NewJobManageToolWithLLM(true, filepath.Join(root, "cron.yaml"), filepath.Join(root, "contacts"), client, "gpt-5.2")
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add_once",
 		"content": "提醒 [John](not-a-reference) 明天确认内容",
@@ -279,12 +279,12 @@ func TestTodoUpdateAddRejectsInvalidReferenceBeforeLLM(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateAddRecurringResolvesConsoleSpeakerPlaceholder(t *testing.T) {
+func TestJobManageAddRecurringResolvesConsoleSpeakerPlaceholder(t *testing.T) {
 	root := t.TempDir()
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)
 	client := &stubTodoToolLLMClient{}
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "cron.yaml"), contactsDir, client, "gpt-5.2")
+	update := NewJobManageToolWithLLM(true, filepath.Join(root, "cron.yaml"), contactsDir, client, "gpt-5.2")
 	update.SetAddContext(todo.AddResolveContext{
 		Channel:         "console",
 		ChatType:        "topic",
@@ -318,11 +318,11 @@ func TestTodoUpdateAddRecurringResolvesConsoleSpeakerPlaceholder(t *testing.T) {
 	}
 }
 
-func TestTodoUpdateAddOnceIgnoresUnusedBuiltinSpeakerPeople(t *testing.T) {
+func TestJobManageAddOnceIgnoresUnusedBuiltinSpeakerPeople(t *testing.T) {
 	root := t.TempDir()
 	contactsDir := filepath.Join(root, "contacts")
 	client := &stubTodoToolLLMClient{}
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "cron.yaml"), contactsDir, client, "gpt-5.2")
+	update := NewJobManageToolWithLLM(true, filepath.Join(root, "cron.yaml"), contactsDir, client, "gpt-5.2")
 	update.SetAddContext(todo.AddResolveContext{
 		Channel:         "console",
 		ChatType:        "topic",
@@ -385,7 +385,7 @@ func seedTodoContacts(t *testing.T, contactsDir string) {
 	}
 }
 
-func TestTodoUpdateAddWorkspaceDir(t *testing.T) {
+func TestJobManageAddWorkspaceDir(t *testing.T) {
 	workspaceDir := t.TempDir()
 	tests := []struct {
 		name    string
@@ -405,7 +405,7 @@ func TestTodoUpdateAddWorkspaceDir(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			cronPath := filepath.Join(root, "cron.yaml")
-			update := NewTodoUpdateToolWithLLM(true, cronPath, filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
+			update := NewJobManageToolWithLLM(true, cronPath, filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
 			params := map[string]any{
 				"action":  "add_recurring",
 				"id":      "build",

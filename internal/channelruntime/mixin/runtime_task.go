@@ -198,7 +198,7 @@ func runMixinTask(ctx context.Context, rt *taskruntime.Runtime, toolAPI mixintoo
 			if block := workspace.PromptBlock(job.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)
 			}
-			toolsutil.SetTodoUpdateToolAddContext(reg, todoResolveContextForMixin(job))
+			toolsutil.SetJobManageToolAddContext(reg, todoResolveContextForMixin(job))
 			promptprofile.AppendMixinRuntimeBlocks(spec, isMixinGroup(job.ChatType))
 		},
 		SteerSource:            steerSource,

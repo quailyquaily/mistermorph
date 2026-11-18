@@ -170,7 +170,7 @@ func runTelegramTask(ctx context.Context, rt *taskruntime.Runtime, api *telegram
 			if block := workspace.PromptBlock(job.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)
 			}
-			toolsutil.SetTodoUpdateToolAddContext(reg, todo.AddResolveContext{
+			toolsutil.SetJobManageToolAddContext(reg, todo.AddResolveContext{
 				Channel:          "telegram",
 				ChatType:         job.ChatType,
 				ChatID:           job.ChatID,

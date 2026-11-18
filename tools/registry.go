@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 )
 
 type Registry struct {
@@ -91,8 +93,18 @@ func registryToolName(tool Tool) (string, error) {
 	return name, nil
 }
 
+// Get returns the tool registered under name. A tool's earlier name (todo_update, now
+// job_manage) finds it too, so a call by the old name reaches the renamed tool.
 func (r *Registry) Get(name string) (Tool, bool) {
+	if r == nil {
+		return nil, false
+	}
 	t, ok := r.tools[name]
+	if !ok {
+		if canonical := jobconfig.CanonicalToolName(name); canonical != name {
+			t, ok = r.tools[canonical]
+		}
+	}
 	return t, ok
 }
 

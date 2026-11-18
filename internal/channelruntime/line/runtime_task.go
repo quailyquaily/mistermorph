@@ -124,7 +124,7 @@ func runLineTask(
 			if block := workspace.PromptBlock(job.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)
 			}
-			toolsutil.SetTodoUpdateToolAddContext(reg, todoResolveContextForLine(job))
+			toolsutil.SetJobManageToolAddContext(reg, todoResolveContextForLine(job))
 			promptprofile.AppendLineRuntimeBlocks(spec, isLineGroupChat(job.ChatType))
 		},
 		SteerSource:            steerSource,

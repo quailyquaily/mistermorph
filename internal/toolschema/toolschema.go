@@ -47,7 +47,7 @@ func Build() Catalog {
 		builtin.NewWebSearchTool(true, "", 0, 0, ""),
 		builtin.NewContactsSendTool(builtin.ContactsSendToolOptions{}),
 		builtin.NewAgentSendTool(builtin.ContactsSendToolOptions{}),
-		builtin.NewTodoUpdateTool(true, "", ""),
+		builtin.NewJobManageTool(true, "", ""),
 		builtin.NewTodoListTool(""),
 		builtin.NewPlanCreateTool(nil, "", nil, 0),
 		builtin.NewImageGenerateTool(builtin.ImageToolConfig{}),

@@ -236,7 +236,7 @@ func emojiForTelegramPlanStep(step string) string {
 		return "🎙️"
 	case strings.Contains(lower, "bash"):
 		return "🧑‍💻"
-	case strings.Contains(lower, "todo_update"), strings.Contains(lower, "todo_list"):
+	case strings.Contains(lower, "job_manage"), strings.Contains(lower, "todo_update"), strings.Contains(lower, "todo_list"):
 		return "🗓️"
 	case strings.Contains(lower, "contacts_send"), strings.Contains(lower, "agent_send"):
 		return "✉️"

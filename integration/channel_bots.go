@@ -603,7 +603,7 @@ func (rt *Runtime) prepareChannelDependencies(ctx context.Context, snap runtimeS
 
 func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDependencies {
 	planEnabled := rt.features.PlanTool && snap.Registry.ToolsPlanCreateEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinPlanCreate)
-	todoEnabled := snap.Registry.ToolsTodoUpdateEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinTodoUpdate)
+	todoEnabled := snap.Registry.ToolsJobManageEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinJobManage)
 	imageGenerateEnabled := snap.Registry.ToolsImageGenerateEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinImageGenerate)
 	imageEditEnabled := snap.Registry.ToolsImageEditEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinImageEdit)
 	usageClientWrap := integrationUsageClientWrap(snap.Paths, snap.Logger)
@@ -665,7 +665,7 @@ func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDepen
 		},
 		RuntimeToolsConfig: toolsutil.RuntimeToolsRegisterConfig{
 			PlanCreate: toolsutil.BuildPlanCreateRegisterConfig(planEnabled, snap.Registry.ToolsPlanCreateMaxSteps),
-			TodoUpdate: toolsutil.TodoUpdateRegisterConfig{
+			JobManage: toolsutil.JobManageRegisterConfig{
 				Enabled:     todoEnabled,
 				CronPath:    snap.Paths.CronPath,
 				StateDir:    snap.Paths.StateDir,

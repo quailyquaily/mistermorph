@@ -63,6 +63,8 @@ func AgentFields() []Field {
 		// The name set of new spawn and coder workers (agent.WorkerNameSets).
 		{Path: "tools.agent_name_set", Kind: KindString, ApplyMode: ApplyNextGeneration, Enum: []string{"scientists", "musicians", "artists"}},
 		{Path: "tools.contacts_send.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.job_manage.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		// The earlier switch of job_manage; it applies while tools.job_manage.enabled is not set.
 		{Path: "tools.todo_update.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.plan_create.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.tool_search.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},

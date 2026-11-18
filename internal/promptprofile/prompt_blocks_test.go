@@ -175,7 +175,7 @@ func TestAppendDiscordRuntimeBlocks(t *testing.T) {
 	}
 }
 
-func TestAppendTodoWorkflowBlock_RequiresTodoUpdateTool(t *testing.T) {
+func TestAppendTodoWorkflowBlock_RequiresJobManageTool(t *testing.T) {
 	spec := agent.PromptSpec{}
 	reg := tools.NewRegistry()
 
@@ -186,20 +186,20 @@ func TestAppendTodoWorkflowBlock_RequiresTodoUpdateTool(t *testing.T) {
 	}
 }
 
-func TestAppendTodoWorkflowBlock_IncludesPolicyWhenTodoUpdateToolExists(t *testing.T) {
+func TestAppendTodoWorkflowBlock_IncludesPolicyWhenJobManageToolExists(t *testing.T) {
 	spec := agent.PromptSpec{}
 	reg := tools.NewRegistry()
-	reg.Register(&testTool{name: "todo_update"})
+	reg.Register(&testTool{name: "job_manage"})
 
 	AppendTodoWorkflowBlock(&spec, reg)
 
 	if len(spec.Blocks) != 1 {
 		t.Fatalf("blocks len = %d, want 1", len(spec.Blocks))
 	}
-	if !strings.Contains(spec.Blocks[0].Content, "[[ Cron Task Workflow ]]") {
+	if !strings.Contains(spec.Blocks[0].Content, "[[ Job Workflow ]]") {
 		t.Fatalf("cron workflow heading missing: %q", spec.Blocks[0].Content)
 	}
-	if !strings.Contains(spec.Blocks[0].Content, "`todo_update`") {
+	if !strings.Contains(spec.Blocks[0].Content, "`job_manage`") {
 		t.Fatalf("cron workflow tool guidance missing: %q", spec.Blocks[0].Content)
 	}
 }
@@ -210,8 +210,8 @@ func TestAppendTodoWorkflowBlock_NamesTodoListOnlyWhenRegistered(t *testing.T) {
 		tools    []string
 		wantList bool
 	}{
-		{name: "update only", tools: []string{"todo_update"}},
-		{name: "update and list", tools: []string{"todo_update", "todo_list"}, wantList: true},
+		{name: "update only", tools: []string{"job_manage"}},
+		{name: "update and list", tools: []string{"job_manage", "todo_list"}, wantList: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			spec := agent.PromptSpec{}
@@ -232,8 +232,8 @@ func TestAppendTodoWorkflowBlock_NamesTodoListOnlyWhenRegistered(t *testing.T) {
 			if strings.Contains(content, "{{") || strings.Contains(content, "\n\n\n") {
 				t.Fatalf("template markers or blank runs left: %q", content)
 			}
-			if !strings.Contains(content, "call `todo_update` with action `add_once`") {
-				t.Fatalf("todo_update guidance missing: %q", content)
+			if !strings.Contains(content, "call `job_manage` with action `add_once`") {
+				t.Fatalf("job_manage guidance missing: %q", content)
 			}
 		})
 	}

@@ -2865,7 +2865,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 		meta["poke"] = pokeMeta
 	}
 	promptAugment := func(spec *agent.PromptSpec, reg *tools.Registry) {
-		toolsutil.SetTodoUpdateToolAddContext(reg, todo.AddResolveContext{
+		toolsutil.SetJobManageToolAddContext(reg, todo.AddResolveContext{
 			Channel:         "console",
 			ChatType:        "topic",
 			SpeakerUsername: consoleParticipantKey,

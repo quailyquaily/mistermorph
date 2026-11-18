@@ -135,11 +135,11 @@ func main() {
 	cfg := integration.DefaultConfig()
 	cfg.Inspect.Prompt = *inspectPrompt
 	cfg.Inspect.Request = *inspectRequest
-	cfg.BuiltinToolNames = []string{"read_file", "url_fetch", "todo_update"}
+	cfg.BuiltinToolNames = []string{"read_file", "url_fetch", "job_manage"}
 	cfg.Set("llm.provider", "openai")
 	cfg.Set("llm.api_key", strings.TrimSpace(*apiKey))
 	cfg.Set("llm.model", strings.TrimSpace(*model))
-	cfg.Set("tools.todo_update.enabled", true)
+	cfg.Set("tools.job_manage.enabled", true)
 	cfg.Set("max_steps", *maxSteps)
 	cfg.Set("tool_repeat_limit", *toolRepeatLimit)
 

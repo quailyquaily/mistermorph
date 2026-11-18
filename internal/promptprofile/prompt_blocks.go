@@ -212,7 +212,7 @@ func AppendInsightBlock(spec *agent.PromptSpec, limit int) {
 }
 
 func AppendTodoWorkflowBlock(spec *agent.PromptSpec, registry *tools.Registry) {
-	if _, ok := registry.Get("todo_update"); !ok {
+	if _, ok := registry.Get("job_manage"); !ok {
 		return
 	}
 	_, canList := registry.Get("todo_list")

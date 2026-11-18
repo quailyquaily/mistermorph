@@ -324,7 +324,7 @@ func TestRunSubtaskReturnsEnvelope(t *testing.T) {
 		},
 		RuntimeToolsConfig: toolsutil.RuntimeToolsRegisterConfig{
 			PlanCreate: toolsutil.BuildPlanCreateRegisterConfig(true, 6),
-			TodoUpdate: toolsutil.BuildTodoUpdateRegisterConfig(true, t.TempDir(), "contacts"),
+			JobManage:  toolsutil.BuildJobManageRegisterConfig(true, t.TempDir(), "contacts"),
 		},
 		PromptSpec: func(_ context.Context, _ *slog.Logger, _ agent.LogOptions, _ string, _ llm.Client, _ string, _ []string) (agent.PromptSpec, []string, error) {
 			return agent.DefaultPromptSpec(), nil, nil

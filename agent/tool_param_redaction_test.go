@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestTodoUpdateBashEnvValuesAreRedactedFromLogsAndEvents(t *testing.T) {
+func TestJobManageBashEnvValuesAreRedactedFromLogsAndEvents(t *testing.T) {
 	const secret = "synthetic-secret-value-0003"
 	var params map[string]any
 	if err := json.Unmarshal([]byte(`{"action":"update","id":"report","content":"Edited",

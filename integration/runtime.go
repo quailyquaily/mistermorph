@@ -124,7 +124,8 @@ func normalizeToolNames(names []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(names))
 	for _, name := range names {
-		name = strings.ToLower(strings.TrimSpace(name))
+		// An earlier tool name selects the tool by its current one (todo_update: job_manage).
+		name = toolsutil.CanonicalBuiltinToolName(name)
 		if name == "" {
 			continue
 		}
@@ -369,7 +370,7 @@ func ensureIntegrationRunContext(ctx context.Context) context.Context {
 }
 
 func (rt *Runtime) isBuiltinToolSelected(name string) bool {
-	name = strings.ToLower(strings.TrimSpace(name))
+	name = toolsutil.CanonicalBuiltinToolName(name)
 	if name == "" || rt == nil {
 		return false
 	}

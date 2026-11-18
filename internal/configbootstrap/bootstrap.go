@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -51,7 +52,7 @@ type runtimeValues struct {
 	ToolsSpawn        bool
 	ToolsCoder        bool
 	ToolsContactsSend bool
-	ToolsTodoUpdate   bool
+	ToolsJobManage    bool
 	ToolsPlanCreate   bool
 	ToolsURLFetch     bool
 	ToolsWebSearch    bool
@@ -67,7 +68,7 @@ func defaultRuntimeValues() runtimeValues {
 		ToolsSpawn:        tmp.GetBool("tools.spawn.enabled"),
 		ToolsCoder:        tmp.GetBool("tools.coder.enabled"),
 		ToolsContactsSend: tmp.GetBool("tools.contacts_send.enabled"),
-		ToolsTodoUpdate:   tmp.GetBool("tools.todo_update.enabled"),
+		ToolsJobManage:    jobconfig.ToolEnabled(tmp),
 		ToolsPlanCreate:   tmp.GetBool("tools.plan_create.enabled"),
 		ToolsURLFetch:     tmp.GetBool("tools.url_fetch.enabled"),
 		ToolsWebSearch:    tmp.GetBool("tools.web_search.enabled"),
@@ -107,7 +108,7 @@ func applyAgentDefaults(root *yaml.Node, values runtimeValues, cfg LLMConfig) {
 	SetMappingBoolPath(toolsNode, "spawn", "enabled", values.ToolsSpawn)
 	SetMappingBoolPath(toolsNode, "coder", "enabled", values.ToolsCoder)
 	SetMappingBoolPath(toolsNode, "contacts_send", "enabled", values.ToolsContactsSend)
-	SetMappingBoolPath(toolsNode, "todo_update", "enabled", values.ToolsTodoUpdate)
+	SetMappingBoolPath(toolsNode, "job_manage", "enabled", values.ToolsJobManage)
 	SetMappingBoolPath(toolsNode, "plan_create", "enabled", values.ToolsPlanCreate)
 	SetMappingBoolPath(toolsNode, "url_fetch", "enabled", values.ToolsURLFetch)
 	SetMappingBoolPath(toolsNode, "web_search", "enabled", values.ToolsWebSearch)

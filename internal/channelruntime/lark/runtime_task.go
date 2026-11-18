@@ -175,7 +175,7 @@ func runLarkTask(
 			if block := workspace.PromptBlock(job.WorkspaceDir); strings.TrimSpace(block.Content) != "" {
 				spec.Blocks = append([]agent.PromptBlock{block}, spec.Blocks...)
 			}
-			toolsutil.SetTodoUpdateToolAddContext(reg, todoResolveContextForLark(job))
+			toolsutil.SetJobManageToolAddContext(reg, todoResolveContextForLark(job))
 			promptprofile.AppendLarkRuntimeBlocks(spec, isLarkGroupChat(job.ChatType), strings.Join(larktools.StandardReactionEmojiTypes(), ","))
 		},
 		SteerSource:            steerSource,

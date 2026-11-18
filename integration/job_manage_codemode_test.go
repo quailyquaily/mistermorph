@@ -11,16 +11,15 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/agent"
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
-// A codemode script that edits a scheduled task through todo_update, with bash_env values written
+// A codemode script that edits a scheduled task through job_manage, with bash_env values written
 // as literals or built at run time, updates the task, while neither the values nor any part of the
 // script's source appear in tool events or logs: the codemode call shows only the script's size, and
-// the nested todo_update calls show the variable names with the values redacted.
-func TestRunTaskTodoUpdateFromCodeModeKeepsValuesOutOfOutput(t *testing.T) {
+// the nested job_manage calls show the variable names with the values redacted.
+func TestRunTaskJobManageFromCodeModeKeepsValuesOutOfOutput(t *testing.T) {
 	const (
 		literal = "synthetic-secret-value-0099"
 		dynamic = "synthetic-dynamic-value-0098"
@@ -50,23 +49,23 @@ func TestRunTaskTodoUpdateFromCodeModeKeepsValuesOutOfOutput(t *testing.T) {
 	edit := `const token = ["synthetic", "dynamic", "value", "0098"].join("-");
 let unknown = "";
 try {
-  await tools.todo_update({action: "update", id: "no-such-task", bash_env: [{name: "API_TOKEN", value: "synthetic-secret-value-0099"}]});
+  await tools.job_manage({action: "update", id: "no-such-task", bash_env: [{name: "API_TOKEN", value: "synthetic-secret-value-0099"}]});
 } catch (e) {
   unknown = e.message;
 }
 let invalid = "";
 try {
-  await tools.todo_update({action: "update", id: "weekly-report", content: "Not applied", bash_env: [{name: "9BAD", value: token}]});
+  await tools.job_manage({action: "update", id: "weekly-report", content: "Not applied", bash_env: [{name: "9BAD", value: token}]});
 } catch (e) {
   invalid = e.message;
 }
-const result = JSON.parse(await tools.todo_update({
+const result = JSON.parse(await tools.job_manage({
   action: "update", id: "weekly-report", content: "Write the weekly report with charts",
   bash_env: [{name: "API_TOKEN", value: "synthetic-secret-value-0099"}, {name: "SESSION", value: token}],
 }));
 return {ok: result.ok, names: result.task.bash_env_names, unknown, invalid};`
 	// A script that does not parse never runs; its source is withheld all the same.
-	malformed := `await tools.todo_update({action: "update", id: "weekly-report", bash_env: [{name: "API_TOKEN", value: "synthetic-broken-value-0097"}]`
+	malformed := `await tools.job_manage({action: "update", id: "weekly-report", bash_env: [{name: "API_TOKEN", value: "synthetic-broken-value-0097"}]`
 	calls := []llm.ToolCall{
 		{ID: "edit", Name: "codemode", Arguments: map[string]any{"code": edit}},
 		{ID: "malformed", Name: "codemode", Arguments: map[string]any{"code": malformed}},
@@ -97,9 +96,7 @@ return {ok: result.ok, names: result.task.bash_env_names, unknown, invalid};`
 	}
 
 	// The script's last call updated the task in place; the failed calls changed nothing.
-	if err := agentdb.CachedBeside(cronPath).Close(); err != nil {
-		t.Fatal(err)
-	}
+	cronstore.NewStore(cronPath).Close()
 	file, _, err := cronstore.NewStore(cronPath).Read()
 	if err != nil {
 		t.Fatal(err)
@@ -163,17 +160,17 @@ return {ok: result.ok, names: result.task.bash_env_names, unknown, invalid};`
 				t.Fatalf("codemode event args = %#v", event.Args)
 			}
 			scripts++
-		case "todo_update":
+		case "job_manage":
 			if event.ParentActivityID != "edit" || event.Args["id"] == nil || event.Args["bash_env"] == nil ||
 				!strings.Contains(string(raw), `"value":"[redacted]"`) {
-				t.Fatalf("nested todo_update event = %s", raw)
+				t.Fatalf("nested job_manage event = %s", raw)
 			}
 			nested++
 		}
 	}
 	// A start and a done event for each script, and for each of the three nested calls.
 	if scripts != 4 || nested != 6 {
-		t.Fatalf("codemode events = %d, nested todo_update events = %d", scripts, nested)
+		t.Fatalf("codemode events = %d, nested job_manage events = %d", scripts, nested)
 	}
 
 	logged := ""

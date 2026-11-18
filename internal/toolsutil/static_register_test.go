@@ -283,7 +283,7 @@ func TestRegisterStaticToolsTodoList(t *testing.T) {
 			if !ok {
 				return
 			}
-			if _, mutating := reg.Get(BuiltinTodoUpdate); mutating {
+			if _, mutating := reg.Get(BuiltinJobManage); mutating {
 				t.Fatal("todo_update registered by the static tools")
 			}
 			out, err := tool.Execute(context.Background(), map[string]any{})

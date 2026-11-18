@@ -69,7 +69,7 @@ func TestNewRunEngineUsesSharedTodoWorkflowPrompt(t *testing.T) {
 	if _, _, err := rt.RunTask(context.Background(), "schedule a reminder", agent.RunOptions{}); err != nil {
 		t.Fatalf("RunTask() error = %v", err)
 	}
-	if !strings.Contains(systemPrompt, "[[ Cron Task Workflow ]]") || !strings.Contains(systemPrompt, "call `todo_update`") {
+	if !strings.Contains(systemPrompt, "[[ Job Workflow ]]") || !strings.Contains(systemPrompt, "call `job_manage`") {
 		t.Fatalf("system prompt is missing todo workflow guidance: %q", systemPrompt)
 	}
 }

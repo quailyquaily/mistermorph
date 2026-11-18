@@ -329,13 +329,13 @@ func RedactToolParamsForDisplay(toolName string, params map[string]any) map[stri
 }
 
 // redactToolParamValues returns params with the values a tool keeps secret replaced, for logs
-// and tool events: todo_update's bash_env values, which may be credentials (the names stay), and
+// and tool events: job_manage's bash_env values (todo_update was its earlier name), which may be credentials (the names stay), and
 // a codemode script's source, which may hold the values the script passes to such a tool.
 func redactToolParamValues(toolName string, params map[string]any) map[string]any {
 	switch strings.TrimSpace(toolName) {
 	case codeModeToolName:
 		return withheldCodeModeParams(params)
-	case "todo_update":
+	case "job_manage", "todo_update":
 	default:
 		return params
 	}

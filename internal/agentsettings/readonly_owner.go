@@ -8,6 +8,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/configstore"
+	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 )
 
 type readOnlyOwner struct {
@@ -86,18 +87,19 @@ func toolsSettingsFromReader(reader Reader) ToolsSettingsPayload {
 		return ToolsSettingsPayload{}
 	}
 	return ToolsSettingsPayload{
-		WriteFile:    ToolEnabledPayload{Enabled: reader.GetBool("tools.write_file.enabled")},
-		Spawn:        ToolEnabledPayload{Enabled: reader.GetBool("tools.spawn.enabled")},
-		Coder:        ToolEnabledPayload{Enabled: reader.GetBool("tools.coder.enabled")},
-		ContactsSend: ToolEnabledPayload{Enabled: reader.GetBool("tools.contacts_send.enabled")},
-		TodoUpdate:   ToolEnabledPayload{Enabled: reader.GetBool("tools.todo_update.enabled")},
-		PlanCreate:   ToolEnabledPayload{Enabled: reader.GetBool("tools.plan_create.enabled")},
-		CodeMode:     ToolEnabledPayload{Enabled: reader.GetBool("tools.codemode.enabled")},
-		ToolSearch:   ToolEnabledPayload{Enabled: reader.GetBool("tools.tool_search.enabled")},
-		URLFetch:     ToolEnabledPayload{Enabled: reader.GetBool("tools.url_fetch.enabled")},
-		WebSearch:    ToolEnabledPayload{Enabled: reader.GetBool("tools.web_search.enabled")},
-		Bash:         ToolEnabledPayload{Enabled: reader.GetBool("tools.bash.enabled")},
-		PowerShell:   ToolEnabledPayload{Enabled: reader.GetBool("tools.powershell.enabled")},
-		AgentNameSet: agent.NormalizeWorkerNameSet(reader.GetString(agentNameSetConfigPath)),
+		WriteFile:        ToolEnabledPayload{Enabled: reader.GetBool("tools.write_file.enabled")},
+		Spawn:            ToolEnabledPayload{Enabled: reader.GetBool("tools.spawn.enabled")},
+		Coder:            ToolEnabledPayload{Enabled: reader.GetBool("tools.coder.enabled")},
+		ContactsSend:     ToolEnabledPayload{Enabled: reader.GetBool("tools.contacts_send.enabled")},
+		JobManage:        ToolEnabledPayload{Enabled: jobconfig.ToolEnabled(reader)},
+		LegacyTodoUpdate: ToolEnabledPayload{Enabled: jobconfig.ToolEnabled(reader)},
+		PlanCreate:       ToolEnabledPayload{Enabled: reader.GetBool("tools.plan_create.enabled")},
+		CodeMode:         ToolEnabledPayload{Enabled: reader.GetBool("tools.codemode.enabled")},
+		ToolSearch:       ToolEnabledPayload{Enabled: reader.GetBool("tools.tool_search.enabled")},
+		URLFetch:         ToolEnabledPayload{Enabled: reader.GetBool("tools.url_fetch.enabled")},
+		WebSearch:        ToolEnabledPayload{Enabled: reader.GetBool("tools.web_search.enabled")},
+		Bash:             ToolEnabledPayload{Enabled: reader.GetBool("tools.bash.enabled")},
+		PowerShell:       ToolEnabledPayload{Enabled: reader.GetBool("tools.powershell.enabled")},
+		AgentNameSet:     agent.NormalizeWorkerNameSet(reader.GetString(agentNameSetConfigPath)),
 	}
 }

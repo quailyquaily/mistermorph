@@ -60,7 +60,7 @@ func runToolsCmd(cmd *cobra.Command, _ []string, registryFactory func() *tools.R
 	}
 	// Runtime tools are injected in run/serve/telegram/slack.
 	toolsutil.RegisterRuntimeTools(r, toolsutil.LoadRuntimeToolsRegisterConfigFromViper(), toolsutil.RuntimeToolLLMOptions{})
-	for _, name := range []string{toolsutil.BuiltinPlanCreate, toolsutil.BuiltinTodoUpdate} {
+	for _, name := range []string{toolsutil.BuiltinPlanCreate, toolsutil.BuiltinJobManage} {
 		if t, ok := r.Get(name); ok {
 			addToolPreview(extraPreviews, toolPreview{
 				Name:        t.Name(),
