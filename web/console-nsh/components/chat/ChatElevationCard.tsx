@@ -6,6 +6,7 @@ import type { InputRef } from "nsh";
 import { cleanup, effect, signal, Text, untracked, View } from "nsh";
 import { Input } from "nsh/base";
 import { Button } from "../ui";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 import { t } from "./i18n";
 import type { KeyedState } from "./rowState";
 
@@ -103,7 +104,7 @@ export function ChatElevationCard(props: {
 
   return (
     <View
-      class={`gap-2 rounded-(--radius) border bg-card p-3 ${open() ? "border-warn" : "border-line-faint"}`}
+      class={`gap-2 ${CARD_CORNERS} border bg-card p-3 ${open() ? "border-warn" : "border-line-faint"}`}
       accessibilityLabel={t("chat_elevation_title")}
       testID="chat-elevation"
     >
@@ -170,7 +171,7 @@ export function ChatElevationCard(props: {
               accessibilityLabel={t("chat_elevation_password_placeholder")}
               readonly={state().busy || remaining() <= 0}
               testID="chat-elevation-password"
-              class="flex-1 rounded-(--radius) border border-input bg-field px-2.5 py-1.5 text-sm text-foreground placeholder:text-placeholder"
+              class={`flex-1 ${CONTROL_CORNERS} border border-input bg-field px-2.5 py-1.5 text-sm text-foreground placeholder:text-placeholder`}
             />
             <Button variant="primary" size="xs" label={t("chat_elevation_allow")} disabled={state().busy || remaining() <= 0} onPress={allow} />
             <Button variant="plain" size="xs" label={t("chat_elevation_decline")} disabled={state().busy} onPress={decline} />

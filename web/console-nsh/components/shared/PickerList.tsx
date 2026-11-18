@@ -7,6 +7,13 @@
 import type { JSX } from "nsh";
 import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View, type ScrollRef } from "nsh";
 import { Button as BaseButton, Input } from "nsh/base";
+import { CONTINUOUS, nestedRadius, RADIUS } from "../corners";
+
+/**
+ * The rows' corners on the phone's floating paper (its 18pt dialog corners nested by its hairline
+ * and 8pt padding: 9pt), the default; a list in another box passes its own (`rowRadius`).
+ */
+export const PAPER_ROW_RADIUS = nestedRadius(RADIUS.dialog, 1 + 8);
 
 export interface PickerItem {
   value: string;
@@ -95,6 +102,8 @@ export function PickerList(props: {
   /** How far the rows, filter, label and footer stand in from the list's sides (the popover's
    *  list reaches its sides); 0 by default. */
   inset?: number;
+  /** The rows' corner radius (continuous), nested in what holds the list (default `PAPER_ROW_RADIUS`). */
+  rowRadius?: number;
 }) {
   const inset = () => ({ paddingHorizontal: props.inset ?? 0 });
   // The rows: filtered, then the footer's; one highlighted (never a disabled one; -1: none).
@@ -161,9 +170,10 @@ export function PickerList(props: {
         accessibilityLabel={item().title}
         testID={item().testID ?? props.part(`option-${item().value}`)}
         onPress={() => choose(item())}
-        class={`rounded-[10px] px-3 py-2 transition-colors duration-[120ms] hover:bg-hover selected:bg-selection disabled:opacity-70 ${
+        class={`${CONTINUOUS} px-3 py-2 transition-colors duration-[120ms] hover:bg-hover selected:bg-selection disabled:opacity-70 ${
           active() === index() ? "bg-hover" : ""
         } ${props.rowClass ?? ""}`}
+        style={{ borderRadius: props.rowRadius ?? PAPER_ROW_RADIUS }}
       >
         <View class="flex-row items-center gap-2">
           <If when={item().icon}>{item().icon}</If>

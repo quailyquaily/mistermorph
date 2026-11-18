@@ -2,6 +2,10 @@
 import { Text, View } from "nsh";
 import { localeState } from "../lib/stores/index.js";
 import { DropdownMenu, Icon } from "./ui";
+import { cornersClass, fittingRadius, RADIUS } from "./corners";
+
+/** The trigger is a 24pt button: the controls' corners, cut to the radius whose curve fits it. */
+const TRIGGER_CORNERS = cornersClass(fittingRadius(RADIUS.control, 24));
 
 /** Every language the console has (lib/i18n), with its own name. */
 export const LANGUAGES = [
@@ -17,7 +21,7 @@ export function LanguageSelector(props: { class?: string }) {
       align="center"
       testID="language-menu"
       trigger={
-        <View role="button" accessibilityLabel={current().label} class={`flex-row items-center gap-1.5 rounded-(--radius) px-2 py-1 hover:bg-hover ${props.class ?? ""}`}>
+        <View role="button" accessibilityLabel={current().label} class={`flex-row items-center gap-1.5 ${TRIGGER_CORNERS} px-2 py-1 hover:bg-hover ${props.class ?? ""}`}>
           <Icon name="PhGlobe" size={14} color="muted-foreground" />
           <Text class="text-xs text-subtle">{current().label}</Text>
         </View>

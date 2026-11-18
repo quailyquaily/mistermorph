@@ -37,6 +37,7 @@ import {
   type StatusState,
 } from "../../../components/ui";
 import { LanguageSelector } from "../../../components/LanguageSelector";
+import { CONTROL_CORNERS } from "../../../components/corners";
 import { act, acts, Col, type DemoMap, LONG_TEXT, LONG_WORD, Row, t, useFlag, useText, V, Wide } from "../demo";
 
 const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger"];
@@ -147,6 +148,7 @@ function TextFieldDemo() {
   const notes = useText(`${LONG_TEXT}\n\n${LONG_WORD}`);
   const search = useText("needle");
   const bad = useText("not an address");
+  const long = useText(`${LONG_TEXT} ${LONG_WORD}`);
   return (
     <Col>
       <Row>
@@ -175,6 +177,9 @@ function TextFieldDemo() {
         <V l="size sm / xs" class="w-64">
           <TextField size="sm" value={name.get()} onChange={name.set} />
           <TextField size="xs" value={name.get()} onChange={name.set} />
+        </V>
+        <V s="long" l="clearable" class="w-64">
+          <TextField value={long.get()} onChange={long.set} clearable testID="uig-textfield-long" />
         </V>
       </Row>
       <V s="long" l="multiline rows=4">
@@ -429,7 +434,7 @@ export const CONTROL_DEMOS: DemoMap = {
         <Each of={["primary", "outlined", "danger"] as const} key={(variant) => variant}>
           {(variant) => (
             <V s="busy" l={variant()}>
-              <View class="relative h-9.5 w-32 items-center justify-center rounded-(--radius) border border-line-faint">
+              <View class={`relative h-9.5 w-32 items-center justify-center ${CONTROL_CORNERS} border border-line-faint`}>
                 <Text class="text-xs text-muted-foreground">{variant()}</Text>
                 <BusyBeam busy variant={variant()} />
               </View>
@@ -437,7 +442,7 @@ export const CONTROL_DEMOS: DemoMap = {
           )}
         </Each>
         <V s="off">
-          <View class="relative h-9.5 w-32 items-center justify-center rounded-(--radius) border border-line-faint">
+          <View class={`relative h-9.5 w-32 items-center justify-center ${CONTROL_CORNERS} border border-line-faint`}>
             <BusyBeam busy={false} />
           </View>
         </V>
@@ -584,6 +589,16 @@ export const CONTROL_DEMOS: DemoMap = {
         </V>
         <V s="long" class="w-64">
           <Card><Text class="text-sm text-foreground">{LONG_TEXT}</Text><Text class="text-sm text-foreground">{LONG_WORD}</Text></Card>
+        </V>
+        <V l="controls on a card" class="w-64">
+          <Card class="gap-3 p-3" testID="uig-card-controls">
+            <TextField value="Morph" size="sm" accessibilityLabel={t("uig_fixture_name")} />
+            <Toggle checked label={t("uig_fixture_toggle")} />
+            <View class="flex-row gap-2">
+              <Button label={t("uig_fixture_press")} size="xs" onPress={() => act("Card", "primary")} />
+              <Button label={t("uig_fixture_press")} size="xs" variant="outlined" onPress={() => act("Card", "outlined")} />
+            </View>
+          </Card>
         </V>
       </Row>
     ),
