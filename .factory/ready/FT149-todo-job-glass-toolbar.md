@@ -38,3 +38,13 @@ Built in commits 1ecacb57 and d2a08bf1 on factory/FT149-todo-job-glass-toolbar; 
 - Visual checks: coder inspected headless Chrome with stubbed API on desktop, phone and 320pt narrow screen, including matching glass styles and opaque fallback. Native desktop and Android devices were not visually checked; live-server integration was not checked.
 - Installs: no unpinned installs or manifest/lockfile changes.
 - Push initially required repository-path credentials; command-local credential.useHttpPath=true resolved it. No persistent git settings changed.
+
+## factory · review · 2026-11-18 15:31
+head: d2a08bf128e1461a8800c05afcb112af4a44221f
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/chat/todoJob.ts:111-115: overlapping polling invalidates every response when the task-list request consistently takes longer than pollMs (default 5 seconds), leaving controls loading indefinitely. Skip polls while a read is in flight or separate full-read and runs-only sequencing. Verified scratch probe: 80 ms replies with 50 ms polling generated 30 requests over 1.5 seconds but remained loading; 30 ms replies reached ready. Poll scheduling is at lines 285-289.
+- Configured gofmt/vet/go test command passed; nsh check passed; required scripts/test.sh passed: 137 files, 0 failed. Five unrelated files failed under parallel load then passed the required individual reruns.
+- Review by Claude Code against origin/master...HEAD; no P0/P1 findings. Worktree remained clean and head unchanged. No installs or manifest changes.
+- Visual and live-runtime integration checks were not performed in this review; real desktop/Android and system-inset layout remain unchecked. Prior build recorded headless desktop/mobile checks. API behavior was covered by fake-runtime tests.
+- Moved review/ → ready/; the low-priority polling issue is non-blocking under factory policy.
