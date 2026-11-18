@@ -11,53 +11,75 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/stateimport"
+	"github.com/quailyquaily/mistermorph/internal/statepaths"
 )
 
 type SemanticResolver interface {
 	MatchTaskIndex(ctx context.Context, query string, tasks []Task) (int, error)
 }
 
-// Store is the job list (the TODO list), the jobs rows of jobs.db. Path names cron.yaml, which
-// the list was; jobs.db is in the same folder (see JobsDBPath), and the list is imported from
-// there, or from agent.db, the first time the database opens. Each change is one transaction; the
-// list's order is the rows' position.
+// Store is the job list (the TODO list), the jobs rows of agent.db. Path names cron.yaml, which
+// the list was; agent.db is in the same folder, and the earlier stores are imported from there the
+// first time the store opens it (see jobs_import.go). Each change is one transaction; the list's
+// order is the rows' position.
 type Store struct {
 	Path      string
 	Semantics SemanticResolver
 
-	db *jobsHandle
+	db *agentdb.Lazy
 }
 
 func NewStore(path string) *Store {
 	path = pathutil.ExpandHomePath(strings.TrimSpace(path))
 	store := &Store{Path: path}
 	if path != "" {
-		store.db = cachedJobsHandle(JobsDBPath(path))
+		store.db = agentdb.CachedBeside(path)
 	}
 	return store
+}
+
+// DBPath is the agent.db that holds the job list beside the cron.yaml path cronPath.
+func DBPath(cronPath string) string {
+	cronPath = strings.TrimSpace(cronPath)
+	if cronPath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(filepath.Clean(pathutil.ExpandHomePath(cronPath))), statepaths.AgentDBFilename)
 }
 
 func (s *Store) handle(ctx context.Context) (*sql.DB, error) {
 	if s == nil || strings.TrimSpace(s.Path) == "" || s.db == nil {
 		return nil, fmt.Errorf("cron path is not configured")
 	}
-	return s.db.get(ctx)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	db, err := s.db.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureJobsImported(ctx, db); err != nil {
+		return nil, err
+	}
+	return db.DB, nil
 }
 
-// Close releases the process's handle on the store's jobs.db; the next use opens the file again.
+// Close releases the process's handle on the store's agent.db; the next use opens the file again.
 func (s *Store) Close() {
 	if s != nil && s.db != nil {
-		s.db.close()
+		_ = s.db.Close()
 	}
 }
 
-// DBPath is the jobs.db the store keeps its list in, or "" without a path.
+// DBPath is the agent.db the store keeps its list in, or "" without a path.
 func (s *Store) DBPath() string {
 	if s == nil || s.db == nil {
 		return ""
 	}
-	return s.db.path
+	return s.db.Path()
 }
 
 // Read returns the list in order. It reports exists as true: the list is always there, empty or
@@ -116,7 +138,7 @@ func (s *Store) Revision(ctx context.Context) (int64, error) {
 	return readRevision(ctx, db)
 }
 
-// Import reports what the one-time import into the store's jobs.db did, running it when it has
+// Import reports what the one-time import into the store's agent.db did, running it when it has
 // not run yet.
 func (s *Store) Import(ctx context.Context) (ImportStatus, error) {
 	db, err := s.handle(ctx)
@@ -124,11 +146,16 @@ func (s *Store) Import(ctx context.Context) (ImportStatus, error) {
 		return ImportStatus{}, err
 	}
 	var mark importMark
-	ok, err := getMeta(ctx, db, "imported:"+jobsImportStore, &mark)
+	ok, err := getMeta(ctx, db, jobsImportDetailKey, &mark)
 	if err != nil || !ok {
 		return ImportStatus{}, err
 	}
-	return ImportStatus{Imported: true, At: mark.At, Source: mark.Source, Jobs: mark.Jobs, IgnoredYAML: mark.IgnoredYAML}, nil
+	rejects, err := stateimport.Rejects(ctx, db, jobsImportStore)
+	if err != nil {
+		return ImportStatus{}, err
+	}
+	return ImportStatus{Imported: true, At: mark.At, Source: mark.Source, Jobs: mark.Jobs, IgnoredYAML: mark.IgnoredYAML,
+		Rejects: rejects.Rejects}, nil
 }
 
 type rowsQueryer interface {

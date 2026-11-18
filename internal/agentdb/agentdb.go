@@ -1,6 +1,6 @@
 // Package agentdb opens agent.db, the SQLite database that holds the agent's own state: config,
-// persona and heartbeat, contacts, Console sessions, Agent Link peers and topic state. (The TODO
-// list was here, in cron_tasks; it is in jobs.db now, see internal/cron, and the table is unused.)
+// persona and heartbeat, contacts, the job list (the TODO list, in jobs; see internal/cron),
+// Console sessions, Agent Link peers and topic state.
 //
 // The schema of every table is here, in one list of migrations, so the database has one
 // user_version whichever store opens it first. The stores themselves live with the code that uses
@@ -123,8 +123,9 @@ func registered() []Importer {
 var shared = sqlitedb.NewShared()
 
 // retiredImports are the imports an earlier version ran into agent.db that this one no longer
-// finishes: the TODO list's (cron) moved to jobs.db, which reads cron.yaml and leaves it as it is,
-// so a cron.yaml that shows up again is not renamed to cron.yaml.imported either.
+// finishes: the TODO list's (cron), which put cron.yaml into cron_tasks and renamed the file. The
+// jobs table's import (internal/cron) reads cron.yaml and leaves it as it is, so a cron.yaml that
+// shows up again is not renamed to cron.yaml.imported either.
 var retiredImports = map[string]bool{"cron": true}
 
 // Path is agent.db in the configured state folder.

@@ -89,7 +89,7 @@ func (d *todoDispatch) mustCall(args string) map[string]any {
 	return parsed
 }
 
-// reload reads the list from jobs.db after dropping the open handle.
+// reload reads the list from agent.db after dropping the open handle.
 func (d *todoDispatch) reload() []cronstore.Task {
 	d.t.Helper()
 	cronstore.NewStore(d.cronPath).Close()

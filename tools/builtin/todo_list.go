@@ -9,7 +9,7 @@ import (
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 )
 
-// TodoListTool lists the TODO list (the scheduled jobs in jobs.db), enabled and disabled alike.
+// TodoListTool lists the TODO list (the scheduled jobs in agent.db), enabled and disabled alike.
 // It only reads: it never changes or runs a task.
 type TodoListTool struct {
 	cronPath string

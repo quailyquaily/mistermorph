@@ -38,9 +38,9 @@ func todoListBool(v bool) *bool { return &v }
 // query.
 func todoListRows(t *testing.T, cronPath string) []string {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(cronstore.JobsDBPath(cronPath))+"?mode=ro")
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(cronstore.DBPath(cronPath))+"?mode=ro")
 	if err != nil {
-		t.Fatalf("open jobs.db: %v", err)
+		t.Fatalf("open agent.db: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 	rows, err := db.QueryContext(context.Background(), `SELECT * FROM jobs ORDER BY position, id`)

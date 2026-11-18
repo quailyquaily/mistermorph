@@ -23,11 +23,11 @@ func envPtr(refs ...BashEnvRef) *[]BashEnvRef {
 	return &refs
 }
 
-// reloadStore drops the process's open handle on the store's jobs.db, so the next read comes
+// reloadStore drops the process's open handle on the store's agent.db, so the next read comes
 // from the file.
 func reloadStore(t *testing.T, store *Store) *Store {
 	t.Helper()
-	store.db.close()
+	store.Close()
 	return NewStore(store.Path)
 }
 

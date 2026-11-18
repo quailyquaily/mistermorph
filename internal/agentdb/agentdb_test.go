@@ -341,7 +341,7 @@ func TestOpenWithoutImportsDefersThemToTheNextOpen(t *testing.T) {
 }
 
 // agent.db's own import of cron.yaml is retired: an earlier version's mark no longer renames a
-// cron.yaml that is there again (jobs.db reads it, and leaves it as it is).
+// cron.yaml that is there again (the jobs import reads it, and leaves it as it is).
 func TestOpenLeavesCronYAMLOfTheRetiredImportAlone(t *testing.T) {
 	dir := t.TempDir()
 	db, err := OpenStateDir(context.Background(), dir)

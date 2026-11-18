@@ -13,6 +13,7 @@ func migrations() []sqlitedb.Migration {
 		{Name: "create cron tasks", SQL: cronSQL},
 		{Name: "create contacts and the contacts bus inbox and outbox", SQL: contactsSQL},
 		{Name: "create the config tables", SQL: configSQL},
+		{Name: "create jobs", SQL: jobsSQL},
 	}
 }
 
@@ -94,7 +95,8 @@ CREATE TABLE heartbeat_workflows (
 CREATE INDEX heartbeat_workflows_by_position ON heartbeat_workflows (position);
 `
 
-// cronSQL: the TODO list (§3).
+// cronSQL: the TODO list (§3), as versions before the jobs table kept it. The job store imports
+// these rows once into jobs (internal/cron) and leaves them as they are; nothing writes them now.
 const cronSQL = `
 CREATE TABLE cron_tasks (
 	id              TEXT PRIMARY KEY,
@@ -267,4 +269,32 @@ CREATE TABLE auth_profiles (
 	updated_at        TEXT NOT NULL,
 	updated_by        TEXT NOT NULL DEFAULT ''
 );
+`
+
+// jobsSQL: the job list (the TODO list), which the scheduler, the Console and job_manage share. It
+// replaces cron_tasks: internal/cron imports the earlier stores into it once (jobs.db of an earlier
+// build, cron_tasks, cron.yaml). A job's ID never changes; its runs have IDs of their own.
+const jobsSQL = `
+CREATE TABLE jobs (
+	id              TEXT PRIMARY KEY,
+	position        INTEGER NOT NULL,
+	title           TEXT NOT NULL DEFAULT '',
+	enabled         INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+	at              TEXT NOT NULL DEFAULT '',
+	cron            TEXT NOT NULL DEFAULT '',
+	tz              TEXT NOT NULL DEFAULT '',
+	content         TEXT NOT NULL,
+	chat_id         TEXT NOT NULL DEFAULT '',
+	mention         TEXT NOT NULL DEFAULT '',
+	llm_profile     TEXT NOT NULL DEFAULT '',
+	workspace_dir   TEXT NOT NULL DEFAULT '',
+	bash_env        TEXT NOT NULL DEFAULT '[]',
+	created_at      TEXT NOT NULL,
+	updated_at      TEXT NOT NULL,
+	last_run_at     TEXT,
+	last_run_status TEXT NOT NULL DEFAULT '',
+	CHECK (id <> ''),
+	CHECK ((at = '') <> (cron = ''))
+);
+CREATE INDEX jobs_by_position ON jobs (position);
 `

@@ -31,7 +31,6 @@ var Databases = []Database{
 	{Name: "memory", Path: statepaths.MemoryDBFilename},
 	{Name: "agent", Path: statepaths.AgentDBFilename},
 	{Name: "usage", Path: statepaths.UsageDBFilename},
-	{Name: "jobs", Path: statepaths.JobsDBFilename},
 }
 
 // Options change what a snapshot holds.

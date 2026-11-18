@@ -32,7 +32,7 @@ func IsGeneratedJobID(id string) bool {
 	return jobIDPattern.MatchString(strings.TrimSpace(id))
 }
 
-// nowText is the current time as jobs.db stores times: RFC 3339 in UTC, to the second.
+// nowText is the current time as agent.db stores times: RFC 3339 in UTC, to the second.
 func nowText() string {
 	return formatTime(time.Now())
 }
