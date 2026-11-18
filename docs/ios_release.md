@@ -9,7 +9,7 @@ How the pieces fit:
 | Piece | What it does |
 | --- | --- |
 | `web/console-nsh/scripts/build-ios.sh` | Builds `Morph.ipa` with `nsh package --target ios`, signed for the App Store, and checks the result. Runs on macOS only. |
-| `.github/workflows/build_ios.yml` | Runs the script on `macos-15` and uploads the `.ipa` to TestFlight with `nsh publish ios`. You can run it by hand. |
+| `.github/workflows/build_ios.yml` | Runs the script on `macos-15` and uploads the `.ipa` to TestFlight with Apple's `xcrun altool`. You can run it by hand. |
 | `.github/workflows/release.yml` (job `ios-app`) | Calls `build_ios.yml` on every `v*` tag, with the tag as the version. |
 | `web/console-nsh/ios/AppIcon-1024.png` | The App Store icon, opaque, from `design/brand/generator/platforms.py`. |
 
@@ -236,7 +236,7 @@ The iOS app had never been built when this guide was written. These might show u
 | `APPLE_CODESIGN_IDENTITY is not in the imported certificate` | Set up iOS signing | `IOS_CODESIGN_IDENTITY` doesn't match the certificate | Copy it again from Part 1, step 7 |
 | `No profile matching` / profile errors from `nsh package` | Build Morph.ipa | The profile isn't for this App ID or certificate, or it expired | Make a new profile (Part 3) |
 | `the app is labelled '…', not Morph` | Build Morph.ipa | nsh didn't apply `--name` | Report it against nsh; the build stops before uploading |
-| 401 / 403 from `nsh publish ios` | Upload to TestFlight | Wrong key ID or issuer ID, or the key's role can't upload builds | Part 5 |
+| 401 / 403, or "Authentication failed", from `altool` | Upload to TestFlight | Wrong key ID or issuer ID, or the key's role can't upload builds | Part 5 |
 | "The bundle version must be higher than the previously uploaded version" | Upload to TestFlight | That version and build number was already uploaded | Use a new version (Part 7, step 2) |
 | ITMS-90683 "Missing purpose string" | Email from Apple | No `NSMicrophoneUsageDescription` | See Known gaps |
 | ITMS-90717 "Invalid App Store Icon" | Email from Apple | The icon has an alpha channel | Regenerate `ios/AppIcon-1024.png`; the script refuses an icon with alpha |

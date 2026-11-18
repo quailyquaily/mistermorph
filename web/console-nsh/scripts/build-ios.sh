@@ -3,7 +3,7 @@
 # a `morph console serve` elsewhere like the Android app (scripts/build-android.sh). Needs macOS with
 # Xcode, nsh 0.5.1 with its iOS runtime (`nsh component add ios`, added here when missing; it is not
 # published for Linux), Node, an Apple Distribution identity in the keychain and an App Store
-# provisioning profile for nsh.json's id. `nsh publish ios` uploads the result to TestFlight.
+# provisioning profile for nsh.json's id. `xcrun altool --upload-app` uploads it to TestFlight.
 #
 #   scripts/build-ios.sh --sign IDENTITY --profile FILE [--out FILE]
 #

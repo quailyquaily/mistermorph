@@ -110,10 +110,14 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # Apple's altool, not `nsh publish ios`: nsh 0.5.1's upload is refused when it commits the file
+      # (HTTP 409, "not a valid value for the attribute 'sourceFileChecksums'"). altool finds the
+      # key as AuthKey_<id>.p8 in ~/.appstoreconnect/private_keys.
       - name: Upload to TestFlight
         if: steps.secrets.outputs.ready == 'true' && inputs.upload
         shell: bash
         run: |
-          nsh publish ios dist/Morph.ipa --app-id "${IOS_APP_STORE_APP_ID}" \
-            --issuer-id "${APPLE_API_ISSUER_ID}" --key-id "${APPLE_API_KEY_ID}" \
-            --private-key "${APPLE_API_KEY_PATH}"
+          mkdir -p ~/.appstoreconnect/private_keys
+          cp "${APPLE_API_KEY_PATH}" ~/.appstoreconnect/private_keys/
+          xcrun altool --upload-app --type ios --file dist/Morph.ipa \
+            --apiKey "${APPLE_API_KEY_ID}" --apiIssuer "${APPLE_API_ISSUER_ID}"
