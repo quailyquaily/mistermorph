@@ -166,6 +166,7 @@ const SETUP_FREE_PATHS = new Set([
   "/settings/security",
   "/settings/automation",
   "/settings/system",
+  "/settings/general",
   "/settings/console",
   "/settings/runtime",
   "/settings/credits",

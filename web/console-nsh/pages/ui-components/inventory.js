@@ -463,9 +463,9 @@ const FILES = {
     },
   },
   "pages/settings/sections/ConsoleSection.tsx": { group: "pages", items: { ConsoleSection: L("live") } },
+  "pages/settings/sections/GeneralSection.tsx": { group: "pages", items: { GeneralSection: L("live") } },
   "pages/settings/sections/McpSection.tsx": { group: "pages", items: { McpSection: L("live"), LoadSkillsSetting: L("part", "McpSection") } },
   "pages/settings/sections/PersonaSection.tsx": { group: "pages", items: { PersonaSection: L("live") } },
-  "pages/settings/sections/RoutesSection.tsx": { group: "pages", items: { RoutesSection: L("live") } },
   "pages/settings/sections/SecuritySection.tsx": { group: "pages", items: { SecuritySection: L("live") } },
   "pages/settings/sections/SystemSection.tsx": { group: "pages", items: { SystemSection: L("live") } },
   "pages/settings/sections/ToolsSection.tsx": {

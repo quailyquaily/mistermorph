@@ -172,6 +172,71 @@ test("Models: a remote agent without the settings routes shows a hint", async ()
   await app.waitFor("id:settings-unsupported");
   // A remote agent that is not a console has no console sections.
   expect(app.shows("id:settings-section-channels")).toBe(false);
+  expect(app.shows("id:settings-section-system")).toBe(false);
+  // This device's settings do not depend on the agent: the language is still there.
+  await app.press("id:settings-section-general");
+  await app.waitFor("id:settings-language");
+  expect(app.shows("id:settings-logout")).toBe(true);
+});
+
+test("the sections are grouped: the agent's, the server's, then this device's", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/settings",
+    api: { ...PERSONA, "GET /settings/console": { body: consoleSettings() } },
+  });
+  await app.waitFor("id:settings-section-security");
+  // The group headings are set in capitals.
+  const order = [
+    "AGENT",
+    "Persona",
+    "Models",
+    "Tools",
+    "SKILLs & MCP",
+    "Automation",
+    "SERVER",
+    "Status",
+    "Channels",
+    "Security",
+    "Remote Control",
+    "System",
+    "THIS DEVICE",
+    "General",
+    "Keyboard shortcuts",
+    "Credits",
+  ];
+  for (const text of order) expect(app.shows(`id:settings-index >> text:${text}`)).toBe(true);
+  const texts = app.texts();
+  const at = order.map((text) => texts.indexOf(text));
+  expect(at).toEqual([...at].sort((a, b) => a - b));
+  // Model Routes and App are no longer sections of their own.
+  expect(app.shows("id:settings-section-routes")).toBe(false);
+  expect(app.shows("id:settings-section-app")).toBe(false);
+});
+
+test("the old addresses of merged sections open the section that holds them now", async () => {
+  const routes = await openConsole({ location: "/e/default/settings/routes", api: { "GET /proxy:/settings/agent": { body: agentSettings() } } });
+  await routes.app.waitFor("id:settings-agent");
+  await routes.app.waitFor("id:settings-routes");
+  const app = await openConsole({ location: "/e/default/settings/app" });
+  await app.app.waitFor("id:settings-general");
+  await app.app.waitFor("id:settings-app");
+});
+
+test("System keeps the server's settings; language, notifications and Log out are in General", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/settings/system",
+    api: {
+      "GET /settings/system": { body: { config_path: "/etc/morph/config.yaml", config_revision: "rev-1", config_values: {}, field_states: {} } },
+      "GET /settings/auto-update": { body: { auto_update: { enabled: false, channel: "" }, channels: [] } },
+    },
+  });
+  await app.waitFor("id:settings-open-logs");
+  expect(app.shows("id:settings-language")).toBe(false);
+  expect(app.shows("id:settings-logout")).toBe(false);
+  await app.press("id:settings-section-general");
+  await app.waitFor("id:settings-language");
+  expect(app.shows("id:settings-logout")).toBe(true);
+  expect(app.shows("id:settings-app")).toBe(true);
 });
 
 test("search lists matching settings and opens the one chosen", async () => {

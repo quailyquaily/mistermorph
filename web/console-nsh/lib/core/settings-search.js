@@ -45,10 +45,10 @@ const HAND_WRITTEN_FIELDS = {
     "settings_console_guard_redaction_title",
     "settings_console_guard_approvals_title",
   ],
+  // This device's settings (language, notifications, the session), the same for every agent.
+  general: ["settings_language_title", "settings_session_title", "settings_app_title"],
   system: [
-    "settings_language_title",
     "settings_logs_title",
-    "settings_session_title",
     "settings_auto_update_card_title",
     "settings_update_channel_title",
     "settings_update_auto_title",

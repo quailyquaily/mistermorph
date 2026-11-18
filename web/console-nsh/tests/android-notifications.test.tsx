@@ -100,7 +100,7 @@ test("a pressed notification of a topic that is gone opens the chat instead", as
 test("Settings' notifications row asks the native part, and says where to allow blocked ones", async () => {
   const { app } = await openConsole({
     platform: "android",
-    location: "/e/default/settings/system",
+    location: "/e/default/settings/general",
     host: nativeHost({ state: "default", request: "granted" }),
     api: { ...QUIET, "GET /settings/auto-update": { body: { enabled: false } } },
   });
@@ -113,7 +113,7 @@ test("Settings' notifications row asks the native part, and says where to allow 
 
   const blocked = await openConsole({
     platform: "android",
-    location: "/e/default/settings/system",
+    location: "/e/default/settings/general",
     host: nativeHost({ state: "denied" }),
     api: { ...QUIET, "GET /settings/auto-update": { body: { enabled: false } } },
   });
@@ -124,7 +124,7 @@ test("Settings' notifications row asks the native part, and says where to allow 
 test("an APK without the native part has no notifications, and nothing breaks", async () => {
   const { app } = await openConsole({
     platform: "android",
-    location: "/e/default/settings/system",
+    location: "/e/default/settings/general",
     host: { "morph.file.pick": [] },
     api: { ...QUIET, "GET /settings/auto-update": { body: { enabled: false } } },
   });

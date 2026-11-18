@@ -971,31 +971,35 @@ export function createSettingsStore() {
   /* --- sections --- */
   const selectedSectionID = signal("persona");
   const settingsSections = computed<SettingsSection[]>(() => {
+    const isConsole = selectedEndpointIsConsole();
     const items: SettingsSection[] = [
-      { id: "persona", icon: "PhUserCircle", title: t("settings_persona_title"), meta: t("settings_section_persona_meta"), saveKind: "persona" },
-      { id: "agent", icon: "PhRobot", title: t("settings_agent_block_title"), meta: t("settings_section_agent_meta"), saveKind: "agent" },
-      { id: "routes", icon: "PhArrowsSplit", title: t("settings_routes_title"), meta: t("settings_section_routes_meta"), saveKind: "agent" },
-      { id: "tools", icon: "PhToolbox", title: t("settings_tools_title"), meta: t("settings_section_tools_meta"), saveKind: "agent" },
+      { id: "persona", group: "agent", icon: "PhUserCircle", title: t("settings_persona_title"), meta: t("settings_section_persona_meta"), saveKind: "persona" },
+      { id: "agent", group: "agent", icon: "PhRobot", title: t("settings_agent_block_title"), meta: t("settings_section_agent_meta"), saveKind: "agent" },
+      { id: "tools", group: "agent", icon: "PhToolbox", title: t("settings_tools_title"), meta: t("settings_section_tools_meta"), saveKind: "agent" },
       // The MCP section also holds Load skills: its id (and /settings/mcp) stay, its title is both.
-      { id: "mcp", icon: "PhPlugsConnected", title: t("settings_skills_mcp_title"), meta: t("settings_section_skills_mcp_meta"), saveKind: "agent" },
+      { id: "mcp", group: "agent", icon: "PhPlugsConnected", title: t("settings_skills_mcp_title"), meta: t("settings_section_skills_mcp_meta"), saveKind: "agent" },
     ];
-    if (selectedEndpointIsConsole()) {
-      items.push({ id: "channels", icon: "PhChats", title: t("settings_console_channels_title"), saveKind: "console" });
-      items.push({ id: "security", icon: "PhShieldCheck", title: t("settings_console_guard_title"), meta: t("settings_section_guard_meta"), saveKind: "console" });
+    if (isConsole) {
       items.push({
         id: "automation",
+        group: "agent",
         icon: "PhCalendarCheck",
         title: t("settings_automation_title"),
         meta: t("settings_section_automation_meta"),
         saveKind: "console-config",
       });
-      items.push({ id: "system", icon: "PhGearSix", title: t("settings_system_title"), meta: t("settings_section_system_meta"), saveKind: "system-config" });
-      items.push({ id: "console", icon: "PhNetwork", title: t("settings_console_title"), meta: t("settings_section_console_meta"), saveKind: "" });
     }
-    items.push({ id: "app", icon: "PhAppWindow", title: t("settings_app_title"), meta: t("settings_section_app_meta"), saveKind: "" });
-    items.push({ id: "shortcuts", icon: "PhKeyboard", title: t("shortcuts_title"), meta: t("shortcuts_section_meta"), saveKind: "" });
-    items.push({ id: "runtime", icon: "PhPulse", title: t("runtime_title"), saveKind: "" });
-    items.push({ id: "credits", icon: "PhInfo", title: t("settings_credits_title"), saveKind: "" });
+    // The selected agent's health: shown for any agent, first among the server's sections.
+    items.push({ id: "runtime", group: "server", icon: "PhPulse", title: t("settings_status_title"), saveKind: "" });
+    if (isConsole) {
+      items.push({ id: "channels", group: "server", icon: "PhChats", title: t("settings_console_channels_title"), saveKind: "console" });
+      items.push({ id: "security", group: "server", icon: "PhShieldCheck", title: t("settings_console_guard_title"), meta: t("settings_section_guard_meta"), saveKind: "console" });
+      items.push({ id: "console", group: "server", icon: "PhNetwork", title: t("settings_console_title"), meta: t("settings_section_console_meta"), saveKind: "" });
+      items.push({ id: "system", group: "server", icon: "PhGearSix", title: t("settings_system_title"), meta: t("settings_section_system_meta"), saveKind: "system-config" });
+    }
+    items.push({ id: "general", group: "device", icon: "PhAppWindow", title: t("settings_general_title"), meta: t("settings_section_general_meta"), saveKind: "" });
+    items.push({ id: "shortcuts", group: "device", icon: "PhKeyboard", title: t("shortcuts_title"), meta: t("shortcuts_section_meta"), saveKind: "" });
+    items.push({ id: "credits", group: "device", icon: "PhInfo", title: t("settings_credits_title"), saveKind: "" });
     return items;
   });
   const selectedSection = computed(
@@ -3229,7 +3233,7 @@ export function createSettingsStore() {
 
   function ensureSettingsSectionData(sectionID: string) {
     untracked(() => {
-      if (["agent", "routes", "tools", "mcp"].includes(sectionID)) {
+      if (["agent", "tools", "mcp"].includes(sectionID)) {
         if (!agentSettingsLoaded() && !agentLoading()) {
           void loadAgentSettings(settingsEndpointRef());
           return;

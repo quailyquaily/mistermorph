@@ -15,7 +15,7 @@ import { isMobile, markMobileDetail } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
 import { BackButton, confirm, Icon, type IconName, MessageDialog, Page, PageBar, PageTitle } from "../../components/ui";
-import { IndexColumn, IndexSearch } from "../../components/knowledge/parts";
+import { IndexColumn, IndexDivider, IndexSearch } from "../../components/knowledge/parts";
 import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
 import { SettingsCanBrowsePaths } from "../../components/settings/SettingFields";
@@ -23,23 +23,30 @@ import { SecretPicker } from "../../components/settings/SecretInput";
 import { createPaneTarget, PaneOutlet } from "../../components/settings/PaneTarget";
 import { SettingsSaveBar, SettingsRestartBanner } from "../../components/settings-page/SaveBar";
 import { createRevealRegistry, findRow, RevealContext } from "../../components/settings-page/reveal";
-import { CHANNEL_ITEMS, SETTINGS_DEFAULT_SECTION_ID, SETTINGS_SECTION_IDS, TOOL_ITEMS } from "./constants";
+import {
+  CHANNEL_ITEMS,
+  SETTINGS_DEFAULT_SECTION_ID,
+  SETTINGS_SECTION_ALIASES,
+  SETTINGS_SECTION_GROUPS,
+  SETTINGS_SECTION_IDS,
+  type SettingsSection,
+  TOOL_ITEMS,
+} from "./constants";
 import { t } from "./i18n";
 import { createSettingsStore, type SettingsStore } from "./store";
 import { SettingsDialogs } from "./SettingsDialogs";
 import { PersonaSection } from "./sections/PersonaSection";
 import { AgentSection, ProfilePane } from "./sections/AgentSection";
-import { RoutesSection } from "./sections/RoutesSection";
 import { ToolsSection } from "./sections/ToolsSection";
 import { McpSection } from "./sections/McpSection";
 import { ChannelPane, ChannelsSection } from "./sections/ChannelsSection";
 import { SecuritySection } from "./sections/SecuritySection";
 import { AutomationSection } from "./sections/AutomationSection";
 import { SystemSection } from "./sections/SystemSection";
+import { GeneralSection } from "./sections/GeneralSection";
 import { ConsoleSection } from "./sections/ConsoleSection";
 import { UnsupportedSection } from "./sections/UnsupportedSection";
 import { RuntimePanel } from "./RuntimePanel";
-import { SettingsAppPanel } from "../../components/settings/SettingsAppPanel";
 import { ShortcutsPanel } from "../../components/settings/ShortcutsPanel";
 import { SettingsCreditsPanel } from "../../components/settings/SettingsCreditsPanel";
 import { BarRoom, barRoom, underBar } from "../../components/frame/glassBar";
@@ -52,8 +59,8 @@ function routeSection() {
 }
 
 export function normalizeSettingsSectionID(value: unknown) {
-  // Running a channel inside Console moved from its own section into the channel's panel.
-  const id = String(value || "").trim() === "runtimes" ? "channels" : String(value || "").trim();
+  const text = String(value || "").trim();
+  const id = SETTINGS_SECTION_ALIASES[text] || text;
   return SETTINGS_SECTION_IDS.has(id) ? id : SETTINGS_DEFAULT_SECTION_ID;
 }
 
@@ -70,7 +77,6 @@ type PaneTargetValue = ReturnType<typeof createPaneTarget>;
 const SECTIONS: Record<string, (s: SettingsStore, pane: PaneTargetValue) => JSX.Element> = {
   persona: (s) => <PersonaSection s={s} />,
   agent: (s) => <AgentSection s={s} />,
-  routes: (s) => <RoutesSection s={s} />,
   tools: (s) => <ToolsSection s={s} />,
   mcp: (s, pane) => <McpSection s={s} pane={pane} />,
   channels: (s) => <ChannelsSection s={s} />,
@@ -78,11 +84,23 @@ const SECTIONS: Record<string, (s: SettingsStore, pane: PaneTargetValue) => JSX.
   automation: (s) => <AutomationSection s={s} />,
   system: (s) => <SystemSection s={s} />,
   console: (s, pane) => <ConsoleSection s={s} pane={pane} />,
-  app: () => <SettingsAppPanel />,
+  general: (s) => <GeneralSection s={s} />,
   shortcuts: () => <ShortcutsPanel />,
   runtime: () => <RuntimePanel />,
   credits: () => <SettingsCreditsPanel />,
 };
+
+/** The section list's rows under their groups' headings; a group with no sections has no heading. */
+function groupedSections(items: SettingsSection[]) {
+  const rows: ({ kind: "group"; id: string; title: string } | { kind: "section"; id: string; item: SettingsSection })[] = [];
+  for (const group of SETTINGS_SECTION_GROUPS) {
+    const members = items.filter((item) => item.group === group.id);
+    if (!members.length) continue;
+    rows.push({ kind: "group", id: `group:${group.id}`, title: t(group.titleKey) });
+    for (const item of members) rows.push({ kind: "section", id: item.id, item });
+  }
+  return rows;
+}
 
 /** A row of the section list: icon and title; the list's sliding highlight marks the selected one. */
 function SectionItem(props: {
@@ -341,8 +359,21 @@ export function SettingsPage() {
         else={
           <View class="relative gap-0.5">
             <selection.Highlight class="rounded-(--radius) bg-selection" />
-            <Each of={s.settingsSections()} key={(item) => item.id}>
-              {(item) => <SectionItem item={item()} selected={sectionSelected(item().id)} mobile={mobile()} onLayout={selection.track(item().id)} onPress={() => void selectSection(item().id)} />}
+            <Each of={groupedSections(s.settingsSections())} key={(row) => row.id}>
+              {(row) => {
+                // A row's kind never changes (the key says which), only its title on a language change.
+                if (untracked(row).kind === "group") return <IndexDivider label={(row() as { title: string }).title} />;
+                const id = untracked(row).id;
+                return (
+                  <SectionItem
+                    item={(row() as { item: SettingsSection }).item}
+                    selected={sectionSelected(id)}
+                    mobile={mobile()}
+                    onLayout={selection.track(id)}
+                    onPress={() => void selectSection(id)}
+                  />
+                );
+              }}
             </Each>
           </View>
         }
@@ -377,7 +408,7 @@ export function SettingsPage() {
   );
 
   const contentKey = () =>
-    `${sectionID()}${s.agentSettingsUnsupported() && ["agent", "routes", "tools", "mcp"].includes(sectionID()) ? ":unsupported" : ""}`;
+    `${sectionID()}${s.agentSettingsUnsupported() && ["agent", "tools", "mcp"].includes(sectionID()) ? ":unsupported" : ""}`;
   // The section pane keeps its section while it slides out (Back may select another as it goes).
   const panelKey = panes.held(1, contentKey);
   // Its bar's title, kept the same way while the section slides out.

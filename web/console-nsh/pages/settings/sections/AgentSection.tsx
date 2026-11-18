@@ -1,5 +1,5 @@
 // Models: the default model, the saved profiles (each opens in a side pane), the fallback order,
-// and the LLM system settings.
+// the model routes (which profile each kind of work uses), and the LLM system settings.
 import { signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { LLM_SYSTEM_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
@@ -8,6 +8,7 @@ import { ConfigSettingsPanel, type ConfigGroup } from "../../../components/setti
 import { InlineNotice } from "../../../components/settings/DialogShell";
 import { ProviderLogo } from "../../../components/settings/InferenceProviderPicker";
 import { LLMConfigForm } from "../../../components/settings/LLMConfigForm";
+import { ModelRoutesPanel } from "../../../components/settings/ModelRoutesPanel";
 import { SettingsPane } from "../../../components/settings/PaneTarget";
 import { DirtyDot, Fold, PlaceholderButton, SettingField, SettingsCard } from "../../../components/settings-page/parts";
 import { useRevealRow } from "../../../components/settings-page/reveal";
@@ -198,6 +199,20 @@ export function AgentSection(props: { s: SettingsStore }) {
           </If>
         </View>
       </SettingsCard>
+
+      {/* Routes pick from the profiles above; their edits join the same save bar. */}
+      <View testID="settings-routes">
+        <ModelRoutesPanel
+          values={s.agentConfigValues()}
+          fieldStates={s.agentFieldStates()}
+          profiles={s.routeProfileOptions()}
+          loading={s.agentLoading()}
+          saving={s.agentSaving() && s.agentSavingTarget() === "config"}
+          saveScope="agent"
+          onSave={(update) => void s.saveConfigSettings("agent", update)}
+          onAddProfile={() => s.openAddProfileDialog()}
+        />
+      </View>
 
       <Each of={LLM_SYSTEM_CONFIG_GROUPS as ConfigGroup[]} key={(group) => group.id}>
         {(group) => (

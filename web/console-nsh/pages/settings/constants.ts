@@ -128,23 +128,39 @@ export const CHANNEL_GROUP_TRIGGER_VALUES = ["smart", "strict", "talkative"];
 export const LOCAL_CONSOLE_ENDPOINT_REF = "ep_console_local";
 export const SETTINGS_DEFAULT_SECTION_ID = "persona";
 export const SETTINGS_SECTION_IDS = new Set([
+  "persona",
   "agent",
-  "routes",
   "tools",
   "mcp",
-  "persona",
-  "channels",
   "automation",
-  "system",
-  "runtimes",
+  "runtime",
+  "channels",
   "security",
   "console",
-  "app",
+  "system",
+  "general",
   "shortcuts",
-  "runtime",
   "credits",
 ]);
+// Sections that were merged into another: their old addresses open the one that holds them now.
+export const SETTINGS_SECTION_ALIASES: Record<string, string> = {
+  // Running a channel inside Console moved from its own section into the channel's panel.
+  runtimes: "channels",
+  // Model Routes is a card of Models.
+  routes: "agent",
+  // Installing as an app is a card of General.
+  app: "general",
+};
 export const UPDATE_RELEASES_URL = "https://mistermorph.com/releases/";
+
+// The section list's groups, in order: the selected agent's settings, the settings of the Morph
+// this Console runs (a console endpoint only), and this device's own.
+export type SettingsSectionGroup = "agent" | "server" | "device";
+export const SETTINGS_SECTION_GROUPS: { id: SettingsSectionGroup; titleKey: string }[] = [
+  { id: "agent", titleKey: "settings_group_agent" },
+  { id: "server", titleKey: "settings_group_server" },
+  { id: "device", titleKey: "settings_group_device" },
+];
 
 export interface SettingsSection {
   id: string;
@@ -152,4 +168,5 @@ export interface SettingsSection {
   title: string;
   meta?: string;
   saveKind: string;
+  group: SettingsSectionGroup;
 }
