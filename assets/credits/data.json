@@ -40,7 +40,7 @@
       "name": "NSH",
       "link": "https://github.com/longbridge/nsh",
       "license": "Apache-2.0",
-      "summary": "Runs the Console's TSX app natively in the desktop shell."
+      "summary": "Runs the Console's TSX app natively on the desktop and on phones, and on the web."
     },
     {
       "id": "gpui",
@@ -50,130 +50,18 @@
       "summary": "Draws the desktop app's window on the GPU."
     },
     {
-      "id": "vue",
-      "name": "Vue",
-      "link": "https://github.com/vuejs/core/tree/main/packages/vue",
+      "id": "yaml",
+      "name": "YAML",
+      "link": "https://github.com/eemeli/yaml",
+      "license": "ISC",
+      "summary": "Reads and writes the persona's YAML profile in the Console."
+    },
+    {
+      "id": "node_qrcode",
+      "name": "node-qrcode",
+      "link": "https://github.com/soldair/node-qrcode",
       "license": "MIT",
-      "summary": "Drives the Console SPA component, state, and rendering model."
-    },
-    {
-      "id": "quail_ui",
-      "name": "Quail UI",
-      "link": "https://github.com/quailyquaily/quail-ui/",
-      "license": "Apache-2.0",
-      "summary": "Provides the Console component, styling, and icon system."
-    },
-    {
-      "id": "overtype",
-      "name": "OverType",
-      "link": "https://github.com/panphora/overtype",
-      "license": "MIT",
-      "summary": "Provides the Markdown editor used in the Console chat input."
-    },
-    {
-      "id": "unified",
-      "name": "unified",
-      "link": "https://github.com/unifiedjs/unified",
-      "license": "MIT",
-      "summary": "Runs the Markdown renderer processing pipeline."
-    },
-    {
-      "id": "remark_parse",
-      "name": "remark-parse",
-      "link": "https://github.com/remarkjs/remark/tree/main/packages/remark-parse",
-      "license": "MIT",
-      "summary": "Parses Markdown source text into a syntax tree."
-    },
-    {
-      "id": "remark_gfm",
-      "name": "remark-gfm",
-      "link": "https://github.com/remarkjs/remark-gfm",
-      "license": "MIT",
-      "summary": "Adds GFM features such as tables and task lists."
-    },
-    {
-      "id": "remark_math",
-      "name": "remark-math",
-      "link": "https://github.com/remarkjs/remark-math/tree/main/packages/remark-math",
-      "license": "MIT",
-      "summary": "Parses block and inline math syntax."
-    },
-    {
-      "id": "remark_rehype",
-      "name": "remark-rehype",
-      "link": "https://github.com/remarkjs/remark-rehype",
-      "license": "MIT",
-      "summary": "Converts the Markdown syntax tree into an HTML syntax tree."
-    },
-    {
-      "id": "rehype_raw",
-      "name": "rehype-raw",
-      "link": "https://github.com/rehypejs/rehype-raw",
-      "license": "MIT",
-      "summary": "Brings raw HTML inside Markdown into the same processing chain."
-    },
-    {
-      "id": "rehype_stringify",
-      "name": "rehype-stringify",
-      "link": "https://github.com/rehypejs/rehype/tree/main/packages/rehype-stringify",
-      "license": "MIT",
-      "summary": "Serializes the processed HTML syntax tree into final HTML."
-    },
-    {
-      "id": "rehype_katex",
-      "name": "rehype-katex",
-      "link": "https://github.com/remarkjs/remark-math/tree/main/packages/rehype-katex",
-      "license": "MIT",
-      "summary": "Turns math nodes into KaTeX HTML output."
-    },
-    {
-      "id": "dompurify",
-      "name": "DOMPurify",
-      "link": "https://github.com/cure53/DOMPurify",
-      "license": "Apache-2.0",
-      "summary": "Sanitizes final HTML before it is rendered."
-    },
-    {
-      "id": "mermaid",
-      "name": "Mermaid",
-      "link": "https://github.com/mermaid-js/mermaid",
-      "license": "MIT",
-      "summary": "Renders Mermaid diagram blocks in Markdown."
-    },
-    {
-      "id": "katex",
-      "name": "KaTeX",
-      "link": "https://github.com/KaTeX/KaTeX",
-      "license": "MIT",
-      "summary": "Renders mathematical formulas."
-    },
-    {
-      "id": "shiki",
-      "name": "Shiki",
-      "link": "https://github.com/shikijs/shiki",
-      "license": "MIT",
-      "summary": "Provides code syntax highlighting."
-    },
-    {
-      "id": "shiki_stream",
-      "name": "Shiki Stream",
-      "link": "https://github.com/antfu/shiki-stream",
-      "license": "MIT",
-      "summary": "Supports streamed syntax-highlighting token output."
-    },
-    {
-      "id": "viz_js",
-      "name": "Viz.js",
-      "link": "https://github.com/mdaines/viz-js",
-      "license": "MIT",
-      "summary": "Renders Graphviz and DOT diagrams."
-    },
-    {
-      "id": "antv_infographic",
-      "name": "AntV Infographic",
-      "link": "https://github.com/antvis/Infographic",
-      "license": "MIT",
-      "summary": "Renders infographic custom blocks."
+      "summary": "Draws the QR codes for signing in to channels such as WeChat."
     }
   ],
   "contributors": [
