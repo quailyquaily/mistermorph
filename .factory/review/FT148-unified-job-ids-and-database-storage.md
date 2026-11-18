@@ -1,6 +1,6 @@
 ---
 branch: factory/FT148-unified-job-ids-and-database-storage
-round: 1
+round: 2
 ---
 # Unified job IDs, job management, topic links and database storage
 
@@ -73,3 +73,26 @@ Owner requested a storage correction and return to new/ for implementation: use 
 - Update the implementation, migration tests, snapshots, prompts and English docs for agent.db. Verify concurrent access and that upgrades with existing explicit deny lists protect sensitive job data, including SQLite sidecar files; address the review's deny-list exposure rather than merely renaming its path.
 
 Move ready/ → new/ on the existing branch for the next fix round. The previous passing review applies to the old implementation only; run the required checks and obtain a new review after this change. No code changes or shipping performed by this board update.
+
+
+## factory · plan · 2026-11-18 14:24
+Fix round 2 supersedes the separate-database design as requested in the 13:59 section.
+
+Behaviour: store all job definitions in the existing shared state database jobs table, retaining all existing state/schema conventions, IDs, order, fields, enabled flags, topic links and independent execution identities. Import prior job stores once transactionally, leaving sources intact; preserve stale-YAML suppression, rollback/retry and no resurrection. Handle mixed-store conflicts explicitly without silent overwrites. Protect sensitive databases and SQLite sidecars even with old explicit deny lists.
+Scope: storage/schema/import, snapshots, sensitive-path checks, regression coverage and English documentation. No new triggers, UI redesign or deployment.
+Decisions: reuse shared migration infrastructure; previous dedicated job store is authoritative for its imported list, append demonstrably newer legacy additions and report irreconcilable older-store edits as explicit persisted rejects. Keep rejected raw records in the protected state database. Older binaries cannot read the new schema; document restoring a pre-upgrade snapshot.
+Checking: existing-state/schema preservation, dedicated/mixed stores, concurrent writers, migration precedence/conflicts/rollback/retry/idempotence/deletion, old explicit deny lists and WAL/SHM/journal sidecars. Required Go checks and Console checks/tests; explicitly report unverified interactive behavior.
+
+## factory · 2026-11-18 14:24
+Round 2 implemented in three commits: 37b59087 (shared database jobs table and migration), ee999b24 (mandatory sensitive-file/sidecar protection), d389ccaa (docs). Head: d389ccaa.
+
+Jobs now use the existing shared state database via schema migration 6. Scheduler, Console and job_manage share the jobs table. Existing data, IDs, ordering, fields, enabled state, topic links and distinct run identity are retained. Prior dedicated job database is read-only input. Its list takes precedence; unchanged legacy rows do not resurrect deleted jobs, newer unique legacy additions append, and irreconcilable changed legacy rows are warned and preserved as explicit import rejects rather than silently overwriting. One-time YAML import remains transactional/retryable and leaves the original intact. Invalid YAML blocks only job access, not unrelated shared-state consumers.
+
+Effective deny paths now always protect current/legacy state databases, imported configuration and SQLite WAL/SHM/journal sidecars for read_file, send_file and shell tools, including old explicit deny lists. read_file checks symlink targets. Shell enforcement remains best-effort string matching; glob/obfuscated shell access is not a security sandbox.
+
+Installs: none.
+Validation: coder passed configured gofmt check, go vet ./..., go test ./..., pinned nsh 0.5.1 check and required Console scripts/test.sh (136 files, 0 failed). Manager independently reran configured gofmt/vet/full Go suite: passed. Manager inspected all three commits and changed paths, confirmed clean worktree and whitespace checks; no forbidden paths changed. New regressions cover migration preserving other state, mixed/legacy/WAL stores, conflicts and retry, separate-process writers, old deny-list exposure, sidecars, symlinks, shells and send_file. Coder exercised real binary upgrade/downgrade sequences and untouched source files.
+
+Not checked: interactive browser, desktop, Android, or live Console with running scheduler; UI has headless test coverage only. Downgrades fail the existing schema-version guard; restore pre-upgrade snapshots. Rejected records may contain sensitive raw fields, retained only in the protected database. A new independent review is required; the prior pass covers only round 1.
+
+Branch pushed; moved new/ → review/. Not merged or shipped.
