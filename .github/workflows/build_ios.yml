@@ -1,0 +1,119 @@
+name: Build iOS App
+
+# The iPhone app (web/console-nsh/scripts/build-ios.sh): Morph.ipa, signed for the App Store and
+# uploaded to TestFlight. Run by hand (Actions → Build iOS App → Run workflow) or by release.yml on
+# each tag. It needs macOS, so it runs on GitHub's runner; nothing here needs a Mac of your own.
+#
+# Secrets: IOS_CERTIFICATE_BASE64 and IOS_CERTIFICATE_PASSWORD (the Apple Distribution .p12),
+# IOS_CODESIGN_IDENTITY ("Apple Distribution: Example Inc (TEAMID1234)"),
+# IOS_PROVISIONING_PROFILE_BASE64 (the App Store .mobileprovision), IOS_APP_STORE_APP_ID (the app's
+# numeric Apple ID in App Store Connect), and the App Store Connect API key the release already uses
+# (APPLE_API_KEY_BASE64, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID). Without them there is no iOS app.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version, e.g. 0.3.80 (build number 3080; App Store Connect takes each build once)
+        required: true
+      upload:
+        description: Upload to TestFlight
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      upload:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios-app:
+    name: Build iOS App
+    runs-on: macos-15
+    env:
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_CODESIGN_IDENTITY: ${{ secrets.IOS_CODESIGN_IDENTITY }}
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+      IOS_APP_STORE_APP_ID: ${{ secrets.IOS_APP_STORE_APP_ID }}
+
+    steps:
+      - name: Check the iOS signing secrets
+        id: secrets
+        shell: bash
+        run: |
+          missing=()
+          for name in IOS_CERTIFICATE_BASE64 IOS_CERTIFICATE_PASSWORD IOS_CODESIGN_IDENTITY \
+            IOS_PROVISIONING_PROFILE_BASE64 IOS_APP_STORE_APP_ID; do
+            [[ -n "${!name}" ]] || missing+=("${name}")
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::warning::${missing[*]} not set: no iOS app"
+            echo "ready=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "ready=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Checkout
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/checkout@v5
+
+      - name: Set up the console build
+        if: steps.secrets.outputs.ready == 'true'
+        uses: ./.github/actions/setup-desktop-build
+        with:
+          gpui: "false"
+          components: web ios
+
+      # The Apple Distribution identity in a temporary keychain (CODESIGN_IDENTITY) and the API key
+      # (APPLE_API_KEY_PATH, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID), as for the macOS release.
+      - name: Set up iOS signing
+        if: steps.secrets.outputs.ready == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.IOS_CODESIGN_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          ./scripts/macos-signing-setup.sh
+          profile="${RUNNER_TEMP}/Morph.mobileprovision"
+          printf '%s' "${IOS_PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${profile}"
+          echo "IOS_PROFILE_PATH=${profile}" >> "${GITHUB_ENV}"
+
+      - name: Build Morph.ipa
+        if: steps.secrets.outputs.ready == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          web/console-nsh/scripts/build-ios.sh --sign "${CODESIGN_IDENTITY}" \
+            --profile "${IOS_PROFILE_PATH}" --out dist/Morph.ipa
+          (cd dist && shasum -a 256 Morph.ipa > Morph.ipa.sha256)
+
+      - name: Upload iOS artifact
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: Morph-ios
+          path: |
+            dist/Morph.ipa
+            dist/Morph.ipa.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload to TestFlight
+        if: steps.secrets.outputs.ready == 'true' && inputs.upload
+        shell: bash
+        run: |
+          nsh publish ios dist/Morph.ipa --app-id "${IOS_APP_STORE_APP_ID}" \
+            --issuer-id "${APPLE_API_ISSUER_ID}" --key-id "${APPLE_API_KEY_ID}" \
+            --private-key "${APPLE_API_KEY_PATH}"

@@ -401,6 +401,17 @@ jobs:
         run: |
           gh release upload "${GITHUB_REF_NAME}" dist/release-upload/* --clobber
 
+  # The iPhone app goes to TestFlight, not into the release: an App Store-signed .ipa installs only
+  # through Apple. Without the IOS_* secrets the job warns and builds nothing.
+  ios-app:
+    name: Build iOS App
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: goreleaser
+    uses: ./.github/workflows/build_ios.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets: inherit
+
   release-metadata:
     name: Publish Release Metadata
     # After the Android app's assets too, but a failed Android build does not hold the release back.

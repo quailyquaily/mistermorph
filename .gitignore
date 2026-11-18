@@ -35,6 +35,8 @@ design/brand/generator/platform-jobs.json
 
 # The phone app built by web/console-nsh/scripts/build-android.sh
 web/console-nsh/dist-android/
+# The iPhone app built by web/console-nsh/scripts/build-ios.sh
+web/console-nsh/dist-ios/
 
 # Runtime state databases (agent.db, usage.db, memory.db and their WAL files) are never source.
 agent.db

@@ -27,6 +27,9 @@ Every bitmap uses the drawing made for its size, never a scaled-down large one:
   panel and no rim. The foreground is the themed icon's monochrome layer too. The drawing is the one
   for the 48 dp the launcher shows the icon at. Also the notification icon,
   drawable-<density>/ic_stat_morph.png: the lines in white, the panel 22 dp across on 24 dp.
+- iOS (web/console-nsh/ios/AppIcon-1024.png, the icon scripts/build-ios.sh gives nsh): the App
+  Store's 1024 px icon, a full-bleed square like apple-touch-icon.png, since iOS draws the rounded
+  corners. It is opaque: the App Store refuses an icon with an alpha channel (the script checks).
 """
 import json, os, re, shutil, struct, sys
 
@@ -44,6 +47,7 @@ WEB_ASSETS = os.path.join(ROOT, 'web', 'console-nsh', 'assets', 'images')
 COLOURWAY = 'aojashin'
 WORKER_AVATARS = os.path.join(ROOT, 'web', 'console-nsh', 'assets', 'worker-avatars')
 ANDROID_RES = os.path.join(ROOT, 'web', 'console-nsh', 'android', 'res')
+IOS = os.path.join(ROOT, 'web', 'console-nsh', 'ios')
 # The colourways design/brand/icons is drawn in; the console picks worker avatars among them.
 WORKER_AVATAR_COLOURWAYS = ('aojashin', 'night', 'paper', 'suimen', 'rinko', 'bunko', 'denko')
 
@@ -132,6 +136,7 @@ def plan():
     for size in (192, 512):
         jobs.append((placed(size, size), os.path.join(WEB_ASSETS, f'android-chrome-{size}x{size}.png'), size))
     jobs.append((placed(180, 180, square=True), os.path.join(WEB, 'apple-touch-icon.png'), 180))
+    jobs.append((placed(1024, 1024, square=True), os.path.join(IOS, 'AppIcon-1024.png'), 1024))
     for name, density in ANDROID_DENSITIES:
         launcher = android(108, 72, 48, density)
         jobs.append((launcher, os.path.join(ANDROID_RES, f'mipmap-{name}', 'ic_launcher_foreground.png'), round(108 * density)))

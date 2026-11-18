@@ -30,7 +30,7 @@ You make the private key yourself and send Apple only a certificate signing requ
    mkdir -p ~/apple-signing && cd ~/apple-signing && umask 077
    ```
 
-2. Create the key and the CSR. Put your Apple ID email in `emailAddress`, and replace `<company name>` with your company's name in English letters, as registered with Apple. `C=JP` is the country code for Japan; use your own country's code if it differs. Apple puts your team's registered name in the final certificate, so these fields only need to be sensible.
+2. Create the key and the CSR. Put your Apple ID email in `emailAddress`, and replace `<company name>` with your company's name in English letters, as registered with Apple. `C=JP` is the country code for Japan; use your own country's code if it differs. Apple puts your team's registered name in the final certificate, so these fields only need to be sensible. If your email has a `+`, write it as `\+` (`name\+tag@example.com`); otherwise openssl stops with "a '+' in a value string needs be escaped".
 
    ```bash
    openssl req -new -newkey rsa:2048 -nodes \
