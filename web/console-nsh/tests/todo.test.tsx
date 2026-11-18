@@ -864,3 +864,91 @@ test("on the desktop, notifying the console user needs the system's notification
   await app.waitFor("Saved");
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[0].chat_id).toBe("console:user");
 });
+
+/* ---------- the content: a plain textarea with the reference toolbar ---------- */
+
+const CONTACTS = {
+  "GET /proxy:/contacts/list": { body: { items: [{ contact_id: "tg:42", nickname: "Alice", channel: "telegram" }] } },
+  "GET /proxy:/contacts/chat-profile": {
+    body: { items: [{ chat_id: "tg:-100", name: "Team", platform: "telegram", type: "group" }] },
+  },
+};
+
+test("the content is a plain textarea under the reference toolbar, with no Markdown preview", async () => {
+  const { app, calls } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-content-source");
+  // The stored Markdown shows as it is, in a regular field.
+  expect(app.value("id:todo-content-source")).toBe("Original content");
+  expect(app.shows("id:todo-content-edit")).toBe(false);
+  expect(app.shows("id:todo-content-preview")).toBe(false);
+  expect(app.shows("id:todo-content-frame")).toBe(false);
+  expect(app.enabled("id:markdown-editor-mention")).toBe(true);
+  expect(app.enabled("id:markdown-editor-conversation")).toBe(true);
+  // Typed Markdown (a line break, a list) goes in and out unchanged.
+  await app.type("id:todo-content-source", "\n- **step** one");
+  expect(app.value("id:todo-content-source")).toBe("Original content\n- **step** one");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  const tasks = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
+  expect(tasks[0]).toMatchObject({ id: "task-1", content: "Original content\n- **step** one" });
+  expect(tasks[1]).toMatchObject({ id: "task-2", content: "Write it" });
+});
+
+test("a contact and a conversation picked from the toolbar go into the content, which keeps the focus", async () => {
+  const { app, calls } = await openTodo(CONTACTS);
+  await app.press("id:todo-item-task-2");
+  await app.waitFor("id:todo-content-source");
+  await app.press("id:markdown-editor-mention");
+  await app.waitFor("id:markdown-editor-mention-dialog");
+  await app.waitFor("text:Alice");
+  await app.press("text:Alice");
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it [Alice](tg:42)");
+  // The caret is back in the field, after the mention.
+  await app.keyboard.press("x");
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it [Alice](tg:42)x");
+  await app.press("id:markdown-editor-conversation");
+  await app.waitFor("text:Team");
+  await app.press("text:Team");
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it [Alice](tg:42)x [Team](tg:-100)");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  const tasks = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
+  expect(tasks[1]).toMatchObject({ id: "task-2", content: "Write it [Alice](tg:42)x [Team](tg:-100)" });
+});
+
+test("a new item's empty content takes a mention as its first text; closing the picker changes nothing", async () => {
+  const { app, calls } = await openTodo({ ...CONTACTS, "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) } });
+  await app.press("id:todo-empty-add");
+  await app.waitFor("id:todo-content-source");
+  expect(app.value("id:todo-content-source")).toBe("");
+  await app.press("id:markdown-editor-mention");
+  await app.waitFor("text:Alice");
+  await app.press("id:markdown-editor-mention-dialog >> label:Close");
+  await app.waitFor("id:markdown-editor-mention-dialog", { state: "gone" });
+  expect(app.value("id:todo-content-source")).toBe("");
+  expect(app.enabled("id:todo-save")).toBe(false);
+  await app.press("id:markdown-editor-mention");
+  await app.press("text:Alice");
+  await app.waitUntil(() => app.value("id:todo-content-source") === "[Alice](tg:42)");
+  expect(app.enabled("id:todo-save")).toBe(true);
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[0].content).toBe("[Alice](tg:42)");
+});
+
+test("another item's content shows in the same field, and a mention goes into that item only", async () => {
+  const { app, calls } = await openTodo(CONTACTS);
+  await app.press("id:todo-item-task-1");
+  await app.type("id:todo-content-source", " today");
+  await app.press("id:todo-item-task-2");
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it");
+  await app.press("id:markdown-editor-mention");
+  await app.press("text:Alice");
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it [Alice](tg:42)");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  const tasks = proxied(calls, "PUT", "/todo/tasks").at(-1)!.json.tasks;
+  expect(tasks.find((task: { id: string }) => task.id === "task-2").content).toBe("Write it [Alice](tg:42)");
+  expect(tasks.find((task: { id: string }) => task.id === "task-1").content).not.toContain("Alice");
+});

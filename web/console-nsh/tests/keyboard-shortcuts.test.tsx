@@ -263,6 +263,8 @@ test("tooltips show the keys in effect", async () => {
 
 test("a text editor keeps its own keys while it has the focus; other shortcuts still act", async () => {
   // Ctrl+L selects a line in the editor; bound here to folding the sidebar (Settings notes the clash).
+  // The Heartbeat workflow's instructions are such an editor (a TODO item's content is a plain
+  // textarea, which has no Ctrl+L of its own).
   const saved = JSON.stringify({ version: 1, bindings: { "frame.toggleSidebar": "ctrl+l", "nav.chat": "ctrl+shift+1" } });
   const tasks = { tasks: [], system_tasks: [], chat_options: [], llm_profiles: [], heartbeat_enabled: false, runs: [] };
   const { app } = await openConsole({
@@ -272,13 +274,15 @@ test("a text editor keeps its own keys while it has the focus; other shortcuts s
     api: {
       "GET /proxy:/todo/tasks": { body: tasks },
       "GET /proxy:/todo/runs": { body: { runs: [] } },
-      "GET /proxy:/heartbeat/workflows": { body: { items: [] } },
+      "GET /proxy:/heartbeat/workflows": {
+        body: { items: [{ id: "hb-1", title: "Inbox", instructions: "Check the inbox.", enabled: true }] },
+      },
     },
   });
-  await app.waitFor("id:todo-empty-add");
-  await app.press("id:todo-empty-add");
-  await app.waitFor("id:todo-content-source");
-  await app.type("id:todo-content-source", "Water the plants");
+  await app.waitFor("id:todo-heartbeat-item");
+  await app.press("id:todo-heartbeat-item");
+  await app.waitFor("id:todo-heartbeat-workflow-instructions-0-source");
+  await app.type("id:todo-heartbeat-workflow-instructions-0-source", "Water the plants");
   // nsh puts the editor's own bindings after the app's, so it keeps its keys even when the
   // shortcuts are bound again meanwhile (another window saved them).
   const changed = JSON.stringify({ version: 1, bindings: { "frame.toggleSidebar": "ctrl+l", "nav.chat": "ctrl+shift+1", "nav.audit": "" } });

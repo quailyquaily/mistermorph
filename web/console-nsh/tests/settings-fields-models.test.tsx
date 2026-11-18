@@ -168,6 +168,55 @@ test("markdown editor: typing in the source reports the text", async () => {
   await app.waitUntil(() => out(app, "doc") === "!# Title\n\nHello");
 });
 
+test("textarea editor: typing reports the text; no Edit / Preview switch, the toolbar stays", async () => {
+  const { app } = await openFixture("/textarea");
+  await app.waitFor("id:ta-source");
+  expect(app.value("id:ta-source")).toBe("Ask Alice");
+  expect(app.shows("id:ta-edit")).toBe(false);
+  expect(app.shows("id:ta-preview")).toBe(false);
+  expect(app.shows("id:ta-frame")).toBe(false);
+  expect(app.shows("id:markdown-editor-mention")).toBe(true);
+  expect(app.shows("id:markdown-editor-conversation")).toBe(true);
+  await app.type("id:ta-source", " **now**");
+  await app.waitUntil(() => out(app, "doc") === "Ask Alice **now**");
+  await app.press("id:insert");
+  await app.waitUntil(() => out(app, "doc") === "Ask Alice **now** [Bob](tg:7)");
+  expect(app.value("id:ta-source")).toBe("Ask Alice **now** [Bob](tg:7)");
+});
+
+test("textarea editor: read-only and disabled take no typing, no insertion and no toolbar", async () => {
+  const { app } = await openFixture("/textarea");
+  await app.waitFor("id:ta-source");
+  for (const toggle of ["readonly", "disabled"]) {
+    await app.press(`id:${toggle}`);
+    await app.waitUntil(() => !app.enabled("id:markdown-editor-mention"));
+    expect(app.enabled("id:markdown-editor-conversation")).toBe(false);
+    // The field itself is read-only: typing is refused.
+    let refused = "";
+    await app.type("id:ta-source", "x").catch((error: unknown) => (refused = String(error)));
+    expect(refused).toContain("not editable");
+    await app.press("id:insert");
+    await app.waitUntil(() => out(app, "inserted") === "false");
+    expect(out(app, "doc")).toBe("Ask Alice");
+    expect(app.value("id:ta-source")).toBe("Ask Alice");
+    await app.press(`id:${toggle}`);
+    await app.waitUntil(() => app.enabled("id:markdown-editor-mention"));
+  }
+  await app.press("id:insert");
+  await app.waitUntil(() => out(app, "doc") === "Ask Alice [Bob](tg:7)");
+  expect(out(app, "inserted")).toBe("true");
+});
+
+test("textarea editor: another document's text replaces the field's, and an insertion goes at its end", async () => {
+  const { app } = await openFixture("/textarea");
+  await app.waitFor("id:ta-source");
+  await app.type("id:ta-source", " soon");
+  await app.press("id:other");
+  await app.waitUntil(() => app.value("id:ta-source") === "Other text");
+  await app.press("id:insert");
+  await app.waitUntil(() => out(app, "doc") === "Other text [Bob](tg:7)");
+});
+
 // The Editor's rows are as tall as its text: a press in the room below it (the middle of this
 // 320pt editor) reaches the view around the Editor, which focuses it with the caret at the end.
 test("markdown editor: a press below the text focuses it at the end", async () => {

@@ -146,10 +146,14 @@ function DateFieldDemo() {
 function MarkdownEditorDemo() {
   const text = useText(EDITOR_TEXT);
   const empty = useText("");
+  const plain = useText(EDITOR_TEXT);
   return (
     <Col>
       <V s="default" l="edit / preview">
         <MarkdownEditor value={text.get()} onChange={text.set} height={240} hint={t("uig_fixture_hint")} accessibilityLabel={t("uig_fixture_notes")} testID="uig-markdown-editor" />
+      </V>
+      <V s="default" l="plainText (a textarea, the TODO content)">
+        <MarkdownEditor value={plain.get()} onChange={plain.set} height={160} plainText placeholder={t("uig_fixture_placeholder")} accessibilityLabel={t("uig_fixture_notes")} testID="uig-markdown-textarea" />
       </V>
       <Row>
         <V s="empty" class="min-w-64 flex-1">

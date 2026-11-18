@@ -1,7 +1,7 @@
 // A test entry that mounts the settings components (components/settings, MarkdownEditor) on their
 // own, with each value read out beside them, for tests/settings-fields*.test.tsx. The boot location
 // picks the gallery: /fields, /secret, /secret-layout, /panel, /routes, /auth, /llm, /markdown,
-// /dialog.
+// /textarea, /dialog.
 import type { JSX, ViewRef } from "nsh";
 import { mount, signal, Text, View, Scroll } from "nsh";
 import { configureApiBase, endpointState, localeState } from "../../lib/core/context.js";
@@ -422,6 +422,55 @@ function MarkdownGallery() {
   );
 }
 
+/** The editor as a plain textarea (`plainText`, the TODO content's), with its document switchable. */
+function TextareaGallery() {
+  const doc = signal("Ask Alice");
+  const key = signal("a");
+  let api: MarkdownEditorApi | undefined;
+  const readOnly = signal(false);
+  const disabled = signal(false);
+  const inserted = signal("");
+  return (
+    <View class="gap-3 p-4">
+      <AppMarkdownEditor
+        plainText
+        documentKey={key()}
+        value={doc()}
+        onChange={(value) => doc.set(value)}
+        placeholder="Write here"
+        height={240}
+        readOnly={readOnly()}
+        disabled={disabled()}
+        accessibilityLabel="Notes"
+        editorRef={(ref) => {
+          api = ref;
+        }}
+        testID="ta"
+      />
+      <Out name="doc" value={doc()} />
+      <Out name="inserted" value={inserted()} />
+      <Text testID="insert" onPress={() => void api?.insertAtCursor("[Bob](tg:7)", { spacing: true })?.then((ok) => inserted.set(String(ok)))}>
+        insert
+      </Text>
+      <Text testID="readonly" onPress={() => readOnly.update((on) => !on)}>
+        readonly
+      </Text>
+      <Text testID="disabled" onPress={() => disabled.update((on) => !on)}>
+        disabled
+      </Text>
+      <Text
+        testID="other"
+        onPress={() => {
+          key.set("b");
+          doc.set("Other text");
+        }}
+      >
+        other
+      </Text>
+    </View>
+  );
+}
+
 function Dialog() {
   const open = signal(false);
   const saving = signal(false);
@@ -460,6 +509,7 @@ const PANELS: Record<string, () => JSX.Element> = {
   "/auth": Auth,
   "/llm": LLM,
   "/markdown": MarkdownGallery,
+  "/textarea": TextareaGallery,
   "/dialog": Dialog,
 };
 
