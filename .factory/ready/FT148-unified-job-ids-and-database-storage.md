@@ -50,3 +50,16 @@ Regression coverage includes new/legacy IDs, tool/config aliases and stable upda
 Not checked: interactive browser, desktop and Android UI appearance; real platform crypto behavior; live Console against a running scheduler. Todo/Topics behavior has headless component coverage only. No deployment, no owner working-copy changes, no new trigger types.
 
 Branch pushed. Moved new/ → review/ for independent review; not merged or shipped.
+
+
+## factory · review · 2026-11-18 12:32
+head: 9f815854c92ffbacebd0257ed758b994a865475c
+verdict: pass
+notes:
+- [P2] internal/configdefaults/defaults.go:275 (also :299, :315): jobs.db is added only to default deny_paths. Existing installations explicitly configured with the old template's deny list do not inherit that default, exposing jobs.db and literal bash_env values to read_file, send-file and shell access. Verified scratch probe: read_file of jobs.db using the old explicit list returned 24,576 bytes containing the literal API_TOKEN value; the new default refused the same read. Preserve protection across upgrades by adding state databases to effective deny lists or migrating existing explicit lists; add an old-config regression test.
+
+Independent Claude Code review covered origin/master...HEAD: five commits, 98 files. No P0/P1 findings. Per factory policy, P2 is nonblocking; moved review/ → ready/. Owner should inspect the upgraded-install deny-list exposure before shipping.
+
+Validation: configured gofmt check, go vet ./... and go test ./... all passed with fresh Go cache; pinned nsh 0.5.1 check passed; required Console scripts/test.sh passed, 136 files and 0 failures. Reviewer verified the finding with a scratch-only probe. Manager confirmed unchanged review head, clean worktree and clean merge with current fetched master. No code changes or commits from review. Installs: none; pinned nsh fetched its routine TypeScript cache only.
+
+Residual risks: no interactive browser, desktop or Android build/JVM tests; Todo/Topics UI only headless-tested. Cross-process sharing checked by unit tests, not two running binaries. Downgrade behavior documented but not exercised. Secret-bearing data paths not exhaustively verified; jobs.db-wal deny matching is not covered (agent.db-wal had a preexisting equivalent gap). No linked GitHub issues or PRs in this item. Not merged or shipped.
