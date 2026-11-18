@@ -177,6 +177,8 @@ function heartbeatWorkflowFrom(item: any): HeartbeatWorkflow {
 
 export function createTodoState() {
   const loading = signal(false);
+  // How the list's first load went: "" until it answered, then ok or failed.
+  const loaded = signal<"" | "ok" | "failed">("");
   const saving = signal(false);
   const tasks = signal<TodoTask[]>([]);
   // A task added to the list flashes where it lands; loads and agent switches do not.
@@ -1083,8 +1085,31 @@ export function createTodoState() {
 
   /* ---------- load and save ---------- */
 
+  // An address that names an item (`/todo?task=<id>`, the chat's View Job) opens it once the list
+  // has loaded; the address then drops the name, so the item stays where the person leaves it. An
+  // item that is not there (deleted, or a one-time item that ran) leaves the list as it is, and says so.
+  effect(() => {
+    const id = trimText(currentRoute()?.query?.task);
+    if (!id || !loaded() || loading()) return;
+    const list = tasks();
+    untracked(() => {
+      const task = list.find((item) => trimText(item.id) === id);
+      if (task) {
+        selectTask(task);
+      } else if (untracked(loaded) === "ok") {
+        // A failed load has said so already.
+        pushNotice({ type: "info", text: t("todo_item_missing") });
+      }
+      const route = currentRoute();
+      const query: Record<string, string> = { ...(route?.query || {}) };
+      delete query.task;
+      void navigate(locationOf(route?.path || "/", query), { replace: true });
+    });
+  });
+
   async function load() {
     loading.set(true);
+    let failed = false;
     try {
       const data = await runtimeApiFetch("/todo/tasks");
       if (disposed) return;
@@ -1106,9 +1131,13 @@ export function createTodoState() {
         mobileEditorVisible.set(false);
       });
     } catch (e) {
+      failed = true;
       notice.error(errorMessage(e) || t("msg_load_failed"));
     } finally {
-      loading.set(false);
+      batch(() => {
+        loading.set(false);
+        if (!untracked(loaded)) loaded.set(failed ? "failed" : "ok");
+      });
     }
   }
 

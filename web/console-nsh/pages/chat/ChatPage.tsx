@@ -13,6 +13,7 @@ import { barRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 import { glassEnabled } from "../../lib/glass";
 import { ChatLoadError } from "../../components/chat/ChatLoadError";
+import { TodoJobBar } from "../../components/chat/TodoJobBar";
 import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
@@ -223,6 +224,32 @@ function LoadError(props: { c: ChatController; compact?: boolean; testID: string
 }
 
 /** `underBar`: the phone's bar lies directly over it; where the bar is glass the history runs on under it. */
+/** A TODO item's topic's foot: the item's toolbar (Start or Stop, View Job) on the chat's job state. */
+function TodoJobToolbar(props: { c: ChatController }) {
+  const job = props.c.todoJob;
+  const error = () => {
+    const failure = job.error();
+    if (!failure) return "";
+    const detail = failure.message || t("msg_load_failed");
+    if (failure.kind === "stop") return t("todo_stop_failed", { error: detail });
+    if (failure.kind === "start") return t("chat_todo_job_start_failed", { error: detail });
+    return t("chat_todo_job_load_failed", { error: detail });
+  };
+  return (
+    <TodoJobBar
+      running={job.running()}
+      busy={job.pending() === "start" || job.stopping()}
+      toggleEnabled={job.running() ? job.canStop() : job.canStart()}
+      viewEnabled={job.canView()}
+      note={job.status() === "missing" ? t("chat_todo_job_missing", { name: props.c.deskTitle() }) : ""}
+      error={error()}
+      onStart={() => void job.start()}
+      onStop={() => void job.stop()}
+      onView={props.c.viewTodoJob}
+    />
+  );
+}
+
 function ChatMain(props: { c: ChatController; underBar?: boolean }) {
   const c = props.c;
   // Not a failed load's panel, which is centred in the room under the bar.
@@ -242,6 +269,9 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
   const footRoom = signal(0);
   const readonlyTopic = () => c.selectedTopicIsAgent() || c.selectedTopicIsCron();
   const glassFloat = () => glassEnabled() && !readonlyTopic() && footRoom() > 0;
+  // A TODO item's toolbar floats on the conversation as the bottom navigation floats on a page: where
+  // the window draws glass the conversation runs on behind it, with no fade to the paper.
+  const glassJobBar = () => glassEnabled() && c.selectedTopicIsCron() && !c.selectedTopicIsAgent();
   const floatFade = () => {
     const paper = String(token("background"));
     const solid = Math.round(footRoom());
@@ -259,10 +289,10 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
             {/* Over the history's foot, fading from it to the page (what scrolls behind the footer
                 line stays readable); presses on the fade reach the history. */}
             <View
-              class={`absolute bottom-0 left-0 right-0 pt-6 ${glassFloat() ? "" : "bg-linear-to-b from-transparent to-background"}`}
+              class={`absolute bottom-0 left-0 right-0 pt-6 ${glassFloat() || glassJobBar() ? "" : "bg-linear-to-b from-transparent to-background"}`}
               style={glassFloat() ? { pointerEvents: "box-none", backgroundImage: floatFade() } : { pointerEvents: "box-none" }}
               onLayout={({ bounds }) => composerRoom.set(bounds.size.height)}
-              testID={glassFloat() ? "chat-composer-float.glass" : "chat-composer-float"}
+              testID={glassFloat() || glassJobBar() ? "chat-composer-float.glass" : "chat-composer-float"}
             >
               <View class="w-full max-w-[832px] self-center" style={{ paddingLeft: chatGutter(), paddingRight: chatGutter() }}>
                 <If when={c.chatLoadErrorKind() !== "" && !c.chatLoadErrorFull()}>
@@ -272,9 +302,7 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
                   when={c.selectedTopicIsAgent()}
                   else={
                     <If when={c.selectedTopicIsCron()} else={<Composer c={c} onFootRoom={(height) => footRoom.set(height)} />}>
-                      <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
-                        {t("chat_topic_cron_readonly", { name: c.deskTitle() })}
-                      </Text>
+                      <TodoJobToolbar c={c} />
                     </If>
                   }
                 >

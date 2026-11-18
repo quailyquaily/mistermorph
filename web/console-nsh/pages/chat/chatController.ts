@@ -66,7 +66,7 @@ import { loadResource, resourceKey } from "../../lib/core/resources.js";
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../../lib/core/workspace-tree.js";
 import { topicIcon, useTopicMetadata } from "../../lib/core/topic-metadata.js";
-import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicSidebarViewFor } from "../../lib/core/chat-cron-topics.js";
+import { CRON_TOPIC_PREFIX, cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicSidebarViewFor } from "../../lib/core/chat-cron-topics.js";
 import {
   activelyViewedTopic,
   createTopicActivityTracker,
@@ -106,7 +106,7 @@ import { agentLinkAvatarURL, agentLinkInstanceID } from "../../lib/core/agent-li
 import { pushNotice } from "../../lib/core/notices.js";
 import { createTopicRename, type TopicRenameSession } from "./topicRename";
 import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile, type PickSource } from "../../lib/platform";
-import { currentRoute, router } from "../../lib/router";
+import { currentRoute, locationOf, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { dismissSoftKeyboard } from "../../lib/softKeyboard";
 import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
@@ -131,6 +131,7 @@ import { fetchEndpointBlob, saveEndpointFile, transcribeRecording, uploadPickedF
 import { createFilePreview, draftFilePreviewable, isBrowserFile, isPickedFile, localImageSource, type FilePreviewState } from "../../components/chat/filePreview";
 import { t } from "../../components/chat/i18n";
 import { createVoiceInput, voiceErrorKey } from "../../components/chat/voice";
+import { createTodoJobControl } from "../../components/chat/todoJob";
 
 const POLL_INTERVAL_MS = 1200;
 const POLL_RETRY_MAX_MS = 15000;
@@ -981,6 +982,32 @@ export function createChatController() {
   const topicRenameAvailable = () => topicDeleteAvailable();
   const topicRegenerateAvailable = () => Boolean(workspaceTopicID()) && selectedTopicIsCron();
   const topicRegenerateLabel = () => t("chat_topic_regenerate_icon_action");
+
+  // A TODO item's topic ("_cron_<id>") has the item's toolbar where a topic has its composer
+  // (components/chat/TodoJobBar.tsx): Start or Stop a run, and View Job. The item is the one the
+  // topic's own ID names, on the agent the topic belongs to; the topic's activity changing (a run
+  // started or ended, from here or anywhere) asks the runtime again at once.
+  // Only while the conversation shows (on a phone the topic list can be up with the topic selected).
+  const todoJobTaskID = () =>
+    selectedTopicIsCron() && !creatingTopic() && showChatPane() ? normalizeTopicID(selectedTopicID()).slice(CRON_TOPIC_PREFIX.length) : "";
+  const todoJob = createTodoJobControl({
+    endpointRef: () => (consoleTopicsEnabled() ? submitEndpointRef() : ""),
+    taskID: todoJobTaskID,
+    activity: () => {
+      const item = topicActivity().get(normalizeTopicID(selectedTopicID()));
+      return item ? `${item.status}:${item.running}:${item.cronRunning || 0}` : "";
+    },
+    fetch: (endpointRef, path, options) => runtimeApiFetchForEndpoint(endpointRef, path, options as never),
+    visible: () => isVisible(),
+  });
+
+  // View Job: the item on the TODO page of the agent that runs it, by its ID (`/todo?task=<id>`).
+  function viewTodoJob() {
+    const id = untracked(todoJob.jobID);
+    const endpointRef = untracked(todoJob.endpointRef);
+    if (!id || !endpointRef || !untracked(todoJob.canView)) return;
+    void router.push(endpointRoutePath(endpointRef, locationOf("/todo", { task: id })));
+  }
   effect(() => {
     void workspaceTopicID();
     untracked(() => topicTagsError.set(""));
@@ -3672,6 +3699,8 @@ export function createChatController() {
     topicSearchRevealed,
     selectedTopicIsAgent,
     selectedTopicIsCron,
+    todoJob,
+    viewTodoJob,
     workspaceTopicID,
     workspaceSidebarAvailable,
     desktopWorkspaceSidebarVisible,

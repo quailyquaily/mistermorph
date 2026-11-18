@@ -128,7 +128,7 @@ const FILES = {
   },
   "components/frame/Workbench.tsx": { group: "frame", items: { Workbench: L("frame") } },
   "components/frame/glassBar.tsx": { group: "frame", items: { BarRoom: L("nonvisual") } },
-  "components/frame/mobileBar.tsx": { group: "frame", items: { MobileBarSpacer: L("nonvisual") } },
+  "components/frame/mobileBar.tsx": { group: "frame", items: { MobileBarSpacer: L("nonvisual"), GlassCapsule: C("TodoJobBar") } },
 
   "components/motion/AdjustingClock.tsx": { group: "motion", items: { AdjustingClock: D() } },
   "components/motion/BorderBeam.tsx": { group: "motion", items: { BorderBeam: D() } },
@@ -193,6 +193,7 @@ const FILES = {
   "components/chat/ChatStatusMark.tsx": { group: "chat", items: { ChatStatusMark: D() } },
   "components/chat/ChatSystemMessage.tsx": { group: "chat", items: { ChatSystemMessage: D() } },
   "components/chat/ChatTerminal.tsx": { group: "rich", items: { ChatTerminal: D() } },
+  "components/chat/TodoJobBar.tsx": { group: "chat", items: { TodoJobBar: D() } },
   "components/chat/ChatWorkerRoster.tsx": {
     group: "chat",
     items: { WorkerAvatar: D(), ChatWorkerRoster: D(), ChatWorkerOutput: D(), WorkerChip: C("ChatWorkerRoster"), Speaker: C("ChatWorkerOutput") },
@@ -372,6 +373,7 @@ const FILES = {
       DetailPanel: L("part", "ChatPage"),
       History: L("part", "ChatPage"),
       LoadError: L("part", "ChatPage"),
+      TodoJobToolbar: L("part", "ChatPage"),
       ChatMain: L("part", "ChatPage"),
     },
   },
