@@ -66,7 +66,15 @@ import { loadResource, resourceKey } from "../../lib/core/resources.js";
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../../lib/core/workspace-tree.js";
 import { topicIcon, useTopicMetadata } from "../../lib/core/topic-metadata.js";
-import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicSidebarViewFor } from "../../lib/core/chat-cron-topics.js";
+import {
+  cronSidebarGroups,
+  cronTopicJobGone,
+  cronTopicModels,
+  cronTopicModelText,
+  cronTopicsOf,
+  isCronTopicID,
+  topicSidebarViewFor,
+} from "../../lib/core/chat-cron-topics.js";
 import {
   activelyViewedTopic,
   createTopicActivityTracker,
@@ -969,6 +977,9 @@ export function createChatController() {
   const deskTitle = () => (creatingTopic() || !hasSelectedTopic() || !selectedTopic() ? t("chat_topic_new") : topicTitle(selectedTopic()));
   const selectedTopicIsAgent = () => isAgentLinkTopicID(normalizeTopicID(selectedTopicID()));
   const selectedTopicIsCron = () => isCronTopicID(normalizeTopicID(selectedTopicID()));
+  // The open TODO topic's job is gone from the list (it ran once, or was deleted): its runs stay,
+  // but there is no item to change.
+  const selectedTopicJobGone = () => selectedTopicIsCron() && cronTopicJobGone(cronModels(), selectedTopic());
   const selectedTopicIsReserved = () => {
     const id = normalizeTopicID(selectedTopicID());
     return id === DEFAULT_TOPIC_ID || id === AWARENESS_TOPIC_ID || selectedTopicIsAgent() || selectedTopicIsCron();
@@ -3720,6 +3731,7 @@ export function createChatController() {
     topicAgentAvatar,
     cronTopicModel,
     isCronTopicID,
+    selectedTopicJobGone,
     toggleTopicGroup,
     // actions
     setTaskInput,

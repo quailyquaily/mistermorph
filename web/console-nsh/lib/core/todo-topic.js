@@ -1,8 +1,8 @@
-import { CRON_TOPIC_PREFIX } from "./chat-cron-topics.js";
+import { CRON_TOPIC_PREFIX, topicJobID } from "./chat-cron-topics.js";
 
-// A TODO item's runs land in its topic, "_cron_<task_id>" (daemonruntime.CronTopicID), which the
-// runtime creates when the item's first run starts. The TODO view links to that topic only once it
-// is there, and looking it up never creates it.
+// A TODO item's runs land in its topic, "_cron_<job id>" (daemonruntime.CronTopicID), which the
+// runtime creates when the item's first run starts and which names the job in job_id. The TODO view
+// links to that topic only once it is there, and looking it up never creates it.
 
 // After a manual run is accepted, the dialog looks for the topic once a second for half a minute.
 export const TODO_TOPIC_POLL_INTERVAL_MS = 1000;
@@ -57,7 +57,9 @@ export async function findTodoTopic(fetchForEndpoint, endpointRef, taskID) {
   }
   try {
     const topic = await fetchForEndpoint(ref, `/topics/${encodeURIComponent(topicID)}`);
-    return text(topic?.id) === topicID ? topicID : "";
+    // The topic is the item's when it names the item's job (an earlier agent names none, and
+    // the job ID comes from the topic's).
+    return text(topic?.id) === topicID && topicJobID(topic) === text(taskID) ? topicID : "";
   } catch (e) {
     if (e?.status === 404) {
       return "";

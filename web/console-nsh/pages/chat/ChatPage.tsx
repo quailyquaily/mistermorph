@@ -273,7 +273,7 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
                   else={
                     <If when={c.selectedTopicIsCron()} else={<Composer c={c} onFootRoom={(height) => footRoom.set(height)} />}>
                       <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
-                        {t("chat_topic_cron_readonly", { name: c.deskTitle() })}
+                        {t(c.selectedTopicJobGone() ? "chat_topic_cron_readonly_gone" : "chat_topic_cron_readonly", { name: c.deskTitle() })}
                       </Text>
                     </If>
                   }

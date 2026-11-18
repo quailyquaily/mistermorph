@@ -336,3 +336,45 @@ test("older topics load on demand", async () => {
   await app.waitFor("Old notes");
   await app.waitFor("id:chat-topics-load-older", { state: "gone" });
 });
+
+test("a TODO topic finds its item by job_id: its model while the item is listed, and that it is gone once it is not", async () => {
+  const JOB = "job-0b7e5d1c-2f7a-4c2e-9a51-1d2f3e4a5b6c";
+  let jobs: Record<string, unknown>[] = [{ id: JOB, llm_profile: "batch" }, { id: "task-3" }];
+  const { app } = await openConsole({
+    location: `/e/default/chat/_cron_${JOB}`,
+    api: {
+      "GET /proxy:/topics": {
+        body: {
+          items: [
+            ...TOPICS,
+            topic(`_cron_${JOB}`, "Weekly report", { job_id: JOB, llm_provider: "openai", llm_model: "gpt-4o" }),
+            // From an agent of an earlier version: no job_id, the job is in the topic's ID.
+            topic("_cron_task-3", "Old digest"),
+          ],
+        },
+      },
+      "GET /proxy:/tasks": { body: { items: [doneTask("run-1", "Write the report", "Done.", `_cron_${JOB}`)] } },
+      "GET /proxy:/todo/tasks": () => ({
+        body: {
+          tasks: jobs,
+          llm_default_route: { inference_provider: "openai", model: "gpt-5.2" },
+          llm_profiles: [{ name: "batch", inference_provider: "xai", model: "grok-4" }],
+        },
+      }),
+    },
+  });
+  // Opening the topic turns the TODO view on; the rows show what each job runs with.
+  await app.waitFor("text:Done.");
+  await app.waitFor("Old digest");
+  await app.waitUntil(() => app.texts().some((text) => text.endsWith("· grok-4")));
+  expect(app.texts().filter((text) => text.endsWith("· gpt-5.2")).length).toBe(1);
+  await app.waitFor("The runs of the TODO item “Weekly report” appear here. Change the item in TODO.");
+  // The item is deleted: the topic and its runs stay, the row shows the last run's model, and the
+  // note says the item is gone.
+  jobs = [{ id: "task-3" }];
+  await app.press("id:chat-topics-view-cron");
+  await app.press("id:chat-topics-view-cron");
+  await app.waitUntil(() => app.texts().some((text) => text.endsWith("· gpt-4o")));
+  await app.waitFor("The runs of the TODO item “Weekly report” appear here. The item is no longer in TODO: it ran once, or was deleted.");
+  expect(app.shows("text:Done.")).toBe(true);
+});

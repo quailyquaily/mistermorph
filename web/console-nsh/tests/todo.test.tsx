@@ -4,6 +4,8 @@ import { expect, test } from "nsh/test";
 import { type ApiRequest, openConsole } from "./harness";
 
 const LOCATION = "/e/default/todo";
+// The form of a job ID the Console and the agent make (internal/cron/jobid.go).
+const JOB_ID = /^job-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function tasksBody(extra: Record<string, unknown> = {}) {
   return {
@@ -146,7 +148,9 @@ test("an empty list adds a new item that needs content before it can be saved", 
   await app.waitFor("Saved");
   const body = proxied(calls, "PUT", "/todo/tasks")[0].json;
   expect(body.tasks.length).toBe(1);
-  expect(body.tasks[0]).toMatchObject({ id: "task-1", title: "Unititled TODO", content: "Water the plants" });
+  expect(body.tasks[0]).toMatchObject({ title: "Unititled TODO", content: "Water the plants" });
+  // A new item's ID is a job ID, as the agent makes them: job-<uuid v4>.
+  expect(body.tasks[0].id).toMatch(JOB_ID);
   expect(body.tasks[0].at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   // A new item runs in the browser's UTC offset.
   expect(body.tasks[0].tz).toMatch(/^UTC([+-]\d{1,2})?$/);
@@ -157,13 +161,16 @@ test("Duplicate copies the item below it under a new id, unsaved", async () => {
   await app.press("id:todo-item-task-1");
   await app.press("id:todo-task-actions");
   await app.press("text:Duplicate");
-  await app.waitFor("id:todo-item-task-3");
-  expect(app.value("id:todo-title")).toBe("Review (copy)");
+  await app.waitUntil(() => app.value("id:todo-title") === "Review (copy)");
   expect(proxied(calls, "PUT", "/todo/tasks").length).toBe(0);
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   const tasks = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
-  expect(tasks.map((task: { id: string }) => task.id)).toEqual(["task-1", "task-3", "task-2"]);
+  expect(tasks.length).toBe(3);
+  expect([tasks[0].id, tasks[2].id]).toEqual(["task-1", "task-2"]);
+  // The copy is a new job with an ID of its own; the items it sits between keep theirs.
+  expect(tasks[1].id).toMatch(JOB_ID);
+  await app.waitFor(`id:todo-item-${tasks[1].id}`);
   expect(tasks[1]).toMatchObject({ title: "Review (copy)", content: "Original content", cron: "15 9 * * 1,3" });
 });
 
@@ -863,4 +870,53 @@ test("on the desktop, notifying the console user needs the system's notification
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[0].chat_id).toBe("console:user");
+});
+
+test("a save sends the revision the list was read at, and one the list has moved past is refused without losing the edit", async () => {
+  let revision = 7;
+  let stale = false;
+  const { app, calls } = await openTodo({
+    "GET /proxy:/todo/tasks": () => ({ body: tasksBody({ revision }) }),
+    "PUT /proxy:/todo/tasks": (request: ApiRequest) => {
+      if (stale || request.json?.revision !== revision) {
+        return { status: 409, body: { error: "the job list changed since it was read; nothing was saved, reload it and try again (read at revision 7, now 8)" } };
+      }
+      revision += 1;
+      return { body: { ...tasksBody({ revision }), tasks: request.json?.tasks } };
+    },
+  });
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  await app.clear("id:todo-title");
+  await app.type("id:todo-title", "Weekly review");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  // The second save sends the revision the first one returned.
+  await app.type("id:todo-title", "!");
+  await app.press("id:todo-save");
+  await app.waitUntil(() => proxied(calls, "PUT", "/todo/tasks").length === 2);
+  expect(proxied(calls, "PUT", "/todo/tasks").map((call) => call.json.revision)).toEqual([7, 8]);
+  // The agent adds a job meanwhile: the next save is refused and says why; the edit stays.
+  stale = true;
+  await app.type("id:todo-title", " again");
+  await app.press("id:todo-save");
+  await app.waitUntil(() => app.texts().some((text: string) => text.startsWith("The TODO list changed since this page loaded it")));
+  expect(app.value("id:todo-title")).toBe("Weekly review! again");
+  expect(app.enabled("id:todo-save")).toBe(true);
+});
+
+test("an agent that reports no revision gets saves without one", async () => {
+  const { app, calls } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  await app.type("id:todo-title", "!");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect("revision" in proxied(calls, "PUT", "/todo/tasks")[0].json).toBe(false);
+});
+
+test("a TODO list that could not be imported shows the agent's report of each rejected record", async () => {
+  const report = "cron.yaml was not imported into jobs.db (nothing was imported; fix or remove the records named here and the import runs again): record 2: task id is missing";
+  const { app } = await openTodo({ "GET /proxy:/todo/tasks": { status: 409, body: { error: report } } });
+  await app.waitFor(report);
 });
