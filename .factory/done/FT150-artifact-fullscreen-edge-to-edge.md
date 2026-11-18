@@ -33,3 +33,10 @@ Validation: required root gofmt check, go vet ./..., and go test ./... passed (1
 Installs: none; no downloads, manifest changes, or lockfile changes.
 Residual risks: this review did not inspect a real browser, desktop native app, or physical Android/iOS devices. Native WebView bottom-corner clipping, artifact scrolling, and keyboard interaction were not tested. The build's browser inspection used the older 0.5.1 web runtime, not shipping 0.6.0. Owner should check these native/runtime behaviors before shipping if relevant. Existing factory settings mention nsh 0.5.0 while AGENTS.md pins 0.6.0; review used the repository pin.
 Moved review/ → ready/.
+
+## factory · 2026-11-18 19:23
+Shipped on owner approval using Claude Code. Merge: 335c0c28; release: v0.3.119. Remote master and peeled tag verified at 335c0c28f5bfef0fd511878d6b3411635bf0c2ea.
+Fullscreen body padding removed only for artifact preview; normal inline layout retained.
+Validation: root gofmt/vet/full Go tests passed; additional uncached Go run passed (164 packages). nsh 0.6.0 check passed; required parallel Console runner 138 files, zero failures, chat-attachments passed isolated retry. Console Node helpers 295/295; Cloudflare Node tests 24/24. Impacted tests passed after each merge. No installs or manifest changes.
+Limits: no fresh browser/device/visual checks, Android JVM tests, APK/iOS/desktop builds, live scheduler integration or deployment.
+No linked issues/PRs to close. Branch retained (clean action not configured). Move: ready/ → done/. Persistent shipment logs retained.

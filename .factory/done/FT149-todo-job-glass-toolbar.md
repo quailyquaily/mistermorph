@@ -48,3 +48,10 @@ notes:
 - Review by Claude Code against origin/master...HEAD; no P0/P1 findings. Worktree remained clean and head unchanged. No installs or manifest changes.
 - Visual and live-runtime integration checks were not performed in this review; real desktop/Android and system-inset layout remain unchecked. Prior build recorded headless desktop/mobile checks. API behavior was covered by fake-runtime tests.
 - Moved review/ → ready/; the low-priority polling issue is non-blocking under factory policy.
+
+## factory · 2026-11-18 19:23
+Shipped on owner approval using Claude Code. Merge: dcaefbf3; release: v0.3.119. Remote master and peeled tag verified at 335c0c28f5bfef0fd511878d6b3411635bf0c2ea.
+Resolved overlap with FT148: kept toolbar, explicit topic job_id with legacy fallback, and deleted-job state; adjusted integration regression and docs. Known P3: polling may remain loading if reads consistently exceed five seconds.
+Validation: root gofmt/vet/full Go tests passed; additional uncached Go run passed (164 packages). nsh 0.6.0 check passed; required parallel Console runner 138 files, zero failures, chat-attachments passed isolated retry. Console Node helpers 295/295; Cloudflare Node tests 24/24. Impacted tests passed after each merge. No installs or manifest changes.
+Limits: no fresh browser/device/visual checks, Android JVM tests, APK/iOS/desktop builds, live scheduler integration or deployment.
+No linked issues/PRs to close. Branch retained (clean action not configured). Move: ready/ → done/. Persistent shipment logs retained.

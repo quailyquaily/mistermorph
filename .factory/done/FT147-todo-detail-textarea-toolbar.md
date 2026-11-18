@@ -40,3 +40,10 @@ Validation: configured gofmt/vet/go test gate passed; nsh check passed; Console 
 Installs: none; existing pinned tools and cached TypeScript reused; no manifest changes.
 Limits: review did not repeat browser/manual platform checks. Headless tests cannot prove actual host caret restoration after picker close; build reported Chrome desktop/phone-viewport checks. Native Android keyboard, desktop application, Safari/Firefox, screen readers and undo grouping remain unchecked. Phone keyboard may briefly appear before picker; mobile autocorrect and cancel focus remain manual-check risks, not confirmed defects.
 Move: review/ → ready/. No code changes, deployment or base merge.
+
+## factory · 2026-11-18 19:23
+Shipped on owner approval using Claude Code. Merge: 42bc95b5; release: v0.3.119. Remote master and peeled tag verified at 335c0c28f5bfef0fd511878d6b3411635bf0c2ea.
+Textarea editing and insertion toolbar preserved.
+Validation: root gofmt/vet/full Go tests passed; additional uncached Go run passed (164 packages). nsh 0.6.0 check passed; required parallel Console runner 138 files, zero failures, chat-attachments passed isolated retry. Console Node helpers 295/295; Cloudflare Node tests 24/24. Impacted tests passed after each merge. No installs or manifest changes.
+Limits: no fresh browser/device/visual checks, Android JVM tests, APK/iOS/desktop builds, live scheduler integration or deployment.
+No linked issues/PRs to close. Branch retained (clean action not configured). Move: ready/ → done/. Persistent shipment logs retained.
