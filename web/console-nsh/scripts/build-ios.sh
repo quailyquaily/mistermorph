@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the iPhone app: the console as an iOS app signed for the App Store (Morph.ipa), a client of
 # a `morph console serve` elsewhere like the Android app (scripts/build-android.sh). Needs macOS with
-# Xcode, nsh 0.5.1 with its iOS runtime (`nsh component add ios`, added here when missing; it is not
+# Xcode, nsh 0.6.0 with its iOS runtime (`nsh component add ios`, added here when missing; it is not
 # published for Linux), Node, an Apple Distribution identity in the keychain and an App Store
 # provisioning profile for nsh.json's id. `xcrun altool --upload-app` uploads it to TestFlight.
 #

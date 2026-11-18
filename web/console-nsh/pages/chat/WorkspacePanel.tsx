@@ -9,7 +9,7 @@
 import type { Bounds } from "nsh";
 import { Image, List, Scroll, Text, View } from "nsh";
 import { Sheet } from "nsh/base";
-import { Button, Icon, type IconName, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
+import { Button, closeDialogOverSheet, Icon, type IconName, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
 import { TopicTagsEditor } from "../../components/chat/TopicTagsEditor";
 import { WorkspacePathLine } from "../../components/chat/WorkspacePathLine";
@@ -431,7 +431,8 @@ export function WorkspaceSheet(props: { open: boolean; onClose: () => void; chil
       open={props.open}
       side="right"
       onOpenChange={({ open }) => {
-        if (!open) props.onClose();
+        // Back with the rename dialog open over the sheet closes the dialog (closeDialogOverSheet).
+        if (!open && !closeDialogOverSheet()) props.onClose();
       }}
       backdropClass="bg-scrim"
       popupClass="h-full w-[88%] max-w-md border-l border-line bg-card"

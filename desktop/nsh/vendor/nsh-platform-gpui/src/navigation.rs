@@ -1352,7 +1352,7 @@ pub(crate) fn modal_config(surface: &Rc<Surface>, view: &NshView, config: &Modal
     let mut nav = surface.nav.borrow_mut();
     let id = view.id();
     let m = nav.modals.entry(id).or_default();
-    m.config = *config;
+    m.config = config.clone();
     // Presented in a window of the app's own: it shows there (a window's
     // own root leaves for its window when it opens).
     if let Some(view) = &m.view {
@@ -1401,6 +1401,12 @@ pub(crate) fn present(surface: &Rc<Surface>, view: &NshView) {
 pub(crate) fn focus_scope(surface: &Surface) -> NshView {
     let window = crate::window::entered(surface).unwrap_or(ROOT_ID);
     surface.nav.borrow().focus_scope(surface, window)
+}
+
+/// Whether `view` is in the focus scope ([`focus_scope`]): not under the
+/// newest modal.
+pub(crate) fn in_focus_scope(surface: &Surface, view: &NshView) -> bool {
+    is_ancestor(&focus_scope(surface), view)
 }
 
 /// Modal `view` is shown in a window of its own (`crate::window`): it
@@ -1646,6 +1652,53 @@ mod tests {
         // Popped down to one screen: the modal is asked to close.
         nav.stacks.get_mut(&32).unwrap().screens.pop();
         assert_eq!(nav.back_target(true), Some(Back::Modal(30)));
+    }
+
+    #[test]
+    fn a_focus_under_the_newest_modal_leaves_return_to_its_bindings() {
+        use nsh_core::keymap::{KeyBinding, Keymap, Keystroke, When};
+
+        use crate::{input::KeyEvent, keys::VK_RETURN, surface::Surface};
+
+        let surface = Surface::new(nsh_engine::Environment::default());
+        surface.root.set_invalidate(Rc::new(|| {}));
+        // A menu button with the focus, then a dialog presented over it.
+        let trigger = child(&surface.root, 2, ViewKind::View);
+        trigger.state_mut().events.set(EventKind::Press, true);
+        crate::key_focus::focus(&surface, &trigger);
+        assert!(crate::key_focus::on_control(&surface));
+        let modal = child(&surface.root, 4, ViewKind::Modal);
+        {
+            let mut nav = surface.nav.borrow_mut();
+            nav.modals.insert(
+                4,
+                ModalNav {
+                    view: Some(modal),
+                    ..ModalNav::default()
+                },
+            );
+            nav.order.push(4);
+        }
+        assert!(crate::key_focus::covered(&surface));
+        assert!(!crate::key_focus::on_control(&surface));
+        // The dialog's Return, then the menu button's, bound for its focus.
+        let enter = Keystroke::parse_with("enter", true).unwrap();
+        let table = Keymap::new(vec![
+            KeyBinding::new(1, enter, When::NotEditing, false),
+            KeyBinding::new(3, enter, When::NotEditing, false).focus_keys(true),
+        ]);
+        crate::keymap::set(&surface, std::sync::Arc::new(table));
+        let key = KeyEvent {
+            vk: VK_RETURN,
+            down: true,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        // The dialog's binding takes Return, and the covered button is not
+        // pressed.
+        assert!(crate::keymap::key_stroke(&surface, &key, false, None));
+        assert!(!crate::key_focus::key(&surface, &key));
+        crate::key_focus::forget(&surface);
     }
 
     #[test]

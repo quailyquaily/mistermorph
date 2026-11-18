@@ -137,12 +137,72 @@ const EXPECTED: &[((f32, f32), [u8; 3], &str)] = &[
     ((23.0, 103.0), WHITE, "outside the card's round corner"),
 ];
 
-fn main() {
-    turned_images_and_icons_turn_with_their_views();
-    println!("render: turned images and icons turn with their views: ok");
+/// A scroll view 200 × 160 at (20, 10) over 200 × 160 of content, the
+/// photo 100 × 80 at its top left, zoomed to 2× around its middle: the
+/// viewport shows the content from (50, 40), the photo's right half at
+/// twice its size in its top left quarter. `text` adds 60 lines of text
+/// under the photo, `steps` zooms by another step every 16 ms.
+fn zoom_app(text: bool, steps: bool) -> String {
+    let lines = if text {
+        r#"<Each of={LINES}>{(i) => <Text style={{ fontSize: 9 }}>Line {i} of zoomed text</Text>}</Each>"#
+    } else {
+        ""
+    };
+    let steps = if steps {
+        r#"let i = 0;
+setInterval(() => {
+  i += 1;
+  scroll.zoomTo({ scale: 1 + (i % 60) / 20, animated: false });
+}, 16);"#
+    } else {
+        ""
+    };
+    format!(
+        r##"
+import {{ mount, Image, Scroll, type ScrollRef, Text, View }} from "nsh";
+
+const PHOTO = "{photo}";
+const LINES = Array.from({{ length: 60 }}, (_, i) => i);
+let scroll!: ScrollRef;
+
+function App() {{
+  return (
+    <View style={{{{ flex: 1, backgroundColor: "#ffffff" }}}}>
+      <Scroll ref={{scroll}} maximumZoomScale={{4}} zoomScale={{2}} style={{{{ position: "absolute", left: 20, top: 10, width: 200, height: 160 }}}}>
+        <View style={{{{ width: 200, height: 160 }}}}>
+          <Image src={{PHOTO}} style={{{{ width: 100, height: 80 }}}} />
+          {lines}
+        </View>
+      </Scroll>
+    </View>
+  );
+}}
+mount(App);
+{steps}
+"##,
+        photo = halves(100, 80),
+    )
 }
 
-fn turned_images_and_icons_turn_with_their_views() {
+/// What the zoomed scroll view shows (window points).
+const ZOOMED: &[((f32, f32), [u8; 3], &str)] = &[
+    (
+        (25.0, 15.0),
+        GREEN,
+        "the photo's right half at the viewport's top left (red unzoomed)",
+    ),
+    (
+        (60.0, 40.0),
+        GREEN,
+        "content (70, 55), the photo's right half (red unzoomed)",
+    ),
+    ((115.0, 85.0), GREEN, "near the photo's zoomed bottom right"),
+    ((125.0, 40.0), WHITE, "right of the zoomed photo"),
+    ((60.0, 100.0), WHITE, "below the zoomed photo"),
+    ((230.0, 100.0), WHITE, "outside the scroll view"),
+];
+
+fn main() {
     let probe = gpui_platform::current_headless_renderer();
     if !matches!(probe, Ok(Some(_))) {
         eprintln!("no headless renderer here: skipped");
@@ -157,28 +217,58 @@ fn turned_images_and_icons_turn_with_their_views() {
     );
     // The engine and the image decoders run on threads of their own.
     cx.allow_parking();
+    shows(&mut cx, &app(), EXPECTED, "turned-images");
+    println!("render: turned images and icons turn with their views: ok");
+    shows(&mut cx, &zoom_app(false, false), ZOOMED, "zoomed-scroll");
+    println!("render: zoomed scroll views draw their content scaled: ok");
+    if std::env::var_os("NSH_RENDER_BENCH").is_some() {
+        zoom_frames(&mut cx);
+    }
+}
+
+/// Opens a 240 × 180 window running `code`.
+fn open(cx: &mut HeadlessAppContext, code: &str) -> gpui::WindowHandle<AppView> {
     let window = cx
         .open_window(size(px(240.0), px(180.0)), |window, cx| {
             cx.new(|cx| AppView::new(AppOptions::default(), window, cx))
         })
         .unwrap();
-    let code = nsh_bundler::compile_module("App.tsx", &app(), &[]).unwrap();
+    let code = nsh_bundler::compile_module("App.tsx", code, &[]).unwrap();
     cx.update(|cx| {
         window
             .update(cx, |view, _, _| view.load(App::Js(Bundle::source(code))))
             .unwrap()
     });
+    window
+}
+
+/// Draws a frame of `window`; how long drawing took.
+fn draw(cx: &mut HeadlessAppContext, window: gpui::WindowHandle<AppView>) -> Duration {
+    cx.run_until_parked();
+    cx.update_window(window.into(), |_, window, cx| {
+        window.refresh();
+        let start = Instant::now();
+        window.draw(cx).clear(cx);
+        start.elapsed()
+    })
+    .unwrap()
+}
+
+/// Runs `code` until a frame shows what `expected` says (the screenshot is
+/// saved as `nsh-<name>.png` in the temporary directory when none does).
+fn shows(
+    cx: &mut HeadlessAppContext,
+    code: &str,
+    expected: &[((f32, f32), [u8; 3], &str)],
+    name: &str,
+) {
+    let window = open(cx, code);
     let start = Instant::now();
     loop {
-        cx.run_until_parked();
-        cx.update_window(window.into(), |_, window, cx| {
-            window.refresh();
-            window.draw(cx).clear(cx);
-        })
-        .unwrap();
+        draw(cx, window);
         let shot = cx.capture_screenshot(window.into()).unwrap();
         let scale = shot.width() as f32 / 240.0;
-        let wrong: Vec<String> = EXPECTED
+        let wrong: Vec<String> = expected
             .iter()
             .filter_map(|&(at, want, what)| {
                 let got = pixel(&shot, scale, at);
@@ -189,10 +279,44 @@ fn turned_images_and_icons_turn_with_their_views() {
             return;
         }
         if start.elapsed() > Duration::from_secs(15) {
-            let path = std::env::temp_dir().join("nsh-turned-images.png");
+            let path = std::env::temp_dir().join(format!("nsh-{name}.png"));
             shot.save(&path).unwrap();
             panic!("{} (screenshot: {})", wrong.join("; "), path.display());
         }
         std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// What drawing costs while the zoom changes every 16 ms (a new scale,
+/// so new glyph sizes, nearly every frame), against the same content at
+/// rest: `NSH_RENDER_BENCH=1`.
+fn zoom_frames(cx: &mut HeadlessAppContext) {
+    for (steps, what) in [(false, "at rest, 2x"), (true, "zooming")] {
+        let window = open(cx, &zoom_app(true, steps));
+        let warm = Instant::now();
+        while warm.elapsed() < Duration::from_secs(2) {
+            draw(cx, window);
+            std::thread::sleep(Duration::from_millis(8));
+        }
+        let mut times = Vec::new();
+        let mut changed = 0;
+        let mut last = cx.capture_screenshot(window.into()).unwrap();
+        while times.len() < 240 {
+            times.push(draw(cx, window).as_secs_f64() * 1e3);
+            if times.len() % 20 == 0 {
+                let shot = cx.capture_screenshot(window.into()).unwrap();
+                changed += usize::from(shot != last);
+                last = shot;
+            }
+            std::thread::sleep(Duration::from_millis(8));
+        }
+        times.sort_by(f64::total_cmp);
+        let mean = times.iter().sum::<f64>() / times.len() as f64;
+        println!(
+            "render: {what}: mean {mean:.2} ms, median {:.2} ms, p95 {:.2} ms, max {:.2} ms a frame ({changed} of 12 samples changed)",
+            times[times.len() / 2],
+            times[times.len() * 95 / 100],
+            times[times.len() - 1],
+        );
     }
 }

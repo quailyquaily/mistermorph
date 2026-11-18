@@ -200,34 +200,62 @@ const FANTASY: &[&str] = &["Impact", "Papyrus"];
 /// The families a `fontFamily` value names, in order of preference: a
 /// comma-separated stack, CSS generic names and Apple's font names as fonts
 /// this platform has; `""` is the UI font.
-fn family_candidates(name: &str) -> Vec<&str> {
-    use nsh_core::FamilyName;
+fn family_candidates(name: &str) -> Vec<std::borrow::Cow<'_, str>> {
+    use std::borrow::Cow;
+
+    if name.contains('\\') {
+        let mut out = Vec::new();
+        nsh_core::for_each_font_family(name, |family| {
+            let mut candidates = Vec::new();
+            family_candidate(family, &mut candidates);
+            out.extend(candidates.into_iter().map(|f| Cow::Owned(f.into_owned())));
+        });
+        if out.is_empty() {
+            out.push(Cow::Borrowed(""));
+        }
+        return out;
+    }
     let mut out = Vec::new();
     for family in nsh_core::font_families(name) {
-        match family {
-            FamilyName::Monospace => out.extend_from_slice(MONOSPACE),
-            FamilyName::Serif => out.extend_from_slice(SERIF),
-            FamilyName::Named("cursive") => out.extend_from_slice(CURSIVE),
-            FamilyName::Named("fantasy") => out.extend_from_slice(FANTASY),
-            FamilyName::Named(f) => {
-                out.push(f);
-                // What apps written for Apple platforms name, as what
-                // this platform has (when it lacks the font itself).
-                out.extend_from_slice(match f {
-                    "Menlo" | "Monaco" | "SF Mono" | "Courier" | "Courier New" => MONOSPACE,
-                    "Times" | "New York" | "Georgia" => SERIF,
-                    "Helvetica" | "Helvetica Neue" | "Arial" => SANS,
-                    _ => &[],
-                });
-            }
-            // The system font, and its rounded design (which GPUI lacks).
-            _ => out.push(""),
-        }
+        family_candidate(family, &mut out);
     }
     if out.is_empty() {
-        out.push("");
+        out.push(Cow::Borrowed(""));
     }
     out
+}
+
+fn family_candidate<'a>(
+    family: nsh_core::FamilyName<'a>,
+    out: &mut Vec<std::borrow::Cow<'a, str>>,
+) {
+    use std::borrow::Cow;
+
+    use nsh_core::FamilyName;
+    match family {
+        FamilyName::Monospace => out.extend(MONOSPACE.iter().copied().map(Cow::Borrowed)),
+        FamilyName::Serif => out.extend(SERIF.iter().copied().map(Cow::Borrowed)),
+        FamilyName::Named("cursive") => {
+            out.extend(CURSIVE.iter().copied().map(Cow::Borrowed));
+        }
+        FamilyName::Named("fantasy") => {
+            out.extend(FANTASY.iter().copied().map(Cow::Borrowed));
+        }
+        FamilyName::Named(f) => {
+            // What apps written for Apple platforms name, as what
+            // this platform has (when it lacks the font itself).
+            let aliases = match f {
+                "Menlo" | "Monaco" | "SF Mono" | "Courier" | "Courier New" => MONOSPACE,
+                "Times" | "New York" | "Georgia" => SERIF,
+                "Helvetica" | "Helvetica Neue" | "Arial" => SANS,
+                _ => &[],
+            };
+            out.push(Cow::Borrowed(f));
+            out.extend(aliases.iter().copied().map(Cow::Borrowed));
+        }
+        // The system font, and its rounded design (which GPUI lacks).
+        _ => out.push(Cow::Borrowed("")),
+    }
 }
 
 /// The family of the UI font among the `installed` ones (by lowercase
@@ -865,8 +893,9 @@ impl Prepared {
             let s = &self.spans[i];
             nsh_core::FontExtent::new(Points(s.ascent), Points(s.descent), Points(s.x))
         };
-        let (up, down) = a.extent(font, alignments.get(a.index));
-        (a.ascent(font, alignments.get(a.index)).0, up.0, down.0)
+        // By its own baseline where it has one (the first baseline of the text in it).
+        let (up, down) = alignments.extent(a, font);
+        (alignments.ascent(a, font).0, up.0, down.0)
     }
 
     /// The width of clusters `start..end` without trailing whitespace.
@@ -1434,6 +1463,14 @@ impl TextEngine for GpuiTextEngine {
             width = width.min(max);
         }
         Size::new(Points(width.ceil()), Points(height.ceil()))
+    }
+
+    fn first_baseline(&self, p: &Prepared, width: Points) -> Option<Points> {
+        // Typeset at the size it measures `width` wide, as the text is laid
+        // out: its first line's baseline.
+        let layout = self.layout(p, self.measure(p, Some(width)));
+        let layout = layout.downcast::<GpuiLayout>()?;
+        Some(Points(layout.lines.first()?.baseline))
     }
 
     fn layout(&self, p: &Prepared, size: Size<Points>) -> TextLayout {
@@ -2928,7 +2965,7 @@ pub(crate) fn context_menu(surface: &Rc<crate::surface::Surface>, view: &NshView
         vec![
             LocalItem::Item {
                 role: Some(MenuRole::Copy),
-                label: "",
+                label: "".into(),
                 enabled: selected,
                 action: Rc::new(move |_| {
                     if let Some(text) = selected_text(&copy) {
@@ -2938,7 +2975,7 @@ pub(crate) fn context_menu(surface: &Rc<crate::surface::Surface>, view: &NshView
             },
             LocalItem::Item {
                 role: Some(MenuRole::SelectAll),
-                label: "",
+                label: "".into(),
                 enabled: true,
                 action: Rc::new(move |s| select_all(s.key(), &all)),
             },
@@ -3230,6 +3267,10 @@ mod tests {
 
     #[test]
     fn families() {
+        let plain = family_candidates("Inter");
+        assert!(matches!(plain[0], std::borrow::Cow::Borrowed("Inter")));
+        assert_eq!(family_candidates(r#"'A\\B', 'A\"B'"#), [r"A\B", "A\"B"]);
+
         assert_eq!(family_candidates("Inter"), ["Inter"]);
         assert_eq!(family_candidates("system-ui"), [""]);
         assert_eq!(family_candidates(" , "), [""]);
@@ -3526,9 +3567,10 @@ mod tests {
         let style = ResolvedTextStyle::default();
         // The first line's top of a 30 pt attachment after "Ax", and the
         // line's extent above and below its baseline.
-        let place = |align| {
+        let place_by = |align, baseline: Option<f32>| {
             let mut t = text(&[("Ax", style)]);
             let mut alignments = nsh_core::AttachmentAlignments::default();
+            alignments.set_baseline(t.len_utf16(), baseline.map(Points));
             alignments.push(
                 &mut t,
                 nsh_core::geometry::size(Points(10.0), Points(30.0)),
@@ -3542,6 +3584,7 @@ mod tests {
             let top = engine.attachments(&layout)[0].expect("shown").y.0;
             (top, line.ascender.0, line.descender.0)
         };
+        let place = |align| place_by(align, None);
         let near = |a: f32, b: f32| (a - b).abs() < 0.01;
         // Its bottom on the baseline.
         let (top, up, _) = place(nsh_core::VerticalAlign::Baseline);
@@ -3558,6 +3601,40 @@ mod tests {
         // Its middle above the baseline.
         let (top, up, _) = place(nsh_core::VerticalAlign::Middle);
         assert!(top + 15.0 < up, "{top} {up}");
+        // By a baseline of its own 22 below its top (the first baseline of the text in it): that
+        // one stands on the line's, the 8 under it in the line's descent.
+        let (top, up, down) = place_by(nsh_core::VerticalAlign::Baseline, Some(22.0));
+        assert!(near(top + 22.0, up) && down > 7.99, "{top} {up} {down}");
+    }
+
+    /// A text's first baseline (what `align-items: baseline` lines it up
+    /// by) is where its first line is drawn, wrapped or not, and grows
+    /// with the font.
+    #[test]
+    fn the_first_baseline_is_the_first_lines() {
+        let Some(engine) = engine() else {
+            return;
+        };
+        let at = |size: f32, width: Option<f32>| {
+            let t = text(&[("Chat with the world", plain(size))]);
+            let (measured, layout) = layout_of(&engine, &t, width);
+            let prepared = engine.prepare(&t);
+            let baseline = engine
+                .first_baseline(&prepared, measured.width)
+                .expect("a first line");
+            let line = engine.lines(&layout).remove(0);
+            (baseline.0, line.y.0 + line.ascender.0)
+        };
+        let near = |a: f32, b: f32| (a - b).abs() < 0.5;
+        let (small, drawn) = at(12.0, None);
+        assert!(near(small, drawn), "{small} {drawn}");
+        let (wrapped, drawn) = at(12.0, Some(30.0));
+        assert!(
+            near(wrapped, drawn) && near(wrapped, small),
+            "{wrapped} {drawn}"
+        );
+        let (large, _) = at(24.0, None);
+        assert!(large > small, "{large} {small}");
     }
 
     #[test]
@@ -3911,6 +3988,8 @@ mod tests {
                 color: Color(0xeeee_eeff),
                 radius: Points(4.0),
                 node: 4,
+                top: Default::default(),
+                bottom: Default::default(),
             }),
             ..style
         };

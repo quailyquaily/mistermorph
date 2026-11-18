@@ -409,12 +409,7 @@ fn cast(cx: &mut DrawCx<'_>, view: &NshView, world: Mat4, spec: &ShadowSpec, opa
         for child in children {
             let (local, child_opacity) = {
                 let cs = child.state();
-                let o = state.child_origin(cs.frame, cs.shift);
-                let mut local = Mat4::new().translate(o.0, o.1);
-                if let Some(t) = cs.transform() {
-                    local = Mat4::mul(&t, &local);
-                }
-                (local, cs.opacity())
+                (state.child_matrix(&cs), cs.opacity())
             };
             if child_opacity <= 0.0 {
                 continue;

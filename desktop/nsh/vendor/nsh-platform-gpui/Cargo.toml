@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "nsh-platform-gpui"
-version = "0.5.1"
+version = "0.6.0"
 build = false
 autolib = false
 autobins = false
@@ -26,30 +26,81 @@ license = "Apache-2.0"
 repository = "https://github.com/longbridge/nsh"
 
 [features]
+crypto = [
+    "js",
+    "nsh-engine/crypto",
+]
 default = [
     "js",
     "webview",
+    "shader",
+    "editor",
+    "emoji-picker",
+    "highlight",
+    "math",
+    "plot",
+    "rich-editor",
+    "term",
+    "zlib",
+    "crypto",
+    "websocket",
+    "updater",
+    "svg",
+    "net",
 ]
 dev = [
     "js",
+    "shader",
+    "editor",
+    "emoji-picker",
+    "highlight",
+    "math",
+    "plot",
+    "rich-editor",
+    "term",
+    "zlib",
+    "crypto",
+    "websocket",
+    "updater",
+    "svg",
+    "net",
     "dep:nsh-dev",
     "dep:nsh-testing",
 ]
-js = ["nsh-engine/js"]
+editor = ["nsh-base/editor"]
+emoji-picker = ["nsh-base/emoji-picker"]
+highlight = ["nsh-base/highlight"]
+js = ["nsh-engine/js-core"]
+math = ["nsh-base/math"]
+net = [
+    "nsh-core/loader",
+    "nsh-engine/net",
+]
+plot = ["nsh-base/plot"]
+rich-editor = ["nsh-base/rich-editor"]
 runtime-shaders = ["gpui_platform/runtime_shaders"]
+shader = ["nsh-engine/shader"]
 shot = [
     "gpui/test-support",
     "gpui_platform/test-support",
 ]
+svg = ["nsh-core/svg"]
+term = ["nsh-base/term"]
+updater = ["nsh-core/updater"]
 video = [
     "dep:gstreamer",
     "dep:gstreamer-app",
     "dep:gstreamer-video",
 ]
+websocket = ["nsh-core/websocket"]
 webview = [
     "dep:wry",
     "dep:gtk",
     "dep:webkit2gtk",
+]
+zlib = [
+    "js",
+    "nsh-engine/zlib",
 ]
 
 [lib]
@@ -91,7 +142,7 @@ features = ["std"]
 default-features = false
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.gpui]
-version = "0.1.13"
+version = "0.1.16"
 features = [
     "font-kit",
     "wayland",
@@ -101,7 +152,7 @@ default-features = false
 package = "gpui-fast"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.gpui_platform]
-version = "0.1.13"
+version = "0.1.16"
 features = [
     "font-kit",
     "wayland",
@@ -136,40 +187,23 @@ features = [
 default-features = false
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-base]
-version = "0.5.1"
-features = [
-    "editor",
-    "emoji-picker",
-    "highlight",
-    "math",
-    "plot",
-    "rich-editor",
-    "term",
-]
+version = "0.6.0"
 default-features = false
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-core]
-version = "0.5.1"
-features = [
-    "svg",
-    "loader",
-]
+version = "0.6.0"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-dev]
-version = "0.5.1"
+version = "0.6.0"
 features = ["client"]
 optional = true
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-engine]
-version = "0.5.1"
-features = [
-    "net",
-    "shader",
-]
+version = "0.6.0"
 default-features = false
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies.nsh-testing]
-version = "0.5.1"
+version = "0.6.0"
 features = ["agent"]
 optional = true
 default-features = false
@@ -202,8 +236,11 @@ version = "0.53.3"
 optional = true
 package = "lb-wry"
 
+[target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dev-dependencies.accesskit_consumer]
+version = "0.38"
+
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dev-dependencies.gpui]
-version = "0.1.13"
+version = "0.1.16"
 features = [
     "font-kit",
     "wayland",
@@ -214,7 +251,7 @@ default-features = false
 package = "gpui-fast"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dev-dependencies.nsh-bundler]
-version = "0.5.1"
+version = "0.6.0"
 default-features = false
 
 [target.'cfg(target_os = "linux")'.dependencies.gtk]
@@ -270,7 +307,10 @@ version = "0.3.2"
 features = [
     "std",
     "NSArray",
+    "NSDictionary",
     "NSGeometry",
+    "NSString",
+    "NSValue",
     "objc2-core-foundation",
 ]
 default-features = false

@@ -74,7 +74,7 @@ pub(crate) enum LocalItem {
         /// work).
         role: Option<MenuRole>,
         /// A label of its own (else the role's).
-        label: &'static str,
+        label: std::borrow::Cow<'static, str>,
         /// It can be chosen.
         enabled: bool,
         /// What choosing it does.
@@ -165,12 +165,43 @@ pub(super) struct Open {
     levels: Vec<Level>,
 }
 
-/// An item's label: its own, else its role's.
-pub(super) fn label(action: &MenuAction) -> String {
-    if action.label.is_empty() {
-        action.role.map_or("", MenuRole::label).to_owned()
-    } else {
-        action.label.clone()
+/// An item's label: its own, else its role's in the app's language
+/// (`SetMenuLabels`, which the core sends for the app's selected language),
+/// with the app's name where the label has `%{app}`.
+pub(super) fn label(action: &MenuAction, surface: &Surface) -> String {
+    if !action.label.is_empty() {
+        return action.label.clone();
+    }
+    action
+        .role
+        .map_or_else(String::new, |role| role_label(role, surface))
+}
+
+/// What an item of `role` alone shows ([`label`]): NSH's translation, else
+/// the English label, written as macOS does (with the app's name) there.
+fn role_label(role: MenuRole, surface: &Surface) -> String {
+    let c = &surface.chrome;
+    let app = c.app_name.borrow();
+    if let Some(text) = c.labels.borrow().role(role) {
+        return text.replace("%{app}", &app);
+    }
+    match role {
+        MenuRole::About | MenuRole::Hide | MenuRole::Quit
+            if PLATFORM == Platform::Mac && !app.is_empty() =>
+        {
+            format!("{} {}", role.label(), app)
+        }
+        MenuRole::ToggleFullScreen if PLATFORM == Platform::Mac => "Enter Full Screen".to_owned(),
+        role => role.label().to_owned(),
+    }
+}
+
+/// [`label`] for the surface with `key`, English once it is gone.
+pub(super) fn label_of(action: &MenuAction, key: u64) -> String {
+    match Surface::by_key(key) {
+        Some(surface) => label(action, &surface),
+        None if action.label.is_empty() => action.role.map_or("", MenuRole::label).to_owned(),
+        None => action.label.clone(),
     }
 }
 
@@ -185,7 +216,7 @@ fn shortcut_label(action: &MenuAction) -> Option<String> {
         }),
         role => role.and_then(|r| r.shortcut(mac)),
     })?;
-    Some(shortcut.label())
+    Some(shortcut.label_for(keys::OS))
 }
 
 /// The items a drawn menu shows: macOS's own roles left out elsewhere,
@@ -267,7 +298,11 @@ fn label_x(items: &[MenuItem]) -> f32 {
 }
 
 /// A level's size and its items' rows, with `width` measuring a text.
-fn measure(items: &[MenuItem], width: impl Fn(&str) -> f32) -> (f32, f32, Vec<(f32, f32)>) {
+fn measure(
+    items: &[MenuItem],
+    text: impl Fn(&MenuAction) -> String,
+    width: impl Fn(&str) -> f32,
+) -> (f32, f32, Vec<(f32, f32)>) {
     let label_x = label_x(items);
     let mut y = BORDER + PADDING;
     let mut rows = Vec::with_capacity(items.len());
@@ -277,7 +312,7 @@ fn measure(items: &[MenuItem], width: impl Fn(&str) -> f32) -> (f32, f32, Vec<(f
             MenuItem::Separator => SEPARATOR_HEIGHT,
             MenuItem::Action(a) => {
                 let shortcut = shortcut_label(a).map_or(0.0, |s| SHORTCUT_GAP + width(&s));
-                w = w.max(2.0 * (BORDER + INSET) + label_x + width(&label(a)) + shortcut + RIGHT);
+                w = w.max(2.0 * (BORDER + INSET) + label_x + width(&text(a)) + shortcut + RIGHT);
                 ITEM_HEIGHT
             }
             MenuItem::Submenu { label, .. } => {
@@ -549,9 +584,9 @@ pub(crate) fn popup_actions(surface: &Surface, items: Vec<LocalItem>) {
                 MenuItem::Action(MenuAction {
                     id: actions.len() as u32,
                     label: if label.is_empty() {
-                        role.map_or("", MenuRole::label).to_owned()
+                        role.map_or_else(String::new, |r| role_label(r, surface))
                     } else {
-                        label.to_owned()
+                        label.into_owned()
                     },
                     shortcut: role.and_then(|r| r.shortcut(PLATFORM == Platform::Mac)),
                     enabled,
@@ -559,6 +594,8 @@ pub(crate) fn popup_actions(surface: &Surface, items: Vec<LocalItem>) {
                     role: None,
                     when: nsh_core::keymap::When::Always,
                     icon: None,
+                    symbol: None,
+                    destructive: false,
                 })
             }
         })
@@ -641,7 +678,7 @@ pub(crate) fn choose_path(surface: &Rc<Surface>, path: &[String]) -> Result<(), 
             items
                 .iter()
                 .position(|item| match item {
-                    MenuItem::Action(action) => label(action) == *wanted,
+                    MenuItem::Action(action) => label(action, surface) == *wanted,
                     MenuItem::Submenu { label, .. } => label == wanted,
                     MenuItem::Separator => false,
                 })
@@ -785,7 +822,7 @@ pub(super) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
             let letter = (vk as u8 as char).to_ascii_lowercase();
             let starts = |i: usize| {
                 let text = match &items[i] {
-                    MenuItem::Action(a) => label(a),
+                    MenuItem::Action(a) => label(a, surface),
                     MenuItem::Submenu { label, .. } => label.clone(),
                     MenuItem::Separator => return false,
                 };
@@ -827,7 +864,7 @@ pub(super) fn mnemonic(surface: &Rc<Surface>, pressed: &Shortcut) -> bool {
         menu.as_deref().and_then(|menu| {
             bar_entries(menu).iter().position(|item| {
                 let text = match item {
-                    MenuItem::Action(a) => label(a),
+                    MenuItem::Action(a) => label(a, surface),
                     MenuItem::Submenu { label, .. } => label.clone(),
                     MenuItem::Separator => String::new(),
                 };
@@ -1002,7 +1039,7 @@ pub(super) fn bar(surface: &Rc<Surface>, _window: &mut Window, theme: &Theme) ->
         .text_size(px(FONT_SIZE));
     for (i, entry) in entries.iter().enumerate() {
         let (text, enabled) = match entry {
-            MenuItem::Action(a) => (label(a), a.enabled),
+            MenuItem::Action(a) => (label(a, surface), a.enabled),
             MenuItem::Submenu { label, enabled, .. } => (label.clone(), *enabled),
             MenuItem::Separator => continue,
         };
@@ -1054,7 +1091,11 @@ fn lay_out(surface: &Rc<Surface>, open: &mut Open, window: &mut Window) {
         if open.levels[i].geom.is_some() {
             continue;
         }
-        let (w, h, rows) = measure(&open.levels[i].items, |t| text_width(window, t));
+        let (w, h, rows) = measure(
+            &open.levels[i].items,
+            |a| label(a, surface),
+            |t| text_width(window, t),
+        );
         load_icons(surface, &open.levels[i].items, window.scale_factor());
         let at = match open.levels[i].anchor {
             Anchor::Point(x, y) => Place::Point(x, y),
@@ -1164,7 +1205,12 @@ const CHECK: &[(f32, f32)] = &[(0.0, 0.55), (0.36, 0.9), (1.0, 0.1)];
 const CHEVRON: &[(f32, f32)] = &[(0.0, 0.0), (1.0, 0.5), (0.0, 1.0)];
 
 /// One level's panel.
-fn panel(level: &Level, theme: &Theme, icons: &RefCell<Icons>) -> Option<AnyElement> {
+fn panel(
+    level: &Level,
+    surface: &Surface,
+    theme: &Theme,
+    icons: &RefCell<Icons>,
+) -> Option<AnyElement> {
     let g = level.geom.as_ref()?;
     let label_x = label_x(&level.items);
     let mut panel = div()
@@ -1199,7 +1245,7 @@ fn panel(level: &Level, theme: &Theme, icons: &RefCell<Icons>) -> Option<AnyElem
                 continue;
             }
             MenuItem::Action(a) => (
-                label(a),
+                label(a, surface),
                 shortcut_label(a),
                 a.checked == Some(true),
                 false,
@@ -1331,7 +1377,7 @@ pub(super) fn layer(
         .children(
             open.levels
                 .iter()
-                .filter_map(|l| panel(l, theme, &surface.chrome.icons)),
+                .filter_map(|l| panel(l, surface, theme, &surface.chrome.icons)),
         );
     Some(
         deferred(
@@ -1347,7 +1393,10 @@ pub(super) fn layer(
 
 #[cfg(test)]
 mod tests {
-    use nsh_core::desktop::{MenuAction, MenuItem};
+    use nsh_core::{
+        desktop::{MenuAction, MenuItem},
+        platform::Os,
+    };
 
     use super::*;
 
@@ -1361,7 +1410,73 @@ mod tests {
             role: None,
             when: nsh_core::keymap::When::Always,
             icon: None,
+            symbol: None,
+            destructive: false,
         })
+    }
+
+    #[test]
+    fn role_items_follow_the_menu_labels_and_the_platform_shortcut() {
+        let surface = Surface::new(Default::default());
+        let mut labels = nsh_core::desktop::MenuLabels::default();
+        labels.roles.insert(MenuRole::Copy, "复制".to_owned());
+        labels.delete = Some("删除".to_owned());
+        labels
+            .roles
+            .insert(MenuRole::About, "关于 %{app}".to_owned());
+        // Before the labels arrive the English ones show.
+        let role = |role| MenuAction {
+            role: Some(role),
+            ..match action(1, "", true) {
+                MenuItem::Action(a) => a,
+                _ => unreachable!(),
+            }
+        };
+        assert_eq!(label(&role(MenuRole::Copy), &surface), "Copy");
+        assert_eq!(crate::chrome::delete_label(&surface), "Delete");
+        crate::chrome::command(
+            &surface,
+            &nsh_core::desktop::DesktopCommand::SetMenuLabels(Box::new(labels)),
+        );
+        // The window's title is not the app's name.
+        *surface.chrome.title.borrow_mut() = "Window".to_owned();
+        crate::chrome::set_app_name(&surface, "Demo");
+        assert_eq!(label(&role(MenuRole::Copy), &surface), "复制");
+        assert_eq!(crate::chrome::delete_label(&surface), "删除");
+        assert_eq!(label(&role(MenuRole::About), &surface), "关于 Demo");
+        // Roles without a translation, and labels of the app's own, stay.
+        assert_eq!(label(&role(MenuRole::Cut), &surface), "Cut");
+        assert_eq!(
+            label(
+                &MenuAction {
+                    label: "Mine".into(),
+                    ..role(MenuRole::Copy)
+                },
+                &surface
+            ),
+            "Mine"
+        );
+        // A special key as macOS writes it.
+        let enter = Shortcut {
+            shift: true,
+            meta: true,
+            ..Shortcut::key(Key::Enter)
+        };
+        assert_eq!(enter.label_for(Os::MacOs), "⇧⌘↩");
+        let back = Shortcut {
+            meta: true,
+            ..Shortcut::key(Key::Backspace)
+        };
+        assert_eq!(back.label_for(Os::MacOs), "⌘⌫");
+        let expected = if cfg!(target_os = "macos") {
+            "⌘C"
+        } else {
+            "Ctrl+C"
+        };
+        assert_eq!(
+            shortcut_label(&role(MenuRole::Copy)).as_deref(),
+            Some(expected)
+        );
     }
 
     #[test]
@@ -1401,11 +1516,11 @@ mod tests {
             MenuItem::Separator,
             action(2, &"x".repeat(40), true),
         ];
-        let (w, h, rows) = measure(&items, |t| t.len() as f32 * 7.0);
+        let (w, h, rows) = measure(&items, |a| a.label.clone(), |t| t.len() as f32 * 7.0);
         assert_eq!(rows, vec![(5.0, 28.0), (33.0, 9.0), (42.0, 28.0)]);
         assert_eq!(h, 75.0);
         assert_eq!(w, 2.0 * (BORDER + INSET) + LABEL_X + 280.0 + RIGHT);
-        let (w, ..) = measure(&items[..1], |t| t.len() as f32 * 7.0);
+        let (w, ..) = measure(&items[..1], |a| a.label.clone(), |t| t.len() as f32 * 7.0);
         assert_eq!(w, MIN_WIDTH);
     }
 
@@ -1427,8 +1542,8 @@ mod tests {
         assert_eq!(label_x(&plain), LABEL_X);
         assert_eq!(label_x(&iconic), LABEL_X + ICON_ADVANCE);
         assert_eq!(
-            measure(&iconic, width).0,
-            measure(&plain, width).0 + ICON_ADVANCE
+            measure(&iconic, |a| a.label.clone(), width).0,
+            measure(&plain, |a| a.label.clone(), width).0 + ICON_ADVANCE
         );
         // A submenu's icon counts as well, and one item moves every label.
         let mixed = [
@@ -1438,6 +1553,8 @@ mod tests {
                 enabled: true,
                 items: Vec::new(),
                 icon: Some(source),
+                symbol: None,
+                inline: false,
             },
         ];
         assert_eq!(label_x(&mixed), LABEL_X + ICON_ADVANCE);

@@ -39,7 +39,9 @@
 //! two-circle radial and conic gradients are all exact.
 //! Shadows are the shape's alpha blurred by three box blurs (close to
 //! canvas' Gaussian of standard deviation blur / 2), offset in the view's
-//! coordinates. Composite operations other than `source-over` draw the
+//! coordinates, from all of the shape within three deviations of where
+//! the shadow shows (a shape past the pixmap's edge casts its shadow in
+//! too). Composite operations other than `source-over` draw the
 //! shape into a layer of its own, combined with the pixmap over the clip,
 //! so they act where the shape is transparent too.
 //!
@@ -90,6 +92,10 @@ use crate::{
     view::{NshView, ViewState},
 };
 
+mod offscreen;
+
+pub(crate) use offscreen::render as render_offscreen;
+
 /// The largest side of a pixmap, in device pixels.
 const MAX_SIDE: i32 = 4096;
 /// The most pixels a pixmap covers; a larger canvas is rasterized only
@@ -116,7 +122,7 @@ pub(crate) struct CanvasState {
     args: Vec<Option<AnimationValue>>,
     /// The images the drawing names, by URI (premultiplied pixels): `None`
     /// while loading (or when they failed to load).
-    images: FxHashMap<Arc<str>, Option<Arc<sk::Pixmap>>>,
+    images: FxHashMap<Arc<str>, Option<CanvasBitmap>>,
     /// What was rasterized (made while drawing, which only sees the
     /// state).
     cache: RefCell<Option<Recorded>>,
@@ -125,6 +131,8 @@ pub(crate) struct CanvasState {
     damage: std::cell::Cell<Option<Damage>>,
     /// Scratch space of the damage scans.
     scan: DamageScan,
+    /// Slots changed by the current animation frame, reused across frames.
+    changed: Vec<u16>,
     /// Counts the changes that need the whole drawing rasterized again
     /// (a new drawing, an image loaded, a value no area bounds).
     version: u64,
@@ -133,6 +141,58 @@ pub(crate) struct CanvasState {
 }
 
 impl CanvasState {
+    /// Updates a frame's animated values and bounds their combined damage.
+    /// Returns whether the view needs to draw again.
+    fn set_args(&mut self, values: &[(u16, AnimationValue)]) -> bool {
+        self.changed.clear();
+        for &(k, value) in values {
+            if self.args.get(k as usize).copied().flatten() != Some(value) {
+                self.changed.push(k);
+            }
+        }
+        if self.changed.is_empty() {
+            return false;
+        }
+        // Bound the all-old and all-new states, not intermediate states
+        // between updates of slots that the same operation reads.
+        let before = self.args_damage();
+        for &(k, value) in values {
+            let k = k as usize;
+            if self.args.len() <= k {
+                self.args.resize(k + 1, None);
+            }
+            self.args[k] = Some(value);
+        }
+        let damage = match before {
+            Damage::All => Damage::All,
+            _ => before.union(self.args_damage()),
+        };
+        match damage {
+            Damage::None => return false,
+            Damage::All => self.stale(),
+            Damage::Rect(_) => {
+                let pending = self.damage.get().map_or(damage, |d| d.union(damage));
+                self.damage.set(Some(pending));
+            }
+        }
+        true
+    }
+
+    /// What the changed slots paint at their current values.
+    fn args_damage(&mut self) -> Damage {
+        let Some(drawing) = self.drawing.as_ref() else {
+            return Damage::All;
+        };
+        let value = |k| Self::slot(&self.args, k);
+        match self.changed.as_slice() {
+            // Keep the single-slot scan's scalar predicate.
+            &[slot] => self.scan.damage(&drawing.ops, value, |k| k == slot),
+            changed => self
+                .scan
+                .damage(&drawing.ops, value, |k| changed.contains(&k)),
+        }
+    }
+
     /// Rasterizes the whole drawing again: on a worker while what was
     /// rasterized before shows, so the main thread never waits for it.
     fn stale(&mut self) {
@@ -271,12 +331,14 @@ pub(crate) fn set(surface: &Rc<Surface>, view: &NshView, drawing: Arc<Drawing>) 
         wait_for_fonts(surface, view);
     }
     let id = view.id();
+    // An SVG is rasterized for the screen it shows on.
+    let scale = surface.scale();
     for uri in load {
         let weak = Rc::downgrade(surface);
         let key = uri.clone();
-        load_image(surface, &uri, move |result| {
-            let pixmap = match result {
-                Ok(pixmap) => pixmap,
+        load_image(surface, &uri, scale, move |result| {
+            let image = match result {
+                Ok(image) => image,
                 Err(e) => {
                     log::warn!("canvas: {e}");
                     return;
@@ -293,7 +355,7 @@ pub(crate) fn set(surface: &Rc<Surface>, view: &NshView, drawing: Arc<Drawing>) 
                 let Some(slot) = c.images.get_mut(&key) else {
                     return;
                 };
-                *slot = Some(Arc::new(pixmap));
+                *slot = Some(image);
                 c.stale();
             }
             view.changed();
@@ -302,74 +364,84 @@ pub(crate) fn set(surface: &Rc<Surface>, view: &NshView, drawing: Arc<Drawing>) 
     view.changed();
 }
 
-/// Animated value slot `k` changed: draws again if the value did.
-pub(crate) fn set_arg(view: &NshView, k: u16, value: AnimationValue) {
+/// Updates a frame's animated value slots, drawing again if they changed.
+pub(crate) fn set_args(view: &NshView, values: &[(u16, AnimationValue)]) {
     {
         let mut state = view.state_mut();
         let Some(c) = state.canvas.as_mut() else {
             return;
         };
-        let k = k as usize;
-        if c.args.len() <= k {
-            c.args.resize(k + 1, None);
-        }
-        if c.args[k] == Some(value) {
+        if !c.set_args(values) {
             return;
-        }
-        // What the operations reading the slot paint, before and after:
-        // only that is rasterized again.
-        let slot = k as u16;
-        let damage = match c.drawing.clone() {
-            Some(drawing) => {
-                let changed = |s: u16| s == slot;
-                let before =
-                    c.scan
-                        .damage(&drawing.ops, |s| CanvasState::slot(&c.args, s), changed);
-                c.args[k] = Some(value);
-                match before {
-                    Damage::All => Damage::All,
-                    _ => before.union(c.scan.damage(
-                        &drawing.ops,
-                        |s| CanvasState::slot(&c.args, s),
-                        changed,
-                    )),
-                }
-            }
-            None => {
-                c.args[k] = Some(value);
-                Damage::All
-            }
-        };
-        match damage {
-            Damage::None => return,
-            Damage::All => c.stale(),
-            Damage::Rect(_) => {
-                let pending = c.damage.get().map_or(damage, |d| d.union(damage));
-                c.damage.set(Some(pending));
-            }
         }
     }
     view.changed();
 }
 
-/// Loads the image `uri` for a canvas, as premultiplied pixels.
+/// An image a canvas draws: its premultiplied pixels, and how many of
+/// them make one unit of the image's own size (what `drawImage`'s source
+/// rectangle and its default size are in).
+#[derive(Clone)]
+pub(crate) struct CanvasBitmap {
+    pub(crate) pixmap: Arc<sk::Pixmap>,
+    /// 1 for a bitmap decoded whole, whose units are its pixels; an SVG's
+    /// pixels per point, as it was rasterized.
+    pub(crate) scale: f64,
+}
+
+/// Loads the image `uri` for a canvas, as premultiplied pixels; an SVG is
+/// rasterized at `scale` pixels per point.
 fn load_image(
     surface: &Rc<Surface>,
     uri: &str,
-    done: impl FnOnce(Result<sk::Pixmap, String>) + 'static,
+    scale: f32,
+    done: impl FnOnce(Result<CanvasBitmap, String>) + 'static,
 ) {
-    crate::image::load_bitmap(surface, uri, move |result| {
-        done(result.and_then(|texture| {
+    crate::image::load_bitmap(surface, uri, scale, move |result| {
+        done(result.and_then(|(texture, scale)| {
             let image = texture.image();
             let size = image.size(0);
             let bytes = image.as_bytes(0).ok_or("an image without pixels")?;
-            premultiplied(
+            let pixmap = premultiplied(
                 size.width.0.max(0) as u32,
                 size.height.0.max(0) as u32,
                 bytes,
-            )
+            )?;
+            Ok(CanvasBitmap {
+                pixmap: Arc::new(pixmap),
+                scale,
+            })
         }))
     });
+}
+
+/// A transparent `width` × `height` pixmap, as `sk::Pixmap::new` makes
+/// one (zeroed premultiplied RGBA, rows packed), `None` for an empty size,
+/// one past tiny-skia's limits, or when its memory cannot be allocated:
+/// `sk::Pixmap::new` aborts the process then, and a render the size of a
+/// large image must not.
+fn try_pixmap(width: u32, height: u32) -> Option<sk::Pixmap> {
+    let size = sk::IntSize::from_wh(width, height)?;
+    // The length `Pixmap::from_vec` requires, worked out as tiny-skia does:
+    // rows of `width * 4` bytes that fit an `i32`, packed, so
+    // `(height - 1) * row + width * 4` is `height * row`.
+    let row = usize::try_from(i32::try_from(width).ok()?.checked_mul(4)?).ok()?;
+    let len = row.checked_mul(height as usize)?;
+    let layout = std::alloc::Layout::array::<u8>(len).ok()?;
+    // SAFETY: `layout` is not zero-sized: `IntSize` has no empty side, so
+    // `len` is at least 4.
+    let data = unsafe { std::alloc::alloc_zeroed(layout) };
+    if data.is_null() {
+        return None;
+    }
+    // SAFETY: `data` was allocated by the global allocator with `layout`,
+    // a `u8` array of `len` (alignment 1, `len` bytes), so `len` is its
+    // capacity; all `len` bytes are initialized (zeroed, a valid `u8`
+    // each, transparent black when read as pixels). The vector owns the
+    // allocation from here on and frees it with that same layout, as does
+    // the pixmap it becomes (or `from_vec`, dropping it, on a mismatch).
+    let data = unsafe { Vec::from_raw_parts(data, len, len) };
+    sk::Pixmap::from_vec(data, size)
 }
 
 /// GPUI's straight BGRA pixels as a pixmap.
@@ -549,7 +621,7 @@ struct Job {
     id: nsh_core::NodeId,
     drawing: Arc<Drawing>,
     args: Vec<Option<AnimationValue>>,
-    images: FxHashMap<Arc<str>, Option<Arc<sk::Pixmap>>>,
+    images: FxHashMap<Arc<str>, Option<CanvasBitmap>>,
     /// The app's text system (each worker shapes with a line layout cache
     /// of its own over it: the window's is the frame's).
     system: Arc<gpui::TextSystem>,
@@ -873,40 +945,13 @@ impl IRect {
 fn record(
     drawing: &Drawing,
     args: &[Option<AnimationValue>],
-    images: &FxHashMap<Arc<str>, Option<Arc<sk::Pixmap>>>,
+    images: &FxHashMap<Arc<str>, Option<CanvasBitmap>>,
     (text, system): (&WindowTextSystem, &Arc<gpui::TextSystem>),
     key: Key,
     region: IRect,
     frac: (f32, f32),
 ) -> Recorded {
-    let [a, b, c, d] = key.linear.map(f64::from);
-    // The view's coordinates to the pixmap's.
-    let base = Affine {
-        a,
-        b,
-        c,
-        d,
-        e: (frac.0 - region.x0 as f32) as f64,
-        f: (frac.1 - region.y0 as f32) as f64,
-    };
-    let size = (region.width() as u32, region.height() as u32);
-    let mut replay = Replay {
-        args,
-        images,
-        text,
-        system,
-        size,
-        base,
-        scale: key.scale as f64,
-        state: State::new(base),
-        stack: Vec::new(),
-        path: PathBuf::default(),
-        layers: Vec::new(),
-        pixmap: sk::Pixmap::new(size.0, size.1),
-        drawn: false,
-        pending: Vec::new(),
-        pending_bounds: None,
-    };
+    let mut replay = Replay::new(args, images, (text, system), key, region, frac, true);
     for op in &drawing.ops {
         replay.op(op);
     }
@@ -930,7 +975,7 @@ fn patch(
     recorded: &mut Recorded,
     drawing: &Drawing,
     args: &[Option<AnimationValue>],
-    images: &FxHashMap<Arc<str>, Option<Arc<sk::Pixmap>>>,
+    images: &FxHashMap<Arc<str>, Option<CanvasBitmap>>,
     text: (&WindowTextSystem, &Arc<gpui::TextSystem>),
     damage: nsh_core::Bounds<nsh_core::Points>,
 ) -> bool {
@@ -1154,7 +1199,7 @@ struct Glyph {
 
 struct Replay<'a> {
     args: &'a [Option<AnimationValue>],
-    images: &'a FxHashMap<Arc<str>, Option<Arc<sk::Pixmap>>>,
+    images: &'a FxHashMap<Arc<str>, Option<CanvasBitmap>>,
     text: &'a WindowTextSystem,
     /// The app's text system (fonts are resolved in it).
     system: &'a Arc<gpui::TextSystem>,
@@ -1177,9 +1222,62 @@ struct Replay<'a> {
     pending: Vec<GlyphRun>,
     /// The bounds of `pending` (pixmap coordinates).
     pending_bounds: Option<sk::Rect>,
+    /// Glyphs without outlines are kept as GPUI glyphs above the pixmap
+    /// (on screen); without them (offscreen), they are left out and
+    /// everything paints into the one pixmap.
+    glyphs: bool,
+    /// A pixmap's memory could not be allocated: what needed it is not
+    /// drawn (an offscreen render answers that the image is too large).
+    out_of_memory: bool,
 }
 
 impl<'a> Replay<'a> {
+    /// A replay of a drawing for `key` over `region` (device pixels, the
+    /// view's origin `frac` into the pixel it falls in), into a pixmap of
+    /// that size.
+    fn new(
+        args: &'a [Option<AnimationValue>],
+        images: &'a FxHashMap<Arc<str>, Option<CanvasBitmap>>,
+        (text, system): (&'a WindowTextSystem, &'a Arc<gpui::TextSystem>),
+        key: Key,
+        region: IRect,
+        frac: (f32, f32),
+        glyphs: bool,
+    ) -> Self {
+        let [a, b, c, d] = key.linear.map(f64::from);
+        // The view's coordinates to the pixmap's.
+        let base = Affine {
+            a,
+            b,
+            c,
+            d,
+            e: (frac.0 - region.x0 as f32) as f64,
+            f: (frac.1 - region.y0 as f32) as f64,
+        };
+        let size = (region.width() as u32, region.height() as u32);
+        let pixmap = try_pixmap(size.0, size.1);
+        let out_of_memory = pixmap.is_none() && size.0 > 0 && size.1 > 0;
+        Replay {
+            args,
+            images,
+            text,
+            system,
+            size,
+            base,
+            scale: key.scale as f64,
+            state: State::new(base),
+            stack: Vec::new(),
+            path: PathBuf::default(),
+            layers: Vec::new(),
+            pixmap,
+            drawn: false,
+            pending: Vec::new(),
+            pending_bounds: None,
+            glyphs,
+            out_of_memory,
+        }
+    }
+
     fn n(&self, n: Num) -> f64 {
         n.get(|s| {
             self.args
@@ -1319,7 +1417,7 @@ impl<'a> Replay<'a> {
             } => {
                 let source = source
                     .map(|s| [s.origin.x, s.origin.y, s.size.width, s.size.height].map(|v| v.0));
-                self.image(&image.uri, source, dest)
+                self.image(&image.uri, image.density(), source, dest)
             }
         }
     }
@@ -1679,7 +1777,8 @@ impl<'a> Replay<'a> {
         };
         if text.intersect(&bounds).is_some() {
             self.flush();
-            self.pixmap = sk::Pixmap::new(self.size.0, self.size.1);
+            self.pixmap = try_pixmap(self.size.0, self.size.1);
+            self.out_of_memory |= self.pixmap.is_none() && self.size.0 > 0 && self.size.1 > 0;
         }
     }
 
@@ -1711,7 +1810,9 @@ impl<'a> Replay<'a> {
         };
         let mut extent = bounds;
         if let Some((_, sigma, (dx, dy))) = shadow {
-            let grow = (3.0 * sigma) as f32;
+            // The blur's full spread, and a pixel for a shadow moved by a
+            // fraction of one.
+            let grow = (3.0 * sigma).ceil() as f32 + 1.0;
             let (dx, dy) = (dx as f32, dy as f32);
             if let Some(r) = sk::Rect::from_ltrb(
                 bounds.left() + dx.min(0.0) - grow,
@@ -1750,7 +1851,11 @@ impl<'a> Replay<'a> {
             y1: h as i32,
         };
         let rect = if destructive(composite) {
-            Some(all)
+            // The clip bounds what changes (the mask is empty past it).
+            match &clip {
+                Some((_, b)) => pixels_within(*b, (w, h)),
+                None => Some(all),
+            }
         } else {
             let r = [extent.left(), extent.top(), extent.right(), extent.bottom()];
             pixels_within(r, (w, h))
@@ -1758,14 +1863,37 @@ impl<'a> Replay<'a> {
         let Some(rect) = rect else {
             return;
         };
-        let Some(mut layer) = sk::Pixmap::new(rect.width() as u32, rect.height() as u32) else {
+        let Some(mut layer) = try_pixmap(rect.width() as u32, rect.height() as u32) else {
+            self.out_of_memory |= rect.width() > 0 && rect.height() > 0;
             return;
         };
         let to_layer = sk::Transform::from_translate(-rect.x0 as f32, -rect.y0 as f32);
         draw(&mut layer, to_layer, None, sk::BlendMode::SourceOver);
         if let Some((color, sigma, offset)) = shadow {
-            let area = shadow_area(bounds, rect, sigma);
-            let shadow = area.and_then(|area| shadow_pixels(&layer, area, sigma, color));
+            let shadow = match shadow_source(bounds, rect, sigma, offset, (w, h)) {
+                // All of the shape the shadow needs is in the layer.
+                Some(source) if rect.contains(&source) => {
+                    let area = shadow_area(bounds, rect, sigma, shadow_limit((w, h)));
+                    area.and_then(|area| shadow_pixels(&layer, area, sigma, color))
+                }
+                // Part of it is outside the pixmap (its shadow is cast
+                // in, or blurred in): that part is drawn on its own.
+                Some(source) => {
+                    let shape = try_pixmap(source.width() as u32, source.height() as u32);
+                    self.out_of_memory |=
+                        shape.is_none() && source.width() > 0 && source.height() > 0;
+                    shape.and_then(|mut shape| {
+                        let to =
+                            sk::Transform::from_translate(-source.x0 as f32, -source.y0 as f32);
+                        draw(&mut shape, to, None, sk::BlendMode::SourceOver);
+                        let area = shadow_area(bounds, source, sigma, shadow_limit((w, h)))?;
+                        let (pixels, x, y) = shadow_pixels(&shape, area, sigma, color)?;
+                        // In the layer's coordinates.
+                        Some((pixels, x + source.x0 - rect.x0, y + source.y0 - rect.y0))
+                    })
+                }
+                None => None,
+            };
             if let Some((shadow, x, y)) = shadow {
                 layer.draw_pixmap(
                     0,
@@ -1885,7 +2013,7 @@ impl<'a> Replay<'a> {
             };
             self.paint_path(path, mode);
         }
-        if glyphs.is_empty() {
+        if glyphs.is_empty() || !self.glyphs {
             return;
         }
         let color = match self.paint(mode) {
@@ -1947,32 +2075,42 @@ impl<'a> Replay<'a> {
 
     // --- Images ---
 
-    fn image(&mut self, uri: &str, source: Option<[f32; 4]>, dest: &[Num; 4]) {
+    fn image(&mut self, uri: &str, density: f32, source: Option<[f32; 4]>, dest: &[Num; 4]) {
         if self.state.singular {
             return;
         }
-        let Some(Some(image)) = self.images.get(uri).cloned() else {
+        let Some(Some(CanvasBitmap {
+            pixmap: image,
+            scale,
+        })) = self.images.get(uri).cloned()
+        else {
             return;
         };
-        let (iw, ih) = (image.width() as f64, image.height() as f64);
+        // The source rectangle and the default size are in the image's own
+        // units: an SVG drawn sharp has `scale` pixels to each.
+        let (iw, ih) = (image.width() as f64 / scale, image.height() as f64 / scale);
         let [sx, sy, sw, sh] = source.map_or([0.0, 0.0, iw, ih], |s| s.map(f64::from));
         if sw == 0.0 || sh == 0.0 {
             return;
         }
         let [dx, dy, dw, dh] = dest.map(|v| self.n(v));
-        // Missing sizes are the source's.
-        let dw = if dw.is_nan() { sw } else { dw };
-        let dh = if dh.is_nan() { sh } else { dh };
+        // Missing sizes are the source's pixels over the file name's
+        // density (`@3x`), as an `Image`'s: never the screen's.
+        let density = f64::from(density);
+        let dw = if dw.is_nan() { sw / density } else { dw };
+        let dh = if dh.is_nan() { sh / density } else { dh };
         if dw == 0.0 || dh == 0.0 {
             return;
         }
         let Some(path) = self.rect_path([dx, dy, dw, dh]) else {
             return;
         };
-        // The image's pixels to user space, then to the pixmap.
+        // The image's pixels to its units, to user space, then to the
+        // pixmap.
         let to_dest = Affine::translate(dx, dy)
             .then(&Affine::scale(dw / sw, dh / sh))
-            .then(&Affine::translate(-sx, -sy));
+            .then(&Affine::translate(-sx, -sy))
+            .then(&Affine::scale(1.0 / scale, 1.0 / scale));
         let transform = self.state.transform.then(&to_dest).skia();
         let source = Source::Image(image, transform, self.state.alpha as f32);
         self.emit(path.bounds(), &|pixmap, to, mask, blend| {
@@ -2166,7 +2304,14 @@ fn load_fonts(fonts: &mut Fonts) {
                 db.len(),
                 started.elapsed().as_secs_f64() * 1000.0
             );
-            crate::rt::invoke(move || fonts_loaded(db));
+            {
+                // Set here, so workers waiting for the fonts
+                // ([`wait_for_fonts_here`]) need no main thread.
+                let mut fonts = self::fonts();
+                fonts.db = Some(Arc::new(db));
+                fonts.loading = false;
+            }
+            crate::rt::invoke(fonts_loaded);
         });
     if let Err(e) = spawned {
         log::warn!("canvas: cannot find the system's fonts: {e}");
@@ -2174,14 +2319,9 @@ fn load_fonts(fonts: &mut Fonts) {
     }
 }
 
-/// The system's fonts were found: canvases that drew text without them
-/// draw again.
-fn fonts_loaded(db: fontdb::Database) {
-    {
-        let mut fonts = fonts();
-        fonts.db = Some(Arc::new(db));
-        fonts.loading = false;
-    }
+/// The system's fonts were found (main thread): canvases that drew text
+/// without them draw again.
+fn fonts_loaded() {
     let waiting = WAITING.with_borrow_mut(std::mem::take);
     for (surface, id) in waiting {
         let Some(view) = surface.upgrade().and_then(|s| s.view(id)) else {
@@ -2201,6 +2341,27 @@ fn wait_for_fonts(surface: &Rc<Surface>, view: &NshView) {
     if fonts.db.is_none() {
         WAITING.with_borrow_mut(|w| w.push((Rc::downgrade(surface), view.id())));
         load_fonts(&mut fonts);
+    }
+}
+
+/// Waits on this thread (a worker, never the main thread) until the
+/// system's fonts are found, starting the search if needed; gives up after
+/// `limit`, drawing text as before they are found.
+fn wait_for_fonts_here(limit: std::time::Duration) {
+    let started = std::time::Instant::now();
+    loop {
+        {
+            let mut fonts = fonts();
+            if fonts.db.is_some() {
+                return;
+            }
+            load_fonts(&mut fonts);
+        }
+        if started.elapsed() >= limit {
+            log::warn!("canvas: the system's fonts were not found in time");
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 
@@ -2455,12 +2616,54 @@ fn blend_mode(c: Composite) -> sk::BlendMode {
 
 // --- Shadows -----------------------------------------------------------------
 
+/// The pixels of a shape within `bounds` (pixmap pixels) whose shadow,
+/// blurred with standard deviation `sigma` and moved by `offset`, falls
+/// on `layer`: the layer moved back by the offset and grown by the blur's
+/// full spread (three deviations), within the shape's bounds. It may
+/// reach past the pixmap (`size`), whose shapes cast shadows into it, but
+/// never more than the spread past what the layer can show; `None` when
+/// the shadow misses the layer or is too large to blur.
+fn shadow_source(
+    bounds: sk::Rect,
+    layer: IRect,
+    sigma: f64,
+    (dx, dy): (f64, f64),
+    size: (u32, u32),
+) -> Option<IRect> {
+    let grow = (3.0 * sigma).ceil() as f32;
+    let (dx, dy) = (dx as f32, dy as f32);
+    let reach = IRect::round_out(
+        layer.x0 as f32 - dx - grow,
+        layer.y0 as f32 - dy - grow,
+        layer.x1 as f32 - dx + grow,
+        layer.y1 as f32 - dy + grow,
+    )?;
+    // Clamped before rounding: a shape may be far larger than any pixmap.
+    let source = IRect::round_out(
+        bounds.left().max(reach.x0 as f32),
+        bounds.top().max(reach.y0 as f32),
+        bounds.right().min(reach.x1 as f32),
+        bounds.bottom().min(reach.y1 as f32),
+    )?;
+    if source.width() as i64 * source.height() as i64 > shadow_limit(size) {
+        log::debug!("canvas: a shadow too large to blur is left out");
+        return None;
+    }
+    Some(source)
+}
+
+/// The most pixels a shadow is blurred over, for a pixmap of `size`: a
+/// shadow as large as the pixmap is always drawn.
+fn shadow_limit(size: (u32, u32)) -> i64 {
+    (2 * MAX_AREA).max(i64::from(size.0) * i64::from(size.1))
+}
+
 /// The pixels whose shadow (blurred with standard deviation `sigma`) the
 /// layer `layer` (pixmap pixels) needs, of a shape within `bounds`, in the
 /// layer's coordinates: the shape grown by the blur's spread, inside the
 /// layer grown likewise (the shape is drawn only in the layer); `None`
 /// when that is nothing or too much to blur.
-fn shadow_area(bounds: sk::Rect, layer: IRect, sigma: f64) -> Option<IRect> {
+fn shadow_area(bounds: sk::Rect, layer: IRect, sigma: f64, limit: i64) -> Option<IRect> {
     let grow = (3.0 * sigma).ceil() as i32;
     let around = IRect {
         x0: -grow,
@@ -2476,7 +2679,7 @@ fn shadow_area(bounds: sk::Rect, layer: IRect, sigma: f64) -> Option<IRect> {
         (bounds.bottom() - y).min(around.y1 as f32) + grow as f32,
     ];
     let area = IRect::round_out(shape[0], shape[1], shape[2], shape[3])?.intersect(&around)?;
-    if area.width() as i64 * area.height() as i64 > 2 * MAX_AREA {
+    if area.width() as i64 * area.height() as i64 > limit {
         log::debug!("canvas: a shadow too large to blur is left out");
         return None;
     }
@@ -3117,6 +3320,351 @@ mod tests {
         Num::Slot(k)
     }
 
+    fn batch_number(value: f32) -> AnimationValue {
+        AnimationValue::Number(value)
+    }
+
+    fn batch_drawing() -> Arc<Drawing> {
+        Arc::new(Drawing {
+            ops: vec![
+                CanvasOp::FillStyle(Paint::Color(Color(0x3040_50ff))),
+                CanvasOp::FillRect(rect(0.0, 0.0, 256.0, 128.0)),
+                CanvasOp::Save,
+                CanvasOp::BeginPath,
+                CanvasOp::Path(PathOp::Rect(rect(12.0, 12.0, 232.0, 104.0))),
+                CanvasOp::Clip(None, FillRule::NonZero),
+                CanvasOp::Transform([slot(8), c(0.0), c(0.0), c(1.0), slot(4), slot(5)]),
+                CanvasOp::FillStyle(Paint::Slot(6)),
+                CanvasOp::GlobalAlpha(slot(7)),
+                CanvasOp::FillRect([slot(0), slot(1), slot(2), slot(3)]),
+                CanvasOp::Restore,
+            ],
+            ..Drawing::default()
+        })
+    }
+
+    fn batch_initial_args() -> Vec<Option<AnimationValue>> {
+        vec![
+            Some(batch_number(12.0)),
+            Some(batch_number(14.0)),
+            Some(batch_number(16.0)),
+            Some(batch_number(12.0)),
+            Some(batch_number(10.0)),
+            Some(batch_number(4.0)),
+            Some(AnimationValue::Color(0xff00_00ff)),
+            Some(batch_number(0.5)),
+            Some(batch_number(1.0)),
+        ]
+    }
+
+    /// Compare a cached old frame, patched using the actual batch helper's
+    /// accumulated damage, with a complete replay at the final values.
+    fn assert_batch_pixels(batches: &[&[(u16, AnimationValue)]]) {
+        let system = Arc::new(gpui::TextSystem::new(Arc::new(gpui::NoopTextSystem::new())));
+        let text = WindowTextSystem::new(system.clone());
+        let images = FxHashMap::default();
+        for scale in [1.0, 1.5, 2.0] {
+            let drawing = batch_drawing();
+            let mut canvas = CanvasState {
+                drawing: Some(drawing.clone()),
+                args: batch_initial_args(),
+                ..CanvasState::default()
+            };
+            let key = Key {
+                linear: [scale, 0.0, 0.0, scale],
+                scale,
+                size: (256.0, 128.0),
+            };
+            let frac = (0.25, 0.5);
+            let (region, _) = region(&key, frac, [0.0, 0.0, 256.0 * scale, 128.0 * scale]).unwrap();
+            let mut patched = record(
+                &drawing,
+                &canvas.args,
+                &images,
+                (&text, &system),
+                key,
+                region,
+                frac,
+            );
+            let old_pixels = pixels(&patched).data().to_vec();
+            for values in batches {
+                assert!(canvas.set_args(values));
+            }
+            assert_eq!(canvas.version, 0, "bounded changes must stay partial");
+            let Some(Damage::Rect(damage)) = canvas.damage.take() else {
+                panic!("batched geometry, color and alpha must damage their shapes");
+            };
+            assert!(patch(
+                &mut patched,
+                &drawing,
+                &canvas.args,
+                &images,
+                (&text, &system),
+                damage,
+            ));
+            let full = record(
+                &drawing,
+                &canvas.args,
+                &images,
+                (&text, &system),
+                key,
+                region,
+                frac,
+            );
+            assert_ne!(
+                old_pixels,
+                pixels(&full).data(),
+                "the fixture must move pixels"
+            );
+            assert_eq!(
+                pixels(&patched).data(),
+                pixels(&full).data(),
+                "partial replay differs from full replay at scale {scale}",
+            );
+        }
+    }
+
+    #[test]
+    fn batched_canvas_args_paint_correlated_values_together() {
+        // A batch of bindings with only one changed slot uses the scalar
+        // scan too; the unchanged values still reach the final frame.
+        assert_batch_pixels(&[&[
+            (0, batch_number(12.0)),
+            (1, batch_number(60.0)),
+            (2, batch_number(16.0)),
+            (3, batch_number(12.0)),
+            (4, batch_number(10.0)),
+            (5, batch_number(4.0)),
+            (6, AnimationValue::Color(0xff00_00ff)),
+            (7, batch_number(0.5)),
+            (8, batch_number(1.0)),
+        ]]);
+        assert_batch_pixels(&[&[
+            (0, batch_number(130.0)),
+            (1, batch_number(60.0)),
+            (2, batch_number(24.0)),
+            (3, batch_number(18.0)),
+            (4, batch_number(-20.0)),
+            (5, batch_number(-8.0)),
+            (6, AnimationValue::Color(0x00ff_00ff)),
+            (7, batch_number(0.75)),
+            (8, batch_number(1.25)),
+        ]]);
+    }
+
+    #[test]
+    fn batched_canvas_args_accumulate_until_painted() {
+        // Three writes can reach a canvas before its next paint. The last
+        // batch's rectangle alone would leave the initially painted dot behind.
+        assert_batch_pixels(&[
+            &[
+                (0, batch_number(70.0)),
+                (1, batch_number(26.0)),
+                (6, AnimationValue::Color(0x0000_ffff)),
+            ],
+            &[
+                (2, batch_number(23.0)),
+                (3, batch_number(9.0)),
+                (4, batch_number(25.0)),
+                (7, batch_number(0.4)),
+            ],
+            &[
+                (0, batch_number(145.0)),
+                (1, batch_number(81.0)),
+                (6, AnimationValue::Color(0xffff_00ff)),
+            ],
+        ]);
+    }
+
+    #[test]
+    fn unchanged_and_unused_canvas_args_leave_pending_damage_alone() {
+        let mut canvas = CanvasState {
+            drawing: Some(batch_drawing()),
+            args: batch_initial_args(),
+            ..CanvasState::default()
+        };
+        assert!(!canvas.set_args(&[]));
+        assert!(!canvas.set_args(&[(0, batch_number(12.0))]));
+        assert_eq!(canvas.damage.get(), None);
+        assert!(canvas.set_args(&[(0, batch_number(60.0)), (1, batch_number(50.0))]));
+        let pending = canvas.damage.get();
+        assert!(!canvas.set_args(&[(0, batch_number(60.0)), (1, batch_number(50.0))]));
+        assert!(!canvas.set_args(&[(30, batch_number(10.0))]));
+        assert_eq!(canvas.args[30], Some(batch_number(10.0)));
+        assert_eq!(canvas.damage.get(), pending);
+        assert_eq!(canvas.version, 0);
+    }
+
+    #[test]
+    fn repeated_canvas_args_keep_the_last_value() {
+        let mut canvas = CanvasState {
+            drawing: Some(batch_drawing()),
+            args: batch_initial_args(),
+            ..CanvasState::default()
+        };
+        // The last entry equals the original value. Filtering entries against
+        // the original values must not discard this last write.
+        canvas.set_args(&[(0, batch_number(90.0)), (0, batch_number(12.0))]);
+        assert_eq!(canvas.args[0], Some(batch_number(12.0)));
+        canvas.set_args(&[
+            (1, batch_number(14.0)),
+            (1, batch_number(80.0)),
+            (1, batch_number(14.0)),
+            (30, batch_number(5.0)),
+            (30, batch_number(7.0)),
+        ]);
+        assert_eq!(canvas.args[1], Some(batch_number(14.0)));
+        assert_eq!(canvas.args[30], Some(batch_number(7.0)));
+    }
+
+    #[test]
+    fn unbounded_canvas_batches_keep_one_job_in_flight() {
+        // An animated clip, and an animated shape under `copy`, must both
+        // request a full redraw. A batch invalidates the version once.
+        for ops in [
+            vec![
+                CanvasOp::BeginPath,
+                CanvasOp::Path(PathOp::Rect([slot(0), slot(1), c(40.0), c(40.0)])),
+                CanvasOp::Clip(None, FillRule::NonZero),
+                CanvasOp::FillRect(rect(0.0, 0.0, 256.0, 128.0)),
+            ],
+            vec![
+                CanvasOp::Composite(Composite::Copy),
+                CanvasOp::FillRect([slot(0), slot(1), c(40.0), c(40.0)]),
+            ],
+        ] {
+            let mut canvas = CanvasState {
+                drawing: Some(Arc::new(Drawing {
+                    ops,
+                    ..Drawing::default()
+                })),
+                args: vec![Some(batch_number(10.0)), Some(batch_number(10.0))],
+                ..CanvasState::default()
+            };
+            assert_eq!(canvas.ask(), Some(0));
+            assert!(canvas.set_args(&[(0, batch_number(20.0)), (1, batch_number(30.0))]));
+            assert_eq!(canvas.version, 1);
+            assert_eq!(canvas.damage.get(), None);
+            assert_eq!(canvas.ask(), None);
+            assert!(canvas.set_args(&[(0, batch_number(40.0)), (1, batch_number(50.0))]));
+            assert_eq!(canvas.version, 2);
+            assert_eq!(canvas.ask(), None);
+            canvas.landed(1);
+            assert_eq!(canvas.ask(), None, "an unrelated completion frees no job");
+            canvas.landed(0);
+            assert_eq!(canvas.ask(), Some(2));
+            canvas.landed(0);
+            assert_eq!(canvas.ask(), None, "an old completion frees no newer job");
+        }
+    }
+
+    #[test]
+    fn canvas_batches_keep_values_before_a_drawing_is_installed() {
+        let mut canvas = CanvasState::default();
+        assert!(canvas.set_args(&[(0, batch_number(10.0)), (40, batch_number(20.0))]));
+        assert_eq!(canvas.args[0], Some(batch_number(10.0)));
+        assert_eq!(canvas.args[40], Some(batch_number(20.0)));
+        assert_eq!(canvas.args[1], None);
+        assert_eq!(canvas.version, 1);
+        assert_eq!(canvas.damage.get(), None);
+        assert!(!canvas.set_args(&[(0, batch_number(10.0)), (40, batch_number(20.0))]));
+        assert_eq!(canvas.version, 1);
+    }
+
+    #[test]
+    fn empty_drawings_store_canvas_args_without_redrawing() {
+        let mut canvas = CanvasState {
+            drawing: Some(Arc::new(Drawing::default())),
+            ..CanvasState::default()
+        };
+        assert!(!canvas.set_args(&[(0, batch_number(10.0)), (40, batch_number(20.0))]));
+        assert_eq!(canvas.args[0], Some(batch_number(10.0)));
+        assert_eq!(canvas.args[40], Some(batch_number(20.0)));
+        assert_eq!(canvas.version, 0);
+        assert_eq!(canvas.damage.get(), None);
+    }
+
+    #[test]
+    fn unbounded_batches_clear_pending_damage_and_store_all_values() {
+        let mut canvas = CanvasState {
+            drawing: Some(batch_drawing()),
+            args: batch_initial_args(),
+            ..CanvasState::default()
+        };
+        assert!(canvas.set_args(&[(0, batch_number(60.0)), (1, batch_number(30.0))]));
+        assert!(matches!(canvas.damage.get(), Some(Damage::Rect(_))));
+        assert!(canvas.set_args(&[(0, batch_number(f32::NAN)), (1, batch_number(50.0))]));
+        assert_eq!(canvas.version, 1);
+        assert_eq!(canvas.damage.get(), None);
+        assert!(CanvasState::slot(&canvas.args, 0).is_nan());
+        assert_eq!(canvas.args[1], Some(batch_number(50.0)));
+        // NaN follows AnimationValue's PartialEq semantics: it changes again.
+        assert!(canvas.set_args(&[(0, batch_number(f32::NAN)), (1, batch_number(70.0))]));
+        assert_eq!(canvas.version, 2);
+        assert_eq!(canvas.args[1], Some(batch_number(70.0)));
+        // The old unbounded state still requests a full redraw when values
+        // become finite, and all new values are nevertheless installed.
+        assert!(canvas.set_args(&[(0, batch_number(30.0)), (1, batch_number(80.0))]));
+        assert_eq!(canvas.version, 3);
+        assert_eq!(canvas.args[0], Some(batch_number(30.0)));
+        assert_eq!(canvas.args[1], Some(batch_number(80.0)));
+    }
+
+    #[test]
+    fn an_image_draws_its_pixels_over_its_file_density() {
+        // 60 × 30 pixels at (0, 0) without a destination size: 60 × 30
+        // points as `dot.png`, 20 × 10 as `dot@3x.png`, 30 × 15 as an SVG
+        // rasterized at 2 pixels per point, at scale 1 and 2.
+        let mut image = sk::Pixmap::new(60, 30).unwrap();
+        image.fill(sk::Color::from_rgba8(255, 0, 0, 255));
+        let image = Arc::new(image);
+        let system = Arc::new(gpui::TextSystem::new(Arc::new(gpui::NoopTextSystem::new())));
+        let text = WindowTextSystem::new(system.clone());
+        for (uri, (w, h), raster) in [
+            ("asset:/dot.png", (60, 30), 1.0),
+            ("asset:/dot@3x.png", (20, 10), 1.0),
+            ("asset:/dot.svg", (30, 15), 2.0),
+        ] {
+            let nan = c(f32::NAN);
+            let drawing = Drawing {
+                ops: vec![CanvasOp::DrawImage {
+                    image: nsh_core::canvas::CanvasImage { uri: uri.into() },
+                    source: None,
+                    dest: [c(0.0), c(0.0), nan, nan],
+                }],
+                ..Drawing::default()
+            };
+            let bitmap = CanvasBitmap {
+                pixmap: image.clone(),
+                scale: raster,
+            };
+            let images = [(Arc::from(uri), Some(bitmap))].into_iter().collect();
+            for scale in [1u32, 2] {
+                let key = Key {
+                    linear: [scale as f32, 0.0, 0.0, scale as f32],
+                    scale: scale as f32,
+                    size: (100.0, 40.0),
+                };
+                let bounds = [0.0, 0.0, 100.0 * scale as f32, 40.0 * scale as f32];
+                let (region, _) = region(&key, (0.0, 0.0), bounds).unwrap();
+                let r = record(
+                    &drawing,
+                    &[],
+                    &images,
+                    (&text, &system),
+                    key,
+                    region,
+                    (0.0, 0.0),
+                );
+                let p = pixels(&r);
+                let what = format!("{uri} at scale {scale}");
+                assert_eq!(at(p, (w - 1) * scale, (h - 1) * scale)[3], 255, "{what}");
+                assert_eq!(at(p, w * scale, 0)[3], 0, "{what}");
+                assert_eq!(at(p, 0, h * scale)[3], 0, "{what}");
+            }
+        }
+    }
+
     #[test]
     fn tiles_cover_the_pixmap_once() {
         let t = tiles(600, 300);
@@ -3655,7 +4203,7 @@ mod tests {
             y1: 100,
         };
         let far = sk::Rect::from_ltrb(-1.0e9, -1.0e9, 1.0e9, 1.0e9).unwrap();
-        let area = shadow_area(far, layer, 10.0).unwrap();
+        let area = shadow_area(far, layer, 10.0, 2 * MAX_AREA).unwrap();
         assert_eq!(
             area,
             IRect {
@@ -3719,6 +4267,8 @@ mod tests {
             drawn: false,
             pending: Vec::new(),
             pending_bounds: None,
+            glyphs: true,
+            out_of_memory: false,
         };
         replay.op(&CanvasOp::FillRect(rect(0.0, 0.0, 10.0, 10.0)));
         // Text at (20, 20)–(30, 30).
@@ -3770,6 +4320,17 @@ mod tests {
         assert!(b.left() >= 9.0 && b.right() < 30.0, "{b:?}");
         assert!(b.bottom() <= 31.0 && b.top() > 10.0, "{b:?}");
         assert_eq!(file.glyphs.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn pixmaps_too_large_to_allocate_are_none() {
+        let p = try_pixmap(3, 2).unwrap();
+        assert_eq!((p.width(), p.height()), (3, 2));
+        assert!(p.data().iter().all(|&b| b == 0));
+        assert!(try_pixmap(0, 2).is_none());
+        // Rows past tiny-skia's limit, then 4 EiB no allocator gives.
+        assert!(try_pixmap(1 << 29, 1).is_none());
+        assert!(try_pixmap(1 << 28, 1 << 30).is_none());
     }
 
     #[test]

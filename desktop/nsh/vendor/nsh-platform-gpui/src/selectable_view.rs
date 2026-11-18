@@ -188,15 +188,7 @@ fn collect(view: &NshView, m: &Mat4, area: &Mat4, out: &mut Vec<AreaText>) {
     }
     view.with_children(|children| {
         for child in children {
-            let local = {
-                let c = child.state();
-                let (x, y) = s.child_origin(c.frame, c.shift);
-                let local = Mat4::new().translate(x, y);
-                match c.transform() {
-                    Some(t) => Mat4::mul(&t, &local),
-                    None => local,
-                }
-            };
+            let local = s.child_matrix(&child.state());
             collect(child, &Mat4::mul(&local, m), area, out);
         }
     });
@@ -678,7 +670,43 @@ fn selected_text(surface: u64) -> Option<String> {
     })
 }
 
-/// A right click in `area`: Copy (its selection) and Select All.
+/// The app's items of `area`'s selection menu (`selectionMenu`), after a
+/// separator: each reports its id as the root's `Menu` event.
+fn app_items(area: &NshView, out: &mut Vec<crate::chrome::LocalItem>) {
+    use nsh_core::desktop::MenuItem;
+
+    use crate::chrome::LocalItem;
+    let menu = area.state().props.selection_menu.clone();
+    if menu.is_empty() {
+        return;
+    }
+    out.push(LocalItem::Separator);
+    for item in menu.iter() {
+        match item {
+            MenuItem::Action(action) => {
+                let id = action.id;
+                out.push(LocalItem::Item {
+                    role: None,
+                    label: action.label.clone().into(),
+                    enabled: action.enabled,
+                    action: Rc::new(move |s| {
+                        if id != 0 {
+                            s.event(
+                                nsh_core::ROOT_ID,
+                                EventKind::Menu,
+                                EventPayload::Map(vec![("id", PayloadValue::Number(id as f64))]),
+                            );
+                        }
+                    }),
+                });
+            }
+            MenuItem::Separator => out.push(LocalItem::Separator),
+            MenuItem::Submenu { .. } => {}
+        }
+    }
+}
+
+/// A right click in `area`: Copy (its selection), Select All and the app's items.
 pub(crate) fn context_menu(surface: &Rc<Surface>, area: &NshView) {
     use nsh_core::desktop::MenuRole;
 
@@ -687,27 +715,26 @@ pub(crate) fn context_menu(surface: &Rc<Surface>, area: &NshView) {
     let key = surface.key();
     let selected = with_area(key, area, |a| !a.model.is_empty());
     let all = area.clone();
-    crate::chrome::popup_actions(
-        surface,
-        vec![
-            LocalItem::Item {
-                role: Some(MenuRole::Copy),
-                label: "",
-                enabled: selected,
-                action: Rc::new(move |s| {
-                    if let Some(text) = selected_text(s.key()) {
-                        crate::system::set_clipboard_text(&text);
-                    }
-                }),
-            },
-            LocalItem::Item {
-                role: Some(MenuRole::SelectAll),
-                label: "",
-                enabled: true,
-                action: Rc::new(move |s| select_all(s.key(), &all)),
-            },
-        ],
-    );
+    let mut items = vec![
+        LocalItem::Item {
+            role: Some(MenuRole::Copy),
+            label: "".into(),
+            enabled: selected,
+            action: Rc::new(move |s| {
+                if let Some(text) = selected_text(s.key()) {
+                    crate::system::set_clipboard_text(&text);
+                }
+            }),
+        },
+        LocalItem::Item {
+            role: Some(MenuRole::SelectAll),
+            label: "".into(),
+            enabled: true,
+            action: Rc::new(move |s| select_all(s.key(), &all)),
+        },
+    ];
+    app_items(area, &mut items);
+    crate::chrome::popup_actions(surface, items);
 }
 
 /// Keys for the active area's selection (Ctrl+C or Ctrl+Insert, Ctrl+A,

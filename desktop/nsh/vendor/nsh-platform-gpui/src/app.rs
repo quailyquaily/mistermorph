@@ -61,7 +61,9 @@ fn bind_keys(cx: &mut GpuiApp) {
 
 static UI_SETS: RwLock<Option<Vec<nsh_core::element::Registry>>> = RwLock::new(None);
 
-/// Sets the UI sets every engine serves (default: `nsh/base`); an app
+/// Sets the UI sets every engine serves (default: `nsh/base`'s core part,
+/// enough for a Rust app; hosts that run JS pass all of `nsh/base`,
+/// `nsh_base::registry()`); an app
 /// with Rust components of its own calls this before [`run_app`].
 pub fn set_ui_sets(sets: Vec<nsh_core::element::Registry>) {
     *UI_SETS.write().unwrap_or_else(|e| e.into_inner()) = Some(sets);
@@ -87,13 +89,20 @@ pub(crate) fn root() -> Option<Root> {
     root.map(|root| root())
 }
 
-/// The UI sets engines serve.
+/// The UI sets engines serve: [`set_ui_sets`]'s, else `nsh/base`'s core
+/// part only. A Rust app makes `nsh/base`'s components by type, so
+/// registering every part would link every component into its binary;
+/// hosts that run JS register the sets their code imports.
 pub(crate) fn ui_sets() -> Vec<nsh_core::element::Registry> {
     UI_SETS
         .read()
         .unwrap_or_else(|e| e.into_inner())
         .clone()
-        .unwrap_or_else(|| vec![nsh_base::registry()])
+        .unwrap_or_else(|| {
+            vec![nsh_base::registry_of([
+                nsh_base::parts::core as nsh_base::parts::Part
+            ])]
+        })
 }
 
 /// What [`run_app`] runs.
@@ -137,17 +146,16 @@ pub struct AppOptions {
     /// embedded in a host app) unless set; the development host runs
     /// apps on their own, with none ([`Limits::standalone`]). See [`AppView::set_limits`].
     pub limits: Limits,
-    /// Where the apps it runs keep their data, each in `<dir>/<app id>`
-    /// (`nsh.json` `"id"`, which travels with the bundle): `None` uses the
-    /// system's data directory ([`nsh_engine::data_dir`]); an app that
-    /// embeds nsh gives its own (its data directory + `/nsh`, say).
-    pub data_dir: Option<PathBuf>,
     /// Where the apps it runs keep their caches (the images they
     /// downloaded) and how much each keeps: by default the system's cache
     /// directory, each app's in `<dir>/<app id>`. See [`AppView::set_cache`].
     pub cache: nsh_engine::CacheOptions,
+    /// The app's data directory, used as it is
+    /// ([`nsh_engine::EngineConfig::data_dir`]); `None`: the one under its
+    /// id in the system's directory for apps' data.
+    pub data_dir: Option<PathBuf>,
     /// The apps' storage (`nsh/storage`), overriding the `storage.json` in
-    /// their directory of [`data_dir`](Self::data_dir).
+    /// their data directory.
     pub storage: Option<Arc<dyn nsh_engine::StorageBackend>>,
     /// What the embedding app gives the engines of the views made with
     /// these options ([`nsh_engine::EngineConfig::context`]): its UI sets'
@@ -170,6 +178,43 @@ pub struct AppOptions {
     /// same app itself. The apps' `windows` capability limits what they
     /// may open either way.
     pub windows: Option<Arc<dyn nsh_core::desktop::WindowBackend>>,
+    /// Runs [`run_app`]'s app in the background: it never becomes the
+    /// active app (on macOS its activation policy is `Prohibited`) and its
+    /// windows show without taking the keyboard from the app the user works
+    /// in, while the window that would have it reads as focused to the app.
+    /// `nsh test --target gpui` sets it (the development host's
+    /// `--background`), so tests leave the keyboard where it is; the test
+    /// agent's input goes to the window directly. Views embedded in an app
+    /// of the embedder's ([`AppView::new`]) ignore it. False by default.
+    pub background: bool,
+    /// The display [`run_app`]'s windows open on, centered: the main window
+    /// and the app's own windows that name no display or position of their
+    /// own. `None` (the default), or a display that is not there, centers
+    /// them on the primary display. `nsh test --target gpui` sets it (a
+    /// secondary display, unless `--display` names one; the development
+    /// host's `--display`), so a test run's windows keep off the screen in
+    /// use.
+    pub display: Option<WindowDisplay>,
+    /// Keeps [`run_app`]'s windows at the size they open at when they do
+    /// not fit on their display, where they would be made to fit it (and
+    /// on macOS AppKit shrinks a window taller than its screen as it shows
+    /// it): a test's app lays out in the room it asked for. False by
+    /// default; `nsh test --target gpui` sets it (the development host's
+    /// `--keep-window-size`).
+    pub keep_size: bool,
+}
+
+/// The display a window opens on ([`AppOptions::display`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum WindowDisplay {
+    /// The display at this index of the system's list, the primary display
+    /// (on macOS the one with the menu bar) first.
+    Index(usize),
+    /// The first display of the list besides the primary one that does not
+    /// mirror it (shows the same part of the desktop); the primary one when
+    /// there is no other.
+    Secondary,
 }
 
 impl std::fmt::Debug for AppOptions {
@@ -191,6 +236,9 @@ impl std::fmt::Debug for AppOptions {
             .field("host", &self.host)
             .field("transparent", &self.transparent)
             .field("windows", &self.windows.is_some())
+            .field("background", &self.background)
+            .field("display", &self.display)
+            .field("keep_size", &self.keep_size)
             .finish()
     }
 }
@@ -207,13 +255,16 @@ impl Default for AppOptions {
             appearance: Appearance::System,
             fps: false,
             limits: Limits::default(),
-            data_dir: None,
             cache: Default::default(),
+            data_dir: None,
             storage: None,
             context: Default::default(),
             host: nsh_engine::HostChannel::default(),
             transparent: false,
             windows: None,
+            background: false,
+            display: None,
+            keep_size: false,
         }
     }
 }
@@ -246,7 +297,8 @@ pub enum CloseRequest {
 ///   focus into it (and through its text fields), and on out of it after
 ///   the last one. A press on it focuses it.
 /// - [`AppView::set_theme`] / [`AppView::set_theme_json`] give the app the
-///   embedding app's theme (gpui-kit's theme format) and
+///   embedding app's theme (gpui-kit's theme format),
+///   [`AppView::set_theme_overrides`] only the tokens it names, and
 ///   [`AppView::set_appearance`] its light or dark mode.
 /// - What the app tells the embedding app goes through the native
 ///   components the latter registers ([`AppView::register_component`]):
@@ -308,6 +360,7 @@ impl AppView {
             .detach();
         bind_keys(cx);
         let surface = Surface::new(initial_environment());
+        crate::chrome::set_app_name(&surface, &options.title);
         surface.appearance.set(options.appearance);
         surface.transparent.set(options.transparent);
         if options.fps || nsh_engine::perf::enabled_by_env() {
@@ -491,9 +544,8 @@ impl AppView {
     /// at once to what runs and to every app loaded later, from its first
     /// frame on.
     pub fn set_theme(&self, theme: Option<Theme>, cx: &mut GpuiApp) {
-        *self.surface.host_theme.borrow_mut() = theme.clone();
-        self.surface
-            .control(|c| c.set_tokens(theme.map(Theme::into_tokens)));
+        *self.surface.host_theme.borrow_mut() = theme;
+        self.surface.host_tokens_changed();
         self.surface.invalidate();
         crate::rt::flush(cx);
     }
@@ -504,6 +556,28 @@ impl AppView {
     pub fn set_theme_json(&self, json: &str, cx: &mut GpuiApp) -> Result<(), ThemeError> {
         let theme = Theme::from_json(json)?;
         self.set_theme(Some(theme), cx);
+        Ok(())
+    }
+
+    /// The embedding app's theme overrides: a theme file of shadcn/ui's
+    /// (`{ "cssVars": { "theme": { … }, "light": { … }, "dark": { … } } }`,
+    /// values as CSS writes them, as `nsh.json`'s `"theme"`), whose tokens
+    /// win over the app's of the same names, light and dark, while the
+    /// app's others stay (a brand's `primary` and `radius`). Classes naming
+    /// them (`bg-primary`) are resolved again at once, and every app loaded
+    /// later starts with them. With a theme of the embedding app's
+    /// ([`AppView::set_theme`]) they win over that one's tokens instead;
+    /// each stays when the other changes. `None` gives the app its own
+    /// theme back. Fails, changing nothing, on a file that does not parse.
+    pub fn set_theme_overrides(
+        &self,
+        json: Option<&str>,
+        cx: &mut GpuiApp,
+    ) -> Result<(), ThemeError> {
+        let tokens = json.map(nsh_base::theme_overrides).transpose()?;
+        *self.surface.host_overrides.borrow_mut() = tokens;
+        self.surface.host_tokens_changed();
+        crate::rt::flush(cx);
         Ok(())
     }
 
@@ -829,6 +903,12 @@ impl gpui::EntityInputHandler for AppView {
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The frame this render draws is presented by the next frame's
+        // callback: the process's first is logged there.
+        static FIRST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+        if FIRST.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            window.on_next_frame(|_, _| nsh_engine::perf::first_frame());
+        }
         let surface = SurfaceElement {
             surface: self.surface.clone(),
             focus: self.focus.clone(),
@@ -889,6 +969,8 @@ fn initial_environment() -> Environment {
         },
         idiom: Idiom::Desktop,
         file_requests: true,
+        // Replayed with tiny-skia, as canvas views are.
+        canvas_render: true,
         // wry, in builds with it.
         web_views: cfg!(feature = "webview"),
         // wgpu, until it finds no GPU.
@@ -940,8 +1022,10 @@ fn open(
     };
     let mut window_options = main_window_options(&options, &main, cx);
     if let Some(p) = placement {
-        window_options.window_bounds = Some(crate::window::gpui_window_bounds(p));
-        window_options.display_id = None;
+        let screens = crate::window::screen::screens(cx);
+        let (bounds, display) = crate::window::place_window(p, &screens);
+        window_options.window_bounds = Some(bounds);
+        window_options.display_id = display;
     }
     // nsh.json `window.defaultVisible: false`: the window opens hidden and
     // the app runs in it, unseen, until it shows it (a tray app). A
@@ -951,7 +1035,8 @@ fn open(
     let held = app.is_err() && !SHOWN_AS_OPENED;
     let shown = !held && (main.visible_at_launch() || SHOWN_AS_OPENED);
     window_options.show = shown;
-    window_options.focus = shown;
+    // A background app's window shows without the keyboard ([`run_app`]).
+    window_options.focus = shown && !options.background;
     if !held && !shown {
         log::info!("the main window starts hidden (nsh.json window.defaultVisible: false)");
     }
@@ -1010,7 +1095,11 @@ fn engine_config(options: &AppOptions, app: App) -> EngineConfig {
         viewport: nsh_core::Size::default(),
         trace: options.trace,
         content_culling: true,
-        network: Some(nsh_engine::net::network()),
+        // Without `net`, `fetch` rejects and remote images fail.
+            #[cfg(feature = "net")]
+            network: Some(nsh_engine::net::network()),
+            #[cfg(not(feature = "net"))]
+            network: None,
         websocket: None,
         refuse_connections: None,
         filesystem: None,
@@ -1021,7 +1110,8 @@ fn engine_config(options: &AppOptions, app: App) -> EngineConfig {
         limits: options.limits,
         ui_sets: ui_sets(),
         runtime: None,
-        data_dir: options.data_dir.clone().or_else(nsh_engine::data_dir),
+        support_dir: nsh_engine::support_dir(),
+        data_dir: options.data_dir.clone(),
         cache: options.cache.clone(),
         storage: options.storage.clone(),
         clock: Default::default(),
@@ -1033,6 +1123,7 @@ fn engine_config(options: &AppOptions, app: App) -> EngineConfig {
         speech: None,
         audio: None,
         windows: options.windows.clone(),
+        login_item: None,
     }
 }
 
@@ -1062,11 +1153,24 @@ fn main_window_options(
             })
             .map(|d| d.id())
     });
+    // The app's display, else, for a window centered on its display, the
+    // one the windows open on (a test's).
+    let mut display = display.or_else(|| {
+        (!matches!(main.default_position, Some(WindowPosition::At(_))))
+            .then(|| crate::window::default_display(cx))
+            .flatten()
+    });
     let bounds = match main.default_position {
+        // A point of the screen: on the display it is on, in its
+        // coordinates.
         Some(WindowPosition::At(p)) => {
-            gpui::Bounds::new(gpui::point(gpui::px(p.x.0), gpui::px(p.y.0)), size)
+            let at = gpui::Bounds::new(gpui::point(gpui::px(p.x.0), gpui::px(p.y.0)), size);
+            let (on, bounds) =
+                crate::window::screen::place(&crate::window::screen::screens(cx), at);
+            display = on.or(display);
+            bounds
         }
-        _ => gpui::Bounds::centered(display, size, cx),
+        _ => crate::window::centered(display, size, cx),
     };
     let window_bounds = match main.default_mode {
         Some(WindowMode::Maximized) => gpui::WindowBounds::Maximized(bounds),
@@ -1114,7 +1218,19 @@ pub fn run_app(source: AppSource, options: AppOptions) -> std::process::ExitCode
             }
         })
         .detach();
+        let background = options.background;
+        if background {
+            crate::window::run_in_background(cx);
+        }
+        crate::window::place_windows(options.display, options.keep_size, cx);
         match open(source, options, cx) {
+            // Shown without activating anything: the window that would have
+            // the keyboard.
+            Ok((handle, true)) if background => {
+                let _ = handle.update(cx, |_, window, cx| {
+                    crate::window::show_window(window, true, cx)
+                });
+            }
             Ok((_, true)) => cx.activate(true),
             // Hidden: the app stays where the user is.
             Ok((_, false)) => {}

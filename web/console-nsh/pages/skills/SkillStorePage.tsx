@@ -6,7 +6,7 @@ import { batch, computed, effect, keymap, LayoutAnimation, reduceMotion, signal,
 import { Button as BaseButton, Sheet } from "nsh/base";
 import { Blocks, gutterX, gutterY, Note, ROW_TRANSITION, SearchField, t, WorkspaceTitle } from "../../components/knowledge/parts";
 import { EdgeScroll, MOTION_SLOW } from "../../components/motion";
-import { BackButton, Button, circleButtonClass, Icon, Page } from "../../components/ui";
+import { BackButton, Button, circleButtonClass, closeDialogOverSheet, Icon, Page } from "../../components/ui";
 import { endpointApiFetch, endpointState, formatBytes, runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -341,7 +341,7 @@ export function SkillStorePage() {
         open={isMobile() && Boolean(selected())}
         side="right"
         onOpenChange={({ open: next }) => {
-          if (!next) close();
+          if (!next && !closeDialogOverSheet()) close();
         }}
         backdropClass="bg-black/24"
         popupClass="h-full w-[92%] max-w-[440px] pb-1 pr-1 pt-1.5"

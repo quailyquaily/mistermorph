@@ -1422,7 +1422,9 @@ mod os {
 pub(crate) fn command(surface: &Rc<Surface>, _id: NodeId, command: &Command) {
     match command {
         Command::Dialog(dialog) => show_dialog(surface, dialog),
-        Command::SetClipboard(text) => {
+        Command::CloseDialog(dialog) => close_dialog(surface, *dialog),
+        // GPUI's clipboard items hold no HTML: the text only.
+        Command::SetClipboard(text) | Command::SetClipboardItem(nsh_core::element::ClipboardItem { text, .. }) => {
             let text = text.clone();
             crate::rt::on_app(move |cx| {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
@@ -1493,6 +1495,21 @@ pub(crate) fn command(surface: &Rc<Surface>, _id: NodeId, command: &Command) {
         Command::PickImages { id, request } => pick_images(surface, *id, *request),
         Command::PickFiles { id, request } => pick_files(surface, *id, request.clone()),
         Command::FileRequest { id, request } => file_request(surface, *id, request),
+        Command::RenderCanvas {
+            id,
+            drawing,
+            width,
+            height,
+            scale,
+            format,
+        } => crate::canvas::render_offscreen(
+            surface,
+            *id,
+            drawing.clone(),
+            (*width, *height),
+            *scale,
+            *format,
+        ),
         Command::ExitApp => {
             // The window goes after the batch is applied (closing it stops
             // the surface). An embedded surface closes the window it is in,
@@ -1511,7 +1528,10 @@ pub(crate) fn command(surface: &Rc<Surface>, _id: NodeId, command: &Command) {
         Command::StatusBar(_)
         | Command::SetStatusBar(_)
         | Command::LayoutAnimation(_)
-        | Command::CancelPress => {}
+        | Command::CancelPress
+        // The app's address: this platform keeps none.
+        | Command::SetAppUrl(_)
+        | Command::PushAppUrl(_) => {}
         other => log::debug!("gpui: command {other:?} is not supported"),
     }
 }
@@ -1888,6 +1908,23 @@ fn add_overlay(surface: &Rc<Surface>, serial: u64, kind: OverlayKind) {
     } else {
         kind.opacity().set(0.0);
         fade(surface, serial, 1.0, FADE_IN, false);
+    }
+}
+
+/// Takes back the dialog [`show_dialog`] showed as `id`
+/// (`Command::CloseDialog`): it fades out as an answered one does, and
+/// reports nothing (the core answered it).
+fn close_dialog(surface: &Rc<Surface>, id: u32) {
+    let serial = OVERLAYS.with(|o| {
+        o.borrow().iter().find_map(|o| match &o.kind {
+            OverlayKind::Dialog(d) if o.key == surface.key() && d.id == id && !d.closing.get() => {
+                Some(o.serial)
+            }
+            _ => None,
+        })
+    });
+    if let Some(serial) = serial {
+        remove_overlay(surface, serial);
     }
 }
 
@@ -2855,6 +2892,22 @@ fn show_dialog(surface: &Rc<Surface>, dialog: &Dialog) {
         labels: buttons.iter().map(|b| b.text.clone()).collect(),
     });
     add_overlay(surface, serial, OverlayKind::Dialog(item));
+}
+
+/// Whether the newest dialog on `surface` was drawn (laid out), or there
+/// is none.
+#[cfg(feature = "dev")]
+pub(crate) fn dialog_drawn(surface: &Surface) -> bool {
+    OVERLAYS
+        .with(|o| {
+            o.borrow().iter().rev().find_map(|o| match &o.kind {
+                OverlayKind::Dialog(d) if o.key == surface.key() && !d.closing.get() => {
+                    Some(d.layout.borrow().is_some())
+                }
+                _ => None,
+            })
+        })
+        .unwrap_or(true)
 }
 
 /// Where a user presses to answer the newest dialog on `surface` (root

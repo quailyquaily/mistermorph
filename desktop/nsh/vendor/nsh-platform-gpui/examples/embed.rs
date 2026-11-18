@@ -37,6 +37,9 @@ fn main() {
     };
     use serde_json::{Value, json};
 
+    // The app's JS may import any part of `nsh/base`.
+    nsh_platform_gpui::set_ui_sets(vec![nsh_base::registry()]);
+
     /// How long the badge flashes after `pulse`.
     const PULSE: f32 = 0.35;
 

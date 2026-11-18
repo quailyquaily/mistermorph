@@ -46,7 +46,8 @@ test("the label is the icon button's tooltip, even beside a title; a title names
   await app.hover("id:both-titled");
   await app.waitUntil(() => shown("Stop"));
   expect(shown("Stop this run")).toBe(false);
-  expect(shown("Refresh")).toBe(false);
+  // The last tooltip goes out over a few frames (nsh 0.6), not at once.
+  await app.waitUntil(() => !shown("Refresh"));
 
   // Without a label, the title is the tooltip.
   await app.hover("id:icon-only");

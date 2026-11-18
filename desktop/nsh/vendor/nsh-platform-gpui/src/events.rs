@@ -81,6 +81,14 @@ fn gesture_phase(phase: TouchPhase) -> GesturePhase {
     }
 }
 
+/// Whether a press moves the window's focus to the surface. A press on
+/// content that cannot take the focus leaves it where the host put it (an
+/// editor next to an embedded surface keeps its caret, #1926); with nothing
+/// focused, or on a focusable view, the surface takes it.
+fn takes_focus(focused: bool, other: bool, focusable: impl FnOnce() -> bool) -> bool {
+    !focused && (!other || focusable())
+}
+
 /// Points the surface's hitbox: the cursor over `(x, y)` (root
 /// coordinates) for the next frame, which is drawn when it changed.
 fn update_cursor(surface: &Rc<Surface>, x: f32, y: f32) {
@@ -166,7 +174,7 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
     }
     // The focused field's caret shows while the surface has the window's
     // focus; text and input methods come through the input handler.
-    let has_focus = window.is_window_active() && focus.is_focused(window);
+    let has_focus = crate::window::is_active(window, cx) && focus.is_focused(window);
     if crate::text_input::window_focus(surface, has_focus) {
         window.refresh();
     }
@@ -202,10 +210,12 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
             cx.stop_propagation();
             return;
         }
-        if !f.is_focused(window) {
+        let (x, y) = root_point(&s, e.position);
+        if takes_focus(f.is_focused(window), window.focused(cx).is_some(), || {
+            crate::input::focusable_at(&s, x, y)
+        }) {
             window.focus(&f, cx);
         }
-        let (x, y) = root_point(&s, e.position);
         if button == 0 && s.input_pressed.get() & 1 != 0 {
             cancel_press(&s, &e.modifiers);
         }
@@ -407,7 +417,7 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
                 nsh_core::WheelDelta::Lines(nsh_core::geometry::point(-l.x, -l.y))
             }
         };
-        if crate::input::wheel_event(&s, &event, delta) {
+        let handled = if crate::input::wheel_event(&s, &event, delta, precise.then_some(phase)) {
             // The view took it; a gesture going on elsewhere still ends.
             if precise && matches!(phase, GesturePhase::Ended | GesturePhase::Cancelled) {
                 let end = WheelEvent {
@@ -421,14 +431,19 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
                     crate::input::touchpad(&s, end, phase);
                 }
             }
+            true
         } else if lifted {
-            crate::input::touchpad_lifted(&s, event);
+            crate::input::touchpad_lifted(&s, event)
         } else if precise {
-            crate::input::touchpad(&s, event, phase);
+            crate::input::touchpad(&s, event, phase)
         } else {
-            crate::input::wheel(&s, event);
+            crate::input::wheel(&s, event)
+        };
+        // Unhandled, it goes on to what is under the surface: the host
+        // view embedding it scrolls (#1927).
+        if handled {
+            cx.stop_propagation();
         }
-        cx.stop_propagation();
         crate::rt::flush(cx);
     });
 
@@ -457,26 +472,31 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
             return;
         }
         crate::chrome::key_pressed(&s);
-        let Some(vk) = crate::keys::vk_of(&e.keystroke.key) else {
+        if crate::window::blocked(&s, root, cx) {
             return;
-        };
+        }
+        // The key as GPUI reported it. A printable key nsh has no virtual
+        // key code for (`?`, `é`) still runs the app's bindings, by its
+        // canonical stroke, and reaches the focused view; a key with a code
+        // keeps the code's meaning. Only the keymap or a listener needs it.
+        let vk = crate::keys::vk_of(&e.keystroke.key);
+        let wants_raw =
+            crate::input::hears_keys(&s) || (vk.is_none() && crate::keymap::mounted(&s));
+        let raw = wants_raw.then(|| crate::keys::RawKey::down(&e.keystroke, e.is_held));
         let event = KeyEvent {
-            vk,
+            vk: vk.unwrap_or(0),
             down: true,
             repeat: e.is_held,
             modifiers: crate::keys::modifiers(&e.keystroke.modifiers),
         };
-        if crate::window::blocked(&s, root, cx) {
-            return;
-        }
         let handled = if crate::native::focused(&s, window) {
-            crate::input::component_key(&s, event)
+            crate::input::component_key(&s, event, raw.as_ref())
         } else {
-            crate::input::key(&s, event)
+            crate::input::window_key(&s, event, raw)
         };
         // Escape nothing took closes a window that says so.
         let handled = handled
-            || (vk == crate::keys::VK_ESCAPE
+            || (vk == Some(crate::keys::VK_ESCAPE)
                 && !e.is_held
                 && crate::window::escape(&s, root, window, cx));
         if handled {
@@ -492,19 +512,27 @@ pub(crate) fn install<V: gpui::EntityInputHandler>(
         if phase != DispatchPhase::Bubble {
             return;
         }
-        let Some(vk) = crate::keys::vk_of(&e.keystroke.key) else {
-            return;
-        };
+        let vk = crate::keys::vk_of(&e.keystroke.key);
+        let wants_raw =
+            crate::input::hears_keys(&s) || (vk.is_none() && crate::keymap::mounted(&s));
+        let raw = wants_raw.then(|| crate::keys::RawKey::up(&e.keystroke));
         let event = KeyEvent {
-            vk,
+            vk: vk.unwrap_or(0),
             down: false,
             repeat: false,
             modifiers: crate::keys::modifiers(&e.keystroke.modifiers),
         };
-        if crate::native::focused(&s, window) {
-            crate::input::component_key(&s, event);
+        // A release a capture rule took is kept from the window's own
+        // handlers, as a captured press is; so is the Alt release the
+        // window swallows once Alt + key was ours.
+        let handled = if crate::native::focused(&s, window) {
+            crate::input::component_key(&s, event, raw.as_ref())
         } else {
-            crate::input::key(&s, event);
+            crate::input::window_key(&s, event, raw)
+        };
+        if handled {
+            cx.stop_propagation();
+            window.prevent_default();
         }
         crate::rt::flush(cx);
     });
@@ -587,5 +615,16 @@ mod tests {
         let (dx, dy, precise) = scroll_amounts(pixels(0.0, 0.01), false);
         assert!(dy < 0.0);
         assert!(!touchpad_lift(dx, dy, precise));
+    }
+
+    #[test]
+    fn press_keeps_the_hosts_focus_on_unfocusable_content() {
+        // #1926: the host's editor keeps its focus.
+        assert!(!takes_focus(false, true, || false));
+        // A field, or nothing focused yet: the surface takes it.
+        assert!(takes_focus(false, true, || true));
+        assert!(takes_focus(false, false, || false));
+        // Already focused: nothing to do.
+        assert!(!takes_focus(true, false, || true));
     }
 }

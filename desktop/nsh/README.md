@@ -19,7 +19,7 @@ stops it on quit.
 ## Build
 
 Needs Rust (the toolchain in `rust-toolchain.toml` is installed by rustup on first use),
-[nsh 0.5.1](https://nsh.dev/docs/installation), Node (for `scripts/generate.mjs`) and Go.
+[nsh 0.6.0](https://nsh.dev/docs/installation), Node (for `scripts/generate.mjs`) and Go.
 
 On Ubuntu or Debian, GPUI also needs these development packages:
 
@@ -113,7 +113,7 @@ quits.
 
 ## Patches to nsh-platform-gpui
 
-`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.5.1 with the patches in `patches/` applied, wired
+`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.6.0 with the patches in `patches/` applied, wired
 in through `[patch.crates-io]` in Cargo.toml. Drop the vendored copy once nsh or GPUI Fast ship
 these. To rebuild it: copy the crate from the cargo registry to `crates/gpui/nsh-platform-gpui` in a
 scratch git repo, `git apply` each patch in order, and copy the result back.

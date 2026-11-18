@@ -135,7 +135,7 @@ Run the first build by hand instead of waiting for a release tag:
    The build number comes from the version (`0.3.118` is build 3118), and App Store Connect accepts each build number once. A released version is safe to reuse because its tag has already run. Don't enter the next version: the trial would take its build number, and that release's upload would then fail. A failed upload doesn't use up the number, so you can rerun the same version until one succeeds.
 
 3. Click **Run workflow** and wait for the run to finish (a few minutes).
-4. Read the **Build Morph.ipa** step's log. Two warnings matter here; see "Known gaps" below.
+4. Read the **Build Morph.ipa** step's log. Any `warning:` line there matters; see "Known gaps" below.
 5. The `.ipa` is also saved as the run's **Morph-ios** artifact, kept for 7 days.
 
 After a successful upload, the build shows up in App Store Connect → your app → **TestFlight** as **Processing**. Processing usually takes 5–30 minutes. Apple emails you if it rejects the build.
@@ -190,7 +190,7 @@ Without this, the review fails under Guideline 2.1 (App Completeness), because t
 2. **Screenshots**: upload iPhone screenshots at 6.9-inch (1320 × 2868) or 6.5-inch (1284 × 2778) size; the page lists the sizes it accepts. Without a Mac, take them on an iPhone running the TestFlight build. A Pro Max model gives the 6.9-inch size directly. If the build also runs on iPad, App Store Connect asks for 13-inch iPad screenshots too.
 3. Fill in **Promotional Text** (optional), **Description**, **Keywords**, **Support URL** and **Marketing URL** (optional).
 4. **Build**: click **+** next to **Build** and pick the TestFlight build you tested.
-5. **App Review Information**: the same sign-in details as in Part 9 (server address, username, password). In **Notes**, explain that the app is a client for a self-hosted Mister Morph server, and that the demo server is provided for review.
+5. **App Review Information**: the same sign-in details as in Part 9 (server address, username, password). In **Notes**, explain that the app is a client for a self-hosted Mister Morph server, and that the demo server is provided for review. Also say why it allows plain http (`NSAllowsArbitraryLoads`): users run the server themselves, often on their own local network at an address of their choosing, and `morph console serve` serves plain http unless they put it behind a TLS proxy. App Review asks for this reason.
 6. **Version Release**: choose **Manually release this version** for the first time, so you control the launch day.
 7. In the left column, fill in:
    - **App Information**: category (Productivity or Developer Tools), content rights, **age rating** questionnaire
@@ -222,7 +222,7 @@ Renewals:
 
 The iOS app had never been built when this guide was written. These might show up on the first TestFlight build:
 
-- **Plain `http://` servers**: iOS blocks plain http unless the app's `Info.plist` allows it (App Transport Security). If the build prints `warning: Info.plist allows no plain http://`, the app can reach only **https** servers. For a LAN server, put it behind https, or have nsh add `NSAllowsLocalNetworking`.
+- **Plain `http://` servers**: `morph console serve` has no TLS of its own, so a server reached directly on the local network is plain http, which iOS blocks by default (App Transport Security). `web/console-nsh/nsh.json` turns that off (`ios.infoPlist`: `NSAllowsArbitraryLoads`), with `NSLocalNetworkUsageDescription` for the local network prompt iOS shows on the first LAN connection. If the build prints `warning: Info.plist allows no plain http://`, nsh dropped that setting.
 - **Microphone text**: if the build prints `warning: Info.plist has no NSMicrophoneUsageDescription`, App Store Connect may reject the upload with ITMS-90683, and voice input can't ask for the microphone.
 - **Features from the Android app's own code**: voice recording, task notifications and saving files come from the Android app's Java (`web/console-nsh/android/src`), and iOS has nothing in their place. On iOS, saving files says it's unavailable and there are no task notifications.
 - **Shell version**: Settings → System → Updates shows the iOS app's version as Unknown (see [App](app.md)).

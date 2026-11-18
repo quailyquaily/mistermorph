@@ -1168,18 +1168,34 @@ fn fetch(
 /// Loads the bitmap `uri` (`https://…`, `asset:/…`, a file path, `data:`)
 /// for a canvas off the main thread, at its natural size; `done` runs on
 /// the main thread with the image (every frame of an animation: frame 0
-/// is the first). An SVG is rasterized by the shared SVG renderer and
-/// handed over as its bitmap.
+/// is the first) and how many of its pixels make one unit of the image's
+/// own size (1 for a bitmap decoded whole, whose units are its pixels). An
+/// SVG is rasterized by the shared SVG renderer at `scale` pixels per point
+/// (the canvas's), so that it stays sharp on the screen, and handed over
+/// as its bitmap.
 ///
 /// A cached image is handed over before this returns: callers must not
 /// hold a borrow of view state that `done` takes.
 pub(crate) fn load_bitmap(
     surface: &Rc<Surface>,
     uri: &str,
-    done: impl FnOnce(Result<Rc<Texture>, String>) + 'static,
+    scale: f32,
+    done: impl FnOnce(Result<(Rc<Texture>, f64), String>) + 'static,
 ) {
     let done = move |result: Result<(Picture, Lease), String>| {
-        done(result.map(|(p, _)| p.texture.clone()))
+        done(result.map(|(p, _)| {
+            // What it was decoded at over its own size.
+            let own = match p.natural {
+                Natural::Vector(points) => f64::from(points.width.0),
+                Natural::Pixels(width, _) => f64::from(width),
+            };
+            let scale = if own > 0.0 {
+                f64::from(p.pixels.0) / own
+            } else {
+                1.0
+            };
+            (p.texture.clone(), scale)
+        }))
     };
     let source = ImageSource {
         uri: uri.into(),
@@ -1191,7 +1207,7 @@ pub(crate) fn load_bitmap(
     if let Some(load) = fetch(
         surface,
         &source,
-        Want::natural(1.0),
+        Want::natural(scale.max(1.0)),
         Frames::First,
         Priority::Normal,
         None,

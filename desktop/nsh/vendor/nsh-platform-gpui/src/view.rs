@@ -151,7 +151,11 @@ impl ViewState {
             shift: (0.0, 0.0),
             fade: 1.0,
             concealed: false,
-            scroll: matches!(kind, ViewKind::Scroll).then(ScrollState::default),
+            scroll: matches!(kind, ViewKind::Scroll).then(|| {
+                let mut s = ScrollState::default();
+                s.can_zoom = true;
+                s
+            }),
             text: None,
             image: None,
             canvas: None,
@@ -261,12 +265,21 @@ impl ViewState {
 
     /// Where a child at `frame` (with its `shift`) goes in this view's
     /// coordinates: its frame's origin, less the scroll offset, mirrored in
-    /// a right-to-left list.
+    /// a right-to-left list; in a zoomed scroll view, where its zoomed
+    /// origin shows ([`ViewState::child_scale`]).
     pub(crate) fn child_origin(
         &self,
         frame: nsh_core::Bounds<Points>,
         shift: (f32, f32),
     ) -> (f32, f32) {
+        if let Some(s) = self.scroll.as_ref().filter(|s| s.zooms() || s.zoom != 1.0) {
+            let at = nsh_core::geometry::point(
+                frame.origin.x + Points(shift.0),
+                frame.origin.y + Points(shift.1),
+            );
+            let p = s.to_viewport(self.frame.size, at);
+            return (p.x.0, p.y.0);
+        }
         let (sx, sy) = self.scroll.as_ref().map_or((0.0, 0.0), |s| {
             let o = s.origin();
             (o.x.0, o.y.0)
@@ -276,6 +289,28 @@ impl ViewState {
             x = self.frame.size.width.0 - x - frame.size.width.0;
         }
         (x, frame.origin.y.0 - sy + shift.1)
+    }
+
+    /// How much the children are scaled: a zoomed scroll view's zoom, 1
+    /// for any other view.
+    pub(crate) fn child_scale(&self) -> f32 {
+        self.scroll.as_ref().map_or(1.0, |s| s.zoom)
+    }
+
+    /// The transform from `child`'s coordinates to this view's: its
+    /// transform, the zoom ([`ViewState::child_scale`]) and its place
+    /// ([`ViewState::child_origin`]).
+    pub(crate) fn child_matrix(&self, child: &ViewState) -> Mat4 {
+        let (x, y) = self.child_origin(child.frame, child.shift);
+        let mut local = Mat4::new().translate(x, y);
+        let z = self.child_scale();
+        if z != 1.0 {
+            local = local.scale(z, z);
+        }
+        match child.transform() {
+            Some(t) => Mat4::mul(&t, &local),
+            None => local,
+        }
     }
 }
 
@@ -494,11 +529,7 @@ impl NshView {
                 drop(s);
                 return self.attached_root(&view).then_some(m);
             };
-            let (x, y) = parent.state().child_origin(s.frame, s.shift);
-            let mut local = Mat4::new().translate(x, y);
-            if let Some(t) = s.transform() {
-                local = Mat4::mul(&t, &local);
-            }
+            let local = parent.state().child_matrix(&s);
             drop(s);
             m = Mat4::mul(&m, &local);
             view = parent;
@@ -520,12 +551,7 @@ impl NshView {
         let mut view = self.clone();
         while let Some(parent) = view.parent_view() {
             {
-                let s = view.state();
-                let (x, y) = parent.state().child_origin(s.frame, s.shift);
-                let mut local = Mat4::new().translate(x, y);
-                if let Some(t) = s.transform() {
-                    local = Mat4::mul(&t, &local);
-                }
+                let local = parent.state().child_matrix(&view.state());
                 m = Mat4::mul(&m, &local);
             }
             let clip = {

@@ -3,6 +3,15 @@
 //! ([`crate::input`]), keys and text ([`crate::text_input`]), and pictures
 //! of the window. The agent of `nsh test --target gpui` acts with them
 //! ([`crate::agent`]).
+//!
+//! A test step's own key ([`press_keys`]) is a source like GPUI's: the
+//! step names the keystroke explicitly, so the press and release go
+//! through the same router a window's keys do ([`crate::input::window_key`])
+//! with a raw key built from that keystroke (`code` is empty, and the
+//! step generates exactly the down and up it names). The programmatic keys
+//! the agent presses for a step (`selectAll`, a line break, `clear`) take
+//! [`press`]: they are the platform's action, not a key a user typed, and
+//! send no raw notification.
 
 use std::{cell::Cell, rc::Rc, time::Duration};
 
@@ -36,7 +45,8 @@ pub(crate) async fn sleep(cx: &mut AsyncApp, ms: u64) {
 
 /// Waits until the window drew a frame with everything changed so far
 /// (false when the window closed). A window that draws no frames (hidden,
-/// minimized) is given up on after a second.
+/// minimized) is given up on after a second; a background app's (covered
+/// by the app in use) is drawn then.
 pub(crate) async fn drawn(window: AnyWindowHandle, cx: &mut AsyncApp) -> bool {
     // Next-frame callbacks run before their frame is drawn: the second
     // one runs once the frame the first one asked for is drawn.
@@ -53,16 +63,83 @@ pub(crate) async fn drawn(window: AnyWindowHandle, cx: &mut AsyncApp) -> bool {
     let start = std::time::Instant::now();
     while !done.get() {
         if start.elapsed() > Duration::from_secs(1) {
-            log::warn!("test: the window draws no frames");
-            break;
+            if !cx.update(|cx| crate::window::in_background(cx)) {
+                log::warn!("test: the window draws no frames");
+                break;
+            }
+            // Covered by other windows (a background app's under the app
+            // the user works in), hidden or minimized: drawn here, so its
+            // frame has everything changed so far.
+            log::debug!("test: the window draws no frames; drawing it");
+            return in_window(window, cx, |window, cx| window.draw(cx).clear(cx)).is_some();
         }
         sleep(cx, 4).await;
     }
     true
 }
 
-/// Presses and releases key `vk` in the surface's input root, as GPUI's
-/// key events reach it; true when the press was taken.
+/// Presses and releases the key a test step names (`keyboard.press`/`up`,
+/// `app.press`): the step's explicit keystroke is the source, so the key
+/// goes through the router real keys do ([`crate::input::window_key`]) with
+/// the raw key built from it ([`crate::keys::RawKey::requested`], no
+/// DOM code, a down then an up as the step generates them). A
+/// printable key nothing took types its character, as GPUI's input handler
+/// would. True when the press was taken.
+pub(crate) fn press_keys(surface: &Rc<Surface>, stroke: &nsh_core::keymap::Keystroke) -> bool {
+    let m = stroke.modifiers;
+    let modifiers = Modifiers {
+        shift: m.shift,
+        ctrl: m.ctrl,
+        alt: m.alt,
+        meta: m.cmd,
+    };
+    let vk = stroke.key.virtual_key().unwrap_or(0);
+    let handled = crate::input::window_key(
+        surface,
+        KeyEvent {
+            vk,
+            down: true,
+            repeat: false,
+            modifiers,
+        },
+        Some(crate::keys::RawKey::requested(stroke, true)),
+    );
+    // Unhandled printable keys type their character, as GPUI's input
+    // handler would get it.
+    if !handled
+        && !(modifiers.ctrl || modifiers.alt || modifiers.meta)
+        && let Some(ch) = typed(stroke)
+    {
+        crate::text_input::char_input(surface, &ch.to_string());
+    }
+    crate::input::window_key(
+        surface,
+        KeyEvent {
+            vk,
+            down: false,
+            repeat: false,
+            modifiers,
+        },
+        Some(crate::keys::RawKey::requested(stroke, false)),
+    );
+    handled
+}
+
+/// The character `stroke` types on the US layout, when it types one.
+fn typed(stroke: &nsh_core::keymap::Keystroke) -> Option<char> {
+    match stroke.key {
+        nsh_core::keymap::Key::Char(c) if stroke.modifiers.shift => {
+            Some(nsh_core::keymap::shifted(c))
+        }
+        nsh_core::keymap::Key::Char(c) => Some(c),
+        _ => None,
+    }
+}
+
+/// Presses and releases a programmatic key `vk` in the surface's input
+/// root, as the platform's own action (a menu role, a line break, select
+/// all): no raw notification follows, as no key source reported it. True
+/// when the press was taken.
 pub(crate) fn press(surface: &Rc<Surface>, vk: u16, modifiers: Modifiers) -> bool {
     let mut taken = false;
     for down in [true, false] {

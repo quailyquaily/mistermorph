@@ -396,7 +396,10 @@ async function pick(options: { accept?: string; multiple?: boolean; source?: str
     picked = (await Picker.pickImages({ multiple, format: "compatible" })).map(({ file }) => file);
   } else {
     const extensions = acceptExtensions(String(options?.accept || ""));
-    picked = (await Picker.pickFiles({ multiple, filters: extensions.length ? [{ name: "Files", extensions }] : null })).map(({ file }) => file);
+    // A file over 512 MiB comes back unread (nsh 0.6: `file` null, `status` "tooLarge"); it is left out.
+    picked = (await Picker.pickFiles({ multiple, filters: extensions.length ? [{ name: "Files", extensions }] : null }))
+      .map(({ file }) => file)
+      .filter((file): file is File => file !== null);
   }
   return picked.map((file) => {
     const id = `m${nextFileID++}`;

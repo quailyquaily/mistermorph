@@ -1744,6 +1744,24 @@ export function watchDialogs(watcher: ((name: string) => DialogProbe | undefined
 /** Android draws dialogs in an Overlay, not nsh's Dialog window (see DialogLayer). */
 const OVERLAY_DIALOGS = platform.os === "android";
 
+// Android: the open overlay dialogs' closers, oldest first; Back (an overlay's onCancel) closes the
+// newest. Since nsh 0.6 an nsh `Sheet` is a modal root, so Back reaches an open sheet before any
+// overlay in the page behind it, even one drawn over the sheet: with the rename dialog open from
+// the topic sheet, Back closed the sheet and left the dialog. The sheets ask `closeDialogOverSheet`
+// first (WorkspaceSheet, SidePane, the skill store's panel).
+const openOverlayDialogs: (() => void)[] = [];
+const cancelNewestOverlayDialog = () => openOverlayDialogs[openOverlayDialogs.length - 1]?.();
+
+/**
+ * For an nsh `Sheet`'s close request (`onOpenChange` to closed: Back, Escape): when one of these
+ * dialogs is open over it (Android), closes that dialog instead and returns true; the sheet stays.
+ */
+export function closeDialogOverSheet(): boolean {
+  if (!openOverlayDialogs.length) return false;
+  cancelNewestOverlayDialog();
+  return true;
+}
+
 export function DialogLayer(props: {
   open: boolean;
   onClose: () => void;
@@ -1760,6 +1778,17 @@ export function DialogLayer(props: {
 }) {
   const shown = signal(untracked(() => props.open));
   trackPopup(() => props.open);
+  if (OVERLAY_DIALOGS) {
+    effect(() => {
+      if (!props.open) return;
+      const close = () => props.onClose();
+      openOverlayDialogs.push(close);
+      cleanup(() => {
+        const at = openOverlayDialogs.indexOf(close);
+        if (at >= 0) openOverlayDialogs.splice(at, 1);
+      });
+    });
+  }
   const panel = createMotion({ initial: { opacity: 0 } });
   const probe = untracked(() => props.probe ?? dialogWatcher?.(props.testID ?? props.label ?? ""));
   probe?.motion?.(panel);
@@ -1927,7 +1956,8 @@ export function DialogLayer(props: {
   return (
     // Android: nsh 0.4.0's Dialog is a window of its own below the status bar, and presses in it
     // land one status bar higher than what is drawn (a press on a footer button hits the row above
-    // it), so the layer is an Overlay over the app's own view there; Back still asks (onCancel).
+    // it), so the layer is an Overlay over the app's own view there; Back still asks (onCancel), and
+    // closes the newest open dialog (openOverlayDialogs).
     <If
       when={OVERLAY_DIALOGS}
       else={
@@ -1951,7 +1981,7 @@ export function DialogLayer(props: {
       }
     >
       <If when={shown()}>
-        <Overlay onCancel={() => props.onClose()} testID={props.testID} class={layerClass()} style={layerStyle()}>
+        <Overlay onCancel={cancelNewestOverlayDialog} testID={props.testID} class={layerClass()} style={layerStyle()}>
           {layer()}
         </Overlay>
       </If>
@@ -2458,7 +2488,7 @@ export function SidePane(props: {
         open={props.open}
         side="right"
         onOpenChange={({ open }) => {
-          if (!open) props.onClose();
+          if (!open && !closeDialogOverSheet()) props.onClose();
         }}
         backdropClass="bg-scrim"
         popupClass={`h-full w-[88%] max-w-md border-l border-line bg-card ${props.class ?? ""}`}

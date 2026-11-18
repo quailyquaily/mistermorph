@@ -34,5 +34,13 @@
   },
   "web": {
     "host": "./host.js"
+  },
+  "ios": {
+    "infoPlist": {
+      "NSAppTransportSecurity": {
+        "NSAllowsArbitraryLoads": true
+      },
+      "NSLocalNetworkUsageDescription": "Morph connects to your Mister Morph server on the local network."
+    }
   }
 }

@@ -26,10 +26,16 @@ async function openList(options: (typeof SCREENS)[number]["options"]) {
 // the new offset back, so positions (and `onScroll`) lag until the next scroll. A nudge of a point
 // and back reports it: what the reader would see after the update.
 async function snap(app: App): Promise<Report> {
-  try {
-    await app.scroll("id:chat-history", -1);
-    await app.scroll("id:chat-history", 1);
-  } catch {
+  const nudge = (by: number) =>
+    app.scroll("id:chat-history", by).then(
+      () => true,
+      () => false,
+    );
+  if (await nudge(-1)) {
+    // At the newest message the list may already have gone back down (nsh 0.6 reports its own
+    // correction at once), leaving nothing to scroll: it is where the reader sees it.
+    await nudge(1);
+  } else {
     // At the very top: the other way round.
     await app.scroll("id:chat-history", 1);
     await app.scroll("id:chat-history", -1);

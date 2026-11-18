@@ -26,6 +26,7 @@
 //!   environment's ([`observe_main`]).
 
 mod native;
+pub(crate) mod screen;
 
 use std::{
     cell::{Cell, RefCell},
@@ -252,7 +253,7 @@ pub(crate) fn blocked(surface: &Surface, root: Option<NodeId>, cx: &mut App) -> 
         return false;
     };
     if let Some(handle) = modal.handle.get() {
-        let _ = handle.update(cx, |_, window, _| window.activate_window());
+        let _ = handle.update(cx, |_, window, cx| activate_window(window, cx));
     }
     true
 }
@@ -432,7 +433,7 @@ pub(crate) fn act_in<R>(
 /// The window of the app's own with the keyboard focus, if one has it.
 #[cfg(feature = "dev")]
 pub(crate) fn focused(surface: &Surface, cx: &App) -> Option<NodeId> {
-    let active = cx.active_window()?;
+    let active = cx.active_window().or_else(|| background_key(cx))?;
     surface
         .windows
         .borrow()
@@ -492,6 +493,272 @@ pub(crate) fn handle(surface: &Surface, id: NodeId) -> Option<AnyWindowHandle> {
 #[cfg(feature = "dev")]
 pub(crate) fn is_open(surface: &Surface, id: NodeId) -> bool {
     get(surface, id).is_some_and(|w| w.handle.get().is_some())
+}
+
+// --- Running in the background ----------------------------------------------------------
+
+/// The standalone app runs in the background ([`crate::AppOptions::background`],
+/// `nsh test`'s apps): it never activates, so the keyboard stays with the
+/// app the user works in. The system gives none of its windows the
+/// keyboard; the one that would have it is kept here, and the app sees it
+/// as focused (its state, its focused field's caret), as the test agent's
+/// keys go to it.
+struct Background {
+    key: Cell<Option<AnyWindowHandle>>,
+}
+
+impl gpui::Global for Background {}
+
+/// Runs the app in the background from now on (before its first window).
+pub(crate) fn run_in_background(cx: &mut App) {
+    cx.set_global(Background {
+        key: Cell::new(None),
+    });
+    native::run_in_background();
+}
+
+/// Runs the app in the background from now on, or no longer, leaving the
+/// platform's app as it is (the tests' is GPUI's test platform's).
+#[cfg(all(test, feature = "shot"))]
+pub(crate) fn set_in_background(on: bool, cx: &mut App) {
+    if on {
+        cx.set_global(Background {
+            key: Cell::new(None),
+        });
+    } else if in_background(cx) {
+        cx.remove_global::<Background>();
+    }
+}
+
+/// Whether the app runs in the background ([`run_in_background`]).
+pub(crate) fn in_background(cx: &App) -> bool {
+    cx.has_global::<Background>()
+}
+
+/// The window that would have the keyboard in a background app.
+fn background_key(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<Background>()?.key.get()
+}
+
+/// Whether `window` has the keyboard (`WindowState.focused`, a field's
+/// caret): it is the active window, or the one that would be in a
+/// background app while it shows (the system gives a hidden or minimized
+/// window's keyboard to another).
+pub(crate) fn is_active(window: &Window, cx: &App) -> bool {
+    window.is_window_active()
+        || (background_key(cx) == Some(window.window_handle()) && shows(window))
+}
+
+/// On screen: neither hidden nor minimized.
+fn shows(window: &Window) -> bool {
+    native::visible(window) && !native::minimized(window)
+}
+
+/// Activates the app and gives `window` the keyboard (a press in it, its
+/// `focus()`); in a background app it only becomes the window that would
+/// have the keyboard.
+pub(crate) fn focus_window(window: &mut Window, cx: &mut App) {
+    if in_background(cx) {
+        became_key(window.window_handle(), cx);
+        return;
+    }
+    cx.activate(true);
+    window.activate_window();
+}
+
+/// Gives `window` the keyboard within the app, which stays as active as
+/// it was; in a background app it becomes the window that would have it.
+fn activate_window(window: &mut Window, cx: &mut App) {
+    if in_background(cx) {
+        became_key(window.window_handle(), cx);
+    } else {
+        window.activate_window();
+    }
+}
+
+/// Shows `window` (hidden or opened unshown), activating the app and giving
+/// it the keyboard when `activate`; a background app's shows without
+/// activating anything, the window that would have the keyboard.
+pub(crate) fn show_window(window: &mut Window, activate: bool, cx: &mut App) {
+    let keep = keeps_size(cx);
+    // AppKit fits a window to its screen as it orders it in: one that keeps
+    // its size is ordered in here first, its frame put back, and activates
+    // once it shows.
+    let ordered_here = in_background(cx) || (keep && cfg!(target_os = "macos"));
+    native::show(window, activate && !ordered_here, keep);
+    // `native::show` leaves one that activates to GPUI (on macOS, which
+    // draws it again as it shows), which also shows a window hidden since
+    // it opened.
+    if activate {
+        focus_window(window, cx);
+    }
+}
+
+/// Out of the minimized state ([`native::restore`]), which on Linux
+/// activates the window: a background app's stays as it is there.
+fn restore(window: &mut Window, cx: &App) {
+    if !(cfg!(target_os = "linux") && in_background(cx)) {
+        native::restore(window);
+    }
+}
+
+/// `handle` became the window that would have the keyboard in a background
+/// app. GPUI reports no activation for it: both it and the one that was
+/// draw again and report their state as on an activation change, and the
+/// one that was hears it lost the keyboard.
+fn became_key(handle: AnyWindowHandle, cx: &mut App) {
+    let Some(old) = cx
+        .try_global::<Background>()
+        .map(|b| b.key.replace(Some(handle)))
+    else {
+        return;
+    };
+    if old == Some(handle) {
+        return;
+    }
+    // On the next turn: `handle` may be the window being updated now.
+    crate::rt::on_app(move |cx| {
+        for h in old.into_iter().chain([handle]) {
+            let _ = h.update(cx, key_changed);
+        }
+    });
+}
+
+/// Window `handle` hid or closed: in a background app, when it was the
+/// window that would have the keyboard, the main window `main` becomes it
+/// if it shows, as the system gives the keyboard to the next window.
+fn lost_key(handle: AnyWindowHandle, main: Option<AnyWindowHandle>, cx: &mut App) {
+    let Some(background) = cx.try_global::<Background>() else {
+        return;
+    };
+    if background.key.get() != Some(handle) {
+        return;
+    }
+    background.key.set(None);
+    let main = main
+        .filter(|&m| m != handle)
+        .filter(|m| m.update(cx, |_, window, _| shows(window)).unwrap_or(false));
+    if let Some(main) = main {
+        became_key(main, cx);
+    }
+}
+
+/// What an activation change does, for a change GPUI does not report (the
+/// window that would have the keyboard in a background app).
+fn key_changed(root: gpui::AnyView, window: &mut Window, cx: &mut App) {
+    match root.downcast::<WindowView>() {
+        Ok(view) => view.update(cx, |view, cx| view.activation_changed(window, cx)),
+        Err(root) => {
+            if let Ok(view) = root.downcast::<crate::AppView>() {
+                let surface = view.read(cx).surface().clone();
+                if !is_active(window, cx) {
+                    crate::keymap::forget_held(&surface);
+                }
+                // Its state now: it goes to the app as it renders, and a
+                // window covered by others draws no frames.
+                observe_main(&surface, window, cx);
+            }
+            window.refresh();
+        }
+    }
+}
+
+// --- Where windows open -----------------------------------------------------------------
+
+/// Where [`crate::run_app`]'s windows open ([`crate::AppOptions::display`],
+/// [`crate::AppOptions::keep_size`]).
+struct Placement {
+    display: Option<gpui::DisplayId>,
+    keep_size: bool,
+}
+
+impl gpui::Global for Placement {}
+
+/// The standalone app's windows open centered on `display` from now on, at
+/// their size when `keep_size` whether or not they fit on it.
+pub(crate) fn place_windows(display: Option<crate::WindowDisplay>, keep_size: bool, cx: &mut App) {
+    let display = display.and_then(|d| resolve_display(d, cx));
+    cx.set_global(Placement { display, keep_size });
+}
+
+/// The display windows that name none open on ([`place_windows`]).
+pub(crate) fn default_display(cx: &App) -> Option<gpui::DisplayId> {
+    cx.try_global::<Placement>()?.display
+}
+
+/// Whether windows keep their size on a display they do not fit on.
+fn keeps_size(cx: &App) -> bool {
+    cx.try_global::<Placement>().is_some_and(|p| p.keep_size)
+}
+
+/// The bounds of a window of `size` centered on `display` (the primary one
+/// when `None` or gone): fitted on it, unless windows keep their size, when
+/// one larger than the display keeps its top left corner on it.
+pub(crate) fn centered(
+    display: Option<gpui::DisplayId>,
+    size: gpui::Size<Pixels>,
+    cx: &App,
+) -> Bounds<Pixels> {
+    let screen = display
+        .and_then(|id| cx.find_display(id))
+        .or_else(|| cx.primary_display());
+    match screen {
+        Some(screen) if keeps_size(cx) => centered_keeping_size(screen.visible_bounds(), size),
+        _ => Bounds::centered(display, size, cx),
+    }
+}
+
+/// `size` centered on `area`, its top left corner kept on it when it is
+/// larger (the title bar stays on the screen, as AppKit keeps it).
+fn centered_keeping_size(area: Bounds<Pixels>, size: gpui::Size<Pixels>) -> Bounds<Pixels> {
+    let x = area.origin.x + ((area.size.width - size.width) / 2.0).max(px(0.0));
+    let y = area.origin.y + ((area.size.height - size.height) / 2.0).max(px(0.0));
+    Bounds::new(gpui::point(x, y), size)
+}
+
+/// The display `which` names, if there is one.
+fn resolve_display(which: crate::WindowDisplay, cx: &App) -> Option<gpui::DisplayId> {
+    let displays = native::displays(cx);
+    let index = match which {
+        crate::WindowDisplay::Index(index) => index,
+        crate::WindowDisplay::Secondary => {
+            let frames: Vec<_> = displays.iter().map(|(_, frame)| *frame).collect();
+            secondary(&frames)?
+        }
+    };
+    let display = displays.get(index).map(|(id, _)| *id);
+    if display.is_none() {
+        log::warn!(
+            "there is no display {} ({} connected): the windows open on the primary one",
+            index + 1,
+            displays.len()
+        );
+    }
+    display
+}
+
+/// The first of the displays (their frames in the desktop, the primary
+/// display's first) besides the primary one that does not mirror it: a
+/// mirror shows the same part of the desktop, so its frame is the
+/// primary's.
+fn secondary<T: PartialEq>(frames: &[T]) -> Option<usize> {
+    let primary = frames.first()?;
+    frames.iter().position(|f| f != primary)
+}
+
+/// GPUI's displays with their frames in the desktop, the primary one
+/// first (what [`native::displays`] is where the platform has nothing
+/// better).
+#[allow(dead_code)]
+fn gpui_displays(cx: &App) -> Vec<(gpui::DisplayId, Bounds<Pixels>)> {
+    let mut displays: Vec<_> = cx.displays().iter().map(|d| (d.id(), d.bounds())).collect();
+    if let Some(primary) = cx.primary_display().map(|d| d.id())
+        && let Some(i) = displays.iter().position(|(id, _)| *id == primary)
+    {
+        let primary = displays.remove(i);
+        displays.insert(0, primary);
+    }
+    displays
 }
 
 // --- The close policies -----------------------------------------------------------------
@@ -719,8 +986,10 @@ fn hide(surface: &Rc<Surface>, w: &Rc<AppWindow>) {
     }
     let s = Rc::downgrade(surface);
     let window = w.clone();
+    let main = surface.chrome.window();
     with_window(w, move |gw, cx| {
         native::hide(gw);
+        lost_key(gw.window_handle(), main, cx);
         if let Some(surface) = s.upgrade() {
             report_state(&surface, &window, gw, cx, true);
         }
@@ -748,32 +1017,32 @@ fn request(
     }
     match r {
         WindowRequest::Show => {
-            native::restore(window);
+            restore(window, cx);
             let activate = own.is_none_or(|w| w.flag(|a| a.activate, true));
-            native::show(window, activate);
-            // As its first frame shows a window: `native::show` leaves one
-            // that activates to GPUI (on macOS, which draws it again as it
-            // shows), which also shows a window hidden since it opened.
-            if activate {
-                cx.activate(true);
-                window.activate_window();
-            }
+            // As its first frame shows a window.
+            show_window(window, activate, cx);
             if own.is_none() {
                 main_opened(surface, window);
             }
         }
-        WindowRequest::Hide => native::hide(window),
+        // An own window hides through [`hide`].
+        WindowRequest::Hide => {
+            native::hide(window);
+            lost_key(window.window_handle(), surface.chrome.window(), cx);
+        }
         WindowRequest::Focus => {
-            native::restore(window);
-            cx.activate(true);
-            window.activate_window();
+            restore(window, cx);
+            focus_window(window, cx);
             if own.is_none() {
                 main_opened(surface, window);
             }
         }
         WindowRequest::Close => {}
+        // A minimized window keeps the keyboard it would have in a
+        // background app, and counts as focused again once restored
+        // ([`is_active`]).
         WindowRequest::Minimize => window.minimize_window(),
-        WindowRequest::Restore => native::restore(window),
+        WindowRequest::Restore => restore(window, cx),
         WindowRequest::SetMode(mode) => set_mode(window, mode),
         WindowRequest::SetBounds(frame) => {
             if frame.width.is_some() || frame.height.is_some() {
@@ -789,10 +1058,10 @@ fn request(
                 }
             }
             if frame.x.is_some() || frame.y.is_some() {
-                let b = window.bounds();
-                let x = frame.x.map_or(f32::from(b.origin.x), |v| v.0);
-                let y = frame.y.map_or(f32::from(b.origin.y), |v| v.0);
-                native::set_origin(window, x, y);
+                // A coordinate left out is read when the move runs, after
+                // the moves asked before it (`center()` then `setBounds`
+                // with only `y` keeps the centered `x`).
+                native::set_origin(window, frame.x.map(|v| v.0), frame.y.map(|v| v.0));
             }
         }
         WindowRequest::SetContentSize { width, height } => {
@@ -816,20 +1085,26 @@ fn request(
                 None => crate::chrome::resize(surface, window, Some(size.0), Some(size.1)),
                 Some(_) => resize(window, Some(size.0), Some(size.1)),
             }
-            native::set_origin(window, b.origin.x.0, b.origin.y.0);
-            set_mode(window, placement.mode);
+            native::set_origin(window, Some(b.origin.x.0), Some(b.origin.y.0));
+            // After the move, which waits for this update to end.
+            if placement.mode != WindowMode::Normal {
+                let handle = window.window_handle();
+                crate::rt::on_app(move |cx| {
+                    let _ = handle.update(cx, |_, window, _| set_mode(window, placement.mode));
+                });
+            }
         }
         WindowRequest::Center { display } => {
             let area = display
                 .and_then(|id| find_display(cx, id))
                 .or_else(|| window.display(cx))
-                .map(|d| d.visible_bounds());
+                .map(|d| screen::global(d.visible_bounds(), screen::origin(&*d)));
             if let Some(area) = area {
                 let size = window.bounds().size;
                 let x = f32::from(area.origin.x) + (f32::from(area.size.width - size.width)) / 2.0;
                 let y =
                     f32::from(area.origin.y) + (f32::from(area.size.height - size.height)) / 2.0;
-                native::set_origin(window, x, y);
+                native::set_origin(window, Some(x), Some(y));
             }
         }
         WindowRequest::RequestAttention { critical } => native::request_attention(window, critical),
@@ -1112,17 +1387,18 @@ pub(crate) fn gpui_kind(kind: WindowKind) -> gpui::WindowKind {
     }
 }
 
-/// The bounds a window opens with: the placement kept, else its default
-/// size at its default position (centered on its display, or on its
-/// parent), in the default mode.
+/// The bounds a window opens with and the display they are on (GPUI's
+/// coordinates are the display's: [`screen::place`]): the placement kept,
+/// else its default size at its default position (centered on its display,
+/// or on its parent), in the default mode.
 fn open_bounds(
     surface: &Surface,
     open: &OpenWindow,
     display: Option<gpui::DisplayId>,
     cx: &mut App,
-) -> gpui::WindowBounds {
+) -> (gpui::WindowBounds, Option<gpui::DisplayId>) {
     if let Some(p) = open.placement {
-        return gpui_window_bounds(p);
+        return place_window(p, &screen::screens(cx));
     }
     let (w, h) = initial_size(open);
     let size = gpui::size(px(w), px(h));
@@ -1131,25 +1407,48 @@ fn open_bounds(
         (open.parent.is_some() && options.kind == WindowKind::Dialog)
             .then_some(WindowPosition::ParentCenter)
     });
-    let bounds = match position {
-        Some(WindowPosition::At(p)) => Bounds::new(gpui::point(px(p.x.0), px(p.y.0)), size),
-        Some(WindowPosition::ParentCenter) => match parent_bounds(surface, open.parent, cx) {
-            Some(parent) => Bounds::new(
-                gpui::point(
-                    parent.origin.x + (parent.size.width - size.width) / 2.0,
-                    parent.origin.y + (parent.size.height - size.height) / 2.0,
-                ),
-                size,
-            ),
-            None => Bounds::centered(display, size, cx),
-        },
-        _ => Bounds::centered(display, size, cx),
+    // A point of the screen: on the display it is on, in its coordinates.
+    let at = match position {
+        Some(WindowPosition::At(p)) => Some(Bounds::new(gpui::point(px(p.x.0), px(p.y.0)), size)),
+        Some(WindowPosition::ParentCenter) => {
+            parent_bounds(surface, open.parent, cx).map(|parent| {
+                Bounds::new(
+                    gpui::point(
+                        parent.origin.x + (parent.size.width - size.width) / 2.0,
+                        parent.origin.y + (parent.size.height - size.height) / 2.0,
+                    ),
+                    size,
+                )
+            })
+        }
+        _ => None,
     };
-    match options.default_mode {
+    let (display, bounds) = match at {
+        Some(at) => screen::place(&screen::screens(cx), at),
+        None => (display, centered(display, size, cx)),
+    };
+    let bounds = match options.default_mode {
         Some(WindowMode::Maximized) => gpui::WindowBounds::Maximized(bounds),
         Some(WindowMode::FullScreen) => gpui::WindowBounds::Fullscreen(bounds),
         _ => gpui::WindowBounds::Windowed(bounds),
-    }
+    };
+    (bounds, display)
+}
+
+/// A placement (screen coordinates) as GPUI opens a window with it: its
+/// bounds in the coordinates of the display they are on, and that display.
+pub(crate) fn place_window(
+    p: WindowPlacement,
+    screens: &[screen::Screen],
+) -> (gpui::WindowBounds, Option<gpui::DisplayId>) {
+    let bounds = gpui_window_bounds(p);
+    let (display, local) = screen::place(screens, bounds.get_bounds());
+    let bounds = match bounds {
+        gpui::WindowBounds::Maximized(_) => gpui::WindowBounds::Maximized(local),
+        gpui::WindowBounds::Fullscreen(_) => gpui::WindowBounds::Fullscreen(local),
+        gpui::WindowBounds::Windowed(_) => gpui::WindowBounds::Windowed(local),
+    };
+    (bounds, display)
 }
 
 /// A placement as GPUI's window bounds.
@@ -1166,7 +1465,8 @@ pub(crate) fn gpui_window_bounds(p: WindowPlacement) -> gpui::WindowBounds {
     }
 }
 
-/// The screen bounds of the window whose root node is `parent`.
+/// The bounds of the window whose root node is `parent`, in screen
+/// coordinates.
 fn parent_bounds(
     surface: &Surface,
     parent: Option<NodeId>,
@@ -1176,7 +1476,13 @@ fn parent_bounds(
         ROOT_ID => surface.chrome.window()?,
         id => get(surface, id)?.handle.get()?,
     };
-    handle.update(cx, |_, window, _| window.bounds()).ok()
+    handle.update(cx, |_, window, _| screen_bounds(window)).ok()
+}
+
+/// The bounds of GPUI window `window`, in screen coordinates (GPUI's are
+/// its display's on macOS).
+pub(crate) fn screen_bounds(window: &Window) -> Bounds<Pixels> {
+    screen::global(window.bounds(), native::bounds_origin(window))
 }
 
 /// The GPUI window of the window whose root node is `id`.
@@ -1194,11 +1500,22 @@ fn open_gpui(surface: &Rc<Surface>, w: &Rc<AppWindow>, open: &OpenWindow, cx: &m
         return;
     }
     let a = w.attributes.borrow().clone();
+    // The app's display, else, for a window centered on its display, the
+    // one the windows open on (a test's).
     let display = open
         .options
         .display
         .and_then(|id| find_display(cx, id))
-        .map(|d| d.id());
+        .map(|d| d.id())
+        .or_else(|| {
+            let centered = open.placement.is_none()
+                && !(open.parent.is_some() && open.options.kind == WindowKind::Dialog)
+                && matches!(
+                    open.options.default_position,
+                    None | Some(WindowPosition::Center)
+                );
+            centered.then(|| default_display(cx)).flatten()
+        });
     let frameless = a.frame == Some(WindowFrameStyle::None);
     let hidden_bar = a
         .title_bar
@@ -1214,8 +1531,9 @@ fn open_gpui(surface: &Rc<Surface>, w: &Rc<AppWindow>, open: &OpenWindow, cx: &m
             .and_then(|b| b.controls_offset)
             .map(|p| gpui::point(px(p.x.0), px(p.y.0))),
     });
+    let (window_bounds, display) = open_bounds(surface, open, display, cx);
     let options = gpui::WindowOptions {
-        window_bounds: Some(open_bounds(surface, open, display, cx)),
+        window_bounds: Some(window_bounds),
         titlebar,
         // Shown with its first frame ([`first_frame`]).
         focus: false,
@@ -1306,11 +1624,14 @@ fn destroy(surface: &Surface, w: &Rc<AppWindow>) {
         .then(|| w.parent.and_then(|p| handle_of(surface, p)))
         .flatten();
     if let Some(handle) = w.handle.take() {
+        let main = surface.chrome.window();
         crate::rt::on_app(move |cx| {
             let _ = handle.update(cx, |_, window, _| {
                 native::set_parent(window, None, false, WindowKind::Normal);
+                native::removing(window);
                 window.remove_window();
             });
+            lost_key(handle, main, cx);
             if let Some(parent) = parent {
                 let _ = parent.update(cx, |_, window, _| native::enable(window, true));
             }
@@ -1323,12 +1644,15 @@ fn destroy(surface: &Surface, w: &Rc<AppWindow>) {
 /// The state of GPUI window `window` (`visible` unless the app or a policy
 /// hid it).
 fn read_state(window: &Window, visible: bool, cx: &App) -> WindowState {
-    let bounds = to_bounds(window.bounds());
+    // GPUI's bounds are its display's on macOS, the app's the screen's.
+    let origin = native::bounds_origin(window);
+    let bounds = to_bounds(screen::global(window.bounds(), origin));
     let (mode, normal) = match window.window_bounds() {
         gpui::WindowBounds::Windowed(b) => (WindowMode::Normal, b),
         gpui::WindowBounds::Maximized(b) => (WindowMode::Maximized, b),
         gpui::WindowBounds::Fullscreen(b) => (WindowMode::FullScreen, b),
     };
+    let normal = screen::global(normal, origin);
     let mode = if window.is_fullscreen() {
         WindowMode::FullScreen
     } else if window.is_maximized() {
@@ -1356,7 +1680,7 @@ fn read_state(window: &Window, visible: bool, cx: &App) -> WindowState {
     state.mode = mode;
     state.minimized = native::minimized(window);
     state.visible = visible && !state.minimized;
-    state.focused = window.is_window_active();
+    state.focused = is_active(window, cx);
     state.display = window.display(cx).map(|d| display_id(&*d));
     state.scale_factor = window.scale_factor();
     state
@@ -1508,22 +1832,25 @@ pub(crate) fn forget_displays(surface: &Surface) {
     DISPLAYS.with(|d| d.borrow_mut().retain(|(k, _)| *k != key));
 }
 
-/// The displays as the app sees them.
+/// The displays as the app sees them (in screen coordinates).
 pub(crate) fn displays(cx: &App) -> Vec<Display> {
     let primary = cx.primary_display().map(|d| d.id());
     cx.displays()
         .iter()
         .map(|d| {
+            let origin = screen::origin(&**d);
+            let bounds = to_bounds(screen::global(d.bounds(), origin));
             let mut display = Display::new(
                 display_id(&**d),
-                to_bounds(d.bounds()),
-                to_bounds(d.visible_bounds()),
+                bounds,
+                to_bounds(screen::global(d.visible_bounds(), origin)),
                 Some(d.id()) == primary,
             );
             display.refresh_rate = d
                 .refresh_interval()
                 .filter(|i| !i.is_zero())
                 .map(|i| 1.0 / i.as_secs_f32());
+            display.cutouts = native::cutouts(d.id(), bounds);
             display
         })
         .collect()
@@ -1570,19 +1897,7 @@ impl WindowView {
         );
         subscriptions.push(
             cx.observe_window_activation(gw, |view: &mut WindowView, gw, cx| {
-                let active = gw.is_window_active();
-                if let Some(surface) = view.surface.upgrade()
-                    && !active
-                {
-                    crate::keymap::forget_held(&surface);
-                    // Losing the focus closes a window that says so.
-                    let w = &view.window;
-                    if w.flag(|a| a.close_on_blur, false) && w.shown.get() && !w.hidden.get() {
-                        close_by_policy(&surface, w, WindowCloseCause::Blur);
-                    }
-                }
-                view.state_changed(gw, cx, true);
-                cx.notify();
+                view.activation_changed(gw, cx);
             }),
         );
         subscriptions.push(
@@ -1608,6 +1923,22 @@ impl WindowView {
             window,
             focus,
         }
+    }
+
+    /// The window gained or lost the keyboard ([`is_active`]).
+    fn activation_changed(&mut self, gw: &mut Window, cx: &mut Context<Self>) {
+        if let Some(surface) = self.surface.upgrade()
+            && !is_active(gw, cx)
+        {
+            crate::keymap::forget_held(&surface);
+            // Losing the focus closes a window that says so.
+            let w = &self.window;
+            if w.flag(|a| a.close_on_blur, false) && w.shown.get() && !w.hidden.get() {
+                close_by_policy(&surface, w, WindowCloseCause::Blur);
+            }
+        }
+        self.state_changed(gw, cx, true);
+        cx.notify();
     }
 
     fn state_changed(&self, gw: &mut Window, cx: &mut Context<Self>, now: bool) {
@@ -1643,6 +1974,7 @@ impl Render for WindowView {
                     bar.and_then(|b| b.height).map(|h| h.0),
                     a.resizable.unwrap_or(true),
                     window,
+                    cx,
                 )
             } else {
                 Vec::new()
@@ -1795,14 +2127,6 @@ struct WindowElement {
     view: gpui::WeakEntity<WindowView>,
 }
 
-impl IntoElement for WindowElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 impl Element for WindowElement {
     type RequestLayoutState = ();
     type PrepaintState = Hitbox;
@@ -1904,7 +2228,8 @@ impl Element for WindowElement {
             crate::canvas::begin_pass(surface.key());
             let mut dcx = crate::render::DrawCx::new(window, cx, bounds, dark);
             let origin = (f32::from(bounds.origin.x), f32::from(bounds.origin.y));
-            crate::render::draw_view(&mut dcx, &w.view, Mat4::new(), origin);
+            let local = crate::render::root_matrix(&w.view, origin);
+            crate::render::draw_view(&mut dcx, &w.view, Mat4::new(), local);
             std::mem::take(&mut dcx.drawn)
         };
         crate::surface::place_items(&w.placed, drawn);
@@ -1953,11 +2278,7 @@ fn first_frame(surface: &Rc<Surface>, w: &Rc<AppWindow>, window: &mut Window) {
     let handle = window.window_handle();
     crate::rt::on_app(move |cx| {
         let _ = handle.update(cx, |_, gw, cx| {
-            native::show(gw, activate);
-            if activate {
-                cx.activate(true);
-                gw.activate_window();
-            }
+            show_window(gw, activate, cx);
             if let Some(surface) = s.upgrade() {
                 report_state(&surface, &window_rc, gw, cx, true);
             }
@@ -1977,6 +2298,63 @@ mod tests {
 
     fn rect(x: f32, y: f32, w: f32, h: f32) -> nsh_core::Bounds<Points> {
         nsh_core::Bounds::new(point(Points(x), Points(y)), size(Points(w), Points(h)))
+    }
+
+    fn gpui_rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
+        Bounds::new(gpui::point(px(x), px(y)), gpui::size(px(w), px(h)))
+    }
+
+    /// A notch is computed from the display's bounds in screen coordinates
+    /// (as [`displays`] passes them to `native::cutouts`), not GPUI's own,
+    /// which start at each display's corner on macOS.
+    #[test]
+    fn a_notch_is_placed_in_screen_coordinates() {
+        // A built-in screen right of a 2560 × 1440 primary display, its top
+        // 658 points below the primary's: GPUI measures it from its corner.
+        let local = gpui_rect(0.0, 0.0, 1512.0, 982.0);
+        let origin = gpui::point(px(2560.0), px(658.0));
+        let bounds = to_bounds(screen::global(local, origin));
+        let area = size(Points(664.0), Points(32.0));
+        assert_eq!(
+            nsh_core::desktop::notch(bounds, area, area, Points(32.0)),
+            Some(rect(3224.0, 658.0, 184.0, 32.0)),
+        );
+    }
+
+    /// A secondary display is the first that is not the primary one or a
+    /// mirror of it (whose frame in the desktop is the primary's); one
+    /// display alone has none.
+    #[test]
+    fn the_secondary_display_skips_the_primary_and_its_mirrors() {
+        let primary = gpui_rect(0.0, 0.0, 3008.0, 1692.0);
+        let built_in = gpui_rect(3008.0, 0.0, 1800.0, 1169.0);
+        // The same size elsewhere in the desktop is another display.
+        let twin = gpui_rect(-3008.0, 0.0, 3008.0, 1692.0);
+        assert_eq!(secondary::<Bounds<Pixels>>(&[]), None);
+        assert_eq!(secondary(&[primary]), None);
+        assert_eq!(secondary(&[primary, primary]), None);
+        assert_eq!(secondary(&[primary, built_in]), Some(1));
+        assert_eq!(secondary(&[primary, primary, built_in]), Some(2));
+        assert_eq!(secondary(&[primary, twin]), Some(1));
+    }
+
+    /// A window that keeps its size is centered on the display's area when
+    /// it fits, and keeps its top left corner on it when it is larger.
+    #[test]
+    fn a_window_keeping_its_size_stays_on_its_display() {
+        let area = gpui_rect(100.0, 25.0, 1000.0, 700.0);
+        assert_eq!(
+            centered_keeping_size(area, gpui::size(px(400.0), px(300.0))),
+            gpui_rect(400.0, 225.0, 400.0, 300.0)
+        );
+        assert_eq!(
+            centered_keeping_size(area, gpui::size(px(1200.0), px(900.0))),
+            gpui_rect(100.0, 25.0, 1200.0, 900.0)
+        );
+        assert_eq!(
+            centered_keeping_size(area, gpui::size(px(400.0), px(900.0))),
+            gpui_rect(400.0, 25.0, 400.0, 900.0)
+        );
     }
 
     fn state(bounds: nsh_core::Bounds<Points>) -> WindowState {

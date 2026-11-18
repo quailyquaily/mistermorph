@@ -1,6 +1,6 @@
 # The Mister Morph console in nsh
 
-One TSX app (nsh 0.5.1, Native Shell) that builds as the web console (`scripts/build-web.sh`, served by
+One TSX app (nsh 0.6.0, Native Shell) that builds as the web console (`scripts/build-web.sh`, served by
 `console serve --console-static-dir`), as the desktop app (`desktop/nsh`, a GPUI shell that embeds
 it and runs the backend) and as the Android app (`scripts/build-android.sh`, a client of a console
 server elsewhere). It reimplements `web/console` (Vue) screen for screen; `web/console/src`
@@ -483,3 +483,16 @@ Headless tests prove behaviour, not the look.
   lists `saveFile`; headless tests play the native part with those two handlers. Task notifications come from the app's own Java (a JobScheduler job reading
   `/api/notifications/events` while the app is away: the page, and its socket, are suspended then);
   see `docs/feat/feat_20261110_android_task_notifications.md`.
+
+### nsh 0.6.0
+
+- An nsh `Sheet` is a modal root now (nsh #2028), and Android's Back reaches the newest modal
+  before any overlay in the page behind it. The console's dialogs are overlays on Android
+  (`DialogLayer`), so with one open over a sheet (the rename dialog from the topic sheet), Back
+  closed the sheet and left the dialog. The sheets ask `closeDialogOverSheet()` (components/ui.tsx)
+  before closing, and an overlay's Back closes the newest open dialog.
+- `Picker.pickFiles` leaves a file over 512 MiB unread (`file: null`, `status: "tooLarge"`);
+  `lib/mobileHost.ts` leaves it out.
+- A tooltip goes out over a few frames as the next one comes in, so for a moment both show.
+- Headless, a list's own scroll correction is reported at once: at the newest message, a point up
+  can be taken back before the test scrolls down again (tests/chat-scroll-anchor.test.tsx `snap`).

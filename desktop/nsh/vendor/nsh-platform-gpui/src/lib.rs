@@ -85,7 +85,10 @@ pub use nsh_engine::{LoadedPackage, accept_package, load_package, package, verif
 #[cfg(feature = "dev")]
 pub use crate::app::set_root;
 pub use crate::{
-    app::{AppOptions, AppSource, AppView, CloseRequest, open_app_window, run_app, set_ui_sets},
+    app::{
+        AppOptions, AppSource, AppView, CloseRequest, WindowDisplay, open_app_window, run_app,
+        set_ui_sets,
+    },
     chrome::titlebar_options,
     image::AssetBase,
     native::{ComponentContext, ComponentFactory, Components, NativeComponent},

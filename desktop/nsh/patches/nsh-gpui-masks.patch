@@ -1,5 +1,5 @@
 diff --git a/crates/gpui/nsh-platform-gpui/src/decor.rs b/crates/gpui/nsh-platform-gpui/src/decor.rs
-index d5cf72f..0b14b29 100644
+index e733ab9..049551b 100644
 --- a/crates/gpui/nsh-platform-gpui/src/decor.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/decor.rs
 @@ -129,6 +129,19 @@ fn det4(m: &[[f32; 4]; 4]) -> f32 {
@@ -74,7 +74,7 @@ index 8d50fd1..6207e6d 100644
  struct Ramp {
      stops: Vec<([f32; 4], f32)>,
 diff --git a/crates/gpui/nsh-platform-gpui/src/render.rs b/crates/gpui/nsh-platform-gpui/src/render.rs
-index b97b28a..e9f03f1 100644
+index 97326d9..e7c726d 100644
 --- a/crates/gpui/nsh-platform-gpui/src/render.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/render.rs
 @@ -85,6 +85,7 @@ struct Saved {
@@ -152,7 +152,7 @@ index b97b28a..e9f03f1 100644
              }
              None => log::error!("render: pop without push"),
          }
-@@ -641,13 +665,25 @@ pub(crate) fn draw_view(cx: &mut DrawCx<'_>, view: &NshView, parent: Mat4, origi
+@@ -638,13 +662,25 @@ pub(crate) fn draw_view(cx: &mut DrawCx<'_>, view: &NshView, parent: Mat4, local
          return;
      }
      let matrix = crate::decor::color_matrix(&state);
@@ -179,10 +179,10 @@ index b97b28a..e9f03f1 100644
          cx.pop();
      }
 diff --git a/crates/gpui/nsh-platform-gpui/src/text.rs b/crates/gpui/nsh-platform-gpui/src/text.rs
-index 73ab342..a874726 100644
+index c8fd701..95ed0ab 100644
 --- a/crates/gpui/nsh-platform-gpui/src/text.rs
 +++ b/crates/gpui/nsh-platform-gpui/src/text.rs
-@@ -2274,6 +2274,23 @@ fn paint_glyphs(cx: &mut DrawCx<'_>, mut glyphs: Vec<Painted>) {
+@@ -2311,6 +2311,23 @@ fn paint_glyphs(cx: &mut DrawCx<'_>, mut glyphs: Vec<Painted>) {
              )
          });
      }
