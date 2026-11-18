@@ -629,13 +629,17 @@ mod tests {
 
     #[test]
     fn lists_candidates() {
-        let exe = Path::new("/opt/mistermorph/MrMorph");
-        let list = backend_candidates(exe, Some("/explicit/morph"));
-        assert_eq!(list[0], PathBuf::from("/explicit/morph"));
-        assert!(list.contains(&PathBuf::from("/opt/mistermorph/morph")));
-        assert!(list.contains(&PathBuf::from("/opt/mistermorph/bin/morph")));
+        // The expected paths go through normalize_path as the candidates do: on Windows
+        // `/explicit/morph` resolves against the current drive (`\\?\D:\explicit\morph`), and the
+        // backend is `morph.exe`.
+        let expect = |path: &str| normalize_path(Path::new(path));
+        let exe_dir = Path::new("/opt/mistermorph");
+        let list = backend_candidates(&exe_dir.join("MrMorph"), Some("/explicit/morph"));
+        assert_eq!(list[0], expect("/explicit/morph"));
+        assert!(list.contains(&normalize_path(&exe_dir.join(binary_name()))));
+        assert!(list.contains(&normalize_path(&exe_dir.join("bin").join(binary_name()))));
         let in_bin = backend_candidates(Path::new("/usr/x/bin/MrMorph"), None);
-        assert!(!in_bin.contains(&PathBuf::from("/usr/x/bin/bin/morph")));
+        assert!(!in_bin.contains(&normalize_path(&Path::new("/usr/x/bin/bin").join(binary_name()))));
     }
 
     #[test]
