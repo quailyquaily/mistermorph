@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 )
 
@@ -38,13 +38,14 @@ func todoListBool(v bool) *bool { return &v }
 // query.
 func todoListRows(t *testing.T, cronPath string) []string {
 	t.Helper()
-	db, err := agentdb.CachedBeside(cronPath).Get(context.Background())
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(cronstore.JobsDBPath(cronPath))+"?mode=ro")
 	if err != nil {
-		t.Fatalf("open agent.db: %v", err)
+		t.Fatalf("open jobs.db: %v", err)
 	}
-	rows, err := db.QueryContext(context.Background(), `SELECT * FROM cron_tasks ORDER BY position, id`)
+	defer func() { _ = db.Close() }()
+	rows, err := db.QueryContext(context.Background(), `SELECT * FROM jobs ORDER BY position, id`)
 	if err != nil {
-		t.Fatalf("query cron_tasks: %v", err)
+		t.Fatalf("query jobs: %v", err)
 	}
 	defer func() { _ = rows.Close() }()
 	cols, err := rows.Columns()

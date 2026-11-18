@@ -272,7 +272,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("logging.max_skill_content_chars", 8000)
 
 	v.SetDefault("tools.read_file.max_bytes", 256*1024)
-	v.SetDefault("tools.read_file.deny_paths", []string{"config.yaml", "config.yaml.imported", "agent.db"})
+	v.SetDefault("tools.read_file.deny_paths", []string{"config.yaml", "config.yaml.imported", "agent.db", "jobs.db"})
 
 	v.SetDefault("tools.write_file.enabled", true)
 	v.SetDefault("tools.write_file.max_bytes", 512*1024)
@@ -296,7 +296,7 @@ func Apply(v *viper.Viper) {
 	}
 	v.SetDefault("tools.bash.timeout", time.Minute)
 	v.SetDefault("tools.bash.max_output_bytes", 256*1024)
-	v.SetDefault("tools.bash.deny_paths", []string{"config.yaml", "config.yaml.imported", "agent.db"})
+	v.SetDefault("tools.bash.deny_paths", []string{"config.yaml", "config.yaml.imported", "agent.db", "jobs.db"})
 	v.SetDefault("tools.bash.path_extra", []string{})
 	v.SetDefault("tools.bash.injected_env_vars", []string{})
 	v.SetDefault("tools.bash.rewrite.enabled", false)
@@ -312,7 +312,7 @@ func Apply(v *viper.Viper) {
 
 	v.SetDefault("tools.powershell.timeout", time.Minute)
 	v.SetDefault("tools.powershell.max_output_bytes", 256*1024)
-	v.SetDefault("tools.powershell.deny_paths", []string{"config.yaml", "config.yaml.imported", "agent.db"})
+	v.SetDefault("tools.powershell.deny_paths", []string{"config.yaml", "config.yaml.imported", "agent.db", "jobs.db"})
 	v.SetDefault("tools.powershell.injected_env_vars", []string{})
 	// A powershell command may run as administrator after the user approves the UAC prompt; Windows.
 	v.SetDefault("tools.powershell.elevation.enabled", true)
@@ -329,6 +329,8 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.web_search.base_url", "https://duckduckgo.com/html/")
 
 	v.SetDefault("tools.contacts_send.enabled", true)
+	// job_manage is on by default. Its switch, tools.job_manage.enabled, has no default here: while
+	// a config does not set it, the earlier tools.todo_update.enabled applies (jobconfig.ToolEnabled).
 	v.SetDefault("tools.todo_update.enabled", true)
 	// On: MCP tools stay hidden until the model finds them. Without MCP tools to hide, tool_search
 	// is not offered, so nothing changes.

@@ -339,3 +339,32 @@ func TestOpenWithoutImportsDefersThemToTheNextOpen(t *testing.T) {
 		t.Fatalf("notes.txt not renamed: %v", err)
 	}
 }
+
+// agent.db's own import of cron.yaml is retired: an earlier version's mark no longer renames a
+// cron.yaml that is there again (jobs.db reads it, and leaves it as it is).
+func TestOpenLeavesCronYAMLOfTheRetiredImportAlone(t *testing.T) {
+	dir := t.TempDir()
+	db, err := OpenStateDir(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO meta (key, value) VALUES ('imported:cron', '{"at":"2026-11-09T00:00:00Z","rename":["cron.yaml"]}')`); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	path := filepath.Join(dir, "cron.yaml")
+	if err := os.WriteFile(path, []byte("version: 1\ntasks: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err = OpenStateDir(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cron.yaml was moved: %v", err)
+	}
+	if _, err := os.Stat(path + ".imported"); !os.IsNotExist(err) {
+		t.Fatalf("cron.yaml.imported made: %v", err)
+	}
+}

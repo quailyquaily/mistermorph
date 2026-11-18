@@ -90,7 +90,7 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Println("[i] the heartbeat workflows and the TODO list start empty in agent.db")
+			fmt.Println("[i] the heartbeat workflows start empty in agent.db and the TODO list in jobs.db")
 			fmt.Printf("[i] initialized %s\n", dir)
 			return nil
 		},

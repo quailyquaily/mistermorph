@@ -1499,17 +1499,18 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 	}
 	switch r.Method {
 	case http.MethodGet:
-		file, exists, err := store.Read()
+		tasks, revision, err := store.Snapshot(r.Context())
 		if err != nil {
-			http.Error(w, strings.TrimSpace(err.Error()), http.StatusInternalServerError)
+			http.Error(w, strings.TrimSpace(err.Error()), todoStoreErrorStatus(err, http.StatusInternalServerError))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"version":           file.Version,
-			"exists":            exists,
-			"task_count":        len(file.Tasks),
-			"tasks":             file.Tasks,
+			"version":           cronstore.Version,
+			"exists":            true,
+			"revision":          revision,
+			"task_count":        len(tasks),
+			"tasks":             tasks,
 			"system_tasks":      todoSystemTasks(settingsReader),
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
@@ -1522,6 +1523,10 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 	case http.MethodPut:
 		var req struct {
 			Tasks []cronstore.Task `json:"tasks"`
+			// Revision, when sent, is the revision the list was read at (GET's "revision"): the
+			// save is refused with 409 when the list has changed since, so a job a tool or another
+			// window added or changed meanwhile is not overwritten.
+			Revision *int64 `json:"revision,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&req); err != nil {
 			http.Error(w, "invalid json", http.StatusBadRequest)
@@ -1531,9 +1536,22 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 		if tasks == nil {
 			tasks = []cronstore.Task{}
 		}
+		for i := range tasks {
+			// A new job without an ID gets one; the ones it has are kept.
+			if strings.TrimSpace(tasks[i].ID) == "" {
+				tasks[i].ID = cronstore.NewJobID()
+			}
+		}
 		file := cronstore.File{Version: cronstore.Version, Tasks: tasks}
-		if err := store.Write(file); err != nil {
-			http.Error(w, strings.TrimSpace(err.Error()), http.StatusBadRequest)
+		var revision int64
+		var err error
+		if req.Revision != nil {
+			revision, err = store.WriteAtRevision(r.Context(), file, *req.Revision)
+		} else if err = store.Write(file); err == nil {
+			revision, err = store.Revision(r.Context())
+		}
+		if err != nil {
+			http.Error(w, strings.TrimSpace(err.Error()), todoStoreErrorStatus(err, http.StatusBadRequest))
 			return
 		}
 		if titler, ok := topics.(cronTopicTitler); ok {
@@ -1551,6 +1569,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":                true,
 			"version":           file.Version,
+			"revision":          revision,
 			"task_count":        len(file.Tasks),
 			"tasks":             file.Tasks,
 			"system_tasks":      todoSystemTasks(settingsReader),
@@ -1566,6 +1585,17 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+}
+
+// todoStoreErrorStatus is the status of a failed read or save of the job list: 409 for a save of
+// a stale list and for a legacy import that needs fixing first (see cronstore.ImportError),
+// otherwise fallback.
+func todoStoreErrorStatus(err error, fallback int) int {
+	var importErr *cronstore.ImportError
+	if errors.Is(err, cronstore.ErrRevisionConflict) || errors.As(err, &importErr) {
+		return http.StatusConflict
+	}
+	return fallback
 }
 
 func todoChatOptions(ctx context.Context, stateDir string, contactsDir string, mode string) []todoChatOption {

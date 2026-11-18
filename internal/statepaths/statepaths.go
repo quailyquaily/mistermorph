@@ -12,9 +12,12 @@ const (
 	CronFilename               = "cron.yaml"
 	JournalDirName             = "journal"
 	MemoryDBFilename           = "memory.db"
-	// AgentDBFilename is the database for the agent's own state: config, persona, contacts, TODO,
+	// AgentDBFilename is the database for the agent's own state: config, persona, contacts,
 	// Console sessions, Agent Link peers and topic state.
 	AgentDBFilename = "agent.db"
+	// JobsDBFilename is the job store: the TODO list's jobs, which the scheduler, the Console and
+	// the tools share. It replaces cron.yaml (and the cron_tasks table agent.db had).
+	JobsDBFilename = "jobs.db"
 	// UsageDBFilename is the database for LLM usage, written on every model call.
 	UsageDBFilename  = "usage.db"
 	PersonaDirName   = "persona"

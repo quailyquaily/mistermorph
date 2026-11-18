@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/quailyquaily/mistermorph/internal/agentdb"
 )
 
 // syntheticSecret stands for a credential in a task's bash_env; it must never show up in errors.
@@ -25,13 +23,11 @@ func envPtr(refs ...BashEnvRef) *[]BashEnvRef {
 	return &refs
 }
 
-// reloadStore drops the process's open handle on the store's agent.db, so the next read comes
+// reloadStore drops the process's open handle on the store's jobs.db, so the next read comes
 // from the file.
 func reloadStore(t *testing.T, store *Store) *Store {
 	t.Helper()
-	if err := agentdb.CachedBeside(store.Path).Close(); err != nil {
-		t.Fatal(err)
-	}
+	store.db.close()
 	return NewStore(store.Path)
 }
 
@@ -42,12 +38,12 @@ type taskRowMeta struct {
 
 func readTaskRowMeta(t *testing.T, store *Store, id string) taskRowMeta {
 	t.Helper()
-	db, err := agentdb.CachedBeside(store.Path).Get(context.Background())
+	db, err := store.handle(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	var meta taskRowMeta
-	if err := db.QueryRowContext(context.Background(), `SELECT position, created_at, updated_at FROM cron_tasks WHERE id = ?`, id).
+	if err := db.QueryRowContext(context.Background(), `SELECT position, created_at, updated_at FROM jobs WHERE id = ?`, id).
 		Scan(&meta.position, &meta.createdAt, &meta.updatedAt); err != nil {
 		t.Fatal(err)
 	}
@@ -303,8 +299,8 @@ tasks:
 	if !reflect.DeepEqual(weekly, want) {
 		t.Fatalf("weekly = %#v\nwant %#v", weekly, want)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "cron.yaml.imported")); err != nil {
-		t.Fatalf("cron.yaml not imported: %v", err)
+	if data, err := os.ReadFile(filepath.Join(dir, "cron.yaml")); err != nil || string(data) != raw {
+		t.Fatalf("cron.yaml changed by the import: %q, %v", data, err)
 	}
 	standup, _, _ := store.FindByID("standup")
 	if standup.Content != "Edited standup" || standup.At != "2030-01-02 09:00" || !reflect.DeepEqual(standup.BashEnv, []BashEnvRef{{Name: "MODE", Value: "once"}}) {

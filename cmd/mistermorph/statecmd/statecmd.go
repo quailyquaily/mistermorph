@@ -103,6 +103,6 @@ func newSnapshotCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringSliceVar(&skip, "skip", nil, "Databases to leave out: journal, memory, agent, usage (repeatable or comma-separated).")
+	cmd.Flags().StringSliceVar(&skip, "skip", nil, "Databases to leave out: journal, memory, agent, usage, jobs (repeatable or comma-separated).")
 	return cmd
 }
