@@ -3,9 +3,9 @@
 //
 // The look follows the Vue console's ui-kit: square-ish corners (2px), hairlines, a dark blue
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
-import type { Bounds, InputRef, JSX, Motion, ViewRef } from "nsh";
+import type { Bounds, InputRef, JSX, KeyBindingOptions, Motion, ViewRef } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
-import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -847,6 +847,19 @@ export function trackPopup(open: () => boolean) {
     if (!open()) return;
     untracked(() => openPopups.set(untracked(openPopups) + 1));
     cleanup(() => openPopups.set(untracked(openPopups) - 1));
+  });
+}
+
+/**
+ * Escape closes a panel beside the content (a `SidePane` column, a settings or store pane at the
+ * right) while `active()` holds, but never while a popup is open over the page: the binding is
+ * dropped meanwhile, so the dialog opened from the panel (Rename, Delete, a picker) gets Escape
+ * and the panel stays open under it as it was. Call it in the panel's component body.
+ */
+export function bindPaneEscape(close: () => void, active: () => boolean = () => true, options?: KeyBindingOptions) {
+  effect(() => {
+    if (!active() || popupOpen()) return;
+    cleanup(keymap.bind("escape", () => close(), options));
   });
 }
 
@@ -1740,28 +1753,17 @@ export function watchDialogs(watcher: ((name: string) => DialogProbe | undefined
   dialogWatcher = watcher;
 }
 
+// Every dialog is one layer of nsh's, a `Dialog` (a modal root), on every platform: the newest
+// modal is above all the others and the app's own root, so a dialog opened from a sheet (the
+// chat's WorkspaceSheet, a SidePane, the skill store's panel: nsh 0.6's `Sheet` is a modal root
+// too) is above it, scrim and paper, and takes the presses, Escape and Android's Back until it is
+// gone. Never an `Overlay`: an overlay is drawn in the root around its node (the app's, for a
+// dialog declared on a page), which is under every open sheet. On Android the layer reaches
+// under the status bar (`statusBarTranslucent`), as the sheets do, and keeps its panel inside the
+// system's insets itself (layerStyle).
+const ANDROID_LAYER = platform.os === "android";
+
 /** The dialog layer under `Modal` and `MessageDialog` (scrim, panel, the motion from the pressing control): for a dialog with a panel of its own. */
-/** Android draws dialogs in an Overlay, not nsh's Dialog window (see DialogLayer). */
-const OVERLAY_DIALOGS = platform.os === "android";
-
-// Android: the open overlay dialogs' closers, oldest first; Back (an overlay's onCancel) closes the
-// newest. Since nsh 0.6 an nsh `Sheet` is a modal root, so Back reaches an open sheet before any
-// overlay in the page behind it, even one drawn over the sheet: with the rename dialog open from
-// the topic sheet, Back closed the sheet and left the dialog. The sheets ask `closeDialogOverSheet`
-// first (WorkspaceSheet, SidePane, the skill store's panel).
-const openOverlayDialogs: (() => void)[] = [];
-const cancelNewestOverlayDialog = () => openOverlayDialogs[openOverlayDialogs.length - 1]?.();
-
-/**
- * For an nsh `Sheet`'s close request (`onOpenChange` to closed: Back, Escape): when one of these
- * dialogs is open over it (Android), closes that dialog instead and returns true; the sheet stays.
- */
-export function closeDialogOverSheet(): boolean {
-  if (!openOverlayDialogs.length) return false;
-  cancelNewestOverlayDialog();
-  return true;
-}
-
 export function DialogLayer(props: {
   open: boolean;
   onClose: () => void;
@@ -1778,17 +1780,6 @@ export function DialogLayer(props: {
 }) {
   const shown = signal(untracked(() => props.open));
   trackPopup(() => props.open);
-  if (OVERLAY_DIALOGS) {
-    effect(() => {
-      if (!props.open) return;
-      const close = () => props.onClose();
-      openOverlayDialogs.push(close);
-      cleanup(() => {
-        const at = openOverlayDialogs.indexOf(close);
-        if (at >= 0) openOverlayDialogs.splice(at, 1);
-      });
-    });
-  }
   const panel = createMotion({ initial: { opacity: 0 } });
   const probe = untracked(() => props.probe ?? dialogWatcher?.(props.testID ?? props.label ?? ""));
   probe?.motion?.(panel);
@@ -1895,6 +1886,8 @@ export function DialogLayer(props: {
   const layer = () => [
     <View
       accessibilityElementsHidden
+      // Found in tests as `<testID>-scrim`.
+      testID={props.testID ? `${props.testID}-scrim` : undefined}
       // On phones the backdrop of More and the agent switcher.
       class={`absolute inset-0 ${narrow() ? "bg-scrim" : "bg-dialog-scrim"}`}
       style={{ opacity: scrim }}
@@ -1933,14 +1926,14 @@ export function DialogLayer(props: {
     </View>,
   ];
   const layerClass = () =>
-    `absolute inset-0 items-center ${narrow() ? "justify-end" : `justify-center ${OVERLAY_DIALOGS ? "" : "p-4"}`}`;
+    `absolute inset-0 items-center ${narrow() ? "justify-end" : `justify-center ${ANDROID_LAYER ? "" : "p-4"}`}`;
   // On phones the panel floats at the foot of the layer, which keeps it a small gap in from the
   // left, the right and the bottom, outside the room the system takes there (a notch, the
   // navigation bar or gesture handle, or the software keyboard, which the layer does not shrink
   // for) and below the status bar (lib/mobilePopup.ts): the layer's padding, on every platform, so
   // the paper's own bottom edge and corners show above the inset. Numbers, not
   // `env(keyboard-inset-height)`: the env value moves a view natively but not in nsh's layout,
-  // where presses are matched. Wide windows: Android's Overlay covers the whole surface, status
+  // where presses are matched. Wide windows: Android's layer covers the whole surface, status
   // and navigation bars included, so there the layer keeps the panel inside every inset
   // (lib/systemInsets.ts), with a 16pt margin.
   const layerStyle = () => {
@@ -1948,44 +1941,32 @@ export function DialogLayer(props: {
       const frame = popupFrame();
       return { paddingTop: frame.top, paddingRight: frame.right, paddingBottom: frame.bottom, paddingLeft: frame.left };
     }
-    if (!OVERLAY_DIALOGS) return undefined;
+    if (!ANDROID_LAYER) return undefined;
     const insets = dialogLayerInsets(safeArea(), 0, 16);
     return { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left };
   };
 
   return (
-    // Android: nsh 0.4.0's Dialog is a window of its own below the status bar, and presses in it
-    // land one status bar higher than what is drawn (a press on a footer button hits the row above
-    // it), so the layer is an Overlay over the app's own view there; Back still asks (onCancel), and
-    // closes the newest open dialog (openOverlayDialogs).
-    <If
-      when={OVERLAY_DIALOGS}
-      else={
-        <Dialog
-          open={shown()}
-          // Escape and back would close the layer at once, under the closing motion: they only ask
-          // (onCancel), and the panel goes out as a press on the scrim or the close button makes it.
-          closeOnEscape={false}
-          closeOnSwipe={false}
-          onCancel={() => props.onClose()}
-          onOpenChange={({ open }) => {
-            if (!open) props.onClose();
-          }}
-          testID={props.testID}
-          animation="none"
-          class={layerClass()}
-          style={layerStyle()}
-        >
-          {layer()}
-        </Dialog>
-      }
+    <Dialog
+      open={shown()}
+      // Escape and Back would close the layer at once, under the closing motion: they only ask
+      // (onCancel), and the panel goes out as a press on the scrim or the close button makes it.
+      closeOnEscape={false}
+      closeOnSwipe={false}
+      onCancel={() => props.onClose()}
+      onOpenChange={({ open }) => {
+        if (!open) props.onClose();
+      }}
+      testID={props.testID}
+      animation="none"
+      // Over the whole screen as the sheets' layers are (nsh 0.4.0's Dialog started below the status
+      // bar and took presses one status bar higher than it drew them; the Console used an Overlay).
+      android={{ statusBarTranslucent: true }}
+      class={layerClass()}
+      style={layerStyle()}
     >
-      <If when={shown()}>
-        <Overlay onCancel={cancelNewestOverlayDialog} testID={props.testID} class={layerClass()} style={layerStyle()}>
-          {layer()}
-        </Overlay>
-      </If>
-    </If>
+      {layer()}
+    </Dialog>
   );
 }
 
@@ -2493,7 +2474,7 @@ export function SidePane(props: {
         open={props.open}
         side="right"
         onOpenChange={({ open }) => {
-          if (!open && !closeDialogOverSheet()) props.onClose();
+          if (!open) props.onClose();
         }}
         backdropClass="bg-scrim"
         popupClass={`h-full w-[88%] max-w-md border-l border-line bg-card ${props.class ?? ""}`}
@@ -2505,7 +2486,7 @@ export function SidePane(props: {
 }
 
 function SidePaneColumn(props: { onClose: () => void; label?: string; class?: string; children?: JSX.Element }) {
-  keymap.bind("escape", () => props.onClose());
+  bindPaneEscape(() => props.onClose());
   return (
     <View accessibilityLabel={props.label} class={`w-96 border-l border-line-faint bg-card ${props.class ?? ""}`}>
       {props.children}

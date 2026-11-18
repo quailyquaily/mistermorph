@@ -4,8 +4,9 @@
 // otherwise the system takes it and leaves the app, as it should on the first screen.
 //
 // What Back does, first match:
-// 1. A dialog (an Overlay on Android, ui.tsx DialogLayer) or a sheet of nsh's closes: nsh asks
-//    them before any listener here. The keyboard, when shown, is closed by the system first.
+// 1. A dialog (ui.tsx DialogLayer) or a sheet of nsh's closes, the newest first (both are nsh
+//    modals): nsh asks them before any listener here. The keyboard, when shown, is closed by the
+//    system first.
 // 2. The newest action registered with `onSystemBack` whose `when` holds: what the screen's own
 //    back arrow does (the open topic back to the list, a settings section back to the sections),
 //    or closing the phone's More and agent sheets.

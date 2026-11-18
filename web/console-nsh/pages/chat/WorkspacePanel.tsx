@@ -9,7 +9,7 @@
 import type { Bounds } from "nsh";
 import { Image, List, Scroll, Text, View } from "nsh";
 import { Sheet } from "nsh/base";
-import { Button, closeDialogOverSheet, Icon, type IconName, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
+import { Button, Icon, type IconName, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
 import { TopicTagsEditor } from "../../components/chat/TopicTagsEditor";
 import { WorkspacePathLine } from "../../components/chat/WorkspacePathLine";
@@ -413,7 +413,7 @@ export function WorkspacePanelTabs(props: {
 }
 
 /**
- * The panel on phones: a sheet from the right over a scrim. Like the dialogs, it is an Overlay
+ * The panel on phones: a sheet from the right over a scrim. Like the dialogs, it is a layer
  * over the whole surface, outside the app's frame, so on Android it runs under the status bar (and
  * the navigation bar) unless it keeps out from under them itself: its paper reaches the edges and
  * its padding takes the bars' insets (lib/systemInsets.ts `rightSheetInsets`), once. Elsewhere
@@ -431,8 +431,9 @@ export function WorkspaceSheet(props: { open: boolean; onClose: () => void; chil
       open={props.open}
       side="right"
       onOpenChange={({ open }) => {
-        // Back with the rename dialog open over the sheet closes the dialog (closeDialogOverSheet).
-        if (!open && !closeDialogOverSheet()) props.onClose();
+        // A dialog opened from the sheet (Rename) is a modal above it, which Back and Escape reach
+        // first (DialogLayer): this is the sheet's own close.
+        if (!open) props.onClose();
       }}
       backdropClass="bg-scrim"
       popupClass="h-full w-[88%] max-w-md border-l border-line bg-card"

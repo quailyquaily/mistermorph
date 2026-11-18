@@ -15,11 +15,12 @@
 //   last line (`workbenchInsets`, on iOS and the web too, with their side insets);
 // - while the software keyboard is up, its height (which covers the navigation bar) replaces the
 //   bottom inset, so nothing adds both;
-// - dialogs are an Overlay over the whole surface, outside the frame: their layer takes the same
-//   insets itself. On phones every popup (a dialog, a menu, a select, a date picker, a picker) is
-//   a paper floating at the foot of that layer: the layer takes every inset, and the keyboard's
-//   height in place of the bottom one, plus a small gap, as its padding, so the paper's own bottom
-//   edge shows above the inset (lib/mobilePopup.ts, on iOS and the web too);
+// - dialogs are a layer over the whole surface (an nsh Dialog that reaches under the status bar),
+//   outside the frame: their layer takes the same insets itself. On phones every popup (a dialog,
+//   a menu, a select, a date picker, a picker) is a paper floating at the foot of that layer: the
+//   layer takes every inset, and the keyboard's height in place of the bottom one, plus a small
+//   gap, as its padding, so the paper's own bottom edge shows above the inset (lib/mobilePopup.ts,
+//   on iOS and the web too);
 // - so are the sheets docked at a side (nsh/base's `Sheet`, the chat's topic and workspace panel on
 //   phones): the panel takes the insets of the edges it touches, inside its own paper, and the
 //   frame's padding never reaches it, so nothing is taken twice;
@@ -113,7 +114,7 @@ export function dialogLayerInsets(area: Partial<Edges>, keyboard: number, gap: n
  * chat's topic and workspace panel on phones): the status bar's inset at the top, the right inset
  * (a cutout or the navigation bar in landscape) at its edge, and at the bottom the navigation bar's
  * inset, or the keyboard's height while it is up. Its left edge is in the middle of the surface:
- * nothing there. The sheet is an Overlay, outside the frame: this is all the room it gets.
+ * nothing there. The sheet is a layer of its own, outside the frame: this is all the room it gets.
  */
 export function rightSheetInsets(area: Partial<Edges>, keyboard: number): Edges {
   const raised = size(keyboard);
