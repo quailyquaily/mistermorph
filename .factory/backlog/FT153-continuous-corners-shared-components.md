@@ -50,3 +50,8 @@ notes:
 - Validation: configured gate failed at gofmt (only internal/proctrack/proctrack_test.go); separate go vet ./... and go test ./... passed (165 packages); nsh check passed on 0.6.0 5541637; required parallel scripts/test.sh passed 140 files, 0 failed, 282s. Manager independently confirmed the same formatting diff on origin/master.
 - Residual risks: native GPUI 0.6.0 renders circular fallback (documented upstream gap); actual 0.6.0 web runtime, Android/iOS, Safari/Firefox, independent dark theme and full running Console not visually verified. Review did no new visual checks; existing fixture screenshots use 0.5.1 web runtime. Headless tests do not establish drawn curves/focus/shadows. BusyBeam remains circular approximation.
 - Moved review/ → new/ for fix round 2 of 3; baseline gate failure must not be misrepresented as introduced by FT153. Owner should inspect renderer gaps and incomplete all-controls coverage.
+
+## factory · 2026-11-19 01:41
+Fix-round build could not proceed: origin/master remains 8d217db4 and lacks the authorized baseline formatting correction. Claude Code checked twice; no in-scope commit can satisfy the mandatory P1 without the forbidden unrelated Go formatting edit or importing unrelated FT152 work. No commits or source changes; branch and round retained. Moved new/ → backlog/ until baseline repair is merged into master, after which the owner can return this item to new/.
+
+Configured gate exits 1 at `gofmt -l .: internal/proctrack/proctrack_test.go`; separate go vet ./... and go test ./... pass. Installs: none. Console suite not repeated because sources unchanged. Review P2 coverage notes and renderer/platform/visual limitations remain unchecked and unresolved; see preceding sections.
