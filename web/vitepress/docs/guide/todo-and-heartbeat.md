@@ -33,7 +33,7 @@ Details:
 
 Every job has a stable `id`. New jobs, from the Console or from `job_manage`, get a generated `job-<uuid>` ID: `job-` and a random (version 4) UUID, for example `job-0b7e5d1c-2f7a-4c2e-9a51-1d2f3e4a5b6c`. The ID only names the job; it says nothing about what starts its runs. Jobs from earlier versions keep the IDs they had (such as `cron-<uuid>`, `task-3`, or one chosen in `cron.yaml`), and all of them work for `get`, `update`, `delete` and Run now. Editing a job never changes its ID.
 
-A job's runs are listed in its own topic on the Topics page. The topic's ID is `_cron_<job id>`, and the topic names its job in `job_id` (the Runtime API's topics carry it; a topic recorded before this field existed gets it from its ID). The job, its topic and each run are three separate things: every run has its own task ID and run ID, so repeated runs of one job never share an identity. Deleting a job, or a one-time job finishing, keeps its topic and the runs in it; the topic then says the item is no longer in TODO.
+A job's runs are listed in its own topic on the Topics page. The topic's ID is `_cron_<job id>`, and the topic names its job in `job_id` (the Runtime API's topics carry it; a topic recorded before this field existed gets it from its ID). The job, its topic and each run are three separate things: every run has its own task ID and run ID, so repeated runs of one job never share an identity. Deleting a job, or a one-time job finishing, keeps its topic and the runs in it; the topic's toolbar then says the item no longer exists.
 
 ### Storage
 

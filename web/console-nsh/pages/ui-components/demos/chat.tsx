@@ -31,6 +31,7 @@ import { PinnedScroll } from "../../../components/chat/PinnedScroll";
 import { ReceivedFile, type ReceivedFiles } from "../../../components/chat/ReceivedFile";
 import { keyedState } from "../../../components/chat/rowState";
 import { KindChip, StatusTag, TerminalText } from "../../../components/chat/TerminalText";
+import { TodoJobBar } from "../../../components/chat/TodoJobBar";
 import { TopicTagsEditor } from "../../../components/chat/TopicTagsEditor";
 import { WorkspacePathLine } from "../../../components/chat/WorkspacePathLine";
 import { workspacePathDisplay } from "../../../components/chat/workspacePath";
@@ -777,6 +778,36 @@ export const CHAT_DEMOS: DemoMap = {
         <V l="pitch 6"><MosaicText text="correct horse" pitch={6} /></V>
       </Row>
     ),
+  },
+  TodoJobBar: {
+    render: () => {
+      const running = useFlag(false);
+      return (
+        <Col>
+          <V s={running.on() ? "on" : "off"} l="idle / running">
+            <TodoJobBar
+              running={running.on()}
+              toggleEnabled
+              viewEnabled
+              onStart={() => {
+                running.toggle();
+                act("TodoJobBar", "start");
+              }}
+              onStop={() => {
+                running.toggle();
+                act("TodoJobBar", "stop");
+              }}
+              onView={() => act("TodoJobBar", "view")}
+            />
+          </V>
+          <V s="loading" l="start"><TodoJobBar running={false} busy toggleEnabled={false} viewEnabled /></V>
+          <V s="busy" l="stopping"><TodoJobBar running busy toggleEnabled={false} viewEnabled /></V>
+          <V s="error"><TodoJobBar running={false} toggleEnabled viewEnabled error="Could not start the run: runtime unavailable" /></V>
+          <V s="disabled" l="gone"><TodoJobBar running={false} toggleEnabled={false} viewEnabled={false} note="The TODO item “Daily digest” no longer exists." /></V>
+        </Col>
+      );
+    },
+    wide: true,
   },
   TopicTagsEditor: { render: () => <TagsDemo />, wide: true },
   ActivityDetailPanel: { render: () => <DetailPanelDemo />, wide: true },

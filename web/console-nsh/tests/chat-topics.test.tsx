@@ -368,13 +368,18 @@ test("a TODO topic finds its item by job_id: its model while the item is listed,
   await app.waitFor("Old digest");
   await app.waitUntil(() => app.texts().some((text) => text.endsWith("· grok-4")));
   expect(app.texts().filter((text) => text.endsWith("· gpt-5.2")).length).toBe(1);
-  await app.waitFor("The runs of the TODO item “Weekly report” appear here. Change the item in TODO.");
+  // The topic's toolbar (Start, View Job) is the item's, found by its job_id.
+  await app.waitFor("id:chat-todo-job-bar");
+  await app.waitUntil(() => app.enabled("id:chat-todo-job-view"));
   // The item is deleted: the topic and its runs stay, the row shows the last run's model, and the
-  // note says the item is gone.
+  // toolbar, asked again, says the item is gone.
   jobs = [{ id: "task-3" }];
   await app.press("id:chat-topics-view-cron");
   await app.press("id:chat-topics-view-cron");
   await app.waitUntil(() => app.texts().some((text) => text.endsWith("· gpt-4o")));
-  await app.waitFor("The runs of the TODO item “Weekly report” appear here. The item is no longer in TODO: it ran once, or was deleted.");
-  expect(app.shows("text:Done.")).toBe(true);
+  await app.press("id:chat-topic-_cron_task-3");
+  await app.press(`id:chat-topic-_cron_${JOB}`);
+  await app.waitFor("The TODO item “Weekly report” no longer exists.");
+  expect(app.enabled("id:chat-todo-job-view")).toBe(false);
+  await app.waitFor("text:Done.");
 });

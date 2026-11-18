@@ -1,7 +1,9 @@
 // The phone's floating bottom bar's room (components/frame/MobileBottomNav.tsx): the bar floats
 // over the foot of the page, so each page's main list ends with MobileBarSpacer to scroll its last
 // row clear of it.
-import { safeArea, View } from "nsh";
+import type { JSX } from "nsh";
+import { platform, safeArea, View } from "nsh";
+import { glassClass, glassEnabled, glassStyle } from "../../lib/glass";
 import { mobileBottomNavVisible, phoneWorkbenchOpen, systemInsets } from "../../lib/shell";
 import { mobilePopupFrame, type MobilePopupFrame } from "../../lib/mobilePopup";
 import type { Edges } from "../../lib/systemInsets";
@@ -17,6 +19,8 @@ const BAR_CLEARANCE = 12;
 export const BAR_SIDE = 12;
 export const BAR_INSET = 4;
 const BAR_BORDER = 0.5;
+/** The capsule's outer shadow (none on Android, where it would not follow the corners). */
+const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
 /** A slot's width where the window has room for it. */
 export const NAV_SLOT_MAX = 60;
 
@@ -63,5 +67,37 @@ export function MobileBarSpacer(props: { testID?: string } = {}) {
     <If when={mobileBarRoom() > 0}>
       <View accessibilityElementsHidden testID={props?.testID} style={{ height: mobileBarRoom() }} />
     </If>
+  );
+}
+
+/**
+ * The bottom navigation's capsule (MobileBottomNav), for any bar of controls that floats over a page
+ * the same way (a TODO topic's toolbar, TodoJobBar): a pill with the navigation's hairline, inset and
+ * shadow, glass where the window draws it (lib/glass.ts), else the card's own opaque fill. Its test
+ * id gains `.glass` while it is glass.
+ */
+export function GlassCapsule(props: {
+  testID: string;
+  role?: "toolbar" | "group";
+  accessibilityLabel?: string;
+  class?: string;
+  style?: Record<string, unknown>;
+  children?: JSX.Element;
+}) {
+  return (
+    <View
+      role={props.role}
+      accessibilityLabel={props.accessibilityLabel}
+      class={`max-w-full rounded-full border-[0.5px] border-line ${glassClass("nav")} ${props.class ?? ""}`}
+      testID={glassEnabled() ? `${props.testID}.glass` : props.testID}
+      style={{
+        padding: BAR_INSET,
+        ...glassStyle(),
+        boxShadow: platform.os === "android" ? undefined : BAR_SHADOW,
+        ...props.style,
+      }}
+    >
+      {props.children}
+    </View>
   );
 }
