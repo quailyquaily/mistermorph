@@ -52,3 +52,10 @@ notes:
 - Pane Escape priority changes after a popup in a synthetic inline-prompt fixture; the actual Settings Telegram secret prompt passes on both base and head, so this is an unconfirmed risk rather than a finding.
 - Not visually checked in a desktop browser/window or on an Android device/emulator. Android navigation-bar inset handling, keyboard-first Back behavior and visual hit coordinates remain unconfirmed.
 - Installs: none. No linked GitHub issues or PRs. Round 1 of 3: returned to new/ under the mandatory failing-test policy, solely for the baseline formatting blocker.
+
+## factory · 2026-11-19 01:38
+Fix-round build could not proceed: authorized baseline formatting correction is absent from origin/master (8d217db4). Claude Code independently checked twice; no legitimate in-scope commit is possible. The formatting correction exists on FT152 only; merging or cherry-picking unrelated feature work was deliberately not done. No new commits, installs, or source changes. Existing branch and round retained.
+
+Configured command still exits 1 at `gofmt -l .: internal/proctrack/proctrack_test.go`; separate go vet ./... and go test ./... pass. Unchanged Console tests were not rerun; no desktop/Android visual checks. Moved new/ → backlog/ until the authorized baseline fix is merged into master; owner can then return this item to new/.
+
+Build-start notification could not be delivered (Telegram request timeout).
