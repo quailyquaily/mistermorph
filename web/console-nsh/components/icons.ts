@@ -77,6 +77,7 @@ import PhPencilSimple from "../assets/icons/pencil-simple.svg";
 import PhPencilSimpleLine from "../assets/icons/pencil-simple-line.svg";
 import PhPlugs from "../assets/icons/plugs.svg";
 import PhPlugsConnected from "../assets/icons/plugs-connected.svg";
+import PhPlay from "../assets/icons/play.svg";
 import PhPlus from "../assets/icons/plus.svg";
 import PhProhibit from "../assets/icons/prohibit.svg";
 import PhPulse from "../assets/icons/pulse.svg";
@@ -114,6 +115,8 @@ import PhMagicWandFill from "../assets/icons/magic-wand-fill.svg";
 import PhChartBarFill from "../assets/icons/chart-bar-fill.svg";
 import PhFingerprintFill from "../assets/icons/fingerprint-fill.svg";
 import PhGearSixFill from "../assets/icons/gear-six-fill.svg";
+import PhPlayFill from "../assets/icons/play-fill.svg";
+import PhStopFill from "../assets/icons/stop-fill.svg";
 
 export const ICONS = {
   /** The ui-kit's clear-field glyph (a backspace key with a cross), Vue's AppIconEditorDelete. */
@@ -193,6 +196,7 @@ export const ICONS = {
   PhPencilSimpleLine,
   PhPlugs,
   PhPlugsConnected,
+  PhPlay,
   PhPlus,
   PhProhibit,
   PhPulse,
@@ -224,7 +228,8 @@ export const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
-/** The fill weight of the navigation's icons (Phosphor 2.2.1): the phone bar's selected slot. */
+/** The fill weight of the navigation's icons (Phosphor 2.2.1): the phone bar's selected slot; Play and Stop
+ * (Phosphor 2.1.1) for the TODO topic's Start and Stop. */
 export const FILLED_ICONS: Partial<Record<IconName, ImageAsset>> = {
   PhChats: PhChatsFill,
   PhUsers: PhUsersFill,
@@ -235,4 +240,6 @@ export const FILLED_ICONS: Partial<Record<IconName, ImageAsset>> = {
   PhChartBar: PhChartBarFill,
   PhFingerprint: PhFingerprintFill,
   PhGearSix: PhGearSixFill,
+  PhPlay: PhPlayFill,
+  PhStop: PhStopFill,
 };

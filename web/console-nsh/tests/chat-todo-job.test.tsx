@@ -1,6 +1,7 @@
 // A TODO topic's toolbar (components/chat/TodoJobBar.tsx on components/chat/todoJob.ts): Start and
-// View Job in the bottom navigation's glass capsule where a topic has its composer, Start reading Stop
-// while the runtime runs the item. The item is the one the topic's ID names; what the toolbar shows
+// View Job (icon buttons; tests/todo-job-bar.test.tsx checks how they look) in the bottom
+// navigation's glass capsule where a topic has its composer, Start turning into Stop while the
+// runtime runs the item. The item is the one the topic's ID names; what the toolbar shows
 // is what the runtime answered (runs started elsewhere too), never what a request alone suggests.
 // Requests still on their way are tested on the module with a fake runtime, since a held answer
 // stops the headless app; the real page is tested through the console's API.
@@ -304,10 +305,14 @@ test("the topic's foot is the item's toolbar: Start and View Job, centred, in pl
   await app.waitFor("id:chat-todo-job-bar");
   expect(app.shows("id:chat-readonly-topic")).toBe(false);
   expect(app.shows("text:/The runs of the TODO item/")).toBe(false);
-  // Exactly two buttons, named for what they do; no composer.
+  // Exactly two icon buttons, named for what they do (no text drawn on them); no composer.
   expect(app.count("id:chat-todo-job-bar >> role:button")).toBe(2);
   await app.waitFor("label:Start");
   expect(app.count("label:View Job")).toBe(1);
+  expect(app.count("id:chat-todo-job-bar >> text:/Start|Stop|View Job/")).toBe(0);
+  // Start: the primary button's white Play (tests/todo-job-bar.test.tsx has the looks).
+  await app.waitFor("id:chat-todo-job-toggle-icon.PhPlay.primary.primary-foreground");
+  expect(app.count("id:chat-todo-job-view-icon.PhListChecks.quiet.muted-foreground")).toBe(1);
   expect(app.count("label:Stop")).toBe(0);
   expect(app.shows("id:chat-composer-input")).toBe(false);
   expect(app.count("role:toolbar")).toBe(1);
@@ -337,6 +342,9 @@ test("Start runs the item now; once the runtime lists the run the button reads S
   expect(app.count("label:Start")).toBe(0);
   expect(proxied(calls, "POST", "/todo/tasks/job1/run").length).toBe(1);
   await app.waitUntil(() => app.enabled("id:chat-todo-job-toggle"));
+  // Stop: the red square on its own solid fill.
+  expect(app.count("id:chat-todo-job-toggle-icon.PhStop.stop.danger")).toBe(1);
+  expect(app.count("id:chat-todo-job-bar >> text:/Start|Stop|View Job/")).toBe(0);
   await app.press("id:chat-todo-job-toggle");
   await app.waitFor("label:Start", { timeout: 4000 });
   const stops = proxied(calls, "POST", "/todo/tasks/job1/stop");
@@ -401,6 +409,8 @@ test("an item that is gone says so; both buttons stay, disabled", async () => {
   const { app } = await openConsole({ location: `/e/default/chat/${TOPIC}`, api: live.api });
   await app.waitFor("The TODO item “Daily digest” no longer exists.");
   expect(app.count("label:Start")).toBe(1);
+  expect(app.count("id:chat-todo-job-toggle-icon.PhPlay.disabled.on-disabled")).toBe(1);
+  expect(app.count("id:chat-todo-job-view-icon.PhListChecks.disabled.plain-disabled-text")).toBe(1);
   expect(app.count("label:Stop")).toBe(0);
   expect(app.enabled("id:chat-todo-job-toggle")).toBe(false);
   expect(app.enabled("id:chat-todo-job-view")).toBe(false);
