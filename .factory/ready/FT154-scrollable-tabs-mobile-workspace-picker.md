@@ -43,3 +43,18 @@ IMPORTANT review gap: on the web runtime, a vertical swipe starting over an OVER
 Visual inspection: coder inspected screenshots and gestures in Chrome with nsh web runtime 0.5.1; pinned local compiler is 0.6.0 and matching web runtime was not available. Android/iOS/native desktop and real device gesture/focus behaviour were not checked. Headless focus auto-reveal also cannot alone prove browser focus handling.
 
 Pushed branch and moved new/ → review/. Initial credential-helper request lacked repository path; retried successfully with command-local credential.useHttpPath=true, without changing user configuration.
+
+
+## factory · review · 2026-11-19 15:53
+head: a8ce546ef3dfc99adecc96f7634988c93be56f88
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/ui.tsx:1975: An overflowing strip uses a web scroller that consumes vertical swipes instead of passing them to a scrolling ancestor. Example: at a narrow viewport where the Stats tabs overflow, a vertical swipe starting on the 36pt strip does not scroll the page; starting outside it does. Preserve vertical gesture handoff when the runtime supports it. This is a limited requirement mismatch, not a P0/P1 blocker; the mobile workspace picker has no outer modal scroll to lose.
+
+Reviewed with Claude Code using review-code: origin/master...HEAD, both commits and all nine changed files, plus existing Tabs callers. No P0/P1 findings. No files changed or commits made by the reviewer.
+
+Validation: required gofmt check, go vet ./... and go test ./... passed (165 packages ok); nsh check passed; scripts/test.sh passed 144 files with zero final failures. Two unrelated existing settings tests failed in parallel and passed the script's isolated rerun. A log-tail wrapper failed after successful checks; this was not a test failure. Installs: none.
+
+Residual risks: matching nsh 0.6.0 web runtime unavailable; web focus/gesture analysis used 0.5.1 runtime source rather than a fresh browser run. Android, iOS and native desktop gestures/layout were not verified. Desktop vertical-wheel handoff, first-frame measurement visuals and edge fades remain unchecked. Passing review does not mean all real-device acceptance cases were verified.
+
+Moved review/ → ready/; owner should inspect narrow-width gestures/focus on supported platforms and the limited vertical-swipe behavior before shipping.
