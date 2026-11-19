@@ -437,8 +437,9 @@ Headless tests prove behaviour, not the look.
   one in for the phone's popups, and `watchDialogs` gives a fixture every paper's frame and motion
   (tests/fixtures/mobile-popup-app.tsx). A step of a test ends only once the app is quiet, so an
   entrance is sampled from the paper's first layout, not from a button pressed before it.
-- Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
-  closes the dialog.
+- Dialogs are nsh `Dialog`s on Android too (`DialogLayer`, `statusBarTranslucent`: over the whole
+  screen, as the sheets' layers are). nsh 0.4.0's Dialog started below the status bar and took
+  presses one status bar higher than it drew them, so they were Overlays until nsh 0.6 (see there).
 - A phone bar's back arrow does not hide the keyboard by itself: the chat's arrow calls
   `dismissSoftKeyboard` (`lib/softKeyboard.ts`) first and goes back only when nothing was up. On
   Android trust `keyboardFrame()` from the start (the host reads the system's keyboard insets); a
@@ -463,7 +464,7 @@ Headless tests prove behaviour, not the look.
   bottom edge, and back down out there. Its footer's buttons go in `DialogActions` (Modal's footer and SettingDialog's are):
   exactly two share the row's width there; put them in the row itself, not each in a column of
   its own (`flex-1` would grow it down).
-- nsh/base's `Sheet` is such an overlay: the frame's padding does not reach it, and its panel runs
+- nsh/base's `Sheet` is such a layer: the frame's padding does not reach it, and its panel runs
   under the status bar unless it is padded. The chat's phone panel (`WorkspaceSheet`) pads its
   popup with `rightSheetInsets` (`lib/systemInsets.ts`); a new sheet at a side does the same, never
   adding the frame's inset on top.
@@ -486,11 +487,15 @@ Headless tests prove behaviour, not the look.
 
 ### nsh 0.6.0
 
-- An nsh `Sheet` is a modal root now (nsh #2028), and Android's Back reaches the newest modal
-  before any overlay in the page behind it. The console's dialogs are overlays on Android
-  (`DialogLayer`), so with one open over a sheet (the rename dialog from the topic sheet), Back
-  closed the sheet and left the dialog. The sheets ask `closeDialogOverSheet()` (components/ui.tsx)
-  before closing, and an overlay's Back closes the newest open dialog.
+- An nsh `Sheet` is a modal root now (nsh #2028): it is drawn, and Back and Escape reach it, above
+  the app's root and every `Overlay` in it (an overlay goes in the root around its node, so one
+  declared on a page is under every open sheet). The console's dialogs were overlays on Android,
+  so the rename dialog opened from the chat's right sheet was drawn under the sheet. Every dialog
+  and phone popup is an nsh `Dialog` on every platform now (`DialogLayer`): the newest modal is on
+  top, scrim and paper, and owns the presses, Escape and Back until it is gone; the sheet under
+  it stays open as it was (tests/dialogs-over-sidebar.test.tsx). Never draw a dialog in an
+  `Overlay`, nor raise one with a z-index. A panel's own Escape binding beside the content (a
+  `SidePane` column) steps aside while a popup is open (`bindPaneEscape`, components/ui.tsx).
 - `Picker.pickFiles` leaves a file over 512 MiB unread (`file: null`, `status: "tooLarge"`);
   `lib/mobileHost.ts` leaves it out.
 - A tooltip goes out over a few frames as the next one comes in, so for a moment both show.

@@ -2,11 +2,11 @@
 // of the store's skills with search and tag filters. A card opens a side panel with the skill's
 // details and SKILL.md (read from GitHub at the commit the store pins), and Install or Update, which
 // start the same review in chat as Add skill. On a phone the panel slides in over the grid.
-import { batch, computed, effect, keymap, LayoutAnimation, reduceMotion, signal, Text, untracked, View } from "nsh";
+import { batch, computed, effect, LayoutAnimation, reduceMotion, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton, Sheet } from "nsh/base";
 import { Blocks, gutterX, gutterY, Note, ROW_TRANSITION, SearchField, t, WorkspaceTitle } from "../../components/knowledge/parts";
 import { EdgeScroll, MOTION_SLOW } from "../../components/motion";
-import { BackButton, Button, circleButtonClass, closeDialogOverSheet, Icon, Page } from "../../components/ui";
+import { BackButton, bindPaneEscape, Button, circleButtonClass, Icon, Page } from "../../components/ui";
 import { endpointApiFetch, endpointState, formatBytes, runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -201,9 +201,11 @@ export function SkillStorePage() {
   // Floored to a whole point: a share that rounds up by a hair wraps the last card of a row.
   const cardWidth = () => (gridWidth() > 0 ? Math.floor((gridWidth() - 12 * (columns() - 1)) / columns()) : undefined);
 
-  keymap.bind("escape", () => {
-    if (!untracked(isMobile) && untracked(selected)) close();
-  });
+  // The pane's Escape on wide windows; a dialog opened from it takes Escape first.
+  bindPaneEscape(
+    () => close(),
+    () => !isMobile() && Boolean(selected()),
+  );
 
   return (
     <Page
@@ -341,7 +343,7 @@ export function SkillStorePage() {
         open={isMobile() && Boolean(selected())}
         side="right"
         onOpenChange={({ open: next }) => {
-          if (!next && !closeDialogOverSheet()) close();
+          if (!next) close();
         }}
         backdropClass="bg-black/24"
         popupClass="h-full w-[92%] max-w-[440px] pb-1 pr-1 pt-1.5"

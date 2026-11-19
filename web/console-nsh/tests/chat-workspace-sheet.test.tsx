@@ -1,5 +1,5 @@
 // The chat's topic and workspace panel on phones, a sheet from the right: its segmented tabs span
-// the 57pt row in equal halves, and on Android the sheet (an Overlay outside the app's frame)
+// the 57pt row in equal halves, and on Android the sheet (a layer outside the app's frame)
 // keeps its tabs and content out from under the status bar and the navigation bar by itself, once.
 // The wide window's panel row keeps its layout. Frames come from tests/fixtures/workspace-sheet-app.tsx;
 // the rest runs the whole console (lib/systemInsets.ts, pages/chat/WorkspacePanel.tsx).

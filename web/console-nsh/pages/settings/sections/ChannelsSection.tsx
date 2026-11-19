@@ -2,11 +2,11 @@
 // right (a sheet on phones). Closing the pane keeps the draft: it stays in the save bar, and the
 // tile shows it is unsaved.
 import type { JSX } from "nsh";
-import { Image, keymap, Scroll, signal, Text, untracked, View } from "nsh";
+import { Image, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { endpointApiFetch } from "../../../lib/core/context.js";
 import { CHANNEL_TRIGGER_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
-import { Button, DropdownMenu, Kicker, MenuIconTrigger, SelectField, SidePane, TextField } from "../../../components/ui";
+import { bindPaneEscape, Button, DropdownMenu, Kicker, MenuIconTrigger, SelectField, SidePane, TextField } from "../../../components/ui";
 import { SCROLLBAR } from "../../../components/motion";
 import { ConfigSettingsPanel, type ConfigGroup } from "../../../components/settings/ConfigSettingsPanel";
 import { EnvManagedField } from "../../../components/settings/EnvManagedField";
@@ -410,9 +410,11 @@ export function ChannelPane(props: { s: SettingsStore; sheet?: boolean }) {
     </View>
     </InSidePane.Provider>
   );
-  keymap.bind("escape", () => {
-    if (untracked(open) && !props.sheet) s.closeChannelPane();
-  });
+  // The column's Escape; a dialog opened from it takes Escape first. The phone's sheet has its own.
+  bindPaneEscape(
+    () => s.closeChannelPane(),
+    () => open() && !props.sheet,
+  );
   return (
     <If
       when={props.sheet}

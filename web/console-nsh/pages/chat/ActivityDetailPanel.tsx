@@ -14,8 +14,8 @@
 // Its head is its title (the panel's name, or the worker's), what it belongs to (the message the
 // reply answers; not for progress, reasoning or a coder's output, see `showContext`) and close;
 // Escape closes it, and on phones Android's Back does.
-import { cleanup, effect, Image, keymap, Text, View } from "nsh";
-import { Icon, popupOpen, StatusMark, Tip, TipButton } from "../../components/ui";
+import { Image, Text, View } from "nsh";
+import { bindPaneEscape, Icon, StatusMark, Tip, TipButton } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
 import { ICONS } from "../../components/icons";
 import { activityDetailKey, type ActivityDetailRef } from "../../components/chat/activityDetail";
@@ -94,10 +94,11 @@ export function ActivityDetailPanel(props: {
   // composer's suggestions: `popupOpen`, whether it opened before the panel or after) gets Escape
   // instead: the binding is dropped meanwhile, since a binding that fires takes the key. The phone's
   // sheet takes Escape and Back itself.
-  effect(() => {
-    if (props.phone || props.escape === false || popupOpen()) return;
-    cleanup(keymap.bind("escape", () => props.onClose(), { when: "always" }));
-  });
+  bindPaneEscape(
+    () => props.onClose(),
+    () => !props.phone && props.escape !== false,
+    { when: "always" },
+  );
 
   const kind = () => props.detail.kind;
   const item = () => props.item;
