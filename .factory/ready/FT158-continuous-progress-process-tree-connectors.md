@@ -59,3 +59,14 @@ Fixed review P1 and pushed 221e8ba0 on factory/FT158-continuous-progress-process
 - Configured gofmt/vet/go test passed. Manager independently reran nsh check and all configured Go checks successfully. Verified commits contain only item work and no forbidden paths changed.
 - Installs: none beyond repository-pinned dependency restoration; no manifest changes.
 - No new visual checks, screenshots, live desktop/mobile web, native desktop or Android device/emulator checks. Headless regression suite passed; prior native dashed-stroke and subpixel visual limitations remain unverified.
+
+## factory · review · 2026-11-19 21:53
+head: 221e8ba01f647b167f5718a82d1a1d4a9925d8a5
+verdict: pass
+notes:
+- Claude Code reviewed all 6 changed files in origin/master...HEAD, both feature commits, against the request, plan and previous review. No qualifying findings. Prior P1 is fixed: nullable normalized activity is checked before reading history.
+- Configured gofmt, go vet ./... and go test ./... passed; Go log contains 165 successful packages, 20 without tests and no failure lines. The coder's pipeline reported tail's exit status rather than go test's; package output was inspected explicitly to verify the result.
+- nsh check passed (0.6.0). Required scripts/test.sh passed: 146 files, 0 failed in 290 seconds. chat-attachments, android-voice, settings-agent-name-set and settings-page passed the runner's isolated retry. Connector regression tests passed in the parallel run.
+- No unpinned installs or manifest changes. Review worktree clean; no code commits.
+- No screenshots or live desktop/mobile web, GPUI desktop or Android device/emulator checks; no separate dark-mode visual check. Headless geometry covers Linux widths 700/320 and Android 360. Native dashed-stroke appearance and subpixel branch alignment remain visually unverified.
+- Moved review/ → ready/. No linked issue or PR in the item.
