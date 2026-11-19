@@ -11,6 +11,16 @@ import { signal, untracked, View } from "nsh";
 import type { DatePickerProps } from "nsh/base";
 import { Calendar, DatePicker, TimeField } from "nsh/base";
 import { Button, PopupSheet, popupSheets } from "../ui";
+import { CONTROL_CORNERS, cornersClass, fittingRadius, RADIUS } from "../corners";
+
+/**
+ * A day in a date popover's calendar (`itemClass`): a 32pt control with the controls' continuous
+ * 8pt corners. The bubble's hairline and 12pt padding put the cells 13pt in from its edge, past its
+ * 12pt radius, so no corner nests in another.
+ */
+export const CALENDAR_DAY_CLASS = `h-8 min-w-8 items-center justify-center ${CONTROL_CORNERS} text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-primary selected:text-primary-foreground disabled:opacity-50`;
+/** The 24pt button that clears a date, beside its trigger (`clearButtonClass`): the controls' corners fitted to its size (7pt). */
+export const DATE_CLEAR_CLASS = `ml-1 size-6 items-center justify-center ${cornersClass(fittingRadius(RADIUS.control, 24))} hover:bg-hover`;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 

@@ -9,11 +9,12 @@
 // weekdays above 680; the weekday chips run 7 to a row, 4 in a narrow form or window, 2 on a phone.
 import { signal, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch, TimeField } from "nsh/base";
-import { DateField } from "../shared/DateField";
+import { CALENDAR_DAY_CLASS, DateField } from "../shared/DateField";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, Tabs, Tip, TipButton } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
+import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 import * as model from "./todo-model.js";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
@@ -58,7 +59,7 @@ function NormalizedField(props: {
   );
 }
 
-/** A weekday chip (`.todo-weekday`): a 4pt-cornered box that turns blue when chosen. */
+/** A weekday chip (`.todo-weekday`): a box with the controls' corners that turns blue when chosen. */
 function WeekdayChip(props: { day: number; selected: boolean; disabled: boolean; onPress: () => void }) {
   return (
     <BaseButton
@@ -67,7 +68,7 @@ function WeekdayChip(props: { day: number; selected: boolean; disabled: boolean;
       disabled={props.disabled}
       accessibilityLabel={model.weekdayLabel(props.day) as string}
       testID={`todo-weekday-${props.day}`}
-      class={`h-11 flex-1 items-center justify-center rounded-[4px] border px-1.5 disabled:opacity-60 ${
+      class={`h-11 flex-1 items-center justify-center ${CONTROL_CORNERS} border px-1.5 disabled:opacity-60 ${
         props.selected ? "border-blue/55 bg-blue/12" : "border-line/70 bg-paper-dense hover:border-blue/40 hover:bg-hover"
       }`}
       style={{ transitionProperty: "colors", transitionDuration: 160, transitionTimingFunction: "ease" }}
@@ -105,15 +106,15 @@ function RunAtField(props: { task: TodoTask; disabled: boolean; onChange: (value
         if (typeof value === "string") props.onChange(value);
       }}
       offset={4}
-      popupClass="rounded-(--radius) border border-line-faint bg-dialog p-3"
+      popupClass={`${POPOVER_CORNERS} border border-line-faint bg-dialog p-3`}
       popupStyle={{ boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)" }}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"
-      itemClass="h-8 min-w-8 items-center justify-center rounded-(--radius) text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-primary selected:text-primary-foreground disabled:opacity-50"
+      itemClass={CALENDAR_DAY_CLASS}
       timeClass="mt-2 flex-row items-center justify-between gap-3"
       timeLabel={<Text class="text-sm text-subtle">{t("todo_field_time")}</Text>}
-      timeFieldClass="h-9.5 flex-row items-center rounded-(--radius) border border-input bg-field px-3"
+      timeFieldClass={`h-9.5 flex-row items-center ${CONTROL_CORNERS} border border-input bg-field px-3`}
       segmentClass="rounded-(--radius) px-0.5 text-sm text-foreground focus:bg-selection"
       separatorClass="text-sm text-muted-foreground"
       trigger={
@@ -182,8 +183,8 @@ function EnabledSwitch(props: { checked: boolean; disabled: boolean; onChange: (
       tooltip={<Tip text={t("todo_field_enabled")} />}
       testID="todo-enabled"
       class="group flex-row items-center disabled:opacity-50"
-      trackClass="h-5 w-[34px] rounded-(--radius) border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink"
-      thumbClass="size-3.5 rounded-[1px] bg-card checked:translate-x-3.5"
+      trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
+      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
       thumbStyle={{
         boxShadow: "0 0 0 1px rgba(24, 24, 50, 0.22), 0 1px 1px rgba(24, 24, 50, 0.1)",
         transitionProperty: "transform",
@@ -292,7 +293,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                 accessibilityLabel={t("todo_action_more")}
                 role="button"
                 tooltip={<Tip text={t("todo_action_more")} />}
-                class={`relative size-8 items-center justify-center rounded-(--radius) ${taskStarting() ? "" : "hover:bg-hover"}`}
+                class={`relative size-8 items-center justify-center ${CONTROL_CORNERS} ${taskStarting() ? "" : "hover:bg-hover"}`}
                 style={{ transitionProperty: "colors", transitionDuration: 180 }}
               >
                 <Icon name="PhDotsThree" size={16} color={taskStarting() ? busyLook("plain").text : "subtle"} />
@@ -607,7 +608,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               accessibilityLabel={t("todo_bash_env_add")}
               tooltip={<Tip text={t("todo_bash_env_add")} />}
               testID="todo-bash-env-add"
-              class="h-9.5 flex-row items-center justify-center gap-2 rounded-(--radius) border border-dashed border-blue/35 bg-white/45 hover:border-blue/60 hover:bg-white/75 disabled:opacity-50"
+              class={`h-9.5 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/35 bg-white/45 hover:border-blue/60 hover:bg-white/75 disabled:opacity-50`}
               style={{ transitionProperty: "colors", transitionDuration: 180 }}
             >
               <Icon name="PhPlus" size={16} color="subtle" />

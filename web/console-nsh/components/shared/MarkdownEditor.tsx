@@ -25,6 +25,12 @@ import { activeChannelTab, channelTabs, itemsForChannelTab } from "../../lib/cor
 import { endpointState, runtimeApiFetchForEndpoint, translate } from "../../lib/core/context.js";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import { Icon, Markdown, Modal, TextField, Tip, TipButton, type IconName } from "../ui";
+import { CONTROL_CORNERS, cornersClass, nestedRadius, RADIUS } from "../corners";
+
+/** The toolbar's buttons and tabs (in its 4pt padding, on the field's hairline): the field's corners nested (8 - 5: 3pt). */
+const TOOLBAR_CORNERS = cornersClass(nestedRadius(RADIUS.control, 1 + 4));
+/** A row of the mention and conversation pickers (in their dialog): a pressable row with the controls' continuous corners. */
+export const PICKER_ROW_CLASS = `flex-row items-center gap-3 ${CONTROL_CORNERS} px-2 py-1.5 hover:bg-hover active:bg-selection`;
 import { ContactAvatar } from "./ContactAvatar";
 import { createBesidePresses } from "./editorPresses";
 import { createTextareaInsert, insertIntoText } from "./textInsert";
@@ -200,7 +206,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
       onPress={() => mode.set(id)}
       accessibilityLabel={text}
       testID={props.testID ? `${props.testID}-${id}` : undefined}
-      class="flex-row items-center gap-1 rounded-(--radius) px-2 py-1 hover:bg-hover selected:bg-selection"
+      class={`flex-row items-center gap-1 ${TOOLBAR_CORNERS} px-2 py-1 hover:bg-hover selected:bg-selection`}
     >
       <Icon name={icon} size={13} color={mode() === id ? "foreground" : "muted-foreground"} />
       <Text class={`text-xs ${mode() === id ? "font-medium text-foreground" : "text-subtle"}`}>{text}</Text>
@@ -210,7 +216,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
   return (
     <View class={`gap-1.5 ${props.class ?? ""}`} testID={props.testID}>
       <View
-        class={`overflow-hidden rounded-(--radius) border bg-card transition-colors duration-200 ${focused() ? "border-ring" : "border-input"} ${
+        class={`overflow-hidden ${CONTROL_CORNERS} border bg-card transition-colors duration-200 ${focused() ? "border-ring" : "border-input"} ${
           props.disabled ? "opacity-60" : ""
         }`}
         style={heightStyle(props.height)}
@@ -455,7 +461,7 @@ function PickerButton(props: {
         tooltip={
           <Tip text={props.title} />
         }
-        class="size-9 items-center justify-center rounded-[6px] transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-45"
+        class={`size-9 items-center justify-center ${TOOLBAR_CORNERS} transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-45`}
       >
         <Icon name={props.icon} size={18} color="subtle" />
       </TipButton>
@@ -473,7 +479,7 @@ function PickerButton(props: {
                       props.onPick(item());
                     }}
                     accessibilityLabel={item().title}
-                    class="flex-row items-center gap-3 rounded-(--radius) px-2 py-1.5 hover:bg-hover active:bg-selection"
+                    class={PICKER_ROW_CLASS}
                   >
                     {props.avatar(item())}
                     <View class="flex-1 min-w-0">

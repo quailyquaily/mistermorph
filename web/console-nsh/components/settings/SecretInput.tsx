@@ -23,6 +23,7 @@ import { canSwapReference, pickerKeys, referenceEnvName, secretFieldLabel } from
 import { loadSecretInfo, loadSecretKeys, loadSecretKeysShared, revealSecret } from "../../lib/core/secret-reveal.js";
 import { secretStorageKind } from "../../lib/core/secret-storage.js";
 import { Button, FIELD_HEIGHT, Icon, type IconName, Modal, TextField } from "../ui";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../shared/partProbe";
 import { EnvManagedField } from "./EnvManagedField";
 
@@ -428,7 +429,7 @@ export function SecretInput(props: SecretInputProps) {
   // A filled field: as tall as a regular one (TextField), its buttons inside its end.
   const storedBox = (state: string, content: JSX.Element) => (
     <View
-      class={`${FIELD_HEIGHT} flex-row items-center gap-2.5 rounded-(--radius) border border-input bg-field py-0.5 pl-3 pr-1`}
+      class={`${FIELD_HEIGHT} flex-row items-center gap-2.5 ${CONTROL_CORNERS} border border-input bg-field py-0.5 pl-3 pr-1`}
       {...parts.probe(() => `${state}.field`)}
     >
       {content}
@@ -768,7 +769,7 @@ export function SecretKeyPicker(props: SecretKeyPickerProps) {
                   disabled={key().unavailable || revealing()}
                   onPress={() => choose(key())}
                   accessibilityLabel={`${hintText(key())}, ${kindTagText(key().kind, info())}`}
-                  class="gap-1 rounded-(--radius) border border-line-faint bg-card px-3 py-2 hover:border-ring hover:bg-hover active:bg-selection disabled:opacity-50"
+                  class={`gap-1 ${CARD_CORNERS} border border-line-faint bg-card px-3 py-2 hover:border-ring hover:bg-hover active:bg-selection disabled:opacity-50`}
                 >
                   <View class="flex-row items-center justify-between gap-3">
                     <Text class="flex-1 font-mono text-sm text-foreground" style={{ numberOfLines: 1 }}>

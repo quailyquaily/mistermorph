@@ -32,6 +32,7 @@ import { onSystemBack } from "../../lib/systemBack";
 import { MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SHEET_OUT, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { mobilePopupEntrance } from "../../lib/mobilePopup";
+import { CONTINUOUS } from "../corners";
 import { Icon, MENU_POPUP_STYLE, POPUP_RADIUS, POPUP_TITLE_HEIGHT, PopupTitle, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
@@ -194,7 +195,7 @@ function SheetLayer(props: {
       <View
         role="menu"
         accessibilityLabel={props.label}
-        class="w-full overflow-hidden border border-line-faint bg-dialog"
+        class={`w-full overflow-hidden ${CONTINUOUS} border border-line-faint bg-dialog`}
         // Until its first layout the sheet's place is unknown: it starts a page's height down.
         onLayout={({ bounds }) => {
           props.onBox({ y: bounds.origin.y, height: bounds.size.height });

@@ -14,6 +14,7 @@ import { ROW_MODES } from "../../lib/core/setting-rows.js";
 import { useRevealRow } from "../settings-page/reveal";
 import { isMobile } from "../../lib/shell";
 import { Icon, PopupList, popupSheets, Tip, TipButton } from "../ui";
+import { CONTROL_CORNERS, cornersClass, nestedRadius, POPOVER_CORNERS, RADIUS } from "../corners";
 
 /** A choice in a settings list. `hint` shows beside the title, `one` is a unit's singular title. */
 export interface SettingOption {
@@ -45,16 +46,19 @@ export const InSidePane = context<boolean>(false);
 
 /** The classes of a field's box. */
 export function boxClass(state: { disabled?: boolean; invalid?: boolean; open?: boolean } = {}) {
-  // SettingFields.css `.sf-box`: 44pt high, 2pt corners, a hairline that firms up on hover and focus.
-  return `h-11 flex-row items-stretch overflow-hidden rounded-(--radius) border bg-field transition-colors duration-120 ${
+  // SettingFields.css `.sf-box`: 44pt high, the controls' continuous corners (it clips its parts'
+  // fills to them), a hairline that firms up on hover and focus.
+  return `h-11 flex-row items-stretch overflow-hidden ${CONTROL_CORNERS} border bg-field transition-colors duration-120 ${
     state.invalid ? "border-danger/70" : state.open ? "border-blue/60" : "border-input hover:border-ink/32"
   } ${state.disabled ? "opacity-60" : ""}`;
 }
 
 const INPUT_CLASS = "flex-1 min-w-0 px-3 py-2 text-sm text-foreground placeholder:text-placeholder";
 const PART_CLASS = "flex-row items-center gap-1.5 px-3 hover:bg-blue/6 active:bg-blue/10 focus:bg-blue/10 disabled:opacity-50";
-const MENU_POPUP = "min-w-40 max-h-80 rounded-(--radius) border border-border bg-popover py-1 shadow-md";
-const MENU_ITEM = "flex-row items-center justify-between gap-3 px-3 py-1.5 hover:bg-hover focus:bg-hover selected:bg-selection disabled:opacity-45";
+// The popovers' continuous corners; an item's highlight is inset 4pt from the sides as from the top
+// and bottom (py-1), its corners nested by the hairline and the 4pt (12 - 5: 7pt), its text 12pt in.
+const MENU_POPUP = `min-w-40 max-h-80 ${POPOVER_CORNERS} border border-border bg-popover py-1 shadow-md`;
+const MENU_ITEM = `mx-1 flex-row items-center justify-between gap-3 px-2 py-1.5 ${cornersClass(nestedRadius(RADIUS.popover, 1 + 4))} hover:bg-hover focus:bg-hover selected:bg-selection disabled:opacity-45`;
 
 /** The hairline between two parts of a box. */
 function Sep() {
@@ -861,7 +865,7 @@ export function SettingChoices(props: SettingChoicesProps) {
             disabled={locked(item())}
             onChange={() => toggle(item())}
             accessibilityLabel={item()}
-            class={`min-h-8 flex-row items-center gap-1.5 rounded-(--radius) border px-2.5 disabled:opacity-50 ${
+            class={`min-h-8 flex-row items-center gap-1.5 ${CONTROL_CORNERS} border px-2.5 disabled:opacity-50 ${
               on(item()) ? "border-blue bg-selection" : "border-input bg-field hover:border-ring"
             }`}
           >
@@ -1050,7 +1054,7 @@ export function SettingRows(props: SettingRowsProps) {
           onPress={addRow}
           accessibilityLabel={props.addLabel || "Add"}
           tooltip={<Tip text={props.addLabel || "Add"} />}
-          class="size-8 items-center justify-center self-start rounded-(--radius) hover:bg-hover active:bg-selection disabled:opacity-50"
+          class={`size-8 items-center justify-center self-start ${CONTROL_CORNERS} hover:bg-hover active:bg-selection disabled:opacity-50`}
         >
           <Icon name="PhPlus" size={14} color="blue" />
         </TipButton>

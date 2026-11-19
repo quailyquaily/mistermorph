@@ -183,7 +183,7 @@ indigo that can. Aojashin's sidebar is light, so its active item is marked in bl
 - **Sidebar.** A panel inset 4 px, corner radius 4. The active item gets the active-row fill and a 2 px bar in
   `sbaccent`; its icon takes `sbaccent` too. The footer carries the mark and MISTER MORPH.
 - **Selection.** `accent` at 8–9% as a fill, with a 1 px border of `accent` at 38%.
-- **Buttons.** Height 34 px, corner radius 2 px. Primary is `primary` with `ontext`. In split themes it carries a
+- **Buttons.** Height 34 px, corner radius 8 px, continuous (the console's corner scale: `docs/console/corners.md`). Primary is `primary` with `ontext`. In split themes it carries a
   1.5 px cyan fringe on the left and magenta on the right; in glow themes, a 14 px glow. Outlined buttons use `line`;
   destructive ones use `danger` on a 10% tint.
 - **Reply suggestions.** Chips with a border of `accent` at 36%, the label in `accent`, and the probability in
@@ -199,7 +199,7 @@ indigo that can. Aojashin's sidebar is light, so its active item is marked in bl
   `accent`, the title as a mono label in brackets (capitals, tracked +0.12 em; a name the user gave keeps its own
   case), the description in tertiary text, and an action area at the right end, all on a hairline. Three forms:
   - *Plain*: no frame; the head's rule is the only line. For groups within a page.
-  - *Boxed*: a hairline frame on the paper, corner radius 2 px, no fill or shadow of its own; the head is its top
+  - *Boxed*: a hairline frame on the paper, corner radius 12 px (continuous, as cards), no fill or shadow of its own; the head is its top
     strip. For things that stand on their own.
   - *Pane*: a left hairline, its own scroll, the head pinned. For a detail pane beside a list.
 - **The section head is one fixed row.** 44 px, or 48 px as a box's strip or a pane's head, whatever it holds. The

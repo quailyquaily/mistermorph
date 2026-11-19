@@ -5,6 +5,10 @@
 import { cleanup, effect, keymap, signal, Text, untracked, View } from "nsh";
 import { Input } from "nsh/base";
 import { Button } from "../ui";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
+
+/** An option of an open question: a row that answers with it when pressed, its hover and focus fill on the controls' continuous corners. */
+export const QUESTION_OPTION_CLASS = `flex-row gap-2 ${CONTROL_CORNERS} px-1 py-1 hover:bg-hover focus:bg-hover disabled:opacity-45`;
 import { ChatMarkdown } from "./ChatMarkdown";
 import { t } from "./i18n";
 import type { KeyedState } from "./rowState";
@@ -92,7 +96,7 @@ export function ChatQuestionCard(props: {
 
   return (
     <View
-      class={`gap-2 rounded-(--radius) border bg-card p-3 ${open() ? "border-blue-lighter" : "border-line-faint"}`}
+      class={`gap-2 ${CARD_CORNERS} border bg-card p-3 ${open() ? "border-blue-lighter" : "border-line-faint"}`}
       accessibilityLabel={t("chat_question_title")}
       testID="chat-question"
     >
@@ -127,7 +131,7 @@ export function ChatQuestionCard(props: {
                 onFocus={() => choiceFocused.set(true)}
                 onBlur={() => choiceFocused.set(false)}
                 accessibilityLabel={String(option()?.label ?? "")}
-                class="flex-row gap-2 rounded-(--radius) px-1 py-1 hover:bg-hover focus:bg-hover disabled:opacity-45"
+                class={QUESTION_OPTION_CLASS}
               >
                 <Key label={`[${index() + 1}]`} />
                 <View class="flex-1 gap-0.5">
@@ -153,7 +157,7 @@ export function ChatQuestionCard(props: {
                   accessibilityLabel={placeholder()}
                   readonly={state().busy}
                   testID="chat-question-input"
-                  class="flex-1 rounded-(--radius) border border-input bg-field px-2.5 py-1.5 text-sm text-foreground placeholder:text-placeholder"
+                  class={`flex-1 ${CONTROL_CORNERS} border border-input bg-field px-2.5 py-1.5 text-sm text-foreground placeholder:text-placeholder`}
                 />
                 <Button
                   variant="primary"

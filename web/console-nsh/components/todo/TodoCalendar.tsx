@@ -12,6 +12,7 @@ import { gutterX, gutterY } from "../frame/metrics";
 import { MOTION_EASE_CSS } from "../motion";
 import { BAR_ICON_SIZE, Button, CircleButton, Tip, TipButton, type IconName } from "../ui";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
+import { POPOVER_CORNERS } from "../corners";
 import { TODO_HEAD_HEIGHT, TODO_INDEX_WIDTH, todoHeadPaddingRight } from "./TodoIndex";
 import { TodoViewToggle } from "./TodoViewToggle";
 import type { CalendarSelection, TodoTask } from "./todo-state";
@@ -403,8 +404,9 @@ export function TodoCalendar(props: TodoCalendarProps) {
                 placement="bottom"
                 align={dayProps.column >= 5 ? "end" : "start"}
                 offset={2}
-                // `.todo-calendar-overflow`: 320 wide, a line frame on paper with the large shadow.
-                popupClass="max-h-70 w-80 gap-1 border border-line bg-paper p-[9px] transition duration-120"
+                // `.todo-calendar-overflow`: 320 wide, a line frame on paper with the large shadow, the
+                // popovers' continuous corners.
+                popupClass={`max-h-70 w-80 gap-1 ${POPOVER_CORNERS} border border-line bg-paper p-[9px] transition duration-120`}
                 popupStyle={{ boxShadow: "0 12px 34px rgba(20, 29, 48, 0.18)", transitionTimingFunction: MOTION_EASE_CSS }}
                 popupStartingClass="opacity-0 -translate-y-1"
                 popupEndingClass="opacity-0"

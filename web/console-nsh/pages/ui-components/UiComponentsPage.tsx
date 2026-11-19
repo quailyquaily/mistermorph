@@ -14,6 +14,7 @@ import { LANGUAGES } from "../../components/LanguageSelector";
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
 import { EdgeScroll } from "../../components/motion/ScrollEdges";
 import { Button, EmptyState, Icon, Tabs, TextField, TipButton } from "../../components/ui";
+import { CARD_CORNERS } from "../../components/corners";
 import { currentRoute } from "../../lib/router";
 import { localeState } from "../../lib/stores/index.js";
 import { galleryAction, galleryActionCount, t } from "./demo";
@@ -110,7 +111,7 @@ function DemoCard(props: { entry: GalleryEntry; width: number; top: number; span
   });
   return (
     <View
-      class="overflow-hidden rounded-(--radius) border border-line-faint bg-card"
+      class={`overflow-hidden ${CARD_CORNERS} border border-line-faint bg-card`}
       style={{ width: props.width }}
       testID={`uig-demo-${props.entry.id}`}
       accessibilityLabel={props.entry.name}
@@ -312,7 +313,7 @@ export function UiComponentsPage() {
                     </Each>
                   </View>
                   <If when={inGroup(item().id).some((entry) => entry.mode !== "demo")}>
-                    <View class="rounded-(--radius) border border-line-faint bg-card" testID={`uig-notes-${item().id}`}>
+                    <View class={`${CARD_CORNERS} border border-line-faint bg-card`} testID={`uig-notes-${item().id}`}>
                       <Text class="px-4 py-2.5 font-mono text-xs uppercase tracking-widest text-muted-foreground">{t("uig_notes_title")}</Text>
                       <Each of={GALLERY_ENTRIES.filter((entry) => entry.group === item().id && entry.mode !== "demo")} key={(entry) => entry.id}>
                         {(entry) => (

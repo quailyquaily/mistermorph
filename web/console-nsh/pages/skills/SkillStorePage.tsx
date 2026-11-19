@@ -4,6 +4,7 @@
 // start the same review in chat as Add skill. On a phone the panel slides in over the grid.
 import { batch, computed, effect, LayoutAnimation, reduceMotion, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton, Sheet } from "nsh/base";
+import { CARD_CORNERS } from "../../components/corners";
 import { Blocks, gutterX, gutterY, Note, ROW_TRANSITION, SearchField, t, WorkspaceTitle } from "../../components/knowledge/parts";
 import { EdgeScroll, MOTION_SLOW } from "../../components/motion";
 import { BackButton, bindPaneEscape, Button, circleButtonClass, Icon, Page } from "../../components/ui";
@@ -285,7 +286,7 @@ export function SkillStorePage() {
                     accessibilityLabel={skill().name}
                     selected={selected()?.id === skill().id}
                     onPress={() => open(skill())}
-                    class={`min-h-[148px] gap-2 rounded-(--radius) border bg-card px-4 py-3.5 hover:border-[#7092b5d8] ${
+                    class={`min-h-[148px] gap-2 ${CARD_CORNERS} border bg-card px-4 py-3.5 hover:border-[#7092b5d8] ${
                       selected()?.id === skill().id ? "border-[#7092b5d8]" : "border-line"
                     }`}
                     style={{ width: cardWidth(), transitionProperty: "colors", transitionDuration: 120, transitionTimingFunction: "ease" }}

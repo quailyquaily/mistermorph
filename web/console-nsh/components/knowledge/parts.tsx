@@ -18,7 +18,8 @@ import type { ScrollMemory } from "../../lib/scrollMemory";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
-import { BackButton, BAR_ICON_SIZE, CircleButton, Icon, TextField, type IconName } from "../ui";
+import { BackButton, BAR_ICON_SIZE, CircleButton, Icon, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, TextField, type IconName } from "../ui";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { sagHalf, SagRule } from "../motion/Sag";
 import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../frame/glassBar";
@@ -512,7 +513,7 @@ export function DetailCard(props: {
 }) {
   const literal = () => props.literal !== false;
   return (
-    <View testID={props.testID} class={`rounded-(--radius) border border-line-soft bg-paper-soft ${props.class ?? ""}`}>
+    <View testID={props.testID} class={`${CARD_CORNERS} border border-line-soft bg-paper-soft ${props.class ?? ""}`}>
       <View class="h-12 flex-row items-center gap-2.5 border-b border-line-soft px-4">
         <View selectable class="shrink" style={{ minWidth: 0 }}>
           <FadeText
@@ -543,7 +544,7 @@ export function MoreTrigger(props: { label: string; testID?: string }) {
       role="button"
       accessibilityLabel={props.label}
       testID={props.testID}
-      class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press"
+      class={`size-8 items-center justify-center ${CONTROL_CORNERS} hover:bg-hover active:bg-press`}
       style={ROW_TRANSITION}
     >
       <Icon name="PhDotsThree" size={16} color="subtle" />
@@ -678,8 +679,8 @@ export function SwitchOnly(props: {
       testID={props.testID}
       hitSlop={6}
       class="group flex-row items-center disabled:opacity-50"
-      trackClass="h-5 w-[34px] rounded-(--radius) border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink"
-      thumbClass="size-3.5 rounded-[1px] bg-card checked:translate-x-3.5"
+      trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
+      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
       thumbStyle={{
         boxShadow: props.checked ? "0 0 0 1px rgba(33, 68, 107, 0.6)" : "0 0 0 1px rgba(24, 24, 50, 0.22), 0 1px 1px rgba(24, 24, 50, 0.1)",
         transitionProperty: "transform",

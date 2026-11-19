@@ -7,6 +7,10 @@ import { cleanup, signal, Text, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import { copyText } from "../../lib/platform";
 import { FIELD_HEIGHT, Icon, Tip, TipButton } from "../ui";
+import { CONTROL_CORNERS } from "../corners";
+
+/** The locked box: a text field's height and continuous corners, on the muted fill. */
+export const ENV_FIELD_FRAME = `${FIELD_HEIGHT} flex-row items-center gap-0.5 ${CONTROL_CORNERS} border border-line-faint bg-muted pr-1 hover:border-line`;
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -48,9 +52,7 @@ export function EnvManagedField(props: EnvManagedFieldProps) {
   return (
     <View
       testID={props.testID}
-      class={`${FIELD_HEIGHT} flex-row items-center gap-0.5 rounded-(--radius) border border-line-faint bg-muted pr-1 hover:border-line ${
-        props.class ?? ""
-      }`}
+      class={`${ENV_FIELD_FRAME} ${props.class ?? ""}`}
     >
       <TipButton
         onPress={() => void copy()}

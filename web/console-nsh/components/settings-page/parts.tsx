@@ -4,7 +4,8 @@ import type { JSX } from "nsh";
 import { Text, View } from "nsh";
 import { Collapsible, Switch } from "nsh/base";
 import { isMobile } from "../../lib/shell";
-import { Icon, type IconName, Tip, TipButton } from "../ui";
+import { Icon, type IconName, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tip, TipButton } from "../ui";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 import { useRevealRow } from "./reveal";
 
 export { LoadingLine } from "../ui";
@@ -37,8 +38,8 @@ export function SettingSwitch(props: {
       accessibilityLabel={props.accessibilityLabel}
       testID={props.testID}
       class="disabled:opacity-45"
-      trackClass="w-[34px] h-5 rounded-(--radius) border border-line bg-transparent p-0.5 transition-colors duration-180 hover:border-muted-foreground checked:border-primary checked:bg-primary"
-      thumbClass="size-3.5 rounded-[1px] bg-card ring-1 ring-foreground/20 shadow-xs transition-transform duration-260 ease-[cubic-bezier(0.3,1.35,0.5,1)] checked:translate-x-3.5 checked:ring-primary/60"
+      trackClass={`w-[34px] h-5 ${SWITCH_TRACK_CORNERS} border border-line bg-transparent p-0.5 transition-colors duration-180 hover:border-muted-foreground checked:border-primary checked:bg-primary`}
+      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card ring-1 ring-foreground/20 shadow-xs transition-transform duration-260 ease-[cubic-bezier(0.3,1.35,0.5,1)] checked:translate-x-3.5 checked:ring-primary/60`}
     />
   );
 }
@@ -272,7 +273,7 @@ export function SettingsCard(props: {
     <View
       ref={reveal.ref}
       style={reveal.style()}
-      class={`min-w-0 ${boxed() ? "rounded-(--radius) border bg-paper/70" : "gap-4"} ${
+      class={`min-w-0 ${boxed() ? `${CARD_CORNERS} border bg-paper/70` : "gap-4"} ${
         reveal.ringed() ? "border-blue ring-2 ring-blue" : "border-line-soft"
       } ${props.class ?? ""}`}
       testID={props.testID}
@@ -345,7 +346,7 @@ export function PlaceholderButton(props: { label: string; icon?: IconName; disab
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
       testID={props.testID}
-      class={`h-11 flex-row items-center justify-center gap-2 rounded-(--radius) border border-dashed border-blue/36 bg-white/46 transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-white/68 disabled:opacity-50 ${
+      class={`h-11 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/36 bg-white/46 transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-white/68 disabled:opacity-50 ${
         props.class ?? ""
       }`}
     >

@@ -2,15 +2,15 @@
 // the ui-kit's .q-input and dropdown trigger): a 44pt field on a hairline with the field's name
 // inside it, before the value ("Timezone  UTC+9 · Tokyo", "Workspace  /path"). ui.tsx's TextField
 // puts its label above the field and has no slot before the text, so the TODO editor frames its own
-// inputs and pickers here with the same metrics: white 92 %, the input hairline, 2pt corners, the
-// blue focus border with its faint halo.
+// inputs and pickers here with the same metrics: white 92 %, the input hairline, the controls'
+// continuous corners, the blue focus border with its faint halo.
 import type { JSX } from "nsh";
 import { Text, View } from "nsh";
 import { Input } from "nsh/base";
+import { CONTROL_CORNERS } from "../corners";
 
 /** The field's frame; `focusWithinStyle` turns it blue while its input has the focus. */
-export const FIELD_FRAME =
-  "min-h-11 flex-row items-center gap-2 rounded-(--radius) border border-input bg-field pr-2";
+export const FIELD_FRAME = `min-h-11 flex-row items-center gap-2 ${CONTROL_CORNERS} border border-input bg-field pr-2`;
 /** The frame's left padding before a prepended name (the dropdown trigger's 0.8rem). */
 export const FIELD_PAD = "pl-[12.8px]";
 export const FIELD_FOCUS = { borderColor: "#426f9e9e", boxShadow: "0 0 0 1px rgba(66, 111, 158, 0.16)" };

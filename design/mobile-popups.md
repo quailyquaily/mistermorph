@@ -55,7 +55,7 @@ One floating paper serves every popup on phones. Its numbers are pure functions 
 
 | Property | Value | Where |
 |---|---|---|
-| Corners | 16pt on all four (`POPUP_RADIUS`) | `components/ui.tsx` |
+| Corners | 18pt continuous on all four (`POPUP_RADIUS`, the dialogs' radius; rows nested at 9pt), see `docs/console/corners.md` | `components/ui.tsx`, `components/corners.ts` |
 | Gap at the left, right and bottom | 12pt (`POPUP_GAP`, the bottom bar's side margin) | `lib/mobilePopup.ts` |
 | Widest | 560pt (`POPUP_MAX_WIDTH`), centred in a wider window; a dialog keeps its own width class | `lib/mobilePopup.ts` |
 | Surface | `bg-dialog`, a `border-line-faint` hairline, the menus' soft shadow (none on Android, where it would not follow the corners) | `DialogLayer`, `MobileBottomNav` |

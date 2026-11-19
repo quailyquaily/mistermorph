@@ -1,4 +1,5 @@
-// A choice from a list in a popover beyond its trigger: a light panel with large corners, an
+// A choice from a list in a popover beyond its trigger: a light panel with the popovers' continuous
+// corners (POPOVER_CORNERS, 12pt; its rows' nested in them), an
 // optional filter, a spaced mono section label, rounded rows (an icon, a title, a mono subtitle),
 // and a tail on its edge facing the trigger, pointing to it. The composer's LLM profile picker is
 // one (a value, the chosen row marked); its add menu another (actions: no `value`, `onChange`
@@ -37,8 +38,8 @@
 import type { JSX, ViewRef } from "nsh";
 import { Canvas, effect, signal, token, untracked, View, windowSize } from "nsh";
 import { Popover } from "nsh/base";
-// POPUP_RADIUS is the popup's `rounded-[16px]`, which the tail keeps off.
-import { MENU_POPUP_STYLE, mobilePopups, POPUP_RADIUS, PopupList, Tip } from "../ui";
+import { MENU_POPUP_STYLE, mobilePopups, PopupList, Tip } from "../ui";
+import { cornerReach, nestedRadius, POPOVER_CORNERS, RADIUS } from "../corners";
 
 export { PickerList, type PickerItem, type PickerProbe } from "./PickerList";
 import { PickerList, type PickerItem, type PickerProbe } from "./PickerList";
@@ -97,6 +98,10 @@ const POPUP_INSET_X = 1;
 /** How far a popup's rows, filter and label stand in from its sides, inside the list: the scroll
  *  view runs edge to edge, so its bar is at the popup's edge and no margin frames it. */
 const LIST_INSET = 8;
+/** The rows' corners: the popup's, nested by its border and the list's inset (12 - 9: 3pt). */
+const ROW_RADIUS = nestedRadius(RADIUS.popover, POPUP_INSET_X + LIST_INSET);
+/** How far along the popup's edge its continuous corner curves, which the tail keeps off. */
+const CORNER_REACH = cornerReach(RADIUS.popover);
 /** How far the tail's canvas reaches back over the popup: its border row and one inside it, so
  *  the fill covers the border under the tail wherever the edge falls on the pixels. */
 const TAIL_OVERLAP = 2;
@@ -256,8 +261,8 @@ export function PopoverPicker(props: {
     const left = anchorMiddle() - (popupLeft() ?? 0) - POPUP_INSET_X - TAIL_WIDTH / 2;
     const width = popupWidth();
     if (width <= 0) return left;
-    const least = POPUP_RADIUS - POPUP_INSET_X;
-    const most = width - POPUP_INSET_X - POPUP_RADIUS - TAIL_WIDTH;
+    const least = CORNER_REACH - POPUP_INSET_X;
+    const most = width - POPUP_INSET_X - CORNER_REACH - TAIL_WIDTH;
     return Math.max(least, Math.min(most, left));
   };
 
@@ -320,7 +325,7 @@ export function PopoverPicker(props: {
           popupLeft.set(bounds.origin.x);
           popupWidth.set(bounds.size.width);
         }}
-        popupClass={`${props.widthClass ?? "w-72"} rounded-[16px] border border-line-faint bg-dialog py-2 transition duration-180`}
+        popupClass={`${props.widthClass ?? "w-72"} ${POPOVER_CORNERS} border border-line-faint bg-dialog py-2 transition duration-180`}
         popupStyle={{
           ...MENU_POPUP_STYLE,
           maxHeight: placement().maxHeight,
@@ -363,6 +368,7 @@ export function PopoverPicker(props: {
           testID={part("list")}
           part={part}
           inset={LIST_INSET}
+          rowRadius={ROW_RADIUS}
           overlay={
             <If when={popupLeft() !== null}>
               <PickerTail

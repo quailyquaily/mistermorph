@@ -7,6 +7,7 @@
 import { Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { DialogLayer, dialogIsSheet, Icon, type IconName } from "../ui";
+import { CARD_CORNERS } from "../corners";
 
 export type AttachSource = "gallery" | "files";
 
@@ -56,7 +57,7 @@ export function AttachSourceSheet(props: {
       <Text role="header" class="px-2 text-base font-semibold text-foreground">
         {labels().title}
       </Text>
-      <View class="overflow-hidden rounded-[20px] border border-line-faint bg-card" testID={`${testID()}-choices`}>
+      <View class={`overflow-hidden ${CARD_CORNERS} border border-line-faint bg-card`} testID={`${testID()}-choices`}>
         <Each of={choices()} key={(choice) => choice.id}>
           {(choice, index) => (
             <BaseButton

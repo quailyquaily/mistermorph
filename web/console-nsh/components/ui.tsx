@@ -1,8 +1,9 @@
 // The console's design system: its controls, drawn from nsh/base with the morph theme's tokens
 // (theme.json). Pages build from these; a missing variant is added here, not restyled per page.
 //
-// The look follows the Vue console's ui-kit: square-ish corners (2px), hairlines, a dark blue
-// primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
+// The look follows the Vue console's ui-kit: hairlines, a dark blue primary, quiet plain buttons,
+// mono caps for labels, and red only for what is destructive. Corners are the continuous scale of
+// ./corners.ts (controls 8, cards and popovers 12, dialogs 18, switch tracks 6); circles stay round.
 import type { Bounds, InputRef, JSX, KeyBindingOptions, Motion, ViewRef } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
 import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
@@ -22,6 +23,7 @@ import {
   Tooltip,
 } from "nsh/base";
 import { dismissNotice, noticeState, pushNotice } from "../lib/core/notices.js";
+import { CARD_CORNERS, CONTINUOUS, CONTROL_CORNERS, cornersClass, fittingRadius, nestedRadius, POPOVER_CORNERS, RADIUS, TRACK_CORNERS } from "./corners";
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
 import { PickerList, type PickerItem, type PickerProbe } from "./shared/PickerList";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
@@ -376,13 +378,21 @@ const BUTTON_VARIANTS: Record<
 };
 
 // The ui-kit's .q-button sizes: md 44, sm 38, xs 32, xxs 24 points tall; 0.8rem side padding
-// (1rem at md); text 14, 14, 12 and 11.2; a 16pt icon 8pt before the label.
-const BUTTON_SIZES: Record<ButtonSize, { box: string; text: string; icon: number; square: string }> = {
-  md: { box: "h-11 px-4 gap-2", text: "text-sm", icon: 16, square: "size-11" },
-  sm: { box: "h-9.5 px-[12.8px] gap-2", text: "text-sm", icon: 16, square: "size-9.5" },
-  xs: { box: "h-8 px-[12.8px] gap-2", text: "text-xs", icon: 16, square: "size-8" },
-  xxs: { box: "h-6 px-[12.8px] gap-1.5", text: "text-[11.2px]", icon: 14, square: "size-6" },
+// (1rem at md); text 14, 14, 12 and 11.2; a 16pt icon 8pt before the label. Corners: the
+// controls' continuous 8pt; the 24pt xxs takes the largest radius whose curve fits it (7pt).
+const XXS_RADIUS = fittingRadius(RADIUS.control, 24);
+const BUTTON_SIZES: Record<ButtonSize, { box: string; text: string; icon: number; square: string; radius: number; corners: string }> = {
+  md: { box: "h-11 px-4 gap-2", text: "text-sm", icon: 16, square: "size-11", radius: RADIUS.control, corners: CONTROL_CORNERS },
+  sm: { box: "h-9.5 px-[12.8px] gap-2", text: "text-sm", icon: 16, square: "size-9.5", radius: RADIUS.control, corners: CONTROL_CORNERS },
+  xs: { box: "h-8 px-[12.8px] gap-2", text: "text-xs", icon: 16, square: "size-8", radius: RADIUS.control, corners: CONTROL_CORNERS },
+  xxs: { box: "h-6 px-[12.8px] gap-1.5", text: "text-[11.2px]", icon: 14, square: "size-6", radius: XXS_RADIUS, corners: cornersClass(XXS_RADIUS) },
 };
+
+/** A button size's corners: its radius in points and its classes (continuous). */
+export function buttonCorners(size: ButtonSize = "sm"): { radius: number; corners: string } {
+  const { radius, corners } = BUTTON_SIZES[size];
+  return { radius, corners };
+}
 
 export interface ButtonProps {
   /** primary (the default commit), outlined, plain (quiet), danger, highlight, ghost-danger. */
@@ -446,7 +456,7 @@ export function BusyBeam(props: {
   variant?: ButtonVariant;
   short?: boolean;
   border?: number;
-  /** The box's corner radius (a circle button's: half its side). */
+  /** The box's corner radius (default the controls' 8pt; a circle button's: half its side). */
   radius?: number;
   testID?: string;
 }) {
@@ -458,7 +468,7 @@ export function BusyBeam(props: {
         tone={variant().beam}
         track={variant().loadingTrack ? String(token(variant().loadingTrack!)) : undefined}
         border={props.border ?? (variant().loadingTrack ? 0 : variant().loadingText ? 0.5 : 1)}
-        radius={props.radius}
+        radius={props.radius ?? RADIUS.control}
         testID={props.testID}
       />
     </If>
@@ -583,7 +593,7 @@ export function Button(props: ButtonProps) {
       testID={props.testID}
       hitSlop={props.hitSlop}
       tooltip={tip() ? <Tip text={tip()!} /> : undefined}
-      class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
+      class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} ${size().corners} border-transparent ${loadingFill() ?? variant().box} ${
         square() && !props.block ? `${size().square} px-0` : props.wrap && !glyphFace() ? wrapBox(size().box) : size().box
       } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
       onLayout={props.onLayout}
@@ -598,13 +608,14 @@ export function Button(props: ButtonProps) {
     >
       <View
         accessibilityElementsHidden
-        class={`absolute inset-0 transition-colors duration-100 ease-out ${variant().press}`}
+        class={`absolute inset-0 ${size().corners} transition-colors duration-100 ease-out ${variant().press}`}
         style={{ pointerEvents: "none" }}
       />
       <BusyBeam
         busy={!!props.loading}
         variant={props.variant}
         short={props.size === "xs" || props.size === "xxs"}
+        radius={size().radius}
         testID={props.testID ? `${props.testID}-loading` : undefined}
       />
       <If when={props.icon}>
@@ -672,13 +683,16 @@ export interface TextFieldProps {
 }
 
 // The ui-kit's field (.q-input, the morph theme): white at 92 %, a hairline that turns blue with a
-// faint halo while focused, 2pt corners; 44pt tall with 12pt padding, a textarea 12pt all round.
+// faint halo while focused, the controls' continuous corners (the halo follows them); 44pt tall
+// with 12pt padding, a textarea 12pt all round.
 const FIELD_SIZES = {
-  md: { box: "min-h-11", text: "text-sm" },
-  sm: { box: "min-h-9.5", text: "text-sm" },
-  xs: { box: "min-h-8", text: "text-xs" },
+  md: { box: "min-h-11", text: "text-sm", height: 44 },
+  sm: { box: "min-h-9.5", text: "text-sm", height: 38 },
+  xs: { box: "min-h-8", text: "text-xs", height: 32 },
 } as const;
 const CLEAR_SIZES = { md: 32, sm: 28, xs: 24 } as const;
+/** The clear button's corners, nested in the field's: the field's radius less the gap round it. */
+const clearRadius = (size: keyof typeof CLEAR_SIZES) => nestedRadius(RADIUS.control, (FIELD_SIZES[size].height - CLEAR_SIZES[size]) / 2);
 /** A regular (md) field's height, for boxes that stand in for one (a stored secret, a locked field). */
 export const FIELD_HEIGHT = FIELD_SIZES.md.box;
 const FIELD_FOCUS = { borderColor: "#426f9e9e", boxShadow: "0 0 0 1px rgba(66, 111, 158, 0.16)" };
@@ -693,7 +707,7 @@ export function TextField(props: TextFieldProps) {
         <Text class="text-xs font-medium text-subtle">{props.label}</Text>
       </If>
       <View
-        class={`flex-row gap-2 rounded-(--radius) border bg-field ${props.multiline ? "items-start" : `items-center ${size().box}`} ${
+        class={`flex-row gap-2 ${CONTROL_CORNERS} border bg-field ${props.multiline ? "items-start" : `items-center ${size().box}`} ${
           props.leadingIcon ? "pl-2.5" : ""
         } ${props.error ? "border-danger" : "border-input"} ${props.disabled ? "bg-transparent opacity-50" : ""}`}
         focusWithinStyle={props.error ? undefined : FIELD_FOCUS}
@@ -737,8 +751,8 @@ export function TextField(props: TextFieldProps) {
             }}
             accessibilityLabel={props.clearLabel || "Clear"}
             testID={props.testID ? `${props.testID}-clear` : undefined}
-            class="group mr-[5px] items-center justify-center rounded-(--radius) transition-colors duration-180 hover:bg-hover active:bg-press"
-            style={{ width: CLEAR_SIZES[props.size ?? "md"], height: CLEAR_SIZES[props.size ?? "md"] }}
+            class={`group mr-[5px] items-center justify-center ${CONTINUOUS} transition-colors duration-180 hover:bg-hover active:bg-press`}
+            style={{ width: CLEAR_SIZES[props.size ?? "md"], height: CLEAR_SIZES[props.size ?? "md"], borderRadius: clearRadius(props.size ?? "md") }}
           >
             <Icon name="AppIconEditorDelete" size={16} color="subtle" />
           </BaseButton>
@@ -751,6 +765,11 @@ export function TextField(props: TextFieldProps) {
     </View>
   );
 }
+
+/** A switch's track: 34 by 20pt, the tracks' continuous 6pt corners. */
+export const SWITCH_TRACK_CORNERS = TRACK_CORNERS;
+/** A switch's thumb (14pt, inset 3pt by the track's hairline and padding): the track's corners nested. */
+export const SWITCH_THUMB_CORNERS = cornersClass(nestedRadius(RADIUS.track, 3));
 
 /** A switch with its label (the Vue console's AppSwitch). */
 export function Toggle(props: {
@@ -772,8 +791,8 @@ export function Toggle(props: {
       accessibilityLabel={props.label}
       testID={props.testID}
       class={`group flex-row items-center gap-2.5 disabled:opacity-50 ${props.class ?? ""}`}
-      trackClass="h-5 w-[34px] rounded-(--radius) border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink"
-      thumbClass="size-3.5 rounded-[1px] bg-card checked:translate-x-3.5"
+      trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
+      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
       thumbStyle={{
         boxShadow: "0 0 0 1px rgba(24, 24, 50, 0.22), 0 1px 1px rgba(24, 24, 50, 0.1)",
         transitionProperty: "transform",
@@ -881,7 +900,7 @@ export function SelectField(props: {
   const current = () => props.items.find((item) => item.value === props.value);
   const height = () => ({ md: "h-11", sm: "h-9.5", xs: "h-8" })[props.size ?? "md"];
   const triggerClass = () =>
-    `${height()} flex-row items-center justify-between gap-2 rounded-(--radius) border bg-field ${
+    `${height()} flex-row items-center justify-between gap-2 ${CONTROL_CORNERS} border bg-field ${
       props.size === "xs" ? "pl-[9.6px]" : "pl-[12.8px]"
     } pr-2 transition-colors duration-180`;
   const valueText = () => (
@@ -960,7 +979,7 @@ export function SelectField(props: {
             indicator={<View />}
             indicatorClass="hidden"
             onSelect={() => props.onChange?.(item().value)}
-            class="px-4 py-2.5 hover:bg-hover focus:bg-hover disabled:opacity-50"
+            class={`${MENU_ITEM_BOX} py-2.5 hover:bg-hover focus:bg-hover disabled:opacity-50`}
           >
             <Text class="text-sm leading-5 text-foreground">{item().label}</Text>
             <If when={item().description}>
@@ -992,7 +1011,7 @@ export function SelectField(props: {
         onChange={({ value }) => value !== null && props.onChange?.(value)}
         onOpenChange={({ open: next }) => openChange(next)}
         testID={props.testID}
-        class={`${height()} flex-row items-center justify-between gap-2 rounded-(--radius) border border-input bg-field ${
+        class={`${height()} flex-row items-center justify-between gap-2 ${CONTROL_CORNERS} border border-input bg-field ${
           props.size === "xs" ? "pl-[9.6px]" : "pl-[12.8px]"
         } pr-2 transition-colors duration-180 aria-expanded:border-ring disabled:opacity-50`}
         placement="bottom"
@@ -1000,8 +1019,8 @@ export function SelectField(props: {
         offset={4}
         popupClass={MENU_POPUP}
         popupStyle={MENU_POPUP_STYLE}
-        itemClass="px-4 py-2 text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-selection"
-        searchClass="mx-2 mb-1 rounded-(--radius) border border-input px-2 py-1 text-sm"
+        itemClass={`${MENU_ITEM_BOX} py-2 text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-selection`}
+        searchClass={`mx-2 mb-1 ${MENU_ITEM_CORNERS} border border-input px-2 py-1 text-sm`}
         trigger={
           <View class="flex-1 flex-row items-center justify-between gap-2">
             <Text class={`flex-1 ${props.size === "xs" ? "text-xs" : "text-sm"} ${current() ? "text-foreground" : "text-placeholder"} line-clamp-1`}>
@@ -1039,19 +1058,29 @@ export interface MenuEntry {
 
 // The ui-kit's menu (.q-menu, the morph theme): white on a faint hairline with a soft drop
 // shadow, 8pt above and below the items, items 8pt by 16pt; it drops in 4pt from its trigger.
-export const MENU_POPUP =
-  "min-w-55 rounded-(--radius) border border-line-faint bg-dialog py-2 transition duration-120";
+// The popovers' continuous 12pt corners; each item's highlight is inset 8pt from the sides as
+// from the top and bottom, its corners nested in the menu's (12 less the hairline and the 8pt:
+// 3pt), and its text 8pt further in, at 16pt as before.
+export const MENU_POPUP = `min-w-55 ${POPOVER_CORNERS} border border-line-faint bg-dialog py-2 transition duration-120`;
+/** A menu item's corners: the menu's, nested by its hairline and the 8pt inset. */
+export const MENU_ITEM_RADIUS = nestedRadius(RADIUS.popover, 1 + 8);
+export const MENU_ITEM_CORNERS = cornersClass(MENU_ITEM_RADIUS);
+/** A menu item's box in a `MENU_POPUP`: inset 8pt from the sides, its text 16pt in, its corners nested. */
+export const MENU_ITEM_BOX = `mx-2 px-2 ${MENU_ITEM_CORNERS}`;
 export const MENU_POPUP_STYLE = {
   boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)",
   transitionTimingFunction: MOTION_EASE_CSS,
 } as const;
 export const MENU_STARTING = "opacity-0 -translate-y-1";
 /**
- * The large corners of the console's floating paper: the popover bubbles (PopoverPicker's
- * `rounded-[16px]`), the dialogs, and every popup on phones (More and the agents in
- * MobileBottomNav, `DialogLayer`'s floating paper, `PopupSheet`): all four corners, always.
+ * The large corners of the console's floating paper: the dialogs, and every popup on phones (More
+ * and the agents in MobileBottomNav, `DialogLayer`'s floating paper, `PopupSheet`): the dialogs'
+ * continuous 18pt (with `CONTINUOUS` beside the inline `borderRadius`), all four corners, always.
+ * Popover bubbles on desktops have the popovers' 12pt (`POPOVER_CORNERS`).
  */
-export const POPUP_RADIUS = 16;
+export const POPUP_RADIUS = RADIUS.dialog;
+/** The rows on the phone's floating paper (`PopupList`): its corners nested by its hairline and 8pt padding. */
+export const POPUP_ROW_RADIUS = nestedRadius(POPUP_RADIUS, 1 + 8);
 
 /**
  * A menu of commands opened from a trigger (the Vue console's AppMenu and dropdown menus).
@@ -1139,7 +1168,7 @@ export function DropdownMenu(props: {
               disabled={item().disabled}
               checked={item().checked ?? null}
               onSelect={() => item().onSelect?.()}
-              class="flex-row items-center gap-2.5 px-4 py-2 hover:bg-hover focus:bg-hover disabled:opacity-50"
+              class={`flex-row items-center gap-2.5 ${MENU_ITEM_BOX} py-2 hover:bg-hover focus:bg-hover disabled:opacity-50`}
             >
               <If when={item().icon}>
                 <Icon name={item().icon!} size={15} color={item().danger ? "danger" : "subtle"} />
@@ -1174,7 +1203,7 @@ export function MenuIconTrigger(props: { icon?: IconName; label: string; testID?
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.label} />}
-      class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press aria-expanded:bg-hover"
+      class={`size-8 items-center justify-center ${CONTROL_CORNERS} hover:bg-hover active:bg-press aria-expanded:bg-hover`}
       style={{ transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease-out" }}
     >
       <Icon name={props.icon ?? "PhDotsThree"} size={16} color="subtle" />
@@ -1290,6 +1319,7 @@ export function PopupList(props: {
             emptyText={props.emptyText}
             footer={props.footer}
             rowClass="min-h-11 justify-center"
+            rowRadius={POPUP_ROW_RADIUS}
             // The paper's padding (p-2) round it.
             maxHeight={contentMax() - 16}
             probe={props.listProbe}
@@ -1341,7 +1371,7 @@ export function Card(props: { children?: JSX.Element; class?: string; onPress?: 
     <View
       testID={props.testID}
       onPress={props.onPress}
-      class={`rounded-(--radius) border border-line-faint bg-card ${props.onPress ? "active:bg-hover" : ""} ${props.class ?? ""}`}
+      class={`${CARD_CORNERS} border border-line-faint bg-card ${props.onPress ? "active:bg-hover" : ""} ${props.class ?? ""}`}
     >
       {props.children}
     </View>
@@ -1399,7 +1429,7 @@ function LegacySection(props: { title?: string; meta?: string | JSX.Element; act
   return (
     <View
       testID={props.testID}
-      class={`gap-3 ${props.variant === "card" ? "rounded-(--radius) border border-line-faint bg-card p-4" : ""} ${
+      class={`gap-3 ${props.variant === "card" ? `${CARD_CORNERS} border border-line-faint bg-card p-4` : ""} ${
         props.class ?? ""
       }`}
     >
@@ -1455,7 +1485,7 @@ function SectionVue(props: {
       style={props.style}
       class={`min-w-0 ${props.fill ? "flex-1" : ""} ${
         props.variant === "boxed"
-          ? "rounded-(--radius) border border-line-soft bg-paper-soft"
+          ? `${CARD_CORNERS} border border-line-soft bg-paper-soft`
           : props.variant === "pane"
             ? `${windowSize().width <= 720 ? "" : "border-l border-line-soft"}`
             : "gap-4"
@@ -1674,8 +1704,9 @@ export function Tabs(props: {
 
 /* ---------- dialogs ---------- */
 
-// The ui-kit's dialog (AppDialog / AppDialogShell, the morph theme): white on a hairline with 2pt
-// corners over a light scrim; a 44pt header with the title and a square red-tinted close button.
+// The ui-kit's dialog (AppDialog / AppDialogShell, the morph theme): white on a hairline over a
+// light scrim, with the dialogs' continuous corners (POPUP_RADIUS); a 44pt header with the title
+// and a square red-tinted close button.
 // On phones (< 720pt) it is a sheet: full width at the bottom.
 //
 // Motion (styles/base.css, core/dialog-origin.js): it settles in from 98 % as it fades, and when a
@@ -1910,7 +1941,7 @@ export function DialogLayer(props: {
       }}
       // On phones the paper of More and the agent switcher: their hairline and shadow, as tall as
       // the window leaves it (lib/mobilePopup.ts); what does not fit scrolls inside it.
-      class={`overflow-hidden border bg-dialog ${narrow() ? "w-full border-line-faint" : "max-h-[90%] border-dialog-line"} ${props.panelClass}`}
+      class={`overflow-hidden ${CONTINUOUS} border bg-dialog ${narrow() ? "w-full border-line-faint" : "max-h-[90%] border-dialog-line"} ${props.panelClass}`}
       style={{
         ...(props.panelStyle ?? {}),
         ...(narrow() ? { maxHeight: popupFrame().maxHeight } : {}),
@@ -2517,7 +2548,7 @@ export function Fab(props: { label: string; icon?: IconName; disabled?: boolean;
         accessibilityLabel={props.label}
         testID={props.testID}
         tooltip={<Tip text={props.label} placement="left" />}
-        class="size-13 items-center justify-center rounded-(--radius) border border-primary-line bg-primary transition duration-120 active:translate-y-px disabled:opacity-55"
+        class={`size-13 items-center justify-center ${CONTROL_CORNERS} border border-primary-line bg-primary transition duration-120 active:translate-y-px disabled:opacity-55`}
         style={{ boxShadow: "0 6px 16px rgba(20, 29, 48, 0.2), 0 1px 3px rgba(20, 29, 48, 0.12)", transitionTimingFunction: MOTION_EASE_CSS }}
         activeStyle={{ boxShadow: "0 2px 6px rgba(20, 29, 48, 0.18)" }}
       >

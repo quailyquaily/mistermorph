@@ -6,7 +6,7 @@
 import type { JSX } from "nsh";
 import { batch, computed, effect, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { DateField } from "../../components/shared/DateField";
+import { CALENDAR_DAY_CLASS, DATE_CLEAR_CLASS, DateField } from "../../components/shared/DateField";
 import {
   Blocks,
   DetailCard,
@@ -25,6 +25,7 @@ import {
 } from "../../components/knowledge/parts";
 import { createSlidingSelection, EdgeScroll, MOTION_EASE_CSS, MOTION_NORMAL, motionMs } from "../../components/motion";
 import { Button, Icon, MessageDialog, Modal, Page, SelectField, TextField, type IconName } from "../../components/ui";
+import { CONTROL_CORNERS, POPOVER_CORNERS } from "../../components/corners";
 import { currentLocale, endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -1093,16 +1094,16 @@ function SinceField(props: { value: string; onChange: (value: string) => void })
       testID="journal-since"
       onChange={({ value }) => props.onChange(typeof value === "string" ? value.slice(0, 10) : "")}
       offset={4}
-      popupClass="rounded-(--radius) border border-border bg-popover p-3 shadow-md"
+      popupClass={`${POPOVER_CORNERS} border border-border bg-popover p-3 shadow-md`}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"
-      itemClass="h-8 min-w-8 items-center justify-center rounded-(--radius) text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-primary selected:text-primary-foreground disabled:opacity-50"
-      clearButtonClass="ml-1 size-6 items-center justify-center rounded-(--radius) hover:bg-hover"
+      itemClass={CALENDAR_DAY_CLASS}
+      clearButtonClass={DATE_CLEAR_CLASS}
       clearButton={<Icon name="PhX" size={12} color="muted-foreground" />}
       clearButtonAccessibilityLabel={t("audit_clear_filter")}
       trigger={
-        <View class="h-9.5 min-w-36 flex-row items-center gap-2 rounded-(--radius) border border-input bg-field px-2.5 hover:border-ring">
+        <View class={`h-9.5 min-w-36 flex-row items-center gap-2 ${CONTROL_CORNERS} border border-input bg-field px-2.5 hover:border-ring`}>
           <Icon name="PhCalendarBlank" size={14} color="muted-foreground" />
           <Text class={`text-sm tabular-nums ${props.value ? "text-foreground" : "text-placeholder"}`}>
             {props.value || t("memories_journal_since")}

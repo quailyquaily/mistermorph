@@ -8,6 +8,10 @@ import type { InputRef } from "nsh";
 import { cleanup, effect, keymap, signal, Text, untracked, View } from "nsh";
 import { Input } from "nsh/base";
 import { Button, Icon } from "../ui";
+import { CONTROL_CORNERS, cornersClass, nestedRadius, POPOVER_CORNERS, RADIUS } from "../corners";
+
+/** A suggestion's highlight: inset 4pt in the list (py-1), its corners the list's nested (12 - 5: 7pt). */
+const SUGGESTION_CORNERS = cornersClass(nestedRadius(RADIUS.popover, 1 + 4));
 import {
   MAX_TOPIC_TAG_LENGTH,
   MAX_TOPIC_TAGS,
@@ -105,7 +109,7 @@ export function TopicTagsEditor(props: {
   return (
     <View class="gap-1">
       <View
-        class={`min-h-8 flex-row flex-wrap items-center gap-1 rounded-(--radius) border border-input bg-field px-1.5 py-1 ${
+        class={`min-h-8 flex-row flex-wrap items-center gap-1 ${CONTROL_CORNERS} border border-input bg-field px-1.5 py-1 ${
           props.disabled ? "opacity-60" : ""
         }`}
         focusable={false}
@@ -177,7 +181,7 @@ export function TopicTagsEditor(props: {
         </If>
       </View>
       <If when={open()}>
-        <View role="listbox" accessibilityLabel={t("chat_topic_tags_suggestions")} class="rounded-(--radius) border border-border bg-popover py-1 shadow-md">
+        <View role="listbox" accessibilityLabel={t("chat_topic_tags_suggestions")} class={`${POPOVER_CORNERS} border border-border bg-popover py-1 shadow-md`}>
           <Each of={suggestions()} key={(tag) => tag}>
             {(tag, index) => (
               <View
@@ -186,7 +190,7 @@ export function TopicTagsEditor(props: {
                 focusable={false}
                 onPress={() => pick(tag())}
                 accessibilityLabel={tag()}
-                class={`flex-row items-center gap-1.5 px-2.5 py-1 ${index() === active() ? "bg-selection" : "hover:bg-hover"}`}
+                class={`mx-1 flex-row items-center gap-1.5 px-1.5 py-1 ${SUGGESTION_CORNERS} ${index() === active() ? "bg-selection" : "hover:bg-hover"}`}
               >
                 <Icon name="PhTag" size={12} color="subtle" />
                 <Text class="text-sm text-foreground">{tag()}</Text>

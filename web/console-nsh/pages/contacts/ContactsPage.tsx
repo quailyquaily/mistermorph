@@ -40,6 +40,7 @@ import {
 import { Button, CircleButton, DropdownMenu, Icon, MessageDialog, Modal, Page, popupOpen, TextField, POPUP_RADIUS, type IconName } from "../../components/ui";
 import { createSlidingSelection, FadeText, MOTION_EASE, MOTION_EXIT_EASE, motionMs, SCROLLBAR } from "../../components/motion";
 import { createPaneStack } from "../../components/motion/PaneStack";
+import { CONTINUOUS } from "../../components/corners";
 import { endpointState, formatShortTime, runtimeApiFetch, runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { useNotice } from "../../lib/core/notices.js";
@@ -1161,7 +1162,7 @@ export function ContactsPage(props: {
               style={{ width: PANEL_WIDTH + PANEL_INSET, paddingTop: PANEL_INSET, paddingBottom: PANEL_INSET, paddingRight: PANEL_INSET, ...panelMotion.style }}
             >
               <View
-                class="flex-1 overflow-hidden border border-line-faint bg-dialog"
+                class={`flex-1 overflow-hidden ${CONTINUOUS} border border-line-faint bg-dialog`}
                 style={{ borderRadius: POPUP_RADIUS, boxShadow: platform.os === "android" ? undefined : PANEL_SHADOW }}
               >
                 <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow" ref={contactMemory.ref} onScroll={contactMemory.onScroll}>

@@ -3,6 +3,11 @@
   "cssVars": {
     "theme": {
       "radius": "2px",
+      "radius-control": "8px",
+      "radius-card": "12px",
+      "radius-popover": "12px",
+      "radius-dialog": "18px",
+      "radius-track": "6px",
       "font-sans": "'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', sans-serif",
       "font-mono": "'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, 'Noto Sans CJK SC', monospace"
     },
