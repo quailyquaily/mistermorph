@@ -208,7 +208,6 @@ func asMembers(procs []Proc) []member {
 	return out
 }
 
-
 // A run that starts nothing leaves no record and is not swept.
 func TestRunWithoutProcessesIsNotKept(t *testing.T) {
 	withSupport(t)
