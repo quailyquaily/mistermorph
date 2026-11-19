@@ -169,10 +169,14 @@ function expectSlideIn(samples: Sample[], panel: Frame) {
   expect(out).toBeGreaterThan(0);
   expect(panel.y + out).toBeGreaterThanOrEqual(HEIGHT);
   // Until its first layout it waits further down, out of sight; then it starts just out of sight
-  // below the window's bottom edge: the first frame in sight is near that (samples come every
-  // 16ms or so), not part way up. From there it only rises, and it is never above its place.
-  const inSight = shown.filter((s) => s.y < out);
-  expect(inSight[0].y).toBeGreaterThan(out * 0.8);
+  // below the window's bottom edge: the frame before the first in sight is still out there, and
+  // the first in sight is near it, not part way up. Samples come every 16ms or so, about 4% of the
+  // way; a busy machine skips a frame now and then (some 23% in two), so near is the lower half.
+  // From there it only rises, and it is never above its place.
+  const first = shown.findIndex((s) => s.y < out);
+  expect(first).toBeGreaterThan(0);
+  expect(shown[first - 1].y).toBeGreaterThanOrEqual(out);
+  expect(shown[first].y).toBeGreaterThan(out * 0.5);
   expect(shown.some((s) => s.y > 0 && s.y < out)).toBe(true);
   for (let i = 1; i < shown.length; i++) expect(shown[i].y).toBeLessThanOrEqual(shown[i - 1].y);
   for (const s of shown) expect(s.y).toBeGreaterThanOrEqual(0);
