@@ -315,6 +315,18 @@ function TabsDemo() {
       <V l="narrow">
         <Wide><Tabs narrow items={items()} value={tab()} onChange={(id) => tab.set(id)} /></Wide>
       </V>
+      {/* More options than the room: the strip scrolls sideways (swipe, drag, wheel), the current
+          one brought into view. */}
+      <V l="overflow">
+        <View class="max-w-full" style={{ width: 220 }}>
+          <Tabs
+            items={[...items(), ...[5, 6, 7, 8].map((n) => ({ id: `o${n}`, label: t("uig_fixture_option", { n }) }))]}
+            value={tab()}
+            onChange={(id) => tab.set(id)}
+            testID="uig-tabs-overflow"
+          />
+        </View>
+      </V>
       <V l="iconOnly" row>
         <Tabs
           iconOnly

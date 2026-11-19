@@ -166,7 +166,14 @@ Headless tests prove behaviour, not the look.
   clicks back; the agent switcher left the menu for `PopoverPicker`, whose rows took every click
   in a GPUI window with the theme on.
 - `Tabs` (ui.tsx) gives each option `role="tab"`, but every option is a Tab stop of its own and
-  arrow keys do nothing. nsh/base's `Tabs` and `Tab` (0.5.0) are WAI-ARIA's tab list: one Tab stop
+  arrow keys do nothing. Its options are pressable views, not nsh/base `Button`s: a base Button
+  reports no `onFocus`, and a browser leaves a Tab-focused option that is partly scrolled out as it
+  is, so the strip brings the focused option in itself (headless runs scroll it in either way, so
+  only Chrome tells). Options that do not fit scroll sideways at their own widths: a plain row while
+  they fit, a scroller only while they overflow (the scroller trap below), the current option kept
+  in view by `scrollTo` from the options' measured frames (`components/shared/tabStrip.ts`). A
+  mouse never drags a scroll view, so the strip follows `onMouseMove` with the button held after a
+  press on an option (`tests/tab-strip.test.tsx`; mouse drags have no headless step). nsh/base's `Tabs` and `Tab` (0.5.0) are WAI-ARIA's tab list: one Tab stop
   at the selected tab, Left/Right/Up/Down/Home/End move the focus and select (each `Tab` reports
   `onPress`), `aria-selected` on the current one (seen in Chrome). A `Tab` takes no `hitSlop`: size
   it for touch. The Contacts tabs put their tooltips on a view around each tab, as `TipButton` does
