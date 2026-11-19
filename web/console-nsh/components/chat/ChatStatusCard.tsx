@@ -472,7 +472,7 @@ export function ChatStatusCard(props: {
   plan: any;
   activity: any;
   hasReasoning: boolean;
-  /** Whether the reply called a tool that starts processes (its Processes column). */
+  /** Whether a process of the reply's task runs now (its Processes column; taskProcesses.ts). */
   hasProcesses?: boolean;
   status: string;
   /** The panel of this reply the detail panel shows ("" for none of them). */
@@ -510,7 +510,7 @@ export function ChatStatusCard(props: {
           testID="chat-status-activity"
         />
       </If>
-      <If when={props.activity && props.hasProcesses}>
+      <If when={props.hasProcesses}>
         <Column
           label={t("chat_processes_title")}
           selected={panel() === PANEL_PROCESSES}

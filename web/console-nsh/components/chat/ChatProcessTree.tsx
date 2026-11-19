@@ -4,74 +4,20 @@
 // (internal/proctrack): a command's leftovers by the tags it started with, after their parent has
 // gone; a coder server's helpers under the server.
 //
-// It reads GET /tasks/{id}/processes when it opens and every couple of seconds while it is open,
-// and each process has a Stop that ends it and what it started (POST /tasks/{id}/processes/kill).
-import { cleanup, effect, signal, Text, View } from "nsh";
+// It draws the task's shared reading of GET /tasks/{id}/processes (taskProcesses.ts), read again
+// every couple of seconds while it is open, and each process has a Stop that ends it and what it
+// started (POST /tasks/{id}/processes/kill). The reply's Processes column shows only while a
+// process runs; once a read finds none left, `onEnded` says so (the page closes the panel).
+import { cleanup, effect, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { KindChip, NEON } from "./TerminalText";
 import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_NOTE } from "./ChatTerminal";
+import { refreshTaskProcesses, watchTaskProcesses, type ProcNode } from "./taskProcesses";
 
-/** How often the open panel reads the tree again. */
-const REFRESH_MS = 2000;
-
-/** The shell and coder tools: a reply that called one may have processes. */
-const PROCESS_TOOLS = new Set(["bash", "powershell", "coder"]);
-
-/** Whether a reply's activity has a call that starts processes (also nested: a subtask's). */
-export function activityStartsProcesses(activity: any): boolean {
-  const seen = new Set<any>();
-  const walk = (entries: any): boolean => {
-    if (!Array.isArray(entries)) return false;
-    for (const entry of entries) {
-      if (!entry || seen.has(entry)) continue;
-      seen.add(entry);
-      if (String(entry.kind || "") === "tool" && PROCESS_TOOLS.has(String(entry.name || "").trim())) return true;
-      if (walk(entry.children)) return true;
-    }
-    return false;
-  };
-  return walk(activity?.history) || walk(activity?.current ? [activity.current] : []);
-}
-
-interface ProcNode {
-  pid: number;
-  ppid: number;
-  name: string;
-  command?: string;
-  started_at: string;
-  orphan?: boolean;
-  children?: ProcNode[];
-}
-
-interface ProcGroup {
-  kind: string;
-  program: string;
-  activity_id?: string;
-  pid: number;
-  running: boolean;
-  keep?: boolean;
-  processes?: ProcNode[];
-}
-
-interface StoppedProc {
-  pid: number;
-  name: string;
-  command?: string;
-  by: string;
-  at: string;
-  error?: string;
-}
-
-export interface ProcessTree {
-  supported: boolean;
-  known: boolean;
-  running: boolean;
-  groups: ProcGroup[];
-  other?: ProcNode[];
-  stopped?: StoppedProc[];
-}
+/** How long after a Stop pressed here the last process ending counts as the Stop's doing. */
+const STOP_ENDS_MS = 10_000;
 
 function clock(raw: string) {
   const date = new Date(raw);
@@ -84,45 +30,67 @@ function countNodes(nodes: ProcNode[] | undefined): number {
   return (nodes ?? []).reduce((sum, node) => sum + 1 + countNodes(node.children), 0);
 }
 
-export function ChatProcessTree(props: { endpointRef: string; taskID: string }) {
-  const tree = signal<ProcessTree | null>(null);
-  const error = signal("");
+export function ChatProcessTree(props: {
+  endpointRef: string;
+  taskID: string;
+  /**
+   * A read found no process of the task running (after one did, or as the panel opened on a
+   * task whose processes have all gone): `byStop` when a Stop pressed here just ended the last.
+   */
+  onEnded?: (byStop: boolean) => void;
+}) {
+  const reading = watchTaskProcesses(
+    () => props.endpointRef,
+    () => props.taskID,
+    { fast: () => true },
+  );
+  const tree = () => reading().tree;
+  const stopError = signal("");
+  const error = () => stopError() || reading().error;
   const stopping = signal<Record<number, boolean>>({});
+  let lastStop = 0;
   let alive = true;
   cleanup(() => (alive = false));
 
-  const path = (suffix = "") => `/tasks/${encodeURIComponent(props.taskID)}/processes${suffix}`;
-  async function load() {
-    if (!props.taskID) return;
-    try {
-      const data = (await runtimeApiFetchForEndpoint(props.endpointRef, path())) as ProcessTree;
-      if (!alive) return;
-      tree.set(data);
-      error.set("");
-    } catch (err) {
-      if (alive) error.set(String((err as Error)?.message || err || t("msg_load_failed")));
-    }
-  }
+  // Another task (or endpoint) starts clean: its own reading, no Stop of the last one pending.
+  effect(() => {
+    void props.endpointRef;
+    void props.taskID;
+    untracked(() => {
+      stopError.set("");
+      stopping.set({});
+      lastStop = 0;
+    });
+  });
+
+  // A successful read with nothing running ends the panel's reason to be open.
+  effect(() => {
+    const state = reading();
+    if (!state.loaded || state.error || state.live) return;
+    untracked(() => props.onEnded?.(lastStop > 0 && Date.now() - lastStop < STOP_ENDS_MS));
+  });
+
   async function stop(pid: number) {
+    const endpointRef = props.endpointRef;
+    const taskID = props.taskID;
     stopping.set({ ...stopping(), [pid]: true });
+    stopError.set("");
+    lastStop = Date.now();
+    let failure = "";
     try {
-      await runtimeApiFetchForEndpoint(props.endpointRef, path("/kill"), { method: "POST", body: { pid } });
+      await runtimeApiFetchForEndpoint(endpointRef, `/tasks/${encodeURIComponent(taskID)}/processes/kill`, { method: "POST", body: { pid } });
     } catch (err) {
-      if (alive) error.set(String((err as Error)?.message || err));
+      failure = String((err as Error)?.message || err);
     }
-    if (!alive) return;
+    if (!alive || endpointRef !== props.endpointRef || taskID !== props.taskID) return;
     const next = { ...stopping() };
     delete next[pid];
     stopping.set(next);
-    await load();
+    if (failure) stopError.set(failure);
+    await refreshTaskProcesses(endpointRef, taskID);
+    // As before: a read that succeeds after a failed Stop shows the tree as it is now instead.
+    if (alive && failure && !untracked(reading).error && endpointRef === props.endpointRef && taskID === props.taskID) stopError.set("");
   }
-
-  effect(() => {
-    void props.taskID;
-    void load();
-    const timer = setInterval(() => void load(), REFRESH_MS);
-    cleanup(() => clearInterval(timer));
-  });
 
   const groups = () => tree()?.groups ?? [];
   const other = () => tree()?.other ?? [];

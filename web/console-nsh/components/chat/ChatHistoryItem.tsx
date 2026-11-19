@@ -44,7 +44,7 @@ import { ChatStatusMark } from "./ChatStatusMark";
 import { ChatSystemMessage } from "./ChatSystemMessage";
 import { ChatWorkerRoster } from "./ChatWorkerRoster";
 import { t } from "./i18n";
-import { activityStartsProcesses } from "./ChatProcessTree";
+import { watchTaskProcesses } from "./taskProcesses";
 import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
 import type { KeyedState } from "./rowState";
@@ -346,6 +346,14 @@ export function ChatHistoryItem(props: {
     !awaitingWord() &&
     !(questionOpen() && item()?.awaiting === true);
   const streaming = () => isAgent() && String(item()?.taskId || "").trim() !== "" && !isTerminalStatus(status());
+  // A reply's task processes (taskProcesses.ts): its Processes column shows only while one runs,
+  // also after the task has finished (a server it kept running, what a command left behind).
+  const processes = watchTaskProcesses(
+    () => String(item()?.endpointRef || ctx.endpointRef() || ""),
+    () => (isAgent() ? String(item()?.taskId || "") : ""),
+    { fast: () => streaming() },
+  );
+  const processesLive = () => processes().live;
   const statusIsDuration = () => item()?.durationVisible === true && String(item()?.durationText || "").trim() !== "";
   const statusText = () => String(statusIsDuration() ? item()?.durationText : item()?.timeText || "").trim();
   const statusLabel = () => (statusIsDuration() ? t("chat_task_duration_thought", { duration: statusText() }) : statusText());
@@ -397,7 +405,7 @@ export function ChatHistoryItem(props: {
   const agentBody = () => (
     <View class="max-w-[736px] gap-[7px]">
       <If
-        when={item()?.plan || taskActivity() || reasoningVisible()}
+        when={item()?.plan || taskActivity() || reasoningVisible() || processesLive()}
         else={statusMark()}
       >
         <ChatStatusCard
@@ -405,7 +413,7 @@ export function ChatHistoryItem(props: {
           plan={item()?.plan}
           activity={taskActivity()}
           hasReasoning={reasoningVisible()}
-          hasProcesses={String(item()?.taskId || "").trim() !== "" && activityStartsProcesses(item()?.activity)}
+          hasProcesses={processesLive()}
           status={item()?.status}
           selectedPanel={selectedPanel()}
           focusPanel={focusPanel()}

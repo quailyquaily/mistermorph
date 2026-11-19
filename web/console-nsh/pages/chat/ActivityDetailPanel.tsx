@@ -5,7 +5,8 @@
 // on phones the right sheet, in the workspace panel's place.
 //
 // A plan, progress, reasoning and a worker's output are drawn on one dark terminal (ChatTerminal);
-// reasoning as plain mono text, as written (no markdown).
+// reasoning as plain mono text, as written (no markdown). Processes are there only while one runs:
+// once the last has gone, the page closes the panel (its column has gone too).
 //
 // It reads the reply from the live history by id (activityDetail.ts), so a plan, progress,
 // reasoning or output still streaming keeps growing here; its scroller follows the end of what
@@ -88,6 +89,11 @@ export function ActivityDetailPanel(props: {
   escape?: boolean;
   class?: string;
   onClose: () => void;
+  /**
+   * The Processes panel's task has no process running any more (ChatProcessTree's `onEnded`):
+   * `byStop` when a Stop pressed in it ended the last one.
+   */
+  onProcessesEnded?: (byStop: boolean) => void;
 }) {
   // Beside the conversation, Escape closes it, also from the composer (where Escape types nothing).
   // A dialog of the page (`escape` false) or any popup over it (a dialog, a menu, a select, the
@@ -238,7 +244,11 @@ export function ActivityDetailPanel(props: {
             </If>
             <If when={kind() === "processes"}>
               <ChatTerminal flush={props.dark}>
-                <ChatProcessTree endpointRef={String(item()?.endpointRef || props.endpointRef || "")} taskID={taskID()} />
+                <ChatProcessTree
+                  endpointRef={String(item()?.endpointRef || props.endpointRef || "")}
+                  taskID={taskID()}
+                  onEnded={(byStop) => props.onProcessesEnded?.(byStop)}
+                />
               </ChatTerminal>
             </If>
             <If when={kind() === "worker" && worker()}>

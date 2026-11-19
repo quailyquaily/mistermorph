@@ -174,6 +174,7 @@ function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string
           escape={!c.pageDialogOpen() && c.activityDetail() !== null}
           class={props.class}
           onClose={() => c.closeActivityDetail()}
+          onProcessesEnded={(byStop) => c.closeEndedProcesses(detail(), byStop)}
         />
       )}
     </If>
