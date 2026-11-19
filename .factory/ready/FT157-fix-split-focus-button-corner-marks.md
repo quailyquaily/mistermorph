@@ -38,3 +38,13 @@ Tests: manager independently passed gofmt cleanliness, go vet ./... and go test 
 Visual checks reported by coder: headless Chrome, actual-size and 8x comparison, light theme, hover/press/keyboard focus/disabled/reduced-motion, narrow phone layouts, DPR 1/1.25/1.5/2/2.625/3; no split/clipping observed, prototype profile matched. Unchecked: distinct dark theme (current app forced light and identical tokens), real browser zoom (fractional DPR only), real devices/native renderers, Safari/Firefox, nsh 0.6.0 web runtime (Chrome used installed 0.5.1 runtime). Original reported split was not reproduced; no browser-offset workaround used.
 
 Branch pushed. First push credential lookup failed without repository path; command-local credential.useHttpPath=true succeeded on retry. Moved new/ → review/, round 1. No source issue/PR linked.
+
+## factory · review · 2026-11-19 19:54
+head: ed05717a12b43847abbf5941bb3dac3ca95f3efc
+verdict: pass
+notes:
+- Claude Code reviewed all six changed files against origin/master...HEAD; no qualifying P0/P1/P2/P3 findings. Branch merges cleanly with the fetched master. No code changes or installs during review.
+- Canvas deviation accepted: nsh exposes Canvas/Path2D rather than SVG elements; each decorative mark remains one continuous open path, one stroke, pointer-transparent and accessibility-hidden. Drawing commands match the approved prototype within floating-point precision. Small internal tangent changes are inherited from the approved prototype with round joins, not new separate border-side seams.
+- Validation passed: gofmt cleanliness, go vet ./..., go test ./... (165 packages), nsh check (0.6.0), and the required parallel Console test runner (145 files, 0 final failures, 326s) plus inventory gate. chat-new-topic-nav, settings-page and dialog-sheet initially failed in parallel and passed on the required isolated retry; no base comparison performed. Fab regressions passed 10/10.
+- Review did not perform independent visual/pixel checks. Geometry was checked numerically against the prototype. Build-stage Chrome checks used the older 0.5.1 runtime; actual nsh 0.6.0 rendering, real zoom/devices, desktop output, Safari/Firefox and a distinct dark theme remain unchecked. Fractional-DPR outer-edge antialias clipping remains unverified, not a confirmed defect. Original split was not reproduced.
+- Moved review/ → ready/. Owner should inspect the two marks visually on target runtimes before shipping. No linked GitHub issues or PRs.
