@@ -30,7 +30,7 @@ const FULL: ProcNode[] = [
 ];
 const nodes = signal<ProcNode[]>(FULL);
 
-const calls = normalizeActivity({
+const activity = normalizeActivity({
   history: [
     {
       id: "a1",
@@ -53,7 +53,10 @@ const calls = normalizeActivity({
     },
     { id: "a2", kind: "subtask", name: "one", status: "done", children: [{ id: "s1", kind: "tool", name: "bash", status: "failed", args: { cmd: "ls" }, error: "ls: no such file" }] },
   ],
-}).history;
+});
+// The history above is never empty; a null here is a broken fixture, not a tree to hide.
+if (!activity) throw new Error("tree-connectors fixture: normalizeActivity dropped the call history");
+const calls = activity.history;
 
 const frames = signal<{ version: number; parts: Record<string, PartFrame> }>({ version: 0, parts: {} });
 let version = 0;
