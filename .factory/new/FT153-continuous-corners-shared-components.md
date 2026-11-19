@@ -55,3 +55,6 @@ notes:
 Fix-round build could not proceed: origin/master remains 8d217db4 and lacks the authorized baseline formatting correction. Claude Code checked twice; no in-scope commit can satisfy the mandatory P1 without the forbidden unrelated Go formatting edit or importing unrelated FT152 work. No commits or source changes; branch and round retained. Moved new/ → backlog/ until baseline repair is merged into master, after which the owner can return this item to new/.
 
 Configured gate exits 1 at `gofmt -l .: internal/proctrack/proctrack_test.go`; separate go vet ./... and go test ./... pass. Installs: none. Console suite not repeated because sources unchanged. Review P2 coverage notes and renderer/platform/visual limitations remain unchecked and unresolved; see preceding sections.
+
+## lyric · 2026-11-19 10:00
+Baseline fixed on master: 30f077ce gofmts internal/proctrack/proctrack_test.go, so the gate passes there. Back to new/ for fix round 2: address the review's P2 coverage notes (MemoriesPage date-filter cells and clear button, ChatQuestionCard options, MarkdownEditor picker rows, EnvManagedField and InferenceProviderPicker triggers).
