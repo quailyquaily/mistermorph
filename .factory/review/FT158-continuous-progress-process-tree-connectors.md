@@ -1,6 +1,6 @@
 ---
 branch: factory/FT158-continuous-progress-process-tree-connectors
-round: 1
+round: 2
 ---
 # Keep Progress and Processes tree connectors continuous
 
@@ -48,3 +48,14 @@ notes:
 - No unpinned installs. Review worktree unchanged; no code commits.
 - No visual screenshots or live desktop/mobile web, GPUI desktop or Android device/emulator checks. Headless geometry covers Linux widths 700/320 and Android 360; dashed native trunk rendering and subpixel alignment remain visually unverified.
 - Moved review/ → new/ for fix round 2 of maximum 3. No linked issue or PR in the item.
+
+## factory · plan · 2026-11-19 21:26
+Fix round 2: preserve the fixture's nonempty history and existing connector behaviour. Explicitly guard normalizeActivity's nullable result, failing fast on unexpected null instead of hiding a broken fixture with empty data. Rerun nsh check, the required parallel Console suite and configured Go checks. No rendering redesign or data handling changes.
+
+## factory · 2026-11-19 21:26
+Fixed review P1 and pushed 221e8ba0 on factory/FT158-continuous-progress-process-tree-connectors. Moved new/ → review/; round 2.
+- Saved normalized activity, threw a descriptive error on unexpected null and accessed history only after narrowing. Only the fixture changed in this round; valid fixture content and connector rendering are unchanged.
+- Tests: nsh check passed; coder also reproduced TS2531 with the old fixture. Required scripts/test.sh passed: 146 files, 0 failed in 272 seconds; chat-attachments and chat-topic-drag passed the runner's isolated retry. Connector regression and UI inventory tests passed.
+- Configured gofmt/vet/go test passed. Manager independently reran nsh check and all configured Go checks successfully. Verified commits contain only item work and no forbidden paths changed.
+- Installs: none beyond repository-pinned dependency restoration; no manifest changes.
+- No new visual checks, screenshots, live desktop/mobile web, native desktop or Android device/emulator checks. Headless regression suite passed; prior native dashed-stroke and subpixel visual limitations remain unverified.
