@@ -1,6 +1,6 @@
 ---
 branch: factory/FT153-continuous-corners-shared-components
-round: 1
+round: 2
 ---
 # Continuous corners across shared Console components
 
@@ -58,3 +58,16 @@ Configured gate exits 1 at `gofmt -l .: internal/proctrack/proctrack_test.go`; s
 
 ## lyric · 2026-11-19 10:00
 Baseline fixed on master: 30f077ce gofmts internal/proctrack/proctrack_test.go, so the gate passes there. Back to new/ for fix round 2: address the review's P2 coverage notes (MemoriesPage date-filter cells and clear button, ChatQuestionCard options, MarkdownEditor picker rows, EnvManagedField and InferenceProviderPicker triggers).
+
+
+## factory · plan · 2026-11-19 10:30
+Fix round 2: merge origin/master to take the separately authorized baseline formatting repair, then apply existing shared continuous corner helpers to the five owner-named surfaces: MemoriesPage date-filter cells/clear button, ChatQuestionCard options, MarkdownEditor picker rows, EnvManagedField and InferenceProviderPicker triggers. Preserve circles, colors, sizes, spacing, accessibility and empty/error/first-run behavior. Use fitting or derived nested radii for small controls; no masks, custom CSS implementation or global clipping. Add regressions covering classes, sizes and interaction, update fixture/docs, run nsh check, required parallel Console suite and complete Go gate. Report actual visual checks separately from headless coverage and unchanged upstream renderer gaps.
+
+## factory · 2026-11-19 10:30
+Built fix round 2 and pushed head 1c617fce (feat: continuous corners on the remaining page and editor controls). Merge d1a87449 brings in origin/master 30f077ce and its separate baseline gofmt correction; no unrelated factory branch imported. The formerly failing P1 gate now passes.
+
+Implemented: shared calendar day and clear-button classes reused by MemoriesPage and the identical TODO editor calendar; question options and editor picker rows use 8pt continuous corners; env-managed field and provider trigger use the same field corners, provider choice cards use 12pt. The 24pt date clear control uses fittingRadius 7pt. Calendar days use 8pt because their inset exceeds the outer popover radius. Provider image tiles remain 2pt marks, not controls. Existing size/spacing/colors/behavior retained. Added class/size/interaction regression coverage and journal since-filter pick/clear test; updated fixture and English documentation. No prohibited paths changed; worktree clean. No installs, dependency or lock changes.
+
+Validation: coder nsh check passed (0.6.0 5541637); required parallel scripts/test.sh passed all 140 files, zero failures, 250s. Complete configured gate `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (165 packages). Manager independently reran the complete Go gate and nsh check successfully and inspected commits/path scope.
+
+Visual verification reported by coder: Chrome 157 with installed 0.5.1 web runtime, fixture screenshots at 1100px and 390px touch width; computed superellipse(1.7) on new surfaces, hovered option and calendar popover/mobile sheet without clipping. Not actual running Console or 0.6.0 web runtime. MarkdownEditor picker rows and browser keyboard focus NOT visually checked; separate dark palette, Safari/Firefox, desktop GPUI and Android/iOS devices not verified. Known unchanged upstream GPUI circular-corner fallback and loading-beam approximation remain documented. Desktop calendar focused selected day still gets pale focus fill (existing behavior). Review should inspect remaining renderer/visual limitations and owner-named coverage. No linked GitHub issues/PRs. Moved new/ → review/.
