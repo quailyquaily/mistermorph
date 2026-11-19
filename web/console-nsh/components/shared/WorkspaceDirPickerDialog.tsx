@@ -14,7 +14,7 @@ import { buildTreeRows, hasOwnTreePath, normalizeTreeItems } from "../../lib/cor
 import { hasFeature, isDesktop, pickDirectory } from "../../lib/platform";
 import { isMobile } from "../../lib/shell";
 import { createSlidingSelection, FadeText, SCROLLBAR } from "../motion";
-import { Button, Modal, TextField, Tip, TipButton, Toggle } from "../ui";
+import { Button, Modal, Tabs, TextField, Tip, TipButton, Toggle } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -128,6 +128,16 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
       { id: SOURCE_STATE_DIR, title: t("chat_workspace_dialog_state_dir"), path: stateDir() },
       { id: SOURCE_CACHE_DIR, title: t("chat_workspace_dialog_cache_dir"), path: cacheDir() },
     ].filter((item) => text(item.path) !== ""),
+  );
+  // Every place, as the phone's tabs list them: the fixed three, then the runtime's own folders it
+  // reported (a place without a path is not offered).
+  const sourceTabs = computed(() =>
+    [
+      { id: SOURCE_RECENT, title: t("chat_workspace_dialog_recent") },
+      { id: SOURCE_HOME, title: t("chat_workspace_dialog_home") },
+      { id: SOURCE_SYSTEM, title: t("chat_workspace_dialog_system") },
+      ...placeSourceItems(),
+    ].map((item) => ({ id: item.id, label: item.title, disabled: creating(), testID: `workspace-source-${item.id}` })),
   );
   const currentSource = computed(() => browserSource(sourceID(), stateDir(), cacheDir()));
   const rows = computed<TreeRow[]>(() => {
@@ -409,8 +419,8 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
     props.onConfirm?.(dir);
   }
 
-  // The places: workspace-sidebar items without a meta line (40pt, 14pt titles), the selected
-  // one on the list's gliding highlight.
+  // The places on a desktop: workspace-sidebar items without a meta line (40pt, 14pt titles), the
+  // selected one on the list's gliding highlight. Phones show them as tabs (`sourceTabs`).
   const placeSelection = createSlidingSelection(() => sourceID());
   const SourceItem = (item: { id: string; title: string; path?: string }) => (
     <TipButton
@@ -423,7 +433,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
       onLayout={placeSelection.track(item.id)}
       class={`min-h-10 justify-center rounded-(--radius) border border-transparent pb-2 pl-3.5 pr-[13px] pt-2 disabled:opacity-45 ${
         sourceID() === item.id ? "hover:bg-hover-faint" : "hover:bg-hover-soft"
-      } ${isMobile() ? "min-w-37 max-w-60" : ""}`}
+      }`}
       // The hover fill comes in after 60ms and goes at once (calm hover).
       style={{ transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease" }}
       hoverStyle={{ transitionDelay: 60 }}
@@ -462,18 +472,34 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
         </If>
         <View class="flex-1 gap-3.5">
           <View class={`flex-1 gap-3.5 ${isMobile() ? "" : "flex-row"}`}>
-            <View class={isMobile() ? "gap-3" : "w-55 gap-2"}>
-              <Kicker text={t("chat_workspace_dialog_places")} />
-              <View class={`relative gap-0.5 ${isMobile() ? "flex-row flex-wrap gap-2" : ""}`}>
-                <placeSelection.Highlight class="rounded-(--radius) bg-selection" />
-                <SourceItem id={SOURCE_RECENT} title={t("chat_workspace_dialog_recent")} />
-                <SourceItem id={SOURCE_HOME} title={t("chat_workspace_dialog_home")} />
-                <SourceItem id={SOURCE_SYSTEM} title={t("chat_workspace_dialog_system")} />
-                <Each of={placeSourceItems()} key={(item) => item.id}>
-                  {(item) => <SourceItem id={item().id} title={item().title} path={item().path} />}
-                </Each>
-              </View>
-            </View>
+            {/* Phones: the places are a row of tabs across the dialog, which scrolls sideways when
+                they do not fit (the shared Tabs). Their name is the tab list's accessible name. */}
+            <If
+              when={isMobile()}
+              else={
+                <View class="w-55 gap-2">
+                  <Kicker text={t("chat_workspace_dialog_places")} />
+                  <View class="relative gap-0.5">
+                    <placeSelection.Highlight class="rounded-(--radius) bg-selection" />
+                    <SourceItem id={SOURCE_RECENT} title={t("chat_workspace_dialog_recent")} />
+                    <SourceItem id={SOURCE_HOME} title={t("chat_workspace_dialog_home")} />
+                    <SourceItem id={SOURCE_SYSTEM} title={t("chat_workspace_dialog_system")} />
+                    <Each of={placeSourceItems()} key={(item) => item.id}>
+                      {(item) => <SourceItem id={item().id} title={item().title} path={item().path} />}
+                    </Each>
+                  </View>
+                </View>
+              }
+            >
+              <Tabs
+                class="self-stretch"
+                testID="workspace-sources"
+                accessibilityLabel={t("chat_workspace_dialog_places")}
+                items={sourceTabs()}
+                value={sourceID()}
+                onChange={(id) => void activateSource(id)}
+              />
+            </If>
 
             <View class="flex-1">
               <View class="mb-2 min-h-8 flex-row items-center justify-between gap-2.5">
