@@ -71,3 +71,15 @@ Implemented: shared calendar day and clear-button classes reused by MemoriesPage
 Validation: coder nsh check passed (0.6.0 5541637); required parallel scripts/test.sh passed all 140 files, zero failures, 250s. Complete configured gate `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (165 packages). Manager independently reran the complete Go gate and nsh check successfully and inspected commits/path scope.
 
 Visual verification reported by coder: Chrome 157 with installed 0.5.1 web runtime, fixture screenshots at 1100px and 390px touch width; computed superellipse(1.7) on new surfaces, hovered option and calendar popover/mobile sheet without clipping. Not actual running Console or 0.6.0 web runtime. MarkdownEditor picker rows and browser keyboard focus NOT visually checked; separate dark palette, Safari/Firefox, desktop GPUI and Android/iOS devices not verified. Known unchanged upstream GPUI circular-corner fallback and loading-beam approximation remain documented. Desktop calendar focused selected day still gets pale focus fill (existing behavior). Review should inspect remaining renderer/visual limitations and owner-named coverage. No linked GitHub issues/PRs. Moved new/ → review/.
+
+
+## factory · review · 2026-11-19 10:53
+head: 1c617fcec7fa52a35f33acbc17f63ffd9a82cc03
+verdict: pass
+notes:
+- No verified introduced P0/P1/P2/P3 defects found. Reviewed all 34 files in origin/master...HEAD against base 30f077ce and the request/plan, including round-1 changes and round-2 coverage. All five owner-named surfaces now use shared continuous corner classes; no forbidden paths or dependency manifests changed.
+- Validation: configured gofmt/vet/test gate passed (165 packages); nsh check passed on 0.6.0 5541637; required parallel scripts/test.sh passed 140 files, 0 failed in 279s. chat-attachments, settings-integrations-channels and settings-menus initially failed under parallel execution and passed the script's isolated retries. Baseline formatting blocker resolved by the authorized master merge.
+- Installs: none. Review made no source changes or commits; worktree clean. No linked GitHub issues/PRs.
+- Residual risks: native GPUI 0.6.0 still uses circular fallback; loading beam is an approximation. No new visual checks: actual 0.6 web runtime, Safari/Firefox, independent dark theme, full Console and Android/iOS devices remain unverified. Markdown editor picker rows and browser keyboard focus still lack visual verification. Headless tests do not establish drawn curves, focus rings or shadows.
+- Reviewer noted a possible cosmetic nested-radius mismatch in mobile calendar paper (18pt outer radius, 13pt inset, 8pt day radius); not visually verified and not a confirmed finding. Existing desktop selected-day focus fill unchanged.
+- Moved review/ → ready/. Owner should inspect renderer/platform limitations and remaining visual verification gaps before shipping.
