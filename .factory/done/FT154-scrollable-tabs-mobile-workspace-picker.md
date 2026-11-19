@@ -58,3 +58,11 @@ Validation: required gofmt check, go vet ./... and go test ./... passed (165 pac
 Residual risks: matching nsh 0.6.0 web runtime unavailable; web focus/gesture analysis used 0.5.1 runtime source rather than a fresh browser run. Android, iOS and native desktop gestures/layout were not verified. Desktop vertical-wheel handoff, first-frame measurement visuals and edge fades remain unchecked. Passing review does not mean all real-device acceptance cases were verified.
 
 Moved review/ → ready/; owner should inspect narrow-width gestures/focus on supported platforms and the limited vertical-swipe behavior before shipping.
+
+
+## factory · 2026-11-19 17:51
+Shipped with Claude Code on owner approval. Merge: d37e67415187a725a5f23978ec7a8ef88e547876; release: v0.3.121; verified remote master and peeled tag: 15f64beb59481f83116be3f085ab71bfa70e9aae. Clean no-ff merge, no fixes or installs.
+
+Validation: gofmt/vet/go test passed (165 packages ok); nsh check passed; required parallel Console runner 145/145 files, zero retries; Console Node 295/295; Cloudflare 24/24. FT156 first impacted-test invocation named a nonexistent file; corrected invocation and final full suite passed.
+
+Retained P3: vertical swipes over an overflowing tab strip are consumed. No matching 0.6.0 browser/runtime or native gesture validation. No fresh visual checks, native builds or device validation during ship. No linked issues/PRs found; none closed. Branch retained because clean is not configured.

@@ -47,3 +47,11 @@ Claude Code reviewed origin/master...HEAD (all four changed files), shared corne
 Validation: configured gofmt/vet/go-test gate passed (165 packages, no failures); nsh 0.6.0 check passed; required parallel Console scripts/test.sh passed (143 files, 0 failed, 267s, inventory passed); Fab tests 5/5 passed. Android download and voice files each had an initial parallel failure, then passed the script's isolated retry. No installs.
 
 Visual limits: Chromium reproduction of emitted nsh 0.5.1 CSS at 6x scale confirmed visibly curved joins and square open ends; this was not a render of the actual Console on pinned nsh 0.6.0 web runtime, which was unavailable locally. Native Android/iOS/desktop were not visually rendered; GPUI's documented circular fallback was inspected, Android border rendering was not available for inspection. Review did not visually check dark theme, hover/focus/press, or live pages with mobile bottom bar. These remain owner visual checks before shipping, not verified defects.
+
+
+## factory · 2026-11-19 17:51
+Shipped with Claude Code on owner approval. Merge: 366288691b101437fadefc1fef061ee2e18d3f17; release: v0.3.121; verified remote master and peeled tag: 15f64beb59481f83116be3f085ab71bfa70e9aae. Clean no-ff merge, no fixes or installs.
+
+Validation: gofmt/vet/go test passed (165 packages ok); nsh check passed; required parallel Console runner 145/145 files, zero retries; Console Node 295/295; Cloudflare 24/24. FT156 first impacted-test invocation named a nonexistent file; corrected invocation and final full suite passed.
+
+Visual checks remain limited to earlier 0.5.1 reproductions, not pinned 0.6.0; no fresh dark-theme/live-page/native validation. No fresh visual checks, native builds or device validation during ship. No linked issues/PRs found; none closed. Branch retained because clean is not configured.

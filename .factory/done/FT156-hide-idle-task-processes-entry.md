@@ -47,3 +47,11 @@ notes:
 Validation: Claude Code reviewed origin/master...HEAD (eight files), request and plan, live lifecycle classification, task/endpoint isolation, stale response handling, disposal, panel closure, controls and relevant backend/security boundaries. Required Go gate passed (165 packages); nsh check passed; required parallel Console suite passed (142 files, zero final failures). Two unrelated parallel failures passed isolated retries. Head unchanged; worktree clean. No installs.
 
 Not checked: real browser/device panel focus, actual WebSocket frame rate/server load, and aggregate five-second polling load across many completed replies. The accepted transient-error behavior hides the entry until a successful read. No P0/P1 findings; moved to ready/ under the factory review policy. The P2 polling defect remains for owner attention before shipping.
+
+
+## factory · 2026-11-19 17:51
+Shipped with Claude Code on owner approval. Merge: 15f64beb59481f83116be3f085ab71bfa70e9aae; release: v0.3.121; verified remote master and peeled tag: 15f64beb59481f83116be3f085ab71bfa70e9aae. Clean no-ff merge, no fixes or installs.
+
+Validation: gofmt/vet/go test passed (165 packages ok); nsh check passed; required parallel Console runner 145/145 files, zero retries; Console Node 295/295; Cloudflare 24/24. FT156 first impacted-test invocation named a nonexistent file; corrected invocation and final full suite passed.
+
+Retained P2: streaming reply replacement can cause redundant immediate process polling. No real-process integration, polling-load or browser/device focus validation. No fresh visual checks, native builds or device validation during ship. No linked issues/PRs found; none closed. Branch retained because clean is not configured.
