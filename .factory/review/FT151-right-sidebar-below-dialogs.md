@@ -1,6 +1,6 @@
 ---
 branch: factory/FT151-right-sidebar-below-dialogs
-round: 1
+round: 2
 ---
 # Keep the right sidebar below all dialogs
 
@@ -62,3 +62,17 @@ Build-start notification could not be delivered (Telegram request timeout).
 
 ## lyric · 2026-11-19 10:12
 Baseline fixed on master: 30f077ce gofmts internal/proctrack/proctrack_test.go, so the configured gate passes there. Back to new/ for fix round 2: bring the branch up to date with master and rerun the gate. The review found no other defects.
+
+## factory · plan · 2026-11-19 10:44
+Fix round 2: merge the authorized baseline correction from origin/master (30f077ce) into the existing branch without rebasing. Preserve the existing sidebar/dialog implementation; no new UI scope. Rerun the complete configured Go gate, nsh check and the required parallel Console test script. Device/browser visual checks remain unavailable.
+
+## factory · 2026-11-19 10:44
+Built fix round 2 at 1a852076, merging master 30f077ce and its authorized baseline formatting correction. No new feature changes or independent unrelated Go edits. The original UI implementation remains intact, and the sole P1 blocker from round 1 is resolved.
+
+Tests: complete configured command `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed; manager independently reran it successfully. nsh check passed, also independently rerun. Required Console scripts/test.sh passed: 140 files, 0 failed, 247 seconds, including UI inventory. Test HOMEs and temporary data were isolated under the run's temporary directory.
+
+Installs: none beyond restoring repository-pinned Go dependencies. No prohibited paths changed. No linked GitHub issues or PRs.
+
+Not checked: visual rendering in a desktop browser/window or on an Android device/emulator; Android inset and keyboard/Back visual behavior still need device confirmation. This round changes no UI sources.
+
+Branch pushed; moved new/ → review/. Owner/reviewer should confirm the baseline gate now passes and retain the prior device-verification limitations. Initial push credential-helper invocation failed due to missing repository-path context; retry with per-command credential.useHttpPath succeeded.
