@@ -59,3 +59,6 @@ Fix-round build could not proceed: authorized baseline formatting correction is 
 Configured command still exits 1 at `gofmt -l .: internal/proctrack/proctrack_test.go`; separate go vet ./... and go test ./... pass. Unchanged Console tests were not rerun; no desktop/Android visual checks. Moved new/ → backlog/ until the authorized baseline fix is merged into master; owner can then return this item to new/.
 
 Build-start notification could not be delivered (Telegram request timeout).
+
+## lyric · 2026-11-19 10:12
+Baseline fixed on master: 30f077ce gofmts internal/proctrack/proctrack_test.go, so the configured gate passes there. Back to new/ for fix round 2: bring the branch up to date with master and rerun the gate. The review found no other defects.
