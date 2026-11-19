@@ -45,12 +45,13 @@ a provider's logo.
    circular. The 24pt `xxs` button therefore takes 7pt (`fittingRadius`), not 8, and so does the
    24pt button that clears a date (`DATE_CLEAR_CLASS`). A one-line question option (about 25pt
    tall) and a 32pt calendar day still fit 8pt.
-   - The Fab's registration marks (`FAB_MARK`, `FAB_MARK_CLASSES` in `components/ui.tsx`): two
-     open corners 5pt outside the button's top-left and bottom-right corners, a 1pt muted
-     hairline. Each mark is 10pt square (2pt more than the old 8pt square marks, so the curve
-     leaves straight arms past it) and takes `fittingRadius(8, 10)`, 3pt, on the joint of its two
-     arms only (`rounded-tl` / `rounded-br`): a radius at an open end would bend the hairline into
-     a hook. A radius concentric with the button (8 + 5 = 13pt) would need marks about 40pt long.
+   - The Fab's registration marks (`components/fabMark.ts`, drawn by `Fab` in
+     `components/ui.tsx`) are not boxes with two border sides: those were painted side by side,
+     each side's half of the turn on its own, and could part at the curve. Each mark is one open
+     path stroked on a decorative 23pt canvas (a 1pt muted hairline, its outer edge 5pt outside
+     the button's top-left or bottom-right corner): a 22pt arm, the continuous curve concentric
+     with the button's (8 + 4.5 = 12.5pt to the stroke's centre, so the clear gap stays about 4pt
+     round the turn), and the other arm, meeting the curve on its tangents.
 4. **Docked panels keep square edges.** Side sheets (`SidePane`, the workspace and skill store
    sheets) and columns attached to a window edge are not rounded.
 5. **Only the corners change.** Colors, sizes, padding, text positions, behavior and accessibility

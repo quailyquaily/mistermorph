@@ -6,7 +6,7 @@
 // ./corners.ts (controls 8, cards and popovers 12, dialogs 18, switch tracks 6); circles stay round.
 import type { Bounds, InputRef, JSX, KeyBindingOptions, Motion, MouseEvent, ScrollRef, ViewRef } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
-import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { Canvas, cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -24,6 +24,7 @@ import {
 } from "nsh/base";
 import { dismissNotice, noticeState, pushNotice } from "../lib/core/notices.js";
 import { CARD_CORNERS, CONTINUOUS, CONTROL_CORNERS, cornersClass, fittingRadius, nestedRadius, POPOVER_CORNERS, RADIUS, TRACK_CORNERS } from "./corners";
+import { drawFabMark, FAB_MARK, FAB_MARK_SIZE, type FabMarkCorner } from "./fabMark";
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
 import { PickerList, type PickerItem, type PickerProbe } from "./shared/PickerList";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
@@ -2848,26 +2849,26 @@ function SidePaneColumn(props: { onClose: () => void; label?: string; class?: st
   );
 }
 
-// The Fab's registration marks: two open corners, each FAB_MARK.gap points outside one of the
-// button's corners (top-left, bottom-right), its two arms FAB_MARK.size points long in a hairline of
-// the muted ink. Each turns on a continuous curve as the button's corners do (corners.ts). The
-// controls' 8pt radius has no room in a 10pt mark (a continuous curve reaches 1.53 times its radius
-// along each edge, and the web draws it only where that fits half the mark's side), so a mark takes
-// the largest radius whose curve fits it (`fittingRadius`): 3pt. Only the corner between its two
-// arms is rounded: the open ends stay square, where a radius would bend the hairline into a hook.
-// The arms are 2pt longer than the old square marks' 8pt so the curve leaves straight runs past it.
-export const FAB_MARK = { size: 10, gap: 5, radius: fittingRadius(RADIUS.control, 10) } as const;
-const FAB_MARK_BOX = `absolute size-[${FAB_MARK.size}px] border-muted-foreground ${CONTINUOUS}`;
-/** The marks' classes: the top-left one and the bottom-right one. */
-export const FAB_MARK_CLASSES = {
-  start: `${FAB_MARK_BOX} -left-[${FAB_MARK.gap}px] -top-[${FAB_MARK.gap}px] border-l border-t rounded-tl-[${FAB_MARK.radius}px]`,
-  end: `${FAB_MARK_BOX} -bottom-[${FAB_MARK.gap}px] -right-[${FAB_MARK.gap}px] border-b border-r rounded-br-[${FAB_MARK.radius}px]`,
-} as const;
+/** One of the Fab's registration marks (fabMark.ts): a single muted hairline stroke on a canvas
+ * just outside one corner, drawn behind the button, taking no presses and hidden from assistive tech. */
+function FabMark(props: { corner: FabMarkCorner; probe: { ref?: (node: ViewRef) => void; onLayout?: () => void } }) {
+  const outside = -FAB_MARK.gap;
+  const place = props.corner === "start" ? { left: outside, top: outside } : { right: outside, bottom: outside };
+  return (
+    <Canvas
+      accessibilityElementsHidden
+      class="absolute"
+      style={{ ...place, width: FAB_MARK_SIZE, height: FAB_MARK_SIZE, pointerEvents: "none" }}
+      draw={(cx) => drawFabMark(cx, props.corner, String(token("muted-foreground")))}
+      {...props.probe}
+    />
+  );
+}
 
 /**
  * The floating add button of a page (the Vue console's AppFab): a 52pt ink square at the bottom
  * right, with registration marks just outside two opposite corners (the console's drawing-sheet
- * frames; FAB_MARK). It rises 12pt into place as it fades in, and sinks 1pt while pressed.
+ * frames; components/fabMark.ts). It rises 12pt into place as it fades in, and sinks 1pt while pressed.
  */
 export function Fab(props: {
   label: string;
@@ -2888,8 +2889,8 @@ export function Fab(props: {
   return (
     // Above the phone's floating bottom bar when it shows (its room less the gap under a list).
     <View class="absolute right-4" style={{ ...enter.style, bottom: mobileBarRoom() > 0 ? mobileBarRoom() - 4 : 16, pointerEvents: "box-none" }} {...parts.probe(() => "fab")}>
-      <View class={FAB_MARK_CLASSES.start} style={{ pointerEvents: "none" }} {...parts.probe(() => "fab-mark-start")} />
-      <View class={FAB_MARK_CLASSES.end} style={{ pointerEvents: "none" }} {...parts.probe(() => "fab-mark-end")} />
+      <FabMark corner="start" probe={parts.probe(() => "fab-mark-start")} />
+      <FabMark corner="end" probe={parts.probe(() => "fab-mark-end")} />
       <TipButton
         onPress={() => props.onPress?.()}
         disabled={props.disabled}

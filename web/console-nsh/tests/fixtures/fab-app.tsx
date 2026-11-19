@@ -1,7 +1,7 @@
 // A test entry for tests/fab-marks.test.tsx: the page Fab (components/ui.tsx) in three frames as
 // the UI components page shows it (enabled, disabled, another icon), each reporting where its
 // button and its two registration marks lie (`onPartLayout`), so the test can hold the marks' size
-// and their gap round the button. Also the web target's visual probe: the marks' continuous curves.
+// and their gap round the button. Also the web target's visual probe: each mark's single stroke.
 import { mount, signal, Text, View } from "nsh";
 import { Fab } from "../../components/ui";
 import type { PartFrame } from "../../components/shared/partProbe";
