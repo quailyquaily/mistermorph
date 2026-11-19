@@ -47,3 +47,10 @@ notes:
 - Validation passed: gofmt gate, go vet ./..., go test ./..., nsh 0.6.0 check, and scripts/test.sh (140 files, 0 failures, inventory check passed). Four unrelated parallel Console test files passed on isolated retry; both toolbar-related files passed first time.
 - Installs: none.
 - Residual checks for owner: no fresh visual inspection during review, no live Console/native Android/desktop inspection. Build visual probe used nsh 0.5.1 runtime. Confirm the opaque pale-red Stop fill matches the intended primary treatment; light/dark tokens currently match, so those tests cannot validate a future dark palette.
+
+## factory · 2026-11-19 11:34
+Shipped with owner approval using Claude Code. Merge commit: 27cc9da1; annotated release: v0.3.120. Remote master and peeled tag verified at 132a7294f0ebc72fe8b476706d583f4dc1b295c0.
+
+FT151/FT152 merged cleanly; FT153 shared ui.tsx header conflict resolved preserving dialog KeyBindingOptions and continuous-corner documentation. No extra fixes or commits. Final configured gofmt/vet/test gate passed (165 packages; 20 without tests), nsh 0.6.0 check passed, required parallel Console runner 142/142 files with zero retries, Console Node 295/295, Cloudflare 24/24. Impacted tests also passed after each merge. Installs: none.
+
+No fresh visual or device checks/native builds. Retained GPUI circular-corner fallback, loading-beam approximation and prior actual-0.6-web-runtime/platform/visual limitations; Android inset/Back behavior and toolbar appearance not device verified. No linked GitHub issues or PRs. Branch retained because clean is not configured. Persistent logs: ship/ship-20261119/logs.

@@ -83,3 +83,10 @@ notes:
 - Residual risks: native GPUI 0.6.0 still uses circular fallback; loading beam is an approximation. No new visual checks: actual 0.6 web runtime, Safari/Firefox, independent dark theme, full Console and Android/iOS devices remain unverified. Markdown editor picker rows and browser keyboard focus still lack visual verification. Headless tests do not establish drawn curves, focus rings or shadows.
 - Reviewer noted a possible cosmetic nested-radius mismatch in mobile calendar paper (18pt outer radius, 13pt inset, 8pt day radius); not visually verified and not a confirmed finding. Existing desktop selected-day focus fill unchanged.
 - Moved review/ → ready/. Owner should inspect renderer/platform limitations and remaining visual verification gaps before shipping.
+
+## factory · 2026-11-19 11:34
+Shipped with owner approval using Claude Code. Merge commit: 132a7294; annotated release: v0.3.120. Remote master and peeled tag verified at 132a7294f0ebc72fe8b476706d583f4dc1b295c0.
+
+FT151/FT152 merged cleanly; FT153 shared ui.tsx header conflict resolved preserving dialog KeyBindingOptions and continuous-corner documentation. No extra fixes or commits. Final configured gofmt/vet/test gate passed (165 packages; 20 without tests), nsh 0.6.0 check passed, required parallel Console runner 142/142 files with zero retries, Console Node 295/295, Cloudflare 24/24. Impacted tests also passed after each merge. Installs: none.
+
+No fresh visual or device checks/native builds. Retained GPUI circular-corner fallback, loading-beam approximation and prior actual-0.6-web-runtime/platform/visual limitations; Android inset/Back behavior and toolbar appearance not device verified. No linked GitHub issues or PRs. Branch retained because clean is not configured. Persistent logs: ship/ship-20261119/logs.
