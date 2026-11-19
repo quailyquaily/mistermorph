@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -170,6 +172,56 @@ func fakeClaude() {
 					map[string]any{"label": "src", "description": "The sources"}, map[string]any{"label": "docs", "description": "The documents"}}},
 				map[string]any{"question": "Which name?", "header": "Name", "options": []any{}},
 			}})
+		case "helper", "escape":
+			// A command left running: in the process's group ("helper"), or in a session of its
+			// own ("escape"). Either keeps the process's output open; its pid goes to MM_CLAUDE_HELPER.
+			helper := exec.Command("sleep", "60")
+			helper.Stdout = os.Stdout
+			if task == "escape" {
+				detachTestProcess(helper)
+			}
+			if err := helper.Start(); err != nil {
+				os.Exit(5)
+			}
+			_ = os.WriteFile(os.Getenv("MM_CLAUDE_HELPER"), []byte(strconv.Itoa(helper.Process.Pid)), 0o600)
+			say("done")
+			result("done", false)
+		case "flood":
+			// More lines after the result than the session queues while it waits for a task.
+			result("done", false)
+			for i := range 400 {
+				say(fmt.Sprintf("straggler %d", i))
+			}
+		case "bye", "bye-escaped":
+			// The process ends right after its result; lines it wrote before are still read. With
+			// "bye-escaped", a command in a session of its own holds the output open after that.
+			if task == "bye-escaped" {
+				helper := exec.Command("sleep", "60")
+				helper.Stdout = os.Stdout
+				detachTestProcess(helper)
+				if err := helper.Start(); err != nil {
+					os.Exit(5)
+				}
+				_ = os.WriteFile(os.Getenv("MM_CLAUDE_HELPER"), []byte(strconv.Itoa(helper.Process.Pid)), 0o600)
+			}
+			for i := range 500 {
+				say(fmt.Sprintf("step %d", i))
+			}
+			result("bye", false)
+			os.Exit(0)
+		case "die-escaped":
+			// The process dies in a task while a command it started in a session of its own holds
+			// its output open: the task ends with the process's last words anyway.
+			helper := exec.Command("sleep", "60")
+			helper.Stdout = os.Stdout
+			detachTestProcess(helper)
+			if err := helper.Start(); err != nil {
+				os.Exit(5)
+			}
+			_ = os.WriteFile(os.Getenv("MM_CLAUDE_HELPER"), []byte(strconv.Itoa(helper.Process.Pid)), 0o600)
+			say("About to stop.")
+			fmt.Fprintln(os.Stderr, "boom: out of memory")
+			os.Exit(7)
 		case "wait":
 			say("Working on it.")
 		case "silent":

@@ -66,7 +66,7 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (output s
 		s = &session{cwd: req.CWD, bypass: req.BypassApprovals}
 		m.items[k] = s
 	}
-	if s.rpc != nil && (s.rpc.exited() || s.bypass != req.BypassApprovals) {
+	if s.rpc != nil && (s.rpc.ended() || s.bypass != req.BypassApprovals) {
 		s.rpc.close()
 		s.rpc = nil
 	}
