@@ -140,6 +140,10 @@ test("the paper's place: a gap outside every inset, the keyboard in place of the
   // Hardly any room (a keyboard on a phone on its side): a least height, scrolling inside; never negative.
   expect(mobilePopupFrame({ width: 844, height: 390, keyboard: 320 }).maxHeight).toBe(POPUP_MIN_HEIGHT);
   expect(mobilePopupFrame({ width: 0, height: 0 }).maxWidth).toBe(0);
+  // Android's dialog layer, which nsh lays out above the keyboard: the paper keeps only the gap from
+  // the keyboard's top (no keyboard and no navigation bar again), and is as tall as before.
+  expect(mobilePopupFrame({ width: 390, height: 844, area: BUTTONS, keyboard: 300, layerAboveKeyboard: true })).toEqual({ top: 36, right: 12, bottom: 12, left: 12, maxHeight: 496, maxWidth: 366 });
+  expect(mobilePopupFrame({ width: 390, height: 844, area: BUTTONS, keyboard: 0, layerAboveKeyboard: true }).bottom).toBe(60);
   // Insets that are not numbers count for nothing.
   expect(mobilePopupFrame({ width: 390, height: 844, area: { top: Number.NaN, bottom: -3 }, keyboard: Number.NaN }).bottom).toBe(12);
 });

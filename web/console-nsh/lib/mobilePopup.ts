@@ -42,7 +42,12 @@ const size = (value: number | undefined) => (Number.isFinite(value) && (value as
  * - `below`: the room something floating at the layer's foot takes, its own bottom inset and the
  *   gap above it included (the bottom navigation, under More and the agents): it replaces the
  *   bottom inset and the gap, unless the keyboard reaches higher;
- * - `share`: the most of the layer's height the paper takes (More's and the agents' 62%).
+ * - `share`: the most of the layer's height the paper takes (More's and the agents' 62%);
+ * - `layerAboveKeyboard`: the platform already lays the layer out above the keyboard (Android: nsh
+ *   draws a dialog in a window of its own, `height` less the keyboard's, ModalHost), so `height`
+ *   is the window's and `keyboard` is what the layer is short of it: the layer's foot is the
+ *   keyboard's top, which covers the bottom inset, and the paper keeps only the gap from it.
+ *   Counting the keyboard again stood the paper a keyboard's height above it.
  */
 export function mobilePopupFrame(options: {
   width: number;
@@ -52,16 +57,19 @@ export function mobilePopupFrame(options: {
   below?: number;
   share?: number;
   maxWidth?: number;
+  layerAboveKeyboard?: boolean;
 }): MobilePopupFrame {
   const area = options.area ?? {};
   const raised = size(options.keyboard);
-  const clear = Math.max(raised, size(area.bottom)) + POPUP_GAP;
+  const shrunk = Boolean(options.layerAboveKeyboard) && raised > 0;
+  const height = shrunk ? Math.max(0, size(options.height) - raised) : size(options.height);
+  const clear = (shrunk ? 0 : Math.max(raised, size(area.bottom))) + POPUP_GAP;
   const bottom = Math.max(size(options.below), clear);
   const top = size(area.top) + POPUP_GAP;
   const left = size(area.left) + POPUP_GAP;
   const right = size(area.right) + POPUP_GAP;
-  const room = size(options.height) - top - bottom;
-  const shared = options.share === undefined ? room : Math.min(room, size(options.height) * options.share);
+  const room = height - top - bottom;
+  const shared = options.share === undefined ? room : Math.min(room, height * options.share);
   return {
     top,
     right,

@@ -1759,10 +1759,22 @@ export function standInKeyboard(height: number | null) {
   keyboardStandIn.set(height);
 }
 
-/** The phone paper's place in the window: the layer's padding round it, and its tallest. Reactive. */
+/**
+ * The phone paper's place in its dialog layer: the layer's padding round it, and its tallest.
+ * Reactive. On Android the layer is an nsh Dialog's window, which nsh lays out above the software
+ * keyboard (ModalHost): the paper keeps only its gap from the keyboard's top. A stand-in keyboard
+ * (headless tests) shrinks no window, and is counted as before.
+ */
 export function popupFrame() {
   const { width, height } = windowSize();
-  return mobilePopupFrame({ width, height, area: safeArea(), keyboard: keyboardStandIn() ?? keyboardFrame().height });
+  const standIn = keyboardStandIn();
+  return mobilePopupFrame({
+    width,
+    height,
+    area: safeArea(),
+    keyboard: standIn ?? keyboardFrame().height,
+    layerAboveKeyboard: platform.os === "android" && standIn === null,
+  });
 }
 
 /** What a test reads of a dialog's panel: its frame in the layer, and its motion. */
@@ -1961,7 +1973,8 @@ export function DialogLayer(props: {
   // On phones the panel floats at the foot of the layer, which keeps it a small gap in from the
   // left, the right and the bottom, outside the room the system takes there (a notch, the
   // navigation bar or gesture handle, or the software keyboard, which the layer does not shrink
-  // for) and below the status bar (lib/mobilePopup.ts): the layer's padding, on every platform, so
+  // for, except on Android: nsh lays its dialog windows out above it, see popupFrame) and below
+  // the status bar (lib/mobilePopup.ts): the layer's padding, on every platform, so
   // the paper's own bottom edge and corners show above the inset. Numbers, not
   // `env(keyboard-inset-height)`: the env value moves a view natively but not in nsh's layout,
   // where presses are matched. Wide windows: Android's layer covers the whole surface, status
