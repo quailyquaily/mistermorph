@@ -1,8 +1,11 @@
 // A test entry for tests/corners.test.tsx: the shared controls with the continuous corners
 // (components/corners.ts), each reporting its frame, so the test can tell the corners changed
 // nothing else: the buttons, fields, clear buttons, switches and cards keep their sizes, and a menu
-// item's text stays where it was although its highlight is now inset (MENU_ITEM_BOX). Also the web
-// target's visual probe (`app.screenshot`): the controls, an open menu, a dialog.
+// item's text stays where it was although its highlight is now inset (MENU_ITEM_BOX). Below them
+// the surfaces of single pages and editors that take the same corners: an environment-managed
+// field, the provider picker's trigger, a date filter (its calendar days and clear button) and a
+// question card's options. Also the web target's visual probe (`app.screenshot`): the controls, an
+// open menu, a dialog.
 import type { Bounds } from "nsh";
 import { mount, signal, Text, View } from "nsh";
 import {
@@ -19,9 +22,24 @@ import {
   Toggle,
   type ButtonSize,
 } from "../../components/ui";
+import { POPOVER_CORNERS } from "../../components/corners";
+import { ChatQuestionCard, type QuestionState } from "../../components/chat/ChatQuestionCard";
+import { keyedState } from "../../components/chat/rowState";
+import { EnvManagedField } from "../../components/settings/EnvManagedField";
+import { InferenceProviderPicker } from "../../components/settings/InferenceProviderPicker";
+import { CALENDAR_DAY_CLASS, DATE_CLEAR_CLASS, DateField } from "../../components/shared/DateField";
 
 const frames = signal<Record<string, [number, number, number, number]>>({});
 const dialog = signal(false);
+const questionStates = keyedState<QuestionState>();
+const answers = signal<string[]>([]);
+const QUESTION = {
+  id: "q1",
+  status: "open",
+  text: "Which city?",
+  options: [{ label: "Lisbon", description: "On the coast" }, { label: "Porto" }],
+  choices_only: true,
+};
 
 /** Records the frame of what it is put on, under `name` (x, y, width, height in its parent). */
 const track = (name: string) => (event: { bounds: Bounds }) => {
@@ -38,6 +56,8 @@ function Gallery() {
   const on = signal(true);
   const text = signal(LONG);
   const choice = signal("pear");
+  const provider = signal("openai");
+  const since = signal("2026-11-04");
   return (
     <View class="flex-1 gap-3 bg-background p-4">
       <View class="flex-row items-start gap-2">
@@ -84,6 +104,47 @@ function Gallery() {
           </View>
         </Card>
       </View>
+      {/* The surfaces of the second round: an environment-managed field, the provider picker's
+          trigger, a question's options in its card, and a date filter's calendar days and clear button. */}
+      <View class="flex-row items-start gap-3">
+        <View class="w-72" onLayout={track("env-field")}>
+          <EnvManagedField name="OPENAI_API_KEY_WITH_A_VERY_LONG_VARIABLE_NAME_THAT_IS_CUT_SHORT" testID="env-field" />
+        </View>
+        <View class="w-72" onLayout={track("provider")}>
+          <InferenceProviderPicker
+            value={provider()}
+            items={[{ title: "OpenAI", value: "openai" }, { title: "Anthropic", value: "anthropic" }]}
+            onChange={(item) => provider.set(item.value)}
+            testID="provider"
+          />
+        </View>
+        <DateField
+          value={since() || null}
+          cleanable
+          accessibilityLabel="Since"
+          testID="since"
+          onChange={({ value }) => since.set(typeof value === "string" ? value.slice(0, 10) : "")}
+          offset={4}
+          popupClass={`${POPOVER_CORNERS} border border-border bg-popover p-3 shadow-md`}
+          headerClass="flex-row items-center justify-between pb-2"
+          rowClass="flex-row justify-between"
+          itemClass={CALENDAR_DAY_CLASS}
+          clearButtonClass={DATE_CLEAR_CLASS}
+          clearButtonAccessibilityLabel="Clear date"
+          trigger={
+            <View class="h-9.5 min-w-36 flex-row items-center px-2.5" onLayout={track("since")}>
+              <Text class="text-sm text-foreground">{since() || "Since"}</Text>
+            </View>
+          }
+        />
+      </View>
+      <View class="w-96" onLayout={track("question")}>
+        <ChatQuestionCard question={QUESTION} live states={questionStates} onAnswer={(answer) => {
+          answers.set([...answers(), String(answer.option)]);
+          answer.done(true);
+        }} />
+      </View>
+      <Text testID="answers" class="text-[9px] text-muted-foreground">{`answers=${answers().join(",")}`}</Text>
       {/* A menu's paper as MENU_POPUP draws it, its item as MENU_ITEM_BOX does (the highlight inset
           8pt, the text 8pt further in), beside the item as it was (px-4 across the whole width). */}
       <View class="flex-row gap-3">

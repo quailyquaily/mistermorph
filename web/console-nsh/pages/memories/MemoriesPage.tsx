@@ -6,7 +6,7 @@
 import type { JSX } from "nsh";
 import { batch, computed, effect, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { DateField } from "../../components/shared/DateField";
+import { CALENDAR_DAY_CLASS, DATE_CLEAR_CLASS, DateField } from "../../components/shared/DateField";
 import {
   Blocks,
   DetailCard,
@@ -1098,8 +1098,8 @@ function SinceField(props: { value: string; onChange: (value: string) => void })
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"
-      itemClass="h-8 min-w-8 items-center justify-center rounded-(--radius) text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-primary selected:text-primary-foreground disabled:opacity-50"
-      clearButtonClass="ml-1 size-6 items-center justify-center rounded-(--radius) hover:bg-hover"
+      itemClass={CALENDAR_DAY_CLASS}
+      clearButtonClass={DATE_CLEAR_CLASS}
       clearButton={<Icon name="PhX" size={12} color="muted-foreground" />}
       clearButtonAccessibilityLabel={t("audit_clear_filter")}
       trigger={

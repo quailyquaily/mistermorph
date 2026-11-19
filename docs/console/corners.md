@@ -9,8 +9,8 @@ the Console's own.
 
 | Role | Radius | Class (`components/corners.ts`) | Where |
 | --- | --- | --- | --- |
-| Controls | 8pt | `CONTROL_CORNERS` | buttons (not round ones), text fields, textareas, select triggers, icon squares, the Fab |
-| Cards | 12pt | `CARD_CORNERS` | `Card`, `Section` card and boxed, settings and knowledge boxes, question and elevation cards |
+| Controls | 8pt | `CONTROL_CORNERS` | buttons (not round ones), text fields, textareas, select triggers, icon squares, the Fab, field-like triggers (`EnvManagedField`, the `InferenceProviderPicker` trigger), calendar days in date popovers (`CALENDAR_DAY_CLASS`), question options (`QUESTION_OPTION_CLASS`), the Markdown editor's picker rows (`PICKER_ROW_CLASS`) |
+| Cards | 12pt | `CARD_CORNERS` | `Card`, `Section` card and boxed, settings and knowledge boxes, question and elevation cards, the secret picker's and the provider picker's cards |
 | Popovers | 12pt | `POPOVER_CORNERS` | menus (`MENU_POPUP`), select lists, `PopoverPicker`, the calendar and date popovers, tag suggestions |
 | Dialogs | 18pt | `DIALOG_CORNERS`, `POPUP_RADIUS` | `DialogLayer` panels (`Modal`, `MessageDialog`), the phone's floating paper (`PopupSheet`, More, the agent sheet), the Contacts panel |
 | Switch tracks | 6pt | `TRACK_CORNERS` (`SWITCH_TRACK_CORNERS`) | every switch |
@@ -19,7 +19,8 @@ The radii are theme tokens (`theme.json`, `cssVars.theme.radius-control`, `radiu
 `radius-popover`, `radius-dialog`, `radius-track`), which the classes name, and `RADIUS` in
 `components/corners.ts`, for what is computed from a radius when the modules load (before the theme
 can be read). `tests/corners.test.tsx` keeps the two equal. The generic `--radius` (2pt) stays for
-small marks, tags, skeletons and tooltips, which are outside the scale.
+small marks, tags, skeletons and tooltips, which are outside the scale, and for image tiles such as
+a provider's logo.
 
 ## Rules
 
@@ -37,9 +38,13 @@ small marks, tags, skeletons and tooltips, which are outside the scale.
    - A switch's thumb: the track's 6pt less its hairline and 2pt padding, 3pt.
    - A text field's clear button: 8pt less half the height difference (2, 3 and 4pt at md, sm, xs).
    - The Markdown editor's toolbar buttons and tabs: 8 − 5 = 3pt.
+   - A box deeper inside another than the outer radius (a calendar day 13pt in from its 12pt
+     bubble) nests in nothing: it takes its own role's radius.
 3. **Small controls fit their curve.** The web draws a continuous corner only where about 1.53
    times the radius fits half the shorter side (`cornerReach`); a radius that does not fit is drawn
-   circular. The 24pt `xxs` button therefore takes 7pt (`fittingRadius`), not 8.
+   circular. The 24pt `xxs` button therefore takes 7pt (`fittingRadius`), not 8, and so does the
+   24pt button that clears a date (`DATE_CLEAR_CLASS`). A one-line question option (about 25pt
+   tall) and a 32pt calendar day still fit 8pt.
 4. **Docked panels keep square edges.** Side sheets (`SidePane`, the workspace and skill store
    sheets) and columns attached to a window edge are not rounded.
 5. **Only the corners change.** Colors, sizes, padding, text positions, behavior and accessibility
@@ -69,7 +74,9 @@ Checked on nsh 0.6.0 (5541637):
 
 - `tests/corners.test.tsx` (fixture `tests/fixtures/corners-app.tsx`): the scale against the
   theme, the classes, the nested radii, round buttons left round, and the controls' sizes and menu
-  text positions on a desktop and a phone. Headless tests cannot read a radius or a curve back.
+  text positions on a desktop and a phone. The fixture also holds the page and editor surfaces on
+  the scale (a variable-managed field, the provider picker, a date filter, a question card), which
+  the test still drives: a date picked and cleared, an option answering, a provider chosen. Headless tests cannot read a radius or a curve back.
 - By eye: `nsh test --target web` with `app.screenshot`, or the fixture packaged for the web and
   opened in Chrome, where `getComputedStyle(el).cornerShape` reads `superellipse(1.7)` on every
   shaped control. The gallery (`/ui-components`) shows the controls, a long value in a field and

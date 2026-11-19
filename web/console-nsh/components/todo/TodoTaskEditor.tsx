@@ -9,7 +9,7 @@
 // weekdays above 680; the weekday chips run 7 to a row, 4 in a narrow form or window, 2 on a phone.
 import { signal, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch, TimeField } from "nsh/base";
-import { DateField } from "../shared/DateField";
+import { CALENDAR_DAY_CLASS, DateField } from "../shared/DateField";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
@@ -111,7 +111,7 @@ function RunAtField(props: { task: TodoTask; disabled: boolean; onChange: (value
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"
-      itemClass="h-8 min-w-8 items-center justify-center rounded-(--radius) text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-primary selected:text-primary-foreground disabled:opacity-50"
+      itemClass={CALENDAR_DAY_CLASS}
       timeClass="mt-2 flex-row items-center justify-between gap-3"
       timeLabel={<Text class="text-sm text-subtle">{t("todo_field_time")}</Text>}
       timeFieldClass={`h-9.5 flex-row items-center ${CONTROL_CORNERS} border border-input bg-field px-3`}

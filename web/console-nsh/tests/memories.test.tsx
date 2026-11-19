@@ -223,6 +223,38 @@ test("an empty journal search says so; a failed one shows the error", async () =
   await app.waitFor("text:journal offline");
 });
 
+test("the journal's since date is picked from the calendar, narrows the search and clears", async () => {
+  const searches: string[] = [];
+  const { app } = await openConsole({
+    location: "/e/default/memories",
+    api: api({
+      "GET /proxy:/journal/search": (request: any) => {
+        searches.push(request.uri);
+        return { body: { events: [] } };
+      },
+    }),
+  });
+  await app.press("id:memories-journal");
+  await app.waitFor("id:journal-since");
+  expect(app.shows("label:Clear filter")).toBe(false);
+  // The calendar opens on this month; its days are buttons named by their date.
+  const now = new Date();
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-15`;
+  await app.press("id:journal-since");
+  await app.press(`role:button[${day}]`);
+  await app.waitFor(`text:${day}`);
+  await app.press("id:journal-go");
+  await app.waitUntil(() => searches.length === 1);
+  expect(searches[0]).toContain(`since=${day}`);
+  // The clear button beside the field empties it, and the next search has no date.
+  await app.press("label:Clear filter");
+  await app.waitFor(`text:${day}`, { state: "gone" });
+  expect(app.shows("label:Clear filter")).toBe(false);
+  await app.press("id:journal-go");
+  await app.waitUntil(() => searches.length === 2);
+  expect(searches[1]).not.toContain("since=");
+});
+
 test("no memories says so; a failed load shows the error", async () => {
   const empty = await openConsole({ location: "/e/default/memories", api: api({ "GET /proxy:/memories": { body: { items: [] } } }) });
   await empty.app.waitFor("text:No memories yet. The agent saves them as it learns things worth keeping.");

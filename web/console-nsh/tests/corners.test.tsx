@@ -20,6 +20,11 @@ import {
   RADIUS,
   TRACK_CORNERS,
 } from "../components/corners";
+import { QUESTION_OPTION_CLASS } from "../components/chat/ChatQuestionCard";
+import { ENV_FIELD_FRAME } from "../components/settings/EnvManagedField";
+import { PROVIDER_OPTION_CLASS, PROVIDER_TRIGGER_CLASS } from "../components/settings/InferenceProviderPicker";
+import { CALENDAR_DAY_CLASS, DATE_CLEAR_CLASS } from "../components/shared/DateField";
+import { PICKER_ROW_CLASS } from "../components/shared/MarkdownEditor";
 import { PAPER_ROW_RADIUS } from "../components/shared/PickerList";
 import { FIELD_FRAME } from "../components/todo/TodoFields";
 import {
@@ -103,6 +108,33 @@ test("the TODO editor's fields share the controls' corners", () => {
   expect(FIELD_FRAME).toContain(CONTROL_CORNERS);
 });
 
+test("page and editor controls take the scale too: date filters, question options, picker rows, provider and variable fields", () => {
+  // A calendar's day (Memories' journal filter, the TODO editor's run time): a 32pt control on the
+  // controls' 8pt, which fits it. Its cells are 13pt in from the bubble's edge, past its 12pt radius.
+  expect(CALENDAR_DAY_CLASS).toContain(CONTROL_CORNERS);
+  expect(CALENDAR_DAY_CLASS).toContain("h-8 min-w-8");
+  expect(fittingRadius(RADIUS.control, 32)).toBe(RADIUS.control);
+  // The 24pt clear button beside a date: the controls' radius fitted to it, as the xxs button's.
+  expect(DATE_CLEAR_CLASS).toContain("size-6");
+  expect(DATE_CLEAR_CLASS).toContain(cornersClass(fittingRadius(RADIUS.control, 24)));
+  expect(DATE_CLEAR_CLASS).toContain(buttonCorners("xxs").corners);
+  // A question's options and the mention and conversation pickers' rows: pressable rows.
+  expect(QUESTION_OPTION_CLASS).toContain(CONTROL_CORNERS);
+  expect(QUESTION_OPTION_CLASS).toContain("hover:bg-hover focus:bg-hover");
+  expect(PICKER_ROW_CLASS).toContain(CONTROL_CORNERS);
+  expect(PICKER_ROW_CLASS).toContain("hover:bg-hover active:bg-selection");
+  // The field-like triggers: a variable-managed field and the provider picker's, as a text field.
+  expect(ENV_FIELD_FRAME).toContain(CONTROL_CORNERS);
+  expect(PROVIDER_TRIGGER_CLASS).toContain(CONTROL_CORNERS);
+  // The provider cards in its dialog, as the secret picker's cards.
+  expect(PROVIDER_OPTION_CLASS).toContain(CARD_CORNERS);
+  // None keeps the generic 2pt radius.
+  for (const cls of [CALENDAR_DAY_CLASS, DATE_CLEAR_CLASS, QUESTION_OPTION_CLASS, PICKER_ROW_CLASS, ENV_FIELD_FRAME, PROVIDER_TRIGGER_CLASS, PROVIDER_OPTION_CLASS]) {
+    expect(cls).not.toContain("rounded-(--radius)");
+    expect(cls).toContain(CONTINUOUS);
+  }
+});
+
 type Frame = [number, number, number, number];
 
 async function openGallery(platform: "linux" | "android" = "linux") {
@@ -119,7 +151,7 @@ function framesOf(app: { texts(): string[] }): Record<string, Frame> {
 for (const platform of ["linux", "android"] as const) {
   test(`the controls keep their sizes (${platform})`, async () => {
     const app = await openGallery(platform);
-    await app.waitUntil(() => Object.keys(framesOf(app)).length >= 18);
+    await app.waitUntil(() => Object.keys(framesOf(app)).length >= 22);
     const f = framesOf(app);
     // Buttons: md 44, sm 38, xs 32, xxs 24 tall; an icon button is as wide as it is tall.
     expect([f["button-md"][3], f["button-sm"][3], f["button-xs"][3], f["button-xxs"][3]]).toEqual([44, 38, 32, 24]);
@@ -136,6 +168,11 @@ for (const platform of ["linux", "android"] as const) {
     expect(f.select[3]).toBe(44);
     // A card keeps its padding round its content.
     expect(f["card-content"].slice(0, 2)).toEqual([13, 13]);
+    // A variable-managed field is as tall as a text field, its long name cut short; the provider
+    // picker's trigger is 44pt; a date filter's trigger 38pt.
+    expect(f["env-field"].slice(2)).toEqual([288, 44]);
+    expect(f.provider.slice(2)).toEqual([288, 44]);
+    expect(f.since[3]).toBe(38);
   });
 }
 
@@ -175,4 +212,25 @@ test("the clear button still empties a long value", async () => {
   expect(app.value("id:field-md")).toContain("an_unbroken_identifier");
   await app.press("id:field-md-clear");
   expect(app.value("id:field-md")).toBe("");
+});
+
+test("the newly shaped surfaces still work: a date is picked and cleared, an option answers, a provider is chosen", async () => {
+  const app = await openGallery();
+  // The date filter: its calendar opens on the date's month, a day replaces it, the clear button empties it.
+  await app.press("id:since");
+  await app.press("role:button[2026-11-18]");
+  await app.waitFor("text:2026-11-18");
+  await app.press("label:Clear date");
+  await app.waitFor("text:2026-11-18", { state: "gone" });
+  expect(app.shows("label:Clear date")).toBe(false);
+  // A question's option answers with its index.
+  await app.press("label:Porto");
+  await app.waitFor("text:answers=1");
+  // The provider trigger opens the dialog of provider cards; a card chooses and closes it.
+  await app.press("id:provider-trigger");
+  await app.waitFor("id:inference-provider-dialog");
+  await app.press("label:Anthropic");
+  await app.waitFor("id:inference-provider-dialog", { state: "gone" });
+  expect(app.shows("id:provider-trigger >> text:Anthropic")).toBe(true);
+  expect(app.shows("id:provider-trigger >> text:OpenAI")).toBe(false);
 });

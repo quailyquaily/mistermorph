@@ -29,6 +29,8 @@ import { CONTROL_CORNERS, cornersClass, nestedRadius, RADIUS } from "../corners"
 
 /** The toolbar's buttons and tabs (in its 4pt padding, on the field's hairline): the field's corners nested (8 - 5: 3pt). */
 const TOOLBAR_CORNERS = cornersClass(nestedRadius(RADIUS.control, 1 + 4));
+/** A row of the mention and conversation pickers (in their dialog): a pressable row with the controls' continuous corners. */
+export const PICKER_ROW_CLASS = `flex-row items-center gap-3 ${CONTROL_CORNERS} px-2 py-1.5 hover:bg-hover active:bg-selection`;
 import { ContactAvatar } from "./ContactAvatar";
 import { createBesidePresses } from "./editorPresses";
 import { createTextareaInsert, insertIntoText } from "./textInsert";
@@ -477,7 +479,7 @@ function PickerButton(props: {
                       props.onPick(item());
                     }}
                     accessibilityLabel={item().title}
-                    class="flex-row items-center gap-3 rounded-(--radius) px-2 py-1.5 hover:bg-hover active:bg-selection"
+                    class={PICKER_ROW_CLASS}
                   >
                     {props.avatar(item())}
                     <View class="flex-1 min-w-0">

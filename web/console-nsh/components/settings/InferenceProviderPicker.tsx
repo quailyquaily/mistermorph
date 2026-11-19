@@ -8,6 +8,12 @@ import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { inferenceProviderLogo } from "../../lib/core/inference-provider-logos.js";
 import { Icon, Modal, Tabs, TextField } from "../ui";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
+
+/** The picker's trigger: a select-like field (44pt at least) with the controls' continuous corners. */
+export const PROVIDER_TRIGGER_CLASS = `min-h-11 flex-row items-center gap-3 ${CONTROL_CORNERS} border border-input bg-field px-2 hover:border-ring disabled:opacity-60`;
+/** A provider's card in the dialog, as the secret picker's: the cards' continuous corners. Its border and fill come with its selection. */
+export const PROVIDER_OPTION_CLASS = `min-h-14 grow basis-48 flex-row items-center gap-3 ${CARD_CORNERS} border px-3 py-2 hover:bg-hover active:bg-selection`;
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -141,7 +147,7 @@ export function InferenceProviderPicker(props: InferenceProviderPickerProps) {
         onPress={openDialog}
         accessibilityLabel={`${t("settings_agent_provider_label")}: ${selectedTitle()}`}
         testID={props.testID ? `${props.testID}-trigger` : "inference-provider-trigger"}
-        class="min-h-11 flex-row items-center gap-3 rounded-(--radius) border border-input bg-field px-2 hover:border-ring disabled:opacity-60"
+        class={PROVIDER_TRIGGER_CLASS}
       >
         <ProviderLogo item={selectedItem()} />
         <Text class="flex-1 text-sm text-foreground" style={{ numberOfLines: 1 }}>
@@ -175,7 +181,7 @@ export function InferenceProviderPicker(props: InferenceProviderPickerProps) {
                 selected={isSelected(item())}
                 onPress={() => selectItem(item())}
                 accessibilityLabel={item().title}
-                class={`min-h-14 grow basis-48 flex-row items-center gap-3 rounded-(--radius) border px-3 py-2 hover:bg-hover active:bg-selection ${
+                class={`${PROVIDER_OPTION_CLASS} ${
                   isSelected(item()) ? "border-blue bg-selection" : "border-line-faint bg-card"
                 }`}
               >
