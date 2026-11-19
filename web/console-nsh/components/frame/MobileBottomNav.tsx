@@ -309,6 +309,10 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
   const moreLabel = () =>
     moreActive() ? `${moreCurrentItem()?.title} · ${t("nav_more")}` : t("nav_more");
 
+  // A selected slot's glyph is the primary buttons' colour, the others quiet. The glyph's testID
+  // names its tint (no headless image query): `mobile-nav-<slot>-icon.<token>`.
+  const iconTint = (selected: boolean): "primary" | "muted-foreground" => (selected ? "primary" : "muted-foreground");
+
   const selectedName = () => selectedEndpointItem()?.title || t("nav_agent");
   const selectedAvatar = () => personaAvatarURL() || selectedEndpointItem()?.image || defaultEndpointAvatar;
 
@@ -384,7 +388,13 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
                 style={slotStyle()}
                 onLayout={report(`mobile-nav-${item().pagePath.slice(1)}`)}
               >
-                <Icon name={item().icon as IconName} size={24} filled={activeSlot() === index()} color={activeSlot() === index() ? "blue" : "muted-foreground"} />
+                <Icon
+                  name={item().icon as IconName}
+                  size={24}
+                  filled={activeSlot() === index()}
+                  color={iconTint(activeSlot() === index())}
+                  testID={`mobile-nav-${item().pagePath.slice(1)}-icon.${iconTint(activeSlot() === index())}`}
+                />
               </TipButton>
             )}
           </Each>
@@ -398,7 +408,13 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
             style={slotStyle()}
             onLayout={report("mobile-nav-more")}
           >
-            <Icon name={moreIcon()} size={24} filled={activeSlot() === primaryItems().length} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
+            <Icon
+              name={moreIcon()}
+              size={24}
+              filled={activeSlot() === primaryItems().length}
+              color={iconTint(activeSlot() === primaryItems().length)}
+              testID={`mobile-nav-more-icon.${iconTint(activeSlot() === primaryItems().length)}`}
+            />
           </TipButton>
           {/* The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing to
               it (no ring, no status mark, no press fill); the pill behind it marks it selected, and
