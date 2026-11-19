@@ -76,3 +76,14 @@ Installs: none beyond restoring repository-pinned Go dependencies. No prohibited
 Not checked: visual rendering in a desktop browser/window or on an Android device/emulator; Android inset and keyboard/Back visual behavior still need device confirmation. This round changes no UI sources.
 
 Branch pushed; moved new/ → review/. Owner/reviewer should confirm the baseline gate now passes and retain the prior device-verification limitations. Initial push credential-helper invocation failed due to missing repository-path context; retry with per-command credential.useHttpPath succeeded.
+
+## factory · review · 2026-11-19 11:09
+head: 1a8520769a56c9932eb448c03ac433ec160048c9
+verdict: pass
+notes:
+- Claude Code reviewed the complete 11-file Console diff origin/master...HEAD against base 30f077ce. No introduced defects found; the authorized baseline formatting correction resolves the previous sole P1. Clean merge verified. No source edits or commits during review; worktree remained clean.
+- Configured command `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed (exit 0; 165 packages passed, 20 without tests). nsh 0.6.0 check passed. Required parallel Console scripts/test.sh passed: 140 files, 0 failed, 341 seconds, including UI inventory. Four parallel-phase timing failures passed their isolated retries; Go checks ran concurrently.
+- New regression file passes all 11 tests on head; 7 fail on base, including verified Android sheet-over-dialog interception and desktop Escape closing the underlying column. Inspected app dialog declaration order and shared layering. Settings Telegram prompt Escape probe behaves identically on base and head; no finding.
+- Installs: none. All test HOMEs and temporary probes were isolated under the run temporary directory. No linked GitHub issues or PRs.
+- Not visually verified in a desktop browser/window or on an Android device/emulator. Android inset rendering, keyboard-first Back behavior and visual hit coordinates remain unconfirmed. Android JVM tests unavailable without a JDK.
+- Round 2 of 3: moved review/ → ready/. Owner should confirm desktop/Android visual behavior before shipping.
