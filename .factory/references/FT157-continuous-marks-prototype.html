@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FT155 · Fab corner marks as one continuous stroke (prototype)</title>
+<style>
+  :root {
+    --bg: #f6faff; --card: #fbfdff; --ink: #1d2b3c; --muted: #5f7894;
+    --primary: #284e78; --primary-line: #21446bb3; --primary-fg: #ffffff;
+    --line-faint: #284e7829;
+    --tip-bg: #1d2b3c; --tip-fg: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: #eef3f9; }
+  header, main { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  header { padding-top: 28px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  p.lede { margin: 0 0 20px; color: #4a5d73; max-width: 820px; }
+  code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0 3px; border-radius: 3px; background: rgba(40,78,120,.08); }
+  section { background: #fff; border: 1px solid #dbe4ee; border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch; }
+  .note { color: #5a6b80; font-size: 12.5px; margin: 8px 0 0; }
+
+  /* ---------- The Fab as the Console builds it: a 52pt button, two marks as sibling views ---------- */
+  .surface { background: var(--bg); color: var(--ink); border: 1px solid var(--line-faint); border-radius: 10px; position: relative; }
+  .surface.dark {
+    /* Illustrative: theme.json's "dark" block currently repeats the light values. */
+    --bg: #101822; --card: #16202c; --ink: #e3ebf4; --muted: #8aa1bb;
+    --primary: #3b6798; --primary-line: #5d86b5b3; --primary-fg: #ffffff; --line-faint: #8aa1bb2e;
+    --tip-bg: #e3ebf4; --tip-fg: #101822;
+  }
+  .fab { position: relative; width: 52px; height: 52px; }
+  .fab .btn {
+    position: absolute; inset: 0; width: 52px; height: 52px; padding: 0; border: 0; background: none; cursor: pointer;
+    filter: drop-shadow(0 6px 8px rgba(20, 29, 48, 0.2)) drop-shadow(0 1px 1.5px rgba(20, 29, 48, 0.12));
+    transition: transform 120ms cubic-bezier(.2,.7,.2,1), filter 120ms cubic-bezier(.2,.7,.2,1);
+    outline: none;
+  }
+  .fab .btn svg { display: block; overflow: visible; }
+  .fab .btn:active, .fab.is-pressed .btn { transform: translateY(1px); filter: drop-shadow(0 2px 3px rgba(20, 29, 48, 0.18)); }
+  .fab .btn:disabled, .fab.is-disabled .btn { opacity: .55; cursor: default; }
+  .fab .btn:focus-visible .focus { opacity: 1; }
+  .fab .focus { opacity: 0; }
+  .fab .mark { position: absolute; overflow: visible; pointer-events: none; }
+  .fab .mark path { fill: none; stroke: var(--muted); stroke-width: 1; stroke-linecap: butt; stroke-linejoin: round; }
+  .fab .tip {
+    position: absolute; right: calc(100% + 12px); top: 50%; transform: translateY(-50%); white-space: nowrap;
+    background: var(--tip-bg); color: var(--tip-fg); font-size: 12px; padding: 4px 8px; border-radius: 6px;
+    opacity: 0; transition: opacity 120ms; pointer-events: none;
+  }
+  .fab:hover .tip, .fab.is-hover .tip { opacity: 1; }
+  .fab.is-disabled:hover .tip { opacity: 0; }
+
+  /* FT155 as implemented, for comparison: 10pt boxes, two border sides, a 3pt continuous radius. */
+  .fab .css-mark { position: absolute; width: 10px; height: 10px; border-color: var(--muted); border-style: solid; border-width: 0; pointer-events: none; corner-shape: superellipse(1.7); }
+  .fab .css-mark.start { left: -5px; top: -5px; border-left-width: 1px; border-top-width: 1px; border-top-left-radius: 3px; }
+  .fab .css-mark.end { right: -5px; bottom: -5px; border-right-width: 1px; border-bottom-width: 1px; border-bottom-right-radius: 3px; }
+  .fab .css-btn { position: absolute; inset: 0; border-radius: 12.2px; corner-shape: superellipse(1.7); background: var(--primary); border: 1px solid var(--primary-line);
+    box-shadow: 0 6px 16px rgba(20, 29, 48, 0.2), 0 1px 3px rgba(20, 29, 48, 0.12); display: grid; place-items: center; }
+
+  /* Hero */
+  .hero { flex: 1 1 520px; min-height: 360px; display: grid; place-items: center; }
+  .hero .stage { transform: scale(4); transform-origin: center; }
+  .hero-side { flex: 1 1 300px; display: flex; flex-direction: column; gap: 14px; }
+  .controls label { display: flex; align-items: center; gap: 10px; font-size: 13px; margin-bottom: 8px; }
+  .controls input[type=range] { flex: 1; }
+  .controls output { font: 12px ui-monospace, monospace; min-width: 56px; text-align: right; }
+  .metric { font: 12.5px ui-monospace, monospace; background: #f3f7fb; border: 1px solid #dbe4ee; border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
+
+  /* State grid */
+  .grid { display: grid; grid-template-columns: 120px repeat(4, 1fr); gap: 0; border-radius: 10px; overflow: hidden; }
+  .grid > div { padding: 0; }
+  .grid .h { font-size: 12px; color: #5a6b80; padding: 8px 10px; background: #f3f7fb; border-bottom: 1px solid #dbe4ee; }
+  .grid .cell { height: 120px; display: grid; place-items: center; }
+  .grid .rowlabel { font-size: 12px; color: #5a6b80; padding: 10px; display: flex; align-items: center; background: #f3f7fb; border-right: 1px solid #dbe4ee; }
+
+  /* Geometry */
+  .geo { flex: 1 1 280px; max-width: 340px; }
+  .evidence { flex: 0 1 370px; }
+  .geo svg { width: 100%; height: auto; background: #fbfdff; border: 1px solid #dbe4ee; border-radius: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #4a5d73; margin-top: 8px; }
+  .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+  .evidence img { image-rendering: pixelated; border: 1px solid #dbe4ee; border-radius: 8px; display: block; }
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 16px; }
+  .compare .surface { height: 160px; display: grid; place-items: center; }
+  .compare .cap { font-size: 12px; color: #5a6b80; margin-top: 6px; }
+  pre.code { font: 12px/1.5 ui-monospace, monospace; background: #0f1722; color: #d7e3f0; padding: 12px 14px; border-radius: 10px; overflow: auto; margin: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FT155 · Fab corner marks: one continuous stroke each</h1>
+  <p class="lede">
+    A visual prototype only, not application code. Each of the two marks is <b>one SVG element holding one
+    <code>&lt;path&gt;</code></b>: a straight arm, the same continuous (Core Animation) corner curve as the button
+    scaled to sit concentric with it, then the other straight arm. There are no border sides, masks, clips or
+    separate segments, so nothing can split at the curve. The button and the marks below come from the same curve
+    function, so the clear gap round the turn stays at 3.94–4.01pt (stroke centre 4.5pt out), where the tangent point
+    and the straight arms carry it unchanged.
+  </p>
+</header>
+<main>
+
+<section>
+  <div class="row">
+    <div class="surface hero" id="heroSurface">
+      <div class="stage"><div id="hero"></div></div>
+    </div>
+    <div class="hero-side">
+      <div class="controls">
+        <h2>Fixed marks (hover / press the button)</h2>
+        <label>Theme
+          <select id="theme"><option value="light">Light (theme.json)</option><option value="dark">Dark (illustrative)</option></select>
+        </label>
+        <label>Arm length <input type="range" id="arm" min="19.2" max="28" step="0.1" value="22"><output id="armOut"></output></label>
+        <label>Gap (outer edge) <input type="range" id="gap" min="3" max="8" step="0.5" value="5"><output id="gapOut"></output></label>
+        <label><input type="checkbox" id="showGeo"> Show construction on the hero</label>
+      </div>
+      <div class="metric" id="metric"></div>
+      <p class="note">
+        Defaults keep FT155's placement: the marks' outer edge 5pt outside the button (stroke centre 4.5pt) and a
+        1pt <code>muted-foreground</code> hairline. Arm length is measured from the mark's corner point. The curve alone reaches
+        1.5287 × 12.5 ≈ 19.1pt, so the default 22pt leaves about 3pt of straight run at each open end.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>States at actual size: light / dark</h2>
+  <div class="grid" id="grid"></div>
+  <p class="note">
+    As in <code>Fab</code> today, only the button reacts: hover shows the tooltip, a press sinks the button 1pt and
+    softens its shadow, and <code>disabled</code> fades only the button. The marks are sibling views and stay put,
+    so a press shifts the top and bottom gaps by 1pt for its duration. That is existing behavior, unchanged here.
+  </p>
+</section>
+
+<section>
+  <h2>Why it breaks: reported vs FT155 construction vs fix</h2>
+  <div class="row">
+    <div class="evidence">
+      <img alt="Zoomed crop of the reported screenshot: both marks show a step at the curve" width="370" height="180" src="data:image/png;base64,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">
+      <p class="note">From <code>1000019201.png</code> (6×, nearest-neighbour). Left: top-left mark. Right: bottom-right mark.<br>
+        The two arms come out at different weights and positions, and they step where they meet in the curve.</p>
+    </div>
+    <div class="geo">
+      <svg id="geoBroken" viewBox="-7 -7 18 18" aria-label="FT155 construction, enlarged"></svg>
+      <div class="legend"><span><i style="background:#e0773a"></i>left border side</span><span><i style="background:#1f9e8f"></i>top border side</span><span><i style="background:#c23"></i>diagonal join</span></div>
+      <p class="note">FT155: a 10pt box with <code>border-l border-t rounded-tl-[3px] corner-squircle</code>. The renderer paints
+        each border side on its own, and the 3pt turn is split between them along the diagonal. Each half is
+        rasterised and snapped separately (a 1pt side on a fractional device-pixel grid), so the halves need not meet (the offset drawn here is exaggerated to show it).</p>
+    </div>
+    <div class="geo">
+      <svg id="geoFixed" viewBox="-8 -8 40 40" aria-label="Fixed construction, enlarged"></svg>
+      <div class="legend"><span><i style="background:#284e78"></i>button edge (r 8)</span><span><i style="background:#5f7894"></i>mark: one path</span><span><i style="background:#e0a100"></i>Bézier handles</span><span><i style="background:#9fb3c8"></i>curve ↔ straight joins</span></div>
+      <p class="note">Fix: one path per mark, <code>M arm → L curve start → C → L → C → L → C → L arm</code>. Every join is
+        tangent-continuous inside one stroke, so there is no seam to rasterise.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Side by side in this browser</h2>
+  <div class="compare" id="compare"></div>
+  <p class="note">The left Fab uses FT155's CSS, live. Whether you can see its split depends on your browser and display
+    (Chromium at 1×–3× DPR shows it most; other browsers ignore <code>corner-shape</code> and draw a circular 3pt
+    turn). The right Fab cannot split anywhere, because it has no join between separately painted pieces.</p>
+</section>
+
+<section>
+  <h2>The path, as data (top-left mark, button coordinates)</h2>
+  <pre class="code" id="pathOut"></pre>
+  <p class="note">The bottom-right mark is the same path rotated 180° about the button's centre. Only <code>d</code> and the
+    element's box change with the button size, the gap or the arm length.</p>
+</section>
+
+</main>
+
+<script>
+// The continuous corner the Console uses (components/corners.ts: Core Animation's curve, reaching
+// 1.52866483 × r along each edge). Pairs are (along the first edge from the corner, along the
+// second edge), in units of r, from the first edge's tangent point to the second's.
+const K = [
+  [[1.52866483, 0], [1.08849296, 0], [0.86840694, 0], [0.66993427, 0.06549600]],
+  [[0.63149399, 0.07491100], [0.37282392, 0.16905899], [0.16905899, 0.37282392], [0.07491100, 0.63149399]],
+  [[0.06549600, 0.66993427], [0, 0.86840694], [0, 1.08849296], [0, 1.52866483]],
+];
+const REACH = 1.52866483;
+const BUTTON = 52, RADIUS = 8, STROKE = 1;
+const f = (n) => +n.toFixed(3);
+
+/** Point at (a, b) radii from corner c along unit vectors u (first edge) and v (second edge). */
+function at(c, u, v, r, a, b) { return [c[0] + (a * u[0] + b * v[0]) * r, c[1] + (a * u[1] + b * v[1]) * r]; }
+
+/** One corner's curve as path commands (no initial M): L to the first tangent point, then the curves. */
+function cornerCmds(c, u, v, r) {
+  let d = "";
+  for (const seg of K) {
+    const p = seg.map(([a, b]) => at(c, u, v, r, a, b));
+    d += ` L${f(p[0][0])} ${f(p[0][1])} C${f(p[1][0])} ${f(p[1][1])} ${f(p[2][0])} ${f(p[2][1])} ${f(p[3][0])} ${f(p[3][1])}`;
+  }
+  return d;
+}
+
+/** The button outline (closed), inset by `inset` (for a centred stroke). */
+function buttonPath(size, r, inset = 0) {
+  const lo = inset, hi = size - inset, rr = r - inset;
+  const s = REACH * rr;
+  let d = `M${f(lo + s)} ${f(lo)}`;
+  d += cornerCmds([hi, lo], [-1, 0], [0, 1], rr);
+  d += cornerCmds([hi, hi], [0, -1], [-1, 0], rr);
+  d += cornerCmds([lo, hi], [1, 0], [0, -1], rr);
+  d += cornerCmds([lo, lo], [0, 1], [1, 0], rr);
+  return d + " Z";
+}
+
+/**
+ * A mark: ONE open path. Its centreline sits `g` outside the button's corner, on a curve of radius
+ * RADIUS + g (concentric), between straight arms `arm` long measured from its corner point.
+ * corner: the button corner; out: unit vector pointing away from the button along each axis.
+ */
+function markPath(corner, ox, oy, g, arm) {
+  const c = [corner[0] + ox * g, corner[1] + oy * g];
+  const u = [-ox, 0], v = [0, -oy];              // first edge: horizontal arm; second: vertical arm
+  const R = RADIUS + g;
+  const a = Math.max(arm, REACH * R);
+  let d = `M${f(c[0] + u[0] * a)} ${f(c[1])}`;
+  d += cornerCmds(c, u, v, R);
+  d += ` L${f(c[0])} ${f(c[1] + v[1] * a)}`;
+  return d;
+}
+
+const state = { arm: 22, gapOuter: 5, theme: "light", geo: false };
+
+/** Builds the Fab: the button (an SVG) and the two marks, each its own <svg> with one <path>. */
+function fabHTML(opts = {}) {
+  const g = state.gapOuter - STROKE / 2;          // stroke centre
+  const arm = state.arm;
+  const ext = g + STROKE / 2;                       // how far a mark reaches outside the button
+  const box = Math.max(arm, REACH * (RADIUS + g)) + STROKE / 2 - g;  // along the button edge, from the button corner
+  const startD = markPath([0, 0], -1, -1, g, arm);
+  const endD = markPath([BUTTON, BUTTON], 1, 1, g, arm);
+  const w = ext + box;
+  const cls = ["fab", opts.hover && "is-hover", opts.pressed && "is-pressed", opts.disabled && "is-disabled"].filter(Boolean).join(" ");
+  const geo = opts.geo ? geoOverlay(g) : "";
+  return `<div class="${cls}">
+    <svg class="mark" style="left:${-ext}px;top:${-ext}px" width="${w}" height="${w}" viewBox="${-ext} ${-ext} ${w} ${w}" aria-hidden="true"><path d="${startD}"/></svg>
+    <svg class="mark" style="right:${-ext}px;bottom:${-ext}px" width="${w}" height="${w}" viewBox="${BUTTON - box} ${BUTTON - box} ${w} ${w}" aria-hidden="true"><path d="${endD}"/></svg>
+    <button class="btn" aria-label="Add" ${opts.disabled ? "disabled" : ""}>
+      <svg width="52" height="52" viewBox="0 0 52 52">
+        <path d="${buttonPath(BUTTON, RADIUS)}" fill="var(--primary)"/>
+        <path d="${buttonPath(BUTTON, RADIUS, 0.5)}" fill="none" stroke="var(--primary-line)" stroke-width="1"/>
+        <path class="focus" d="${buttonPath(BUTTON, RADIUS, -2.5)}" fill="none" stroke="var(--primary)" stroke-opacity=".45" stroke-width="2"/>
+        <g transform="translate(15 15) scale(${22 / 256})" fill="var(--primary-fg)"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></g>
+        ${geo}
+      </svg>
+    </button>
+    <span class="tip">Add</span>
+  </div>`;
+}
+
+function geoOverlay(g) {
+  const R = RADIUS + g;
+  let s = "";
+  for (const [corner, o] of [[[0, 0], -1], [[BUTTON, BUTTON], 1]]) {
+    const c = [corner[0] + o * g, corner[1] + o * g];
+    s += `<circle cx="${c[0]}" cy="${c[1]}" r=".5" fill="#e0a100"/>`;
+    const t1 = [c[0] - o * REACH * R, c[1]], t2 = [c[0], c[1] - o * REACH * R];
+    s += `<circle cx="${t1[0]}" cy="${t1[1]}" r=".45" fill="#9fb3c8"/><circle cx="${t2[0]}" cy="${t2[1]}" r=".45" fill="#9fb3c8"/>`;
+  }
+  return `<g pointer-events="none">${s}</g>`;
+}
+
+function cssFabHTML() {
+  return `<div class="fab">
+    <div class="css-mark start"></div><div class="css-mark end"></div>
+    <div class="css-btn"><svg width="22" height="22" viewBox="0 0 256 256" fill="var(--primary-fg)"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></svg></div>
+  </div>`;
+}
+
+/** Distance from points on the mark's curve to the button outline: the gap's range round the turn. */
+function gapRange() {
+  const g = state.gapOuter - STROKE / 2;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.style.cssText = "position:absolute;width:0;height:0";
+  document.body.appendChild(svg);
+  const mk = (d) => { const p = document.createElementNS(ns, "path"); p.setAttribute("d", d); svg.appendChild(p); return p; };
+  const btn = mk(buttonPath(BUTTON, RADIUS));
+  const mark = mk(markPath([0, 0], -1, -1, g, state.arm));
+  const bl = btn.getTotalLength(), ml = mark.getTotalLength();
+  const bp = []; for (let i = 0; i <= 4000; i++) { const q = btn.getPointAtLength(bl * i / 4000); if (q.x < 30 && q.y < 30) bp.push(q); }
+  let lo = Infinity, hi = 0;
+  for (let i = 0; i <= 600; i++) {
+    const q = mark.getPointAtLength(ml * i / 600);
+    let d = Infinity; for (const p of bp) d = Math.min(d, Math.hypot(p.x - q.x, p.y - q.y));
+    lo = Math.min(lo, d); hi = Math.max(hi, d);
+  }
+  svg.remove();
+  return [lo - STROKE / 2, hi - STROKE / 2];
+}
+
+function renderHero() {
+  document.getElementById("heroSurface").classList.toggle("dark", state.theme === "dark");
+  document.getElementById("hero").innerHTML = fabHTML({ geo: state.geo });
+  document.getElementById("armOut").textContent = state.arm.toFixed(1) + "pt";
+  document.getElementById("gapOut").textContent = state.gapOuter.toFixed(1) + "pt";
+  const [lo, hi] = gapRange();
+  const g = state.gapOuter - STROKE / 2, R = RADIUS + g;
+  document.getElementById("metric").textContent =
+    `button: 52pt, continuous r ${RADIUS}pt (curve reach ${(REACH * RADIUS).toFixed(2)}pt)\n` +
+    `mark:   1 path, stroke ${STROKE}pt, centre ${g}pt out, concentric r ${R}pt\n` +
+    `        curve reach ${(REACH * R).toFixed(2)}pt, arms ${Math.max(state.arm, REACH * R).toFixed(1)}pt\n` +
+    `clear gap (button edge → stroke inner edge): ${lo.toFixed(2)}–${hi.toFixed(2)}pt`;
+  const g0 = state.gapOuter - STROKE / 2;
+  document.getElementById("pathOut").textContent =
+    `<svg viewBox=…><path d="${markPath([0, 0], -1, -1, g0, state.arm)}"\n      fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="butt"/></svg>`;
+}
+
+function renderGrid() {
+  const states = [["Normal", {}], ["Hover", { hover: true }], ["Pressed", { pressed: true }], ["Disabled", { disabled: true }]];
+  let h = `<div class="h"></div>` + states.map(([n]) => `<div class="h">${n}</div>`).join("");
+  for (const [theme, label] of [["light", "Light · 1×"], ["dark", "Dark · 1× (illustrative)"]]) {
+    h += `<div class="rowlabel">${label}</div>`;
+    for (const [, o] of states) h += `<div class="surface cell ${theme}" style="border-radius:0">${fabHTML(o)}</div>`;
+  }
+  h += `<div class="rowlabel">Light · 2× (phone density)</div>`;
+  for (const [, o] of states) h += `<div class="surface cell scaleRow" style="border-radius:0;height:200px"><div style="transform:scale(2)">${fabHTML(o)}</div></div>`;
+  document.getElementById("grid").innerHTML = h;
+}
+
+function renderCompare() {
+  document.getElementById("compare").innerHTML = `
+    <div><div class="surface">${cssFabHTML()}</div><div class="cap">FT155: CSS border sides + <code>corner-shape</code> (3pt)</div></div>
+    <div><div class="surface">${fabHTML()}</div><div class="cap">Fix: one SVG path per mark (concentric, r 12.5)</div></div>
+    <div><div class="surface"><div style="transform:scale(2.5)">${cssFabHTML()}</div></div><div class="cap">FT155, 2.5×</div></div>
+    <div><div class="surface"><div style="transform:scale(2.5)">${fabHTML()}</div></div><div class="cap">Fix, 2.5×</div></div>`;
+}
+
+function renderGeoBroken() {
+  // FT155's mark at its own scale: the 10pt box, outer corner radius 3 (continuous), border 1.
+  // Each side's paint, clipped by the diagonal join through the corner, drawn in its own colour.
+  const outer = (inset, r) => {
+    const s = REACH * r, lo = inset;
+    return `M${f(lo)} ${f(10)} L${f(lo)} ${f(lo + s)}` + cornerCmds([lo, lo], [0, 1], [1, 0], r).replace(/^ L[^C]*/, "") + ` L${f(10)} ${f(lo)}`;
+  };
+  // Centre line of the 1pt border: 0.5 inside the box edge (the box sits at -5..5 round the button corner at 0).
+  const d = outer(0.5, 2.5);
+  document.getElementById("geoBroken").innerHTML = `
+    <defs>
+      <clipPath id="cpL"><polygon points="-20,-20 -20,30 30,30"/></clipPath>
+      <clipPath id="cpT"><polygon points="-20,-20 30,-20 30,30"/></clipPath>
+    </defs>
+    <g transform="translate(-5 -5)">
+      <rect x="0" y="0" width="10" height="10" fill="none" stroke="#c9d6e4" stroke-width=".06" stroke-dasharray=".25 .2"/>
+      <path d="${d}" fill="none" stroke="#e0773a" stroke-width="1" clip-path="url(#cpL)"/>
+      <path d="${d}" fill="none" stroke="#1f9e8f" stroke-width="1" clip-path="url(#cpT)" transform="translate(.12 -.1)"/>
+      <line x1="-1" y1="-1" x2="3.2" y2="3.2" stroke="#c23" stroke-width=".08"/>
+      <text x="0" y="-.6" font-size=".8" fill="#5a6b80">10pt box, 3pt radius</text>
+    </g>
+    <path d="${buttonPath(BUTTON, RADIUS)}" fill="#284e7814" stroke="#284e78" stroke-width=".12"/>
+    <text x="6" y="10" font-size=".9" fill="#284e78">button (r 8)</text>`;
+}
+
+function renderGeoFixed() {
+  const g = state.gapOuter - STROKE / 2, R = RADIUS + g;
+  const c = [-g, -g];
+  const u = [1, 0], v = [0, 1];
+  let handles = "";
+  for (const seg of K) {
+    const p = seg.map(([a, b]) => at(c, u, v, R, a, b));
+    handles += `<line x1="${p[0][0]}" y1="${p[0][1]}" x2="${p[1][0]}" y2="${p[1][1]}" stroke="#e0a100" stroke-width=".12"/>`;
+    handles += `<line x1="${p[3][0]}" y1="${p[3][1]}" x2="${p[2][0]}" y2="${p[2][1]}" stroke="#e0a100" stroke-width=".12"/>`;
+    handles += `<circle cx="${p[1][0]}" cy="${p[1][1]}" r=".3" fill="#e0a100"/><circle cx="${p[2][0]}" cy="${p[2][1]}" r=".3" fill="#e0a100"/>`;
+    handles += `<circle cx="${p[0][0]}" cy="${p[0][1]}" r=".35" fill="#9fb3c8"/><circle cx="${p[3][0]}" cy="${p[3][1]}" r=".35" fill="#9fb3c8"/>`;
+  }
+  // Gap ticks along the 45° line and at the tangent points.
+  document.getElementById("geoFixed").innerHTML = `
+    <path d="${buttonPath(BUTTON, RADIUS)}" fill="#284e7814" stroke="#284e78" stroke-width=".25"/>
+    <path d="${markPath([0, 0], -1, -1, g, state.arm)}" fill="none" stroke="#5f7894" stroke-width="1"/>
+    ${handles}
+    <text x="14" y="16" font-size="1.6" fill="#284e78">button r 8</text>
+    <text x="${-g + 1}" y="${-g - 1.2}" font-size="1.4" fill="#5f7894">mark r ${R}, 1 path</text>`;
+}
+
+function renderAll() { renderHero(); renderGrid(); renderCompare(); renderGeoBroken(); renderGeoFixed(); }
+
+document.getElementById("theme").onchange = (e) => { state.theme = e.target.value; renderHero(); };
+document.getElementById("arm").oninput = (e) => { state.arm = +e.target.value; renderAll(); };
+document.getElementById("gap").oninput = (e) => { state.gapOuter = +e.target.value; renderAll(); };
+document.getElementById("showGeo").onchange = (e) => { state.geo = e.target.checked; renderHero(); };
+renderAll();
+</script>
+</body>
+</html>
