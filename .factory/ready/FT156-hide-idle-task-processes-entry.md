@@ -37,3 +37,13 @@ Built and pushed 1ef22f73: task-scoped shared process readings now control entry
 Tests: coder ran `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`, `nsh check`, and `web/console-nsh/scripts/test.sh`: all passed. Console suite: 142 files, zero final failures; six unrelated parallel failures passed the script's isolated reruns. Manager independently reran the required Go command, nsh check and the process file (12/12 passed). No forbidden paths changed; one item-specific commit based on 47232d75.
 
 Not checked: no real browser/device visual inspection or real-process integration; headless stubs cannot verify keyboard focus return. Polling load with many visible replies was not measured. A failed read hides the entry until the next successful refresh. Initial push credential helper lacked the repository path; retry with command-local credential.useHttpPath=true succeeded.
+
+## factory · review · 2026-11-19 16:31
+head: 1ef22f731d08dac3646a0774f02a055082a91d08
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/taskProcesses.ts:202-213: Replacing a streaming reply item reruns the watcher even when endpoint/task/fast are unchanged; remove/add resets fastWatchers to one and schedules an immediate read, bypassing the two-second interval. Re-subscribe only when the actual watch tuple changes, and add regression coverage. Verified store probe: 20 item replacements with fast=true caused reads to increase from 1 to 21; fast=false remained at 1. App probe: eight 1.2-second task polls caused eight process reads. Each backend read can scan the user's process tree, so stream-frame-rate polling creates avoidable load.
+
+Validation: Claude Code reviewed origin/master...HEAD (eight files), request and plan, live lifecycle classification, task/endpoint isolation, stale response handling, disposal, panel closure, controls and relevant backend/security boundaries. Required Go gate passed (165 packages); nsh check passed; required parallel Console suite passed (142 files, zero final failures). Two unrelated parallel failures passed isolated retries. Head unchanged; worktree clean. No installs.
+
+Not checked: real browser/device panel focus, actual WebSocket frame rate/server load, and aggregate five-second polling load across many completed replies. The accepted transient-error behavior hides the entry until a successful read. No P0/P1 findings; moved to ready/ under the factory review policy. The P2 polling defect remains for owner attention before shipping.
