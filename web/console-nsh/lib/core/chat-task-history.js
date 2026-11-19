@@ -339,6 +339,11 @@ export function activityWorkerLabel(entry, lang) {
   return [workerDisplayName(worker, lang), ...processes].join(" · ");
 }
 
+// normalizeActivityEntry reads an entry of the runtime's activity, or one this function already
+// returned: a running task's activity is normalized again as updates arrive (a poll that brings
+// none keeps what the page shows), so a field it renames must still read under its new name, or a
+// subtask's task_id (and output kind, omitted calls, shell result) would blank until the next
+// update.
 function normalizeActivityEntry(raw) {
   const id = String(raw?.id || "").trim();
   const kind = normalizeActivityKind(raw?.kind);
@@ -365,12 +370,12 @@ function normalizeActivityEntry(raw) {
     args: args && Object.keys(args).length > 0 ? args : null,
     summary: String(raw?.summary || "").trim(),
     error: String(raw?.error || "").trim(),
-    taskId: String(raw?.task_id || "").trim(),
+    taskId: String(raw?.task_id || raw?.taskId || "").trim(),
     mode: String(raw?.mode || "").trim(),
     profile: String(raw?.profile || "").trim(),
-    outputKind: String(raw?.output_kind || "").trim(),
+    outputKind: String(raw?.output_kind || raw?.outputKind || "").trim(),
     children: Array.isArray(raw?.children) ? raw.children.map((child) => normalizeActivityEntry(child)).filter(Boolean) : [],
-    childrenOmitted: Math.max(0, Number(raw?.children_omitted) || 0),
+    childrenOmitted: Math.max(0, Number(raw?.children_omitted ?? raw?.childrenOmitted) || 0),
     messages: normalizeActivityMessages(raw?.messages),
     shell: normalizeShellResult(raw?.shell),
   };
@@ -378,20 +383,25 @@ function normalizeActivityEntry(raw) {
 
 // How a failed bash or powershell call ended: its exit code and what it printed to each stream,
 // as the server kept them (each stream's end; `*Omitted` counts the characters before it not
-// kept, `*Truncated` that the tool's output limit cut the stream). Empty streams stay "".
+// kept, `*Truncated` that the tool's output limit cut the stream). Empty streams stay "". A
+// result this function already returned reads the same.
 function normalizeShellResult(raw) {
-  if (!raw || typeof raw !== "object" || !Number.isInteger(raw.exit_code)) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const exitCode = raw.exit_code ?? raw.exitCode;
+  if (!Number.isInteger(exitCode)) {
     return null;
   }
   const count = (value) => Math.max(0, Number(value) || 0);
   return {
-    exitCode: raw.exit_code,
+    exitCode,
     stdout: String(raw.stdout ?? ""),
     stderr: String(raw.stderr ?? ""),
-    stdoutTruncated: raw.stdout_truncated === true,
-    stderrTruncated: raw.stderr_truncated === true,
-    stdoutOmitted: count(raw.stdout_omitted),
-    stderrOmitted: count(raw.stderr_omitted),
+    stdoutTruncated: (raw.stdout_truncated ?? raw.stdoutTruncated) === true,
+    stderrTruncated: (raw.stderr_truncated ?? raw.stderrTruncated) === true,
+    stdoutOmitted: count(raw.stdout_omitted ?? raw.stdoutOmitted),
+    stderrOmitted: count(raw.stderr_omitted ?? raw.stderrOmitted),
     reason: String(raw.reason || "").trim(),
   };
 }
