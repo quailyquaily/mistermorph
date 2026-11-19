@@ -37,3 +37,13 @@ Tests: nsh check passed; focused tests 5/5 passed; full scripts/test.sh passed (
 Visual verification: coder inspected before/after headless Chrome renders at high density, desktop and 390pt mobile, enabled/disabled/custom icon, hover/press/Tab/entry/reduced motion. Both marks visibly curve; computed corner shape superellipse(1.7). Caveat: rendered using existing nsh 0.5.1 web runtime, not pinned 0.6.0, which was unavailable for visual rendering. Current compiler/typecheck/tests use repository toolchain. Dark emulation produces identical palette because app forces light; distinct dark appearance not verified. No visible focus ring in either before or after. Native desktop, real Android/iOS devices, live Chat/Todo/Skills pages and actual bottom-bar placement were not visually checked.
 
 Initial branch push failed because GitHub credential request omitted repository path; retry with command-local credential.useHttpPath=true succeeded. No settings changed. Ready for review; pay particular attention to visual runtime-version caveat and native rendering.
+
+## factory · review · 2026-11-19 16:07
+head: 0978eec1a9b0eca7d83e518eca0b493b4a196f6e
+verdict: pass
+
+Claude Code reviewed origin/master...HEAD (all four changed files), shared corner helpers, web stroke geometry and available native rendering code. No qualifying findings. Branch merges cleanly with current master; review made no tracked edits or commits.
+
+Validation: configured gofmt/vet/go-test gate passed (165 packages, no failures); nsh 0.6.0 check passed; required parallel Console scripts/test.sh passed (143 files, 0 failed, 267s, inventory passed); Fab tests 5/5 passed. Android download and voice files each had an initial parallel failure, then passed the script's isolated retry. No installs.
+
+Visual limits: Chromium reproduction of emitted nsh 0.5.1 CSS at 6x scale confirmed visibly curved joins and square open ends; this was not a render of the actual Console on pinned nsh 0.6.0 web runtime, which was unavailable locally. Native Android/iOS/desktop were not visually rendered; GPUI's documented circular fallback was inspected, Android border rendering was not available for inspection. Review did not visually check dark theme, hover/focus/press, or live pages with mobile bottom bar. These remain owner visual checks before shipping, not verified defects.
