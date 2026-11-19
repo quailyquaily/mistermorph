@@ -177,7 +177,9 @@ function heartbeatWorkflowFrom(item: any): HeartbeatWorkflow {
 }
 
 export function createTodoState() {
-  const loading = signal(false);
+  // True from the start: the page loads at once, so its first frame shows the placeholder rows,
+  // not the empty list.
+  const loading = signal(true);
   // How the list's first load went: "" until it answered, then ok or failed.
   const loaded = signal<"" | "ok" | "failed">("");
   const saving = signal(false);
