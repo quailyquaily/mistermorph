@@ -37,3 +37,11 @@ Checks: configured gofmt/vet/go test gate passed independently by manager. First
 Visual running-state check: coder used real headless Chrome with simulated stream/poll traffic; old code lost IDs in 144/247 samples, fixed code in 0/247, completion retained both IDs. Browser probe used available nsh 0.5.1 web runtime, not 0.6.0. A real coder-backed UI session, desktop and Android visual checks were not performed.
 
 Installs: none. No manifest/lockfile changes. Owner should inspect the normalization fix and running-state regression tests during review.
+
+## factory · review · 2026-11-19 20:30
+head: 3d4698ce4fee75525c24a5020e338bccbf7248fa
+verdict: pass
+notes:
+- No P0, P1, P2 or P3 findings. Claude Code reviewed all four changed files against origin/master...HEAD; confirmed activity-less polls re-normalize camelCase entries and the fix preserves each entry identity without cross-subtask carryover.
+- Validation: configured gofmt/vet/go test gate passed (exit 0); nsh 0.6.0 check passed; required Console scripts/test.sh passed 146 files, 0 failed, no retries; Node core tests passed 282 tests. New core regressions fail against base (22 pass, 2 fail); new polling UI regression fails against base with missing sub_a/sub_b IDs. Worktree unchanged.
+- Installs: none. No real coder-backed session, desktop or Android visual verification; no JDK for Android JVM checks. Browser sample figures from build were not independently reproduced; stream/poll interleaving is covered through activity-bearing and activity-less polls, not live WebSocket traffic.
