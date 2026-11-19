@@ -40,3 +40,13 @@ Built and pushed commit 50b06191 on factory/FT161-bottom-nav-primary-color. Move
 - Tests: nsh check passed; required scripts/test.sh passed, 146 files, 0 failed (chat-attachments passed isolated runner retry); configured gofmt/vet/go test passed. Manager independently reran configured Go checks, nsh check and both focused tests successfully.
 - Installs: none; no manifest changes.
 - Not checked: no visual screenshots, live browser comparison, Android device/emulator or native desktop inspection. Headless tests verify selected tokens and navigation behavior, not rendered pixels. Review should assess visual matching in both themes.
+
+## factory · review · 2026-11-19 21:31
+head: 50b061918d5050bdabe911fe611f13e9a8194a8d
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (two changed files); no findings at any priority. Selected primary-page and More icons resolve the same semantic primary token as primary button backgrounds. Inactive colors, highlight pill, avatar, navigation and layout remain unchanged.
+- Validation: configured gofmt/vet/go test passed; nsh check passed (installed nsh 0.6.0); required parallel Console scripts/test.sh passed, 146 files, 0 failed. settings-page, settings-menus and dialog-sheet passed isolated runner retries after parallel failures. Focused navigation regression fails against base as expected.
+- Installs: none; no manifest changes. Worktree clean at reviewed head.
+- Limits: no rendered visual comparison, browser/native screenshots or device checks. Headless tests assert tint-bearing IDs sharing the color helper rather than rendered pixels; changing color independently of the ID could escape those tests. Agent-sheet open/close is covered, not selecting another agent.
+- Moved review/ → ready/. No merge or release performed.
