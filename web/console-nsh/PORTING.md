@@ -496,6 +496,15 @@ Headless tests prove behaviour, not the look.
   it stays open as it was (tests/dialogs-over-sidebar.test.tsx). Never draw a dialog in an
   `Overlay`, nor raise one with a z-index. A panel's own Escape binding beside the content (a
   `SidePane` column) steps aside while a popup is open (`bindPaneEscape`, components/ui.tsx).
+- On Android an nsh `Dialog` (and `Sheet`) is a window of its own, which nsh lays out above the
+  software keyboard: its root is the window's height less the keyboard's. `keyboardFrame()` still
+  reports the keyboard there, so a layer that also pads by it stands a keyboard's height too high
+  (`popupFrame`'s `layerAboveKeyboard`, lib/mobilePopup.ts). And as the keyboard comes up,
+  nsh pads the scroll view around the focused field by what the keyboard covers before the window
+  shrinks, and keeps it until the keyboard goes down: an empty band under the field, the body
+  scrolled into it. The app's native part takes that room back in dialog windows
+  (android/src/com/longbridge/nsh/ModalKeyboardRoom.java, in nsh's package for its
+  package-private parts); headless tests draw no keyboard and cannot show either.
 - `Picker.pickFiles` leaves a file over 512 MiB unread (`file: null`, `status: "tooLarge"`);
   `lib/mobileHost.ts` leaves it out.
 - A tooltip goes out over a few frames as the next one comes in, so for a moment both show.

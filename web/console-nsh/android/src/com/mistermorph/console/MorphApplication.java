@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import com.longbridge.nsh.ModalKeyboardRoom;
 import com.longbridge.nsh.NshHostReply;
 import com.longbridge.nsh.NshView;
 import java.util.Map;
@@ -30,6 +31,9 @@ import java.util.concurrent.Executors;
  *
  * <p>And `morph.shell.info`: this installed app's version name and code ({@link ShellInfo}), which
  * the console shows as its shell's version.
+ *
+ * <p>And the dialogs' fields over the software keyboard: {@link ModalKeyboardRoom} takes back the
+ * room nsh 0.6.0 leaves under them.
  */
 public final class MorphApplication extends Application implements Application.ActivityLifecycleCallbacks {
     private final Map<Activity, Attached> attached = new WeakHashMap<>();
@@ -76,6 +80,8 @@ public final class MorphApplication extends Application implements Application.A
         if (existing != null || ours(activity) || activity.getWindow() == null) return existing;
         NshView view = findView(activity.getWindow().getDecorView());
         if (view == null) return null;
+        // The dialogs' fields: no keyboard room nsh 0.6.0 would leave under them (ModalKeyboardRoom).
+        ModalKeyboardRoom.install(view);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         VoiceController voice = new VoiceController(new AndroidVoicePlatform(activity, view, executor));
         view.handle("morph.voice.support", (data, reply) -> reply.resolve(voice.support()));

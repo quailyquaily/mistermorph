@@ -2,7 +2,8 @@
 # The phone app's native part (android/src): the microphone behind the console's `morph.voice.*`
 # host calls, the task notifications behind `morph.notify.*`, the saving of files behind
 # `morph.file.save*` and the app's version behind `morph.shell.info`, which nsh's prebuilt Android
-# runtime does not have. build-android.sh compiles it into
+# runtime does not have; and ModalKeyboardRoom (com/longbridge/nsh, in nsh's package), which takes
+# back the keyboard room nsh 0.6.0 leaves under a dialog's fields. build-android.sh compiles it into
 # the APK's classes.dex next to the runtime's own classes; MorphApplication (named in the manifest
 # by scripts/android-manifest.mjs) attaches it to nsh's AppActivity.
 #
