@@ -2848,12 +2848,37 @@ function SidePaneColumn(props: { onClose: () => void; label?: string; class?: st
   );
 }
 
+// The Fab's registration marks: two open corners, each FAB_MARK.gap points outside one of the
+// button's corners (top-left, bottom-right), its two arms FAB_MARK.size points long in a hairline of
+// the muted ink. Each turns on a continuous curve as the button's corners do (corners.ts). The
+// controls' 8pt radius has no room in a 10pt mark (a continuous curve reaches 1.53 times its radius
+// along each edge, and the web draws it only where that fits half the mark's side), so a mark takes
+// the largest radius whose curve fits it (`fittingRadius`): 3pt. Only the corner between its two
+// arms is rounded: the open ends stay square, where a radius would bend the hairline into a hook.
+// The arms are 2pt longer than the old square marks' 8pt so the curve leaves straight runs past it.
+export const FAB_MARK = { size: 10, gap: 5, radius: fittingRadius(RADIUS.control, 10) } as const;
+const FAB_MARK_BOX = `absolute size-[${FAB_MARK.size}px] border-muted-foreground ${CONTINUOUS}`;
+/** The marks' classes: the top-left one and the bottom-right one. */
+export const FAB_MARK_CLASSES = {
+  start: `${FAB_MARK_BOX} -left-[${FAB_MARK.gap}px] -top-[${FAB_MARK.gap}px] border-l border-t rounded-tl-[${FAB_MARK.radius}px]`,
+  end: `${FAB_MARK_BOX} -bottom-[${FAB_MARK.gap}px] -right-[${FAB_MARK.gap}px] border-b border-r rounded-br-[${FAB_MARK.radius}px]`,
+} as const;
+
 /**
  * The floating add button of a page (the Vue console's AppFab): a 52pt ink square at the bottom
  * right, with registration marks just outside two opposite corners (the console's drawing-sheet
- * frames). It rises 12pt into place as it fades in, and sinks 1pt while pressed.
+ * frames; FAB_MARK). It rises 12pt into place as it fades in, and sinks 1pt while pressed.
  */
-export function Fab(props: { label: string; icon?: IconName; disabled?: boolean; onPress?: () => void; testID?: string }) {
+export function Fab(props: {
+  label: string;
+  icon?: IconName;
+  disabled?: boolean;
+  onPress?: () => void;
+  testID?: string;
+  /** Hears its frame on the page as `fab`, and its marks' as `fab-mark-start` and `fab-mark-end` (tests). */
+  onPartLayout?: PartLayoutListener;
+}) {
+  const parts = createPartProbe(() => props.onPartLayout);
   const enter = createMotion({
     enter: {
       duration: MOTION_SLOW,
@@ -2862,9 +2887,9 @@ export function Fab(props: { label: string; icon?: IconName; disabled?: boolean;
   });
   return (
     // Above the phone's floating bottom bar when it shows (its room less the gap under a list).
-    <View class="absolute right-4" style={{ ...enter.style, bottom: mobileBarRoom() > 0 ? mobileBarRoom() - 4 : 16, pointerEvents: "box-none" }}>
-      <View class="absolute -left-1.25 -top-1.25 size-2 border-l border-t border-muted-foreground" style={{ pointerEvents: "none" }} />
-      <View class="absolute -bottom-1.25 -right-1.25 size-2 border-b border-r border-muted-foreground" style={{ pointerEvents: "none" }} />
+    <View class="absolute right-4" style={{ ...enter.style, bottom: mobileBarRoom() > 0 ? mobileBarRoom() - 4 : 16, pointerEvents: "box-none" }} {...parts.probe(() => "fab")}>
+      <View class={FAB_MARK_CLASSES.start} style={{ pointerEvents: "none" }} {...parts.probe(() => "fab-mark-start")} />
+      <View class={FAB_MARK_CLASSES.end} style={{ pointerEvents: "none" }} {...parts.probe(() => "fab-mark-end")} />
       <TipButton
         onPress={() => props.onPress?.()}
         disabled={props.disabled}

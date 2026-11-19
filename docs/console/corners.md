@@ -45,6 +45,12 @@ a provider's logo.
    circular. The 24pt `xxs` button therefore takes 7pt (`fittingRadius`), not 8, and so does the
    24pt button that clears a date (`DATE_CLEAR_CLASS`). A one-line question option (about 25pt
    tall) and a 32pt calendar day still fit 8pt.
+   - The Fab's registration marks (`FAB_MARK`, `FAB_MARK_CLASSES` in `components/ui.tsx`): two
+     open corners 5pt outside the button's top-left and bottom-right corners, a 1pt muted
+     hairline. Each mark is 10pt square (2pt more than the old 8pt square marks, so the curve
+     leaves straight arms past it) and takes `fittingRadius(8, 10)`, 3pt, on the joint of its two
+     arms only (`rounded-tl` / `rounded-br`): a radius at an open end would bend the hairline into
+     a hook. A radius concentric with the button (8 + 5 = 13pt) would need marks about 40pt long.
 4. **Docked panels keep square edges.** Side sheets (`SidePane`, the workspace and skill store
    sheets) and columns attached to a window edge are not rounded.
 5. **Only the corners change.** Colors, sizes, padding, text positions, behavior and accessibility
@@ -77,6 +83,9 @@ Checked on nsh 0.6.0 (5541637):
   text positions on a desktop and a phone. The fixture also holds the page and editor surfaces on
   the scale (a variable-managed field, the provider picker, a date filter, a question card), which
   the test still drives: a date picked and cleared, an option answering, a provider chosen. Headless tests cannot read a radius or a curve back.
+- `tests/fab-marks.test.tsx` (fixture `tests/fixtures/fab-app.tsx`): the Fab marks' classes and
+  radius, and their frames round the button (enabled, disabled, another icon) on a desktop, a
+  390pt phone and with reduced motion; the button still presses and names itself.
 - By eye: `nsh test --target web` with `app.screenshot`, or the fixture packaged for the web and
   opened in Chrome, where `getComputedStyle(el).cornerShape` reads `superellipse(1.7)` on every
   shaped control. The gallery (`/ui-components`) shows the controls, a long value in a field and
