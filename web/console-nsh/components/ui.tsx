@@ -4,7 +4,7 @@
 // The look follows the Vue console's ui-kit: hairlines, a dark blue primary, quiet plain buttons,
 // mono caps for labels, and red only for what is destructive. Corners are the continuous scale of
 // ./corners.ts (controls 8, cards and popovers 12, dialogs 18, switch tracks 6); circles stay round.
-import type { Bounds, InputRef, JSX, KeyBindingOptions, Motion, ViewRef } from "nsh";
+import type { Bounds, InputRef, JSX, KeyBindingOptions, Motion, MouseEvent, ScrollRef, ViewRef } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
 import { cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
@@ -30,7 +30,8 @@ import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
 import { RunningMark } from "./motion/RunningMark";
 import { sagHalf, SagRule } from "./motion/Sag";
 import { recentPress } from "./motion/pressOrigin";
-import { EdgeScroll } from "./motion/ScrollEdges";
+import { createScrollEdges, EdgeScroll, SCROLLBAR } from "./motion/ScrollEdges";
+import { equalTabWidths, TAB_OVERFLOW_SLACK, tabRevealOffset, type TabBox } from "./shared/tabStrip";
 import { FadeText } from "./motion/FadeText";
 import { BarRoom, glassBarClass, glassBarStyle, underBar } from "./frame/glassBar";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
@@ -1622,14 +1623,81 @@ export function ProgressBar(props: { value?: number; indeterminate?: boolean; to
   );
 }
 
+/** One option of `Tabs`. */
+export interface TabItem {
+  id: string;
+  label: string;
+  count?: number;
+  disabled?: boolean;
+  icon?: IconName;
+  /** The option's test id (its press target). */
+  testID?: string;
+}
+
+/** Where a tab strip stands, as test fixtures hear it (`probeTabStrips`). */
+export interface TabStripFrame {
+  /** One per strip, for as long as it is mounted. */
+  strip: number;
+  testID: string;
+  value: string;
+  /** The strip's own width: the room it shows. */
+  viewport: number;
+  /** The options' row, at least as wide as the viewport. */
+  content: number;
+  /** How far it is scrolled sideways. */
+  offset: number;
+  /** Whether the options are wider than the room (it scrolls). */
+  scrolls: boolean;
+  /** Each option's place along the content. */
+  boxes: Record<string, TabBox>;
+  /** The width each option's own content (icon, label, count, padding) takes. */
+  natural: Record<string, number>;
+  /** A mouse is dragging the strip (moved past the slop). */
+  dragging: boolean;
+  /** How many times the strip scrolled by itself to show an option. */
+  reveals: number;
+  /** Whether the last of those glided (false: it jumped), null before the first. */
+  glided: boolean | null;
+  /** The option with the keyboard's focus, if any. */
+  focused: string | null;
+}
+
+let tabStripProbe: ((frame: TabStripFrame) => void) | null = null;
+let tabStrips = 0;
+
+/** Test fixtures hear every tab strip's widths, offset and options here (null to stop). */
+export function probeTabStrips(listener: ((frame: TabStripFrame) => void) | null) {
+  tabStripProbe = listener;
+}
+
+/** A mouse drag that goes this far sideways scrolls the strip. */
+const TAB_DRAG_SLOP = 6;
+/** A press this soon after a mouse drag ended is the drag's release, not a choice. */
+const TAB_DRAG_RELEASE_MS = 250;
+
 /**
  * Tabs (design/ui-refresh.html §1): the options in quiet text on a hairline, the current one in ink
  * with the hairline dipping softly under it; the dip glides to the next option when it changes.
  * `equal` gives every option the same share of the row; an item's `icon` shows before its label
  * (`iconOnly` hides labels, keeping them as tooltips).
+ *
+ * Options never get narrower than their labels: options wider than the room together scroll
+ * sideways in a strip as wide as the room (never wider than its parent), their hidden edges fading.
+ * A finger swipes it natively (a swipe cancels the press it began on; an up or down swipe is left to
+ * the page); a mouse pressed on an option drags it once it moves a few points sideways, and the
+ * release selects nothing; a wheel or touchpad scrolls it as any scroller. The current option is
+ * brought into view, moving the strip as little as it must (shared/tabStrip.ts): when it changes
+ * (gliding, unless the system reduces motion), on the first layout, and whenever the strip or its
+ * options change size. An option already in view is never moved to, so a strip the user scrolled
+ * stays put until the selection or the layout changes. `equal` options share a row they fit
+ * equally; one whose label needs more keeps its width and the others share the rest
+ * (`equalTabWidths`). Each option is a Tab stop, brought into view as the keyboard's focus reaches
+ * it; Enter or Space selects it, and the keyboard's focus shows as a soft fill. The options are
+ * pressable views (role `tab`, with its selected and disabled states), not nsh/base Buttons, which
+ * report no focus.
  */
 export function Tabs(props: {
-  items: { id: string; label: string; count?: number; disabled?: boolean; icon?: IconName }[];
+  items: TabItem[];
   value: string;
   onChange?: (id: string) => void;
   equal?: boolean;
@@ -1638,66 +1706,308 @@ export function Tabs(props: {
   narrow?: boolean;
   accessibilityLabel?: string;
   class?: string;
-  /** Each option's frame in the control, as `onLayout` reports it (to measure the options). */
+  /** The strip's test id; its scroller is `<testID>-scroll`. */
+  testID?: string;
+  /** Each option's frame in the control, as `onLayout` reports it (to measure the options): along
+   * the options' row, which starts at the control's start (scrolled or not), and down from the
+   * control's top. */
   onItemLayout?: (id: string, event: { bounds: Bounds }) => void;
 }) {
+  const strip = ++tabStrips;
   const narrow = () => props.narrow ?? windowSize().width < 380;
-  // Each option's place along the row, for the dip under the current one.
-  const boxes = signal<Record<string, { x: number; w: number }>>({});
-  const track = (id: string) => (event: { bounds: { origin: { x: number }; size: { width: number } } }) => {
+  // Each option's place along the content (for the dip under the current one and for bringing it
+  // into view), and the width its own content takes (for the equal shares).
+  const boxes = signal<Record<string, TabBox>>({});
+  const natural = signal<Record<string, number>>({});
+  const viewport = signal(0);
+  const content = signal(0);
+  // Where the strip is scrolled: as it last reported, or as last asked (a report may lag). The
+  // scroller is there only while the options overflow; `scrollerReady` counts the scrollers laid out.
+  let offset = 0;
+  let scroller: ScrollRef | undefined;
+  let laidOut = false;
+  const scrollerReady = signal(0);
+  let reveals = 0;
+  let glided: boolean | null = null;
+  let focused: string | null = null;
+  // A mouse drag: pressed on an option (`armed`), then where the first held move was and the offset
+  // then; `moved` once past the slop. `released`: when the last drag that moved ended.
+  let armed = false;
+  let drag: { x: number; from: number; moved: boolean } | null = null;
+  let released = 0;
+  const edges = createScrollEdges({ horizontal: true, fade: 16 });
+  const scrolls = computed(() => viewport() > 0 && content() > viewport() + TAB_OVERFLOW_SLACK);
+
+  const setBox = (id: string, event: { bounds: Bounds }) => {
     const box = { x: event.bounds.origin.x, w: event.bounds.size.width };
-    const old = boxes()[id];
-    if (!old || old.x !== box.x || old.w !== box.w) boxes.set({ ...boxes(), [id]: box });
+    const old = untracked(boxes)[id];
+    if (!old || old.x !== box.x || old.w !== box.w) boxes.set({ ...untracked(boxes), [id]: box });
   };
+  const setNatural = (id: string, width: number) => {
+    if (untracked(natural)[id] !== width) natural.set({ ...untracked(natural), [id]: width });
+  };
+  // `equal`: the width each option takes, once every option and the room are measured.
+  const shares = computed<Record<string, number> | null>(() => {
+    if (!props.equal) return null;
+    const items = props.items;
+    const room = viewport();
+    const measured = natural();
+    if (room <= 0 || items.some((item) => !(measured[item.id] > 0))) return null;
+    const widths = equalTabWidths(
+      items.map((item) => measured[item.id]),
+      room,
+    );
+    return Object.fromEntries(items.map((item, index) => [item.id, widths[index]]));
+  });
+  // Equal options are laid out at their own widths first: the row shows once they are shared out.
+  const settling = () => Boolean(props.equal) && props.items.length > 0 && shares() === null;
+
+  const report = () =>
+    tabStripProbe?.({
+      strip,
+      testID: untracked(() => props.testID) ?? "",
+      value: untracked(() => props.value),
+      viewport: untracked(viewport),
+      content: untracked(content),
+      offset,
+      scrolls: untracked(scrolls),
+      boxes: untracked(boxes),
+      natural: untracked(natural),
+      dragging: Boolean(drag?.moved),
+      reveals,
+      glided,
+      focused,
+    });
+  const maxOffset = () => Math.max(0, untracked(content) - untracked(viewport));
+  const scrollTo = (x: number, animated: boolean) => {
+    if (!scroller) return;
+    scroller.scrollTo({ x, animated: animated && !untracked(reduceMotion) });
+    offset = x;
+  };
+  /** Brings option `id` into view, moving the strip as little as it must. */
+  const reveal = (id: string, animated: boolean) => {
+    const box = untracked(boxes)[id];
+    if (!box || !scroller || !untracked(scrolls)) return;
+    const next = tabRevealOffset(box, untracked(viewport), untracked(content), Math.min(offset, maxOffset()));
+    if (Math.abs(next - offset) <= TAB_OVERFLOW_SLACK) return;
+    reveals += 1;
+    glided = animated && !untracked(reduceMotion);
+    scrollTo(next, animated);
+    report();
+  };
+  // The current option, whenever it, its place or the room change. A new value glides there; the
+  // first layout and a change of sizes jump (nothing to follow).
+  let shown: string | null = null;
+  effect(() => {
+    const value = props.value;
+    const box = boxes()[value];
+    const room = viewport();
+    content();
+    scrolls();
+    scrollerReady();
+    if (!box || room <= 0) return;
+    const moved = shown !== null && shown !== value;
+    shown = value;
+    untracked(() => reveal(value, moved));
+  });
+  effect(() => {
+    boxes();
+    natural();
+    viewport();
+    content();
+    props.value;
+    untracked(report);
+  });
+
+  // A mouse drags the strip (a finger's swipe is the scroll view's own, and a mouse never drags a
+  // scroll view): moves with the button held after a press on an option. The press does not fire
+  // once the pointer moved off (the web drops it past 10pt); a release that still reaches an
+  // option right after a drag is ignored (`choose`).
+  const endDrag = () => {
+    armed = false;
+    if (!drag) return;
+    if (drag.moved) released = Date.now();
+    drag = null;
+    report();
+  };
+  const mouseMove = (event: MouseEvent) => {
+    if (event.pressedButton !== "left" || !armed || !untracked(scrolls)) {
+      if (event.pressedButton !== "left") endDrag();
+      return;
+    }
+    const x = event.pagePosition.x;
+    if (!drag) {
+      drag = { x, from: Math.min(offset, maxOffset()), moved: false };
+      return;
+    }
+    const dx = x - drag.x;
+    if (!drag.moved && Math.abs(dx) < TAB_DRAG_SLOP) return;
+    drag.moved = true;
+    scrollTo(Math.min(maxOffset(), Math.max(0, drag.from - dx)), false);
+    report();
+  };
+  const choose = (id: string) => {
+    if (drag?.moved || Date.now() - released < TAB_DRAG_RELEASE_MS) return;
+    props.onChange?.(id);
+  };
+
   const current = () => boxes()[props.value] ?? null;
-  return (
+  // The options' frames for `onItemLayout`, moved down by where their row sits in the control
+  // (centred in a control taller than the options); told again when that moves.
+  const itemFrames: Record<string, Bounds> = {};
+  let rowTop = 0;
+  const tellItem = (id: string) => {
+    const frame = itemFrames[id];
+    if (frame) props.onItemLayout?.(id, { bounds: { origin: { x: frame.origin.x, y: frame.origin.y + rowTop }, size: frame.size } });
+  };
+  const setViewport = (event: { bounds: Bounds }) => {
+    const width = event.bounds.size.width;
+    if (width !== untracked(viewport)) viewport.set(width);
+    if (event.bounds.origin.y !== rowTop) {
+      rowTop = event.bounds.origin.y;
+      for (const id of Object.keys(itemFrames)) tellItem(id);
+    }
+  };
+  // The options' row, with room under it for the dip, which hangs 6pt below the options; the
+  // negative margin of the view around it keeps the strip as tall as its options. Drawn by the plain
+  // row and by the scroller alike (each its own copy: only one is there at a time).
+  const Options = () => (
     <View
-      class={`relative flex-row items-center self-start ${props.equal ? "self-stretch" : ""} ${props.class ?? ""}`}
-      role="tablist"
-      accessibilityLabel={props.accessibilityLabel}
+      class="relative grow shrink-0 flex-row items-center pb-[6px]"
+      style={{ opacity: settling() ? 0 : 1 }}
+      onLayout={(event) => {
+        edges.onContentLayout(event);
+        const width = event.bounds.size.width;
+        if (width !== untracked(content)) content.set(width);
+      }}
     >
       <Each of={props.items} key={(item) => item.id}>
         {(item) => (
-          <TipButton
+          <View
             role="tab"
-            selected={props.value === item().id}
-            disabled={item().disabled}
-            onPress={() => props.onChange?.(item().id)}
-            onLayout={(event: { bounds: Bounds }) => {
-              track(item().id)(event);
-              props.onItemLayout?.(item().id, event);
-            }}
             accessibilityLabel={item().label}
+            accessibilityState={{ selected: props.value === item().id, disabled: Boolean(item().disabled) }}
+            disabled={item().disabled}
+            testID={item().testID}
             tooltip={props.iconOnly && item().icon ? <Tip text={item().label} /> : undefined}
-            class={`group h-9 flex-row items-center justify-center gap-1.5 ${
-              props.iconOnly && item().icon ? "w-9" : narrow() ? "px-2" : "px-3"
-            } ${props.equal ? "flex-1" : ""} disabled:opacity-50`}
+            onPress={() => choose(item().id)}
+            onPressDown={() => {
+              armed = true;
+            }}
+            onFocus={() => {
+              focused = item().id;
+              reveal(item().id, true);
+              report();
+            }}
+            onBlur={() => {
+              if (focused === item().id) focused = null;
+              report();
+            }}
+            onLayout={(event: { bounds: Bounds }) => {
+              setBox(item().id, event);
+              itemFrames[item().id] = event.bounds;
+              tellItem(item().id);
+            }}
+            class={`group h-9 shrink-0 flex-row items-center justify-center ${CONTROL_CORNERS} focus-visible:bg-hover disabled:opacity-50`}
+            style={{ minWidth: shares()?.[item().id] ?? 0 }}
           >
-            <If when={item().icon}>
-              <Icon name={item().icon!} size={16} color={props.value === item().id ? "ink" : "muted-foreground"} />
-            </If>
-            <If when={!(props.iconOnly && item().icon)}>
-              <Text
-                class={`${narrow() ? "text-xs leading-[16.8px]" : "text-sm leading-[19.6px]"} font-medium transition-colors duration-120 ${
-                  props.value === item().id ? "text-ink" : "text-muted-foreground group-hover:text-foreground"
-                }`}
-                style={{ numberOfLines: 1 }}
-              >
-                {item().label}
-              </Text>
-            </If>
-            <If when={item().count !== undefined}>
-              <Text class="font-mono text-xs text-muted-foreground">{String(item().count)}</Text>
-            </If>
-          </TipButton>
+            {/* The option's own content, at its own width whatever share it is given. */}
+            <View
+              class={`h-9 flex-row items-center justify-center gap-1.5 ${
+                props.iconOnly && item().icon ? "w-9" : narrow() ? "px-2" : "px-3"
+              }`}
+              onLayout={(event) => setNatural(item().id, event.bounds.size.width)}
+            >
+              <If when={item().icon}>
+                <Icon name={item().icon!} size={16} color={props.value === item().id ? "ink" : "muted-foreground"} />
+              </If>
+              <If when={!(props.iconOnly && item().icon)}>
+                <Text
+                  class={`${narrow() ? "text-xs leading-[16.8px]" : "text-sm leading-[19.6px]"} font-medium transition-colors duration-120 ${
+                    props.value === item().id ? "text-ink" : "text-muted-foreground group-hover:text-foreground"
+                  }`}
+                  style={{ numberOfLines: 1 }}
+                >
+                  {item().label}
+                </Text>
+              </If>
+              <If when={item().count !== undefined}>
+                <Text class="font-mono text-xs text-muted-foreground">{String(item().count)}</Text>
+              </If>
+            </View>
+          </View>
         )}
       </Each>
       <SagRule
         center={() => (current() ? current()!.x + current()!.w / 2 : null)}
         half={sagHalf(Math.min(current()?.w ?? 38, 64))}
         color={String(token("line-soft"))}
-        class="absolute -bottom-[6px] left-0 right-0 h-[7px]"
+        class="absolute bottom-0 left-0 right-0 h-[7px]"
       />
+    </View>
+  );
+  // The strip is a plain row while its options fit and a scroller only while they do not: on the web
+  // every scroller, even one that cannot scroll, keeps a vertical swipe that starts on it from
+  // scrolling the page (PORTING.md), so only a strip that overflows pays for that. The options are
+  // measured at their own widths either way, so the choice cannot feed back on itself.
+  return (
+    <View
+      class={`relative flex-row items-center self-start max-w-full ${props.equal ? "self-stretch" : ""} ${props.class ?? ""}`}
+      role="tablist"
+      accessibilityLabel={props.accessibilityLabel}
+      testID={props.testID}
+      onMouseMove={mouseMove}
+      onMouseUp={endDrag}
+      onMouseLeave={endDrag}
+    >
+      <If
+        when={scrolls()}
+        else={
+          <View
+            class="-mb-[6px] min-w-0 shrink grow flex-row overflow-hidden"
+            ref={() => {
+              scroller = undefined;
+              offset = 0;
+            }}
+            onLayout={setViewport}
+          >
+            <Options />
+          </View>
+        }
+      >
+        <Scroll
+          horizontal
+          ref={(node: ScrollRef) => {
+            scroller = node;
+            offset = 0;
+            laidOut = false;
+          }}
+          scrollbar={SCROLLBAR}
+          keyboardShouldPersistTaps="handled"
+          testID={props.testID ? `${props.testID}-scroll` : undefined}
+          class="-mb-[6px] min-w-0 shrink grow"
+          contentClass="grow"
+          style={edges.style()}
+          scrollEventThrottle={16}
+          onLayout={(event) => {
+            edges.handlers.onLayout(event);
+            setViewport(event);
+            // A scroller made as the options stopped fitting starts at its start: show the current
+            // option once it is laid out.
+            if (!laidOut) {
+              laidOut = true;
+              scrollerReady.update((n) => n + 1);
+            }
+          }}
+          onScroll={(event) => {
+            edges.handlers.onScroll(event);
+            offset = event.offset.x;
+            report();
+          }}
+        >
+          <Options />
+        </Scroll>
+      </If>
     </View>
   );
 }
