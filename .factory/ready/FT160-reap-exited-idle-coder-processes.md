@@ -48,3 +48,15 @@ Added Linux regressions for idle exits across backends, SIGTERM/SIGKILL, actual 
 Checks: configured gofmt cleanliness, go vet ./..., go test ./... PASS (coder and independently manager); go test -race ./internal/codersessions PASS independently. Coder additionally passed repeated race/concurrency and related proctrack/taskruntime/agent tests. Cross-vet passed darwin/freebsd/openbsd/windows; other platform full checks were limited by sqlite dependency, with new files typechecked separately.
 
 Installs: none. No Console sources changed. Not checked: live Console UI Stop against real CLIs; non-Linux runtime behavior (compile/type checks only). No deployment or ship. First branch push required a command-local credential.useHttpPath=true retry, which succeeded; no settings changed.
+
+
+## factory · review · 2026-11-19 21:02
+head: 44cca346b0b86229cb762dfd47b924578a9d9fe6
+verdict: pass
+notes:
+- [P3] internal/codersessions/rpc.go:186-194: markExited closes stdout after a fixed 1s even while draining buffered output. Verified fake CLI emits 500 lines, result, exit 0 with Note delayed 5ms/line: head lost the result in 2/3 runs (notes=371, coder server exited with exit status 0); base delivered notes=499 and result bye without error. Bound idle read time rather than total drain time.
+- [P3] internal/codersessions/rpc.go:206-207: before watch sets unwatched, non-Unix kill falls through to no-op killGroup, so immediate close/cancellation waits for natural process exit. Windows-stub probe on Linux with a 3s sleeper returned cancellation only after 3.004s; direct immediate close reproduced 5/5 single-core runs and 10/10 multicore runs. Initialize fallback mode before launching watch, or use Process.Kill on non-Unix. Native Windows runtime reproduction not performed.
+
+Review scope: origin/master...44cca346; all 12 changed files and lifecycle callers. Claude Code review only; clean worktree, no code commits. No P0/P1 findings.
+Validation by reviewer: gofmt cleanliness, go vet ./..., go test ./..., go test -race ./internal/codersessions, repeated race lifecycle tests, and race checks for proctrack/taskruntime PASS. Seven new regression tests failed on base in scratch reproduction. Cross-vet darwin/freebsd/openbsd/windows amd64/arm64 PASS; netbsd/dragonfly package vet blocked by sqlite dependency, isolated new-file type checks passed. Installs: none.
+Limits: no live Console UI Stop against real CLIs; non-Linux runtime not exercised. Each live process uses an OS thread in blocking waitid/kevent. Passed under factory policy (no P0/P1), with the two verified low-priority defects above retained for owner review. No ship or deployment.
