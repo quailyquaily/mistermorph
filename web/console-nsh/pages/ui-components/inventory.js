@@ -193,7 +193,7 @@ const FILES = {
   "components/chat/ChatStatusMark.tsx": { group: "chat", items: { ChatStatusMark: D() } },
   "components/chat/ChatSystemMessage.tsx": { group: "chat", items: { ChatSystemMessage: D() } },
   "components/chat/ChatTerminal.tsx": { group: "rich", items: { ChatTerminal: D() } },
-  "components/chat/TodoJobBar.tsx": { group: "chat", items: { TodoJobBar: D() } },
+  "components/chat/TodoJobBar.tsx": { group: "chat", items: { TodoJobBar: D(), TodoJobButton: C("TodoJobBar") } },
   "components/chat/ChatProcessTree.tsx": {
     group: "chat",
     items: { ChatProcessTree: L("live"), ProcessRows: L("part", "ChatProcessTree") },

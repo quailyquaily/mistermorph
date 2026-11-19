@@ -800,9 +800,11 @@ export const CHAT_DEMOS: DemoMap = {
               onView={() => act("TodoJobBar", "view")}
             />
           </V>
+          <V s="on" l="running"><TodoJobBar running toggleEnabled viewEnabled /></V>
           <V s="loading" l="start"><TodoJobBar running={false} busy toggleEnabled={false} viewEnabled /></V>
           <V s="busy" l="stopping"><TodoJobBar running busy toggleEnabled={false} viewEnabled /></V>
           <V s="error"><TodoJobBar running={false} toggleEnabled viewEnabled error="Could not start the run: runtime unavailable" /></V>
+          <V s="disabled" l="loading item"><TodoJobBar running={false} toggleEnabled={false} viewEnabled /></V>
           <V s="disabled" l="gone"><TodoJobBar running={false} toggleEnabled={false} viewEnabled={false} note="The TODO item “Daily digest” no longer exists." /></V>
         </Col>
       );

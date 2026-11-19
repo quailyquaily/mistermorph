@@ -82,11 +82,14 @@ export function GlassCapsule(props: {
   accessibilityLabel?: string;
   class?: string;
   style?: Record<string, unknown>;
+  /** Its frame in its parent as it lays out (layout checks in tests). */
+  onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
   children?: JSX.Element;
 }) {
   return (
     <View
       role={props.role}
+      onLayout={props.onLayout}
       accessibilityLabel={props.accessibilityLabel}
       class={`max-w-full rounded-full border-[0.5px] border-line ${glassClass("nav")} ${props.class ?? ""}`}
       testID={glassEnabled() ? `${props.testID}.glass` : props.testID}
