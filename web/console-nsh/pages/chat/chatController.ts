@@ -1691,6 +1691,20 @@ export function createChatController() {
     detailFocusReturn.request(activityDetailKey(current));
   }
 
+  /**
+   * Closes the Processes panel of `ref` once its task has no process running (its column has gone
+   * from the reply). When a Stop pressed in it ended the last one, the reply's Progress column
+   * takes the keyboard focus (the Stop and the Processes column are gone); a process that ended
+   * on its own leaves the focus where it is. Nothing happens if the panel shows something else.
+   */
+  function closeEndedProcesses(ref: ActivityDetailRef, byStop: boolean) {
+    const current = untracked(activityDetail);
+    if (!current || current.kind !== "processes" || activityDetailKey(current) !== activityDetailKey(ref)) return;
+    setActivityDetail(null);
+    if (!byStop || composer?.focused()) return;
+    detailFocusReturn.request(activityDetailKey({ ...current, kind: "activity" }));
+  }
+
   function onWorkspaceTabChange(id: string) {
     workspaceSidebarTabID.set(String(id || "").trim() || TOPIC_TAB_ID);
     if (id === WORKSPACE_TAB_ID && String(untracked(workspaceDir) || "").trim() && !hasOwnTreePath(untracked(workspaceTreeItems), "")) {
@@ -3793,6 +3807,7 @@ export function createChatController() {
     closeMobileWorkspaceSidebar,
     openActivityDetail,
     closeActivityDetail,
+    closeEndedProcesses,
     onWorkspaceTabChange,
     selectWorkspaceTreeNode,
     addWorkspaceSelectionToComposer,
