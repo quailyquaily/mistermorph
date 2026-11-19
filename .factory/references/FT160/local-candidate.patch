@@ -1,0 +1,197 @@
+diff --git a/internal/codersessions/claude_test.go b/internal/codersessions/claude_test.go
+index d49b1a7f..f2eed889 100644
+--- a/internal/codersessions/claude_test.go
++++ b/internal/codersessions/claude_test.go
+@@ -6,9 +6,11 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 	"os"
++	"os/exec"
+ 	"path/filepath"
+ 	"reflect"
+ 	"slices"
++	"strconv"
+ 	"strings"
+ 	"testing"
+ 	"time"
+@@ -170,6 +172,16 @@ func fakeClaude() {
+ 					map[string]any{"label": "src", "description": "The sources"}, map[string]any{"label": "docs", "description": "The documents"}}},
+ 				map[string]any{"question": "Which name?", "header": "Name", "options": []any{}},
+ 			}})
++		case "helper":
++			// A helper left running in the process's group (a background command), its pid
++			// written to MM_CLAUDE_HELPER. It holds none of the process's output.
++			helper := exec.Command("sleep", "60")
++			if err := helper.Start(); err != nil {
++				os.Exit(5)
++			}
++			_ = os.WriteFile(os.Getenv("MM_CLAUDE_HELPER"), []byte(strconv.Itoa(helper.Process.Pid)), 0o600)
++			say("done")
++			result("done", false)
+ 		case "wait":
+ 			say("Working on it.")
+ 		case "silent":
+diff --git a/internal/codersessions/rpc.go b/internal/codersessions/rpc.go
+index f3a61c1b..5746feeb 100644
+--- a/internal/codersessions/rpc.go
++++ b/internal/codersessions/rpc.go
+@@ -39,9 +39,15 @@ type rpc struct {
+ 	once     sync.Once
+ 	waitOnce sync.Once
+ 	waited   chan struct{}
+-	next     int
+-	err      error
+-	stderr   stderrTail
++	// reapMu orders stopping the process group with reaping the server: the group is signaled
++	// by the server's pid, which is only the server's until it is reaped. reaping says the
++	// group was stopped and the server is reaped (or about to be), so it must not be signaled
++	// again.
++	reapMu  sync.Mutex
++	reaping bool
++	next    int
++	err     error
++	stderr  stderrTail
+ }
+ 
+ // stderrTail keeps the end of what the CLI wrote to stderr, for the error of a process that died.
+@@ -116,15 +122,39 @@ func startProcess(req Request, lines bool, args ...string) (*rpc, error) {
+ 		}
+ 		if r.err == nil {
+ 			r.err = scan.Err()
++			if r.err == nil {
++				// The output ended: the server exited, or is exiting. Nothing else waits for a
++				// server between tasks, and one ended from outside then (the Console stopping it,
++				// a crash) would stay a zombie until the next task or close: reap it now.
++				r.reap()
++			}
+ 		}
+ 	}()
+ 	return r, nil
+ }
++
++// reap stops what is left in the server's process group, while its pid still holds the group,
++// and reaps the server.
++func (r *rpc) reap() {
++	r.reapMu.Lock()
++	if !r.reaping {
++		r.reaping = true
++		_ = r.cmd.Cancel()
++	}
++	r.reapMu.Unlock()
++	r.wait()
++}
++
+ func (r *rpc) close() {
+ 	r.once.Do(func() {
+ 		close(r.stopped)
+ 		r.in.Close()
+-		_ = r.cmd.Cancel()
++		// A server reaped already (reap) has had its group stopped; its pid may be another's now.
++		r.reapMu.Lock()
++		if !r.reaping {
++			_ = r.cmd.Cancel()
++		}
++		r.reapMu.Unlock()
+ 		_ = r.out.Close()
+ 		<-r.done
+ 		r.wait()
+diff --git a/internal/codersessions/reap_linux_test.go b/internal/codersessions/reap_linux_test.go
+new file mode 100644
+index 00000000..e00348d2
+--- /dev/null
++++ b/internal/codersessions/reap_linux_test.go
+@@ -0,0 +1,94 @@
++//go:build linux
++
++package codersessions
++
++import (
++	"context"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"syscall"
++	"testing"
++	"time"
++)
++
++// procState is the state letter of pid in /proc ("Z" for a zombie), or "" when it is gone.
++func procState(pid int) string {
++	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
++	if err != nil {
++		return ""
++	}
++	// pid (comm) S ...: comm can hold spaces and parentheses, the state follows the last ")".
++	s := string(data)
++	i := strings.LastIndexByte(s, ')')
++	if i < 0 || i+2 >= len(s) {
++		return ""
++	}
++	return s[i+2 : i+3]
++}
++
++// waitDead waits until pid is gone, or only a zombie if zombieOK; it returns the last state seen.
++func waitDead(pid int, zombieOK bool) string {
++	deadline := time.Now().Add(5 * time.Second)
++	for {
++		state := procState(pid)
++		if state == "" || (zombieOK && state == "Z") || time.Now().After(deadline) {
++			return state
++		}
++		time.Sleep(20 * time.Millisecond)
++	}
++}
++
++// A coder server that something else ends while it waits for its next task (the Console's
++// process panel stopping it, a crash, the OOM killer) is reaped at once, not left a zombie until
++// the scope's next task, and what it left running in its group is stopped with it. The next
++// task reopens the session.
++func TestClaudeServerEndedWhileIdleIsReaped(t *testing.T) {
++	var sessions Sessions
++	defer sessions.Close()
++	req, log := claudeRequest(t, "helper")
++	helperFile := filepath.Join(t.TempDir(), "helper.pid")
++	req.Env = append(req.Env, "MM_CLAUDE_HELPER="+helperFile)
++	var pids []int
++	req.Process = func(pid int) { pids = append(pids, pid) }
++	if out, err := sessions.Run(context.Background(), "chat", req); err != nil || out != "done" {
++		t.Fatalf("out=%q err=%v", out, err)
++	}
++	data, err := os.ReadFile(helperFile)
++	if err != nil {
++		t.Fatal(err)
++	}
++	helper, err := strconv.Atoi(strings.TrimSpace(string(data)))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer syscall.Kill(helper, syscall.SIGKILL)
++
++	// The task is over; the server waits for the next one. Stop it as the Console's process panel
++	// does: SIGTERM to its pid only.
++	server := pids[0]
++	if err := syscall.Kill(server, syscall.SIGTERM); err != nil {
++		t.Fatal(err)
++	}
++	if state := waitDead(server, false); state != "" {
++		t.Fatalf("server %d is still in state %q after it ended, want reaped", server, state)
++	}
++	// The helper is no longer the session's child: once killed it may wait for init (or a
++	// subreaper) to reap it, so a zombie counts as stopped.
++	if state := waitDead(helper, true); state != "" && state != "Z" {
++		t.Fatalf("helper %d left in the server's group is still running (state %q)", helper, state)
++	}
++
++	req.Task = "ok"
++	if out, err := sessions.Run(context.Background(), "chat", req); err != nil || out != "done" {
++		t.Fatalf("next task: out=%q err=%v", out, err)
++	}
++	starts := claudeStarts(t, log)
++	if len(starts) != 2 || len(pids) != 2 || pids[0] == pids[1] {
++		t.Fatalf("processes = %v pids = %v", starts, pids)
++	}
++	if id := flagValue(starts[0], "--session-id"); id == "" || flagValue(starts[1], "--resume") != id {
++		t.Fatalf("processes = %v", starts)
++	}
++}
