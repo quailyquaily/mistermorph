@@ -36,3 +36,15 @@ Built and pushed commit 8466f319 on factory/FT158-continuous-progress-process-tr
 - Installs: none beyond restoring repository-pinned dependencies; no manifest changes.
 - Visual checks reported by coder: fixture rendering real components in headless Chrome, desktop 700pt and mobile touch 360pt. Headless Android geometry covered. No Android device/emulator, native desktop shell or live Console panel checks; dashed Android trunk visually unverified. Browser fixture used available web runtime 0.5.1, not 0.6; no separate dark screenshots because fixture forces light theme. Branch centres can differ by 0.5pt (about 1pt for wrapped process names).
 - Branch push initially needed per-command credential.useHttpPath=true; retry succeeded. No global git settings changed.
+
+## factory · review · 2026-11-19 20:09
+head: 8466f319c7446b532b1a70603369af3b3e828812
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/fixtures/tree-connectors-app.tsx:33: normalizeActivity can return null, but the fixture dereferences .history without handling null. Required nsh check fails with TS2531 (Object is possibly 'null'); handle the nullable result and rerun nsh check. Reproduced twice on head; the same check passes on origin/master.
+notes:
+- Reviewed all 6 changed files against origin/master...HEAD using Claude Code. No other qualifying findings.
+- Configured gofmt/vet/go test command passed. Console scripts/test.sh passed: 146 files, 0 failed, with 8 files passing the runner's isolated retry. Connector regression tests passed.
+- No unpinned installs. Review worktree unchanged; no code commits.
+- No visual screenshots or live desktop/mobile web, GPUI desktop or Android device/emulator checks. Headless geometry covers Linux widths 700/320 and Android 360; dashed native trunk rendering and subpixel alignment remain visually unverified.
+- Moved review/ → new/ for fix round 2 of maximum 3. No linked issue or PR in the item.
