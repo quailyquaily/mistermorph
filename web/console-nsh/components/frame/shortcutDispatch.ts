@@ -5,6 +5,11 @@
 // everywhere else, and nothing is bound while a dialog, menu or the composer's suggestions are
 // open (they own the keyboard) or while Settings records a new shortcut. A focused text editor
 // keeps its own keys: nsh puts the components' bindings after the app's.
+//
+// Nothing at all is bound where application shortcuts are off (lib/shortcutPolicy.ts: a browser's
+// phone layout, the phone app without a known hardware keyboard): every key is then the page's,
+// the field's and the system's, as if the Console had no shortcuts. The effect follows the policy,
+// so the keys come and go with the layout and the keyboard.
 import { cleanup, effect, keymap, untracked } from "nsh";
 import { authValid, endpointState } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
@@ -27,6 +32,7 @@ import {
   shortcutProvider,
   shortcutRecording,
 } from "../../lib/shortcuts";
+import { shortcutsEligible } from "../../lib/shortcutPolicy";
 import { popupOpen } from "../ui";
 
 /** Where the Settings page lists the shortcuts. */
@@ -65,6 +71,7 @@ export function startShortcutDispatch() {
   );
 
   effect(() => {
+    if (!shortcutsEligible()) return;
     if (popupOpen() || shortcutRecording()) return;
     for (const binding of effectiveShortcuts()) {
       if (!binding.keys || binding.shadowedBy) continue;

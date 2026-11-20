@@ -60,6 +60,7 @@ import { modelPickerItemsFromPayload } from "../../lib/core/setup-picker.js";
 import { reactiveRecord } from "../../lib/stores/reactive-record.js";
 import { DEFAULT_WORKER_NAME_SET, normalizeWorkerNameSet } from "../../lib/core/worker-identity.js";
 import { hasFeature, isDesktop, restartDesktopApp } from "../../lib/platform";
+import { shortcutsEligible } from "../../lib/shortcutPolicy";
 import { navigate } from "../../lib/router";
 import { createDeviceAuthFlow } from "./device-auth";
 import { t } from "./i18n";
@@ -526,7 +527,10 @@ export function createSettingsStore() {
   const personaOk = signal("");
   // The persona as loaded: which API the runtime has, and the identity.yaml text on an old one.
   const loadedPersonaRecord = signal<any>(null);
-  const loadedIdentitySnapshot = signal("");
+  // The empty persona's own snapshot, as `resetPersonaSettingsState` sets it: a persona that was
+  // never loaded has no unsaved changes (Settings can open on another section and come to this one
+  // without a load, as when the Keyboard shortcuts section goes: the leave guard must not ask).
+  const loadedIdentitySnapshot = signal(untracked(() => buildPersonaIdentitySnapshot(state.persona)));
   const loadedSoulSnapshot = signal("");
   const personaSettingsLoaded = signal(false);
   const soulContent = signal("");
@@ -1004,7 +1008,11 @@ export function createSettingsStore() {
       items.push({ id: "system", group: "server", icon: "PhGearSix", title: t("settings_system_title"), meta: t("settings_section_system_meta"), saveKind: "system-config" });
     }
     items.push({ id: "general", group: "device", icon: "PhAppWindow", title: t("settings_general_title"), meta: t("settings_section_general_meta"), saveKind: "" });
-    items.push({ id: "shortcuts", group: "device", icon: "PhKeyboard", title: t("shortcuts_title"), meta: t("shortcuts_section_meta"), saveKind: "" });
+    // Keyboard shortcuts: only where they are on (lib/shortcutPolicy.ts). Without the section its
+    // address opens the first one instead (SettingsPage), also when it goes while it is open.
+    if (shortcutsEligible()) {
+      items.push({ id: "shortcuts", group: "device", icon: "PhKeyboard", title: t("shortcuts_title"), meta: t("shortcuts_section_meta"), saveKind: "" });
+    }
     items.push({ id: "credits", group: "device", icon: "PhInfo", title: t("settings_credits_title"), saveKind: "" });
     return items;
   });

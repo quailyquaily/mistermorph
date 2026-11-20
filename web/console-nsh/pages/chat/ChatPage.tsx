@@ -61,7 +61,6 @@ function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (h
         retry: t("chat_composer_file_retry"),
       }}
       sendLabel={c.composerActionLabel()}
-      submitOnEnter={!c.mobileMode()}
       inputHistory={c.composerInputHistory()}
       commands={c.composerCommands()}
       skills={c.composerSkills()}

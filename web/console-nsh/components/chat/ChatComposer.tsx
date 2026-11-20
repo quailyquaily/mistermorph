@@ -35,6 +35,7 @@ import {
 } from "../../lib/core/chat-composer-suggestions.js";
 import { glassEnabled, glassStyle } from "../../lib/glass";
 import { isMobile } from "../../lib/shell";
+import { shortcutsEligible } from "../../lib/shortcutPolicy";
 import { COMPOSER_QUOTE_BAR_CLASS, COMPOSER_RADIUS, COMPOSER_VOICE_BAR_CLASS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
 import { editQuoteLine } from "../../lib/core/chat-message-edit.js";
 import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
@@ -97,6 +98,11 @@ export interface ChatComposerProps {
   fileItems?: ComposerFileItem[];
   fileLabels?: { files: string; preview: string; remove: string; uploading: string; failed: string; retry: string };
   sendLabel?: string;
+  /**
+   * Enter sends (Shift+Enter for a new line); `false` makes Enter a new line. Sending with Enter is
+   * an application shortcut: wherever those are off (lib/shortcutPolicy.ts) Enter is a new line
+   * whatever this says.
+   */
   submitOnEnter?: boolean;
   inputHistory?: string[];
   commands?: any[];
@@ -280,8 +286,10 @@ export function ChatComposer(props: ChatComposerProps) {
   const placeholderShown = () => composerPlaceholderShown(props.placeholder, value(), composing());
   // Rows change in one snap, heights above the controls ease; the history above moves with them.
   followComposerLayout(layout, value, measures);
-  // Enter sends on desktops; while suggestions show it picks one, also on phones.
-  const submitBehavior = () => (props.submitOnEnter !== false || suggestionsVisible() ? "submit" : "newline");
+  // Enter sends where application shortcuts are on (lib/shortcutPolicy.ts) and is a new line where
+  // they are off; while suggestions show it picks one, everywhere (the list is a popup).
+  const enterSends = () => props.submitOnEnter !== false && shortcutsEligible();
+  const submitBehavior = () => (enterSends() || suggestionsVisible() ? "submit" : "newline");
 
   function closeSuggestions() {
     suggestionContext.set(null);
@@ -419,6 +427,9 @@ export function ChatComposer(props: ChatComposerProps) {
       );
       return;
     }
+    // The sent messages are an application shortcut (lib/shortcutPolicy.ts): where those are off,
+    // Up and Down stay the field's own (the caret's).
+    if (!shortcutsEligible()) return;
     const items = history();
     if (!items.length) return;
     const index = historyIndex();
@@ -431,7 +442,8 @@ export function ChatComposer(props: ChatComposerProps) {
   // lets go of the focus). A popup over the page takes Escape instead, the suggestion list too
   // (trackPopup above): the binding is dropped meanwhile. Not while the edit is being sent.
   effect(() => {
-    if (props.editQuote === undefined || props.sending || popupOpen()) return;
+    // An application shortcut too: off where those are (the edit's own Cancel button stays).
+    if (!shortcutsEligible() || props.editQuote === undefined || props.sending || popupOpen()) return;
     cleanup(keymap.bind("escape", () => props.onEditCancel?.(), { when: "always" }));
   });
 
@@ -508,7 +520,7 @@ export function ChatComposer(props: ChatComposerProps) {
       if (suggestionItems().length) applySuggestion();
       return;
     }
-    if (props.submitOnEnter === false) return;
+    if (!untracked(enterSends)) return;
     props.onSubmit?.();
   }
 
@@ -1005,7 +1017,7 @@ export function ChatComposer(props: ChatComposerProps) {
               value={value()}
               multiline
               submitBehavior={submitBehavior()}
-              returnKeyType={props.submitOnEnter === false ? "default" : "send"}
+              returnKeyType={enterSends() ? "send" : "default"}
               placeholder={props.placeholder}
               accessibilityLabel={props.placeholder}
               readonly={props.disabled}

@@ -1,6 +1,6 @@
 // The app frame's state, as the Vue console's useAppShell had it: which endpoint is selected,
 // the navigation, and the shared data every workspace page preloads.
-import { batch, cleanup, computed, effect, keyboardFrame, LayoutAnimation, platform, reduceMotion, safeArea, signal, untracked, windowSize } from "nsh";
+import { batch, cleanup, computed, effect, keyboardFrame, LayoutAnimation, platform, reduceMotion, safeArea, signal, untracked } from "nsh";
 import defaultEndpointAvatar from "../assets/images/app_logo_current.svg";
 import { lastTopicID } from "./core/chat-topic-memory.js";
 import { endpointDisplayItem, visibleEndpoints } from "./core/endpoints.js";
@@ -10,15 +10,15 @@ import { NAV_ITEMS_META, navigate, route, currentPath, type Route } from "./rout
 import { NAV_TAB_PATHS } from "./navOrder";
 import { useContactsStore } from "./stores/contactsStore.js";
 import { usePersonaStore } from "./stores/personaStore.js";
+import { isMobile, MOBILE_BREAKPOINT } from "./layout";
 import { localStore } from "./platform";
 import { frameInsets, rightSheetInsets } from "./systemInsets";
 import { SystemBackScope } from "./systemBack";
 
 export { currentPath };
 
-/** Below this width the sidebar gives way to the bottom navigation. */
-export const MOBILE_BREAKPOINT = 980;
-export const isMobile = computed(() => windowSize().width <= MOBILE_BREAKPOINT);
+// The layout's breakpoint and signal (lib/layout.ts), handed on to the frame and the pages.
+export { isMobile, MOBILE_BREAKPOINT };
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "mistermorph.sidebarCollapsed";
 /** The sidebar's two widths: unfolded, and folded to its icons. */

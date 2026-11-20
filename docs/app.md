@@ -203,6 +203,11 @@ the session, and the download follows no redirects. nsh has no save dialog on An
 comes from the app's own Java; an APK built without it, or a device without a document picker, says
 that saving is not available. Other phones (iOS) have no saving yet.
 
+Keyboard shortcuts are on in the Android app only while a hardware keyboard is connected: the native
+part reports it (`morph.keyboard.state`, `morph.keyboard.changed`) from Android's input devices, and
+an APK without the native part, or a state Android cannot tell, leaves them off. See
+[Keyboard shortcuts](console/keyboard-shortcuts.md#where-shortcuts-are-on).
+
 Not available in the Android app yet: attaching files other than images, other system notifications
 (TODO items' opt-in notifications) and changing avatars.
 

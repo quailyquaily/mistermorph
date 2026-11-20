@@ -631,7 +631,8 @@ test("on a phone the closing workbench keeps the details, never showing the work
 /* ---------- the panel alone ---------- */
 
 test("the open plan follows the reply as it changes, and says when there is nothing to show", async () => {
-  const app = await open("./fixtures/activity-detail-app.tsx", { width: 600, height: 700, platform: "linux", locale: "en-US" });
+  // A desktop layout's width: the panel's Escape is an application shortcut (lib/shortcutPolicy.ts).
+  const app = await open("./fixtures/activity-detail-app.tsx", { width: 1000, height: 700, platform: "linux", locale: "en-US" });
   await app.waitFor("id:chat-detail-plan");
   expect(inPanel(app, "Look around")).toBe(true);
   expect(inPanel(app, "0/1")).toBe(true);

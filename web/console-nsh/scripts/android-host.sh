@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The phone app's native part (android/src): the microphone behind the console's `morph.voice.*`
 # host calls, the task notifications behind `morph.notify.*`, the saving of files behind
-# `morph.file.save*` and the app's version behind `morph.shell.info`, which nsh's prebuilt Android
-# runtime does not have; and ModalKeyboardRoom (com/longbridge/nsh, in nsh's package), which takes
+# `morph.file.save*`, the app's version behind `morph.shell.info` and the hardware keyboard's state
+# behind `morph.keyboard.state`, which nsh's prebuilt Android runtime does not have; and ModalKeyboardRoom (com/longbridge/nsh, in nsh's package), which takes
 # back the keyboard room nsh 0.6.0 leaves under a dialog's fields. build-android.sh compiles it into
 # the APK's classes.dex next to the runtime's own classes; MorphApplication (named in the manifest
 # by scripts/android-manifest.mjs) attaches it to nsh's AppActivity.
@@ -13,7 +13,8 @@
 #   scripts/android-host.sh test
 #       The JVM tests (android/test) of the parts that need no Android: the recording's states,
 #       permission outcomes, cleanup and the upload; the task notifications' watcher; saving a file
-#       (the download, its failures and the cleanup after a failed save); the app's version answer.
+#       (the download, its failures and the cleanup after a failed save); the app's version answer; the hardware
+#       keyboard's state from the input devices.
 #
 # Needs a JDK (javac, jar, java); `dex` also the SDK's build tools (d8).
 set -euo pipefail
@@ -72,6 +73,7 @@ case "${1:-}" in
     "${java_home_bin}java" -cp "$work/classes" com.mistermorph.console.TaskNotifierTest
     "${java_home_bin}java" -cp "$work/classes" com.mistermorph.console.FileSaverTest
     "${java_home_bin}java" -cp "$work/classes" com.mistermorph.console.ShellInfoTest
+    "${java_home_bin}java" -cp "$work/classes" com.mistermorph.console.HardwareKeyboardTest
     ;;
   *)
     sed -n '2,15p' "$0"

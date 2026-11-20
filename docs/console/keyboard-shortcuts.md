@@ -1,14 +1,118 @@
 # Keyboard shortcuts
 
-The Console (web, desktop app, and the Android app with a hardware keyboard)
-has keyboard shortcuts for a few of its actions. They are listed, and can be
-changed, in **Settings → Keyboard shortcuts**; **Show keyboard shortcuts**
-(`Shift+/`, that is `?`) opens that list from any page. The tooltips of the
-New Topic button, the sidebar's pages and the sidebar's edge show the keys in
-effect.
+The Console has keyboard shortcuts for a few of its actions, where a keyboard
+is expected (see [Where shortcuts are on](#where-shortcuts-are-on)): a browser
+window in the desktop layout, the desktop app, and the Android app with a
+hardware keyboard connected. They are listed, and can be changed, in
+**Settings → Keyboard shortcuts**; **Show keyboard shortcuts** (`Shift+/`,
+that is `?`) opens that list from any page. The tooltips of the New Topic
+button, the sidebar's pages and the sidebar's edge show the keys in effect.
 
 These are application shortcuts: they work while the Console has the keyboard
 focus. There are no system-wide hotkeys.
+
+## Where shortcuts are on
+
+One decision (`web/console-nsh/lib/shortcutPolicy.ts`) turns the application
+shortcuts on or off as a whole: the keys that act, the hints that name them
+and the Keyboard shortcuts section of Settings. A shortcut that is not shown
+never acts.
+
+| Where the Console runs | Shortcuts |
+| --- | --- |
+| Browser, desktop layout (window wider than 980 pt) | on |
+| Browser, phone layout (980 pt or narrower) | off, also with a hardware keyboard |
+| Desktop app | on, at any window width |
+| Android app, hardware keyboard connected | on, at a phone's width and a tablet's |
+| Android app, no hardware keyboard, or unknown | off |
+| iOS app | off (nothing reports its keyboard, see below) |
+
+While they are off:
+
+- no application shortcut acts, and none takes a key: every key goes to the
+  focused field, the page, the browser and the system as if the Console had
+  no shortcuts;
+- tooltips and the Send button's name show no keys;
+- Settings has no Keyboard shortcuts section, and its address
+  (`/settings/shortcuts`) opens Settings without it (the list of sections on
+  a phone).
+
+The saved keys are kept and apply again when the shortcuts come back on.
+
+The decision follows the window and the keyboard without a reload. Making a
+browser window narrower than the breakpoint turns the shortcuts off and
+closes the Keyboard shortcuts section if it is open (a recording under way
+ends without saving); making it wide turns them back on. In the Android app
+the same happens when a keyboard is connected or taken away, and the state is
+asked again each time the app comes back to the front.
+
+### What counts as an application shortcut
+
+A key the Console itself gives to an action of the app or of a page:
+
+- the actions in the table below;
+- in the chat: Enter to send (Shift+Enter is a new line), Up and Down through
+  the messages sent before, Escape to leave an edit, and the number keys of a
+  question's choices;
+- Escape closing a panel beside the content (an activity's details, a
+  channel's settings, a skill in the store).
+
+Where shortcuts are off, Enter in the message field is a new line and the
+Send button sends; Up and Down move the caret; panels close with their own
+close or back button.
+
+Keys that operate the control that has the focus, or a popup that is open,
+are not application shortcuts and work everywhere: typing and editing, the
+input method, Tab, Enter or Space on a focused button, Escape and the arrows
+in a dialog, menu, list of choices or the composer's suggestions (Enter or
+Tab picks a suggestion), Escape clearing a search field, the arrows on a
+focused splitter or number field, Escape dropping a dragged topic. So do the
+system's and the browser's own shortcuts and assistive technology.
+
+### How a keyboard is detected, and what is not
+
+- **Browser.** A page cannot ask whether a hardware keyboard is connected,
+  and the Console does not guess: not from keys that arrive, not from an
+  on-screen keyboard that stays hidden. Only the layout decides. A phone or
+  small tablet browser with a Bluetooth keyboard therefore has no shortcuts,
+  by design; a tablet browser wide enough for the desktop layout has them
+  whether or not a keyboard is attached, like any desktop-layout window.
+- **Desktop app.** Always on; nothing is detected.
+- **Android app.** The app's native part
+  (`web/console-nsh/android/src/com/mistermorph/console/HardwareKeyboard.java`,
+  `AndroidHardwareKeyboard.java`) answers the host call `morph.keyboard.state`
+  with `{"physical": "connected" | "disconnected" | "unknown"}` and sends
+  `morph.keyboard.changed` with the same data. "Connected" means Android's
+  `InputManager` lists an enabled, non-virtual input device that is a keyboard
+  source with an alphabetic layout (built in, USB, Bluetooth or a cover), and
+  the configuration does not report the hardware keyboard as hidden (a closed
+  slider, a cover folded back). It listens to input devices being added,
+  removed or changed and to configuration changes, and reads again when the
+  activity resumes; the Console also asks again when the app comes back to the
+  front. If `InputManager` is missing or throws, the answer is "unknown".
+  The Console takes only an explicit "connected" as a keyboard: "unknown", an
+  answer of another shape, a failed call, and an APK built without the native
+  part (plain `nsh package`) all leave the shortcuts off. While a refresh
+  after resume is pending, the last known state holds.
+- **iOS app.** The repository has no iOS native part (the build is nsh's
+  alone), so nothing answers `morph.keyboard.state`: the state is unknown and
+  shortcuts stay off, also with a hardware keyboard. Turning them on needs a
+  native part that answers the same two messages (for example from
+  `GCKeyboard.coalescedKeyboard` and its connect and disconnect
+  notifications).
+
+Known limits of the Android detection: it trusts what devices report, so an
+accessory that wrongly presents itself as a full alphabetic keyboard (some
+barcode scanners and remote controls do) turns shortcuts on, and a keyboard
+that reports a non-alphabetic type does not. Android does not say whether
+the user actually types on a connected keyboard.
+
+What was verified: the decision and its effects are covered by the Console's
+headless tests, which play the host's answers and events
+(`tests/shortcut-eligibility.test.tsx`), and the Android decision by a JVM
+test (`HardwareKeyboardTest`); the Android classes compile against the
+Android SDK. No Android or iOS device or emulator, and no real keyboard being
+connected or disconnected, was part of that testing.
 
 ## Actions and default keys
 
@@ -33,7 +137,8 @@ elsewhere.
 | Show keyboard shortcuts | `Shift+/` | `Shift+/` | on every page |
 
 "Every page" means the agent's pages: not the login, setup or troubleshooting
-pages. The Android app uses the desktop app's defaults.
+pages. The Android app uses the desktop app's defaults. All of this holds
+where shortcuts are on (above).
 
 The browser's defaults differ because browsers never pass `Mod+N`, `Mod+T`,
 `Mod+W` or `Mod` with a digit to a page (they open windows and switch tabs).
@@ -126,6 +231,13 @@ Action identifiers: `chat.newTopic`, `chat.searchTopics`,
 
 ## For developers
 
+- `web/console-nsh/lib/shortcutPolicy.ts`: where application shortcuts are on
+  (`shortcutsEligible()`, read reactively). Every application shortcut, hint
+  and the Settings section goes through it: a new key bound to an action of a
+  page or the app must check it too.
+- `web/console-nsh/lib/mobileHost.ts`: the phone app's hardware keyboard
+  state from its native part (`morph.keyboard.state`,
+  `morph.keyboard.changed`).
 - `web/console-nsh/lib/shortcuts.ts`: the actions and their defaults, the
   checks, the saved changes.
 - `web/console-nsh/components/frame/shortcutDispatch.ts`: binds each action's
@@ -133,5 +245,7 @@ Action identifiers: `chat.newTopic`, `chat.searchTopics`,
   ignores keys being composed, and does not repeat on held keys. A page says
   what an action does with `provideShortcut(id, run, available)`.
 - `web/console-nsh/components/settings/ShortcutsPanel.tsx`: the Settings list.
-- Tests: `web/console-nsh/tests/keyboard-shortcuts-model.test.tsx` and
-  `keyboard-shortcuts.test.tsx`.
+- Tests: `web/console-nsh/tests/keyboard-shortcuts-model.test.tsx`,
+  `keyboard-shortcuts.test.tsx` and `shortcut-eligibility.test.tsx`; the
+  Android decision in `web/console-nsh/android/test/.../HardwareKeyboardTest.java`
+  (`scripts/android-host.sh test`).

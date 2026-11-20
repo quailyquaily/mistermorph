@@ -92,7 +92,8 @@ test("Back while a settings section still slides in turns it round with that sec
 });
 
 test("a page going out does not take Back: it goes to the place before, not the outgoing page's own back", async () => {
-  const { app } = await openConsole({ platform: "android", location: "/e/default/skills?skill=weather", api: { ...QUIET, ...SKILLS }, slowSlides: true });
+  // The shortcut below needs the hardware keyboard the native part tells of (lib/shortcutPolicy.ts).
+  const { app } = await openConsole({ platform: "android", location: "/e/default/skills?skill=weather", api: { ...QUIET, ...SKILLS }, slowSlides: true, keyboard: "connected" });
   await app.waitFor("id:skill-detail");
   await app.waitUntil(() => location(app) === "/e/default/skills?skill=weather");
 

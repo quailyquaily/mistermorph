@@ -105,6 +105,17 @@ export const secureContext = (): boolean | null =>
 /** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`, `voiceRecord`, `voicePreview`, `backgroundTaskNotifications`. */
 export const hasFeature = (name: string) => config.features.includes(name);
 
+/* ---------- the hardware keyboard (phone app) ---------- */
+
+export type PhysicalKeyboard = mobileHost.PhysicalKeyboard;
+/**
+ * Whether a hardware keyboard is connected to the phone or tablet the phone app runs on, as its
+ * native part says (a signal: it follows a keyboard connected or taken away, and is asked again
+ * when the app comes back to the front). "unknown" where no native part tells: a browser and the
+ * desktop app, which never need it (lib/shortcutPolicy.ts), an APK without the native part, iOS.
+ */
+export const physicalKeyboard = (): PhysicalKeyboard => (MOBILE ? mobileHost.physicalKeyboard() : "unknown");
+
 /* ---------- the server (phone app) ---------- */
 
 /** The console server's address the phone app talks to, `""` before the user entered one. */

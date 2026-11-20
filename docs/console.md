@@ -182,7 +182,7 @@ Settings that only apply after a restart (`process_restart` and `runtime_restart
   - agent tool toggles mirror `config.yaml` structure under `tools.<name>.enabled`
   - the Settings page now exposes the `spawn` toggle together with the other agent tools
 - Keyboard shortcuts:
-  - a few actions (new topic, topic search, the message field, the pages, the sidebar) have keyboard shortcuts, with different defaults in a browser and in the desktop app; Settings → Keyboard shortcuts lists and changes them, saved per environment in the Console's local values. See [Keyboard shortcuts](console/keyboard-shortcuts.md)
+  - a few actions (new topic, topic search, the message field, the pages, the sidebar) have keyboard shortcuts, with different defaults in a browser and in the desktop app; Settings → Keyboard shortcuts lists and changes them, saved per environment in the Console's local values. They are on in a browser's desktop layout, in the desktop app and in the Android app with a hardware keyboard connected, and off (with their hints and the Settings section) in a browser's phone layout and in a phone app without a known keyboard. See [Keyboard shortcuts](console/keyboard-shortcuts.md)
 - i18n:
   - English, Chinese, Japanese
   - language selector appears on Login and Settings (not in top nav)

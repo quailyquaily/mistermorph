@@ -10,6 +10,7 @@
 // key means the same keys wherever it is read.
 import { batch, cleanup, computed, keymap, platform, signal, untracked } from "nsh";
 import { localStore, onKvChange, runtime } from "./platform";
+import { shortcutsEligible } from "./shortcutPolicy";
 
 /** Where the Console runs: in a browser, or in an app (the desktop app; the phone app too). */
 export type ShortcutEnv = "web" | "desktop";
@@ -391,8 +392,11 @@ export function shortcutKeys(id: string): string {
   return binding && !binding.shadowedBy ? binding.keys : "";
 }
 
-/** An action's keys as hints show them ("" for none). */
-export const shortcutLabel = (id: string) => keysLabel(shortcutKeys(id));
+/**
+ * An action's keys as hints show them: "" for none, and "" wherever application shortcuts are off
+ * (lib/shortcutPolicy.ts), so no tooltip names keys that would not act.
+ */
+export const shortcutLabel = (id: string) => (shortcutsEligible() ? keysLabel(shortcutKeys(id)) : "");
 
 /** An action's default keys here (canonical, "" for none). */
 export const defaultShortcutKeys = (id: string) => canonicalKeys(shortcutAction(id)?.defaults[currentShortcutEnv()] ?? "", appleKeys());

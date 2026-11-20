@@ -52,6 +52,7 @@ import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 import { boundsFrame, createPartProbe, type PartFrame, type PartLayoutListener } from "./shared/partProbe";
 import type { ScrollMemory } from "../lib/scrollMemory";
 import { isMobile, MOBILE_BREAKPOINT } from "../lib/shell";
+import { shortcutsEligible } from "../lib/shortcutPolicy";
 
 export type { IconName };
 
@@ -875,10 +876,13 @@ export function trackPopup(open: () => boolean) {
  * right) while `active()` holds, but never while a popup is open over the page: the binding is
  * dropped meanwhile, so the dialog opened from the panel (Rename, Delete, a picker) gets Escape
  * and the panel stays open under it as it was. Call it in the panel's component body.
+ *
+ * A page's own key, so an application shortcut: not bound where those are off
+ * (lib/shortcutPolicy.ts); the panel's close or back button is there as ever.
  */
 export function bindPaneEscape(close: () => void, active: () => boolean = () => true, options?: KeyBindingOptions) {
   effect(() => {
-    if (!active() || popupOpen()) return;
+    if (!shortcutsEligible() || !active() || popupOpen()) return;
     cleanup(keymap.bind("escape", () => close(), options));
   });
 }

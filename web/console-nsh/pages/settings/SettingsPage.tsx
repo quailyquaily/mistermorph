@@ -203,11 +203,16 @@ export function SettingsPage() {
   });
 
   // A section the endpoint does not have (a remote agent has no Channels): the first one instead.
+  // So with Keyboard shortcuts where application shortcuts are off (lib/shortcutPolicy.ts): its
+  // address opens Settings without it, and it closes when they go off while it is open (a browser
+  // window made narrow, a tablet's keyboard taken away). On phones that shows the sections.
   effect(() => {
     const items = s.settingsSections();
     untracked(() => {
-      if (items.some((item) => item.id === s.selectedSectionID())) return;
+      const gone = s.selectedSectionID();
+      if (items.some((item) => item.id === gone)) return;
       const id = items[0]?.id || SETTINGS_DEFAULT_SECTION_ID;
+      if (gone === "shortcuts") mobilePanelVisible.set(false);
       s.selectedSectionID.set(id);
       const nextPath = settingsSectionPath(endpointState.selectedRef, id);
       if (currentRoute().path !== nextPath) void navigate(nextPath, { replace: true });
