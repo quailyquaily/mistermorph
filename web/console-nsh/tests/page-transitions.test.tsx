@@ -142,6 +142,8 @@ test("a topic opens and closes within the chat page: its own slide, the same pag
 test("a cancelled leave moves nothing", async () => {
   const { app } = await openConsole({
     platform: "android",
+    // The shortcut below needs the hardware keyboard the native part tells of (lib/shortcutPolicy.ts).
+    keyboard: "connected",
     location: "/e/default/settings",
     api: {
       ...QUIET,

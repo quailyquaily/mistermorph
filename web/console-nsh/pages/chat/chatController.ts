@@ -108,6 +108,7 @@ import { createTopicRename, type TopicRenameSession } from "./topicRename";
 import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile, type PickSource } from "../../lib/platform";
 import { currentRoute, locationOf, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
+import { shortcutsEligible } from "../../lib/shortcutPolicy";
 import { dismissSoftKeyboard } from "../../lib/softKeyboard";
 import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
 import type { ComposerFileItem, ComposerHandle, ComposerProfileItem } from "../../components/chat/ChatComposer";
@@ -554,8 +555,10 @@ export function createChatController() {
     composerDisabled() || (!composerStopMode() && ((!messageEdit() && composerFilesPending()) || !composerHasInput()));
   const composerActionLabel = () => {
     if (composerStopMode()) return t("chat_action_stop");
-    if (messageEdit()) return mobileMode() ? t("chat_message_edit_send") : `${t("chat_message_edit_send")} (Enter)`;
-    return mobileMode() ? t("chat_action_send") : `${t("chat_action_send")} (Enter)`;
+    // Enter is named only where it sends (lib/shortcutPolicy.ts, as the composer decides it).
+    const enter = shortcutsEligible() ? " (Enter)" : "";
+    if (messageEdit()) return `${t("chat_message_edit_send")}${enter}`;
+    return `${t("chat_action_send")}${enter}`;
   };
   const composerPlaceholder = () => t("chat_input_placeholder", { name: displayAgentName() });
   const composerAttachActive = () => Boolean(pendingWorkspaceDir());

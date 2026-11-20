@@ -32,6 +32,15 @@
 // bytes are written, "cancelled" when the user backed out. The app offers it (`saveFile`) only when
 // the native part says the device has that picker; an APK without it, or another phone (iOS), says
 // saving is not available. Only the console server's own URLs are given the session's headers.
+//
+// Whether a hardware keyboard is connected is the native part's to tell as well
+// (`morph.keyboard.state`, android/src/.../HardwareKeyboard.java): nsh has no such state, and the
+// console's keyboard shortcuts are on in the phone app only while one is known to be connected
+// (lib/shortcutPolicy.ts). It is asked at boot and again whenever the app comes back to the front,
+// and the native part tells of a keyboard connected or taken away (`morph.keyboard.changed`). An
+// APK without the native part, the iOS app, an answer that is not understood or a call that fails
+// all leave it "unknown", which is never "connected". Nothing else is taken for a keyboard: not a
+// key that arrives, not the software keyboard staying hidden.
 import { effect, host, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
 
 /** The saved address of the console server, `https://host[:port][/base]`. */
@@ -231,6 +240,46 @@ function notifyCall(name: string, data: unknown = {}, fallback: unknown = null) 
   return host.call(name, data, { timeout: 0 });
 }
 
+/* ---------- the hardware keyboard (the native part) ---------- */
+
+/** What the native part knows of a hardware keyboard; "unknown" when it does not say (or is not there). */
+export type PhysicalKeyboard = "connected" | "disconnected" | "unknown";
+
+/** The native part's answer or event (`{ physical }`) as a state: anything not understood is "unknown". */
+export function physicalKeyboardFrom(answer: unknown): PhysicalKeyboard {
+  const physical = answer && typeof answer === "object" ? (answer as { physical?: unknown }).physical : undefined;
+  return physical === "connected" || physical === "disconnected" ? physical : "unknown";
+}
+
+const keyboard = signal<PhysicalKeyboard>("unknown");
+// Whether the native part answers `morph.keyboard.state`: asked once at boot.
+let nativeKeyboard = false;
+// Counts what was learned (answers asked for and the native part's events): an answer that comes
+// back after something newer was learned is dropped.
+let keyboardNews = 0;
+
+/** Whether a hardware keyboard is connected to the phone or tablet, as the native part last said (a signal). */
+export const physicalKeyboard = () => keyboard();
+
+/**
+ * Asks the native part and takes its answer, unless something newer was learned meanwhile. A call
+ * that fails leaves the state "unknown". Returns whether the native part answered at all: without
+ * one (an APK `nsh package` built alone, iOS, a test without the native part) nothing is asked again.
+ */
+async function askKeyboard(): Promise<boolean> {
+  const news = ++keyboardNews;
+  let next: PhysicalKeyboard = "unknown";
+  let answered = false;
+  try {
+    next = physicalKeyboardFrom(await host.call("morph.keyboard.state", {}));
+    answered = true;
+  } catch (error) {
+    console.warn("hardware keyboard: unknown, the native part did not answer:", (error as Error)?.message || error);
+  }
+  if (news === keyboardNews) keyboard.set(next);
+  return answered;
+}
+
 /* ---------- saving files (the native part) ---------- */
 
 // Whether the native part saves files on this device: asked once at boot.
@@ -306,6 +355,15 @@ async function bootData() {
   nativeNotify = await probeNotify();
   nativeSave = await probeSave();
   const shell = await probeShell();
+  nativeKeyboard = await askKeyboard();
+  if (nativeKeyboard) {
+    // A keyboard was connected or taken away while the app runs.
+    host.on("morph.keyboard.changed", (data: unknown) => {
+      keyboardNews += 1;
+      keyboard.set(physicalKeyboardFrom(data));
+    });
+  }
+  let wasActive = untracked(lifecycle) === "active";
   if (nativeNotify) {
     // A pressed notification brought the app back: the console takes its topic.
     host.on("morph.notify.opened", (data: unknown) => emit("morph.notify.opened", data));
@@ -324,6 +382,11 @@ async function bootData() {
     // Nothing records in the background: the native part stops when the activity does, and the
     // app ends its side here too. (A permission question only makes the app "inactive".)
     if (state === "background" && nativeVoice) untracked(() => endVoice("background"));
+    // Back in front: a keyboard may have come or gone meanwhile. The last state holds until the
+    // native part answers (a failed answer is "unknown").
+    const active = state === "active";
+    if (active && !wasActive && nativeKeyboard) void askKeyboard();
+    wasActive = active;
   });
   return {
     runtime: "mobile",

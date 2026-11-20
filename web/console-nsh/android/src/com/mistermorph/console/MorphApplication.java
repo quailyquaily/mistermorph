@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -32,6 +33,10 @@ import java.util.concurrent.Executors;
  * <p>And `morph.shell.info`: this installed app's version name and code ({@link ShellInfo}), which
  * the console shows as its shell's version.
  *
+ * <p>And `morph.keyboard.state`: whether a hardware keyboard is connected
+ * ({@link AndroidHardwareKeyboard}), which decides whether the console's keyboard shortcuts are on;
+ * it tells the console (`morph.keyboard.changed`) when one is connected or taken away.
+ *
  * <p>And the dialogs' fields over the software keyboard: {@link ModalKeyboardRoom} takes back the
  * room nsh 0.6.0 leaves under them.
  */
@@ -45,12 +50,14 @@ public final class MorphApplication extends Application implements Application.A
         final NshView view;
         // Saves download on their own thread: a long one does not hold up a voice upload.
         final ExecutorService saves;
+        final AndroidHardwareKeyboard keyboard;
 
-        Attached(VoiceController voice, ExecutorService executor, NshView view, ExecutorService saves) {
+        Attached(VoiceController voice, ExecutorService executor, NshView view, ExecutorService saves, AndroidHardwareKeyboard keyboard) {
             this.voice = voice;
             this.executor = executor;
             this.view = view;
             this.saves = saves;
+            this.keyboard = keyboard;
         }
     }
 
@@ -127,7 +134,9 @@ public final class MorphApplication extends Application implements Application.A
                 reply.reject(message);
             }
         }));
-        Attached result = new Attached(voice, executor, view, saves);
+        AndroidHardwareKeyboard keyboard = new AndroidHardwareKeyboard(activity, view);
+        view.handle("morph.keyboard.state", (data, reply) -> reply.resolve(keyboard.answer()));
+        Attached result = new Attached(voice, executor, view, saves, keyboard);
         attached.put(activity, result);
         return result;
     }
@@ -199,6 +208,7 @@ public final class MorphApplication extends Application implements Application.A
         Attached current = attached.remove(activity);
         if (current == null) return;
         current.voice.close();
+        current.keyboard.close();
         current.executor.shutdown();
         // A save under way still finishes (its document is the user's); nothing new starts.
         current.saves.shutdown();
@@ -208,7 +218,19 @@ public final class MorphApplication extends Application implements Application.A
     public void onActivityCreated(Activity activity, Bundle state) {}
 
     @Override
-    public void onActivityResumed(Activity activity) {}
+    public void onActivityResumed(Activity activity) {
+        // Back in front: a keyboard may have come or gone while the app was away.
+        Attached current = attached.get(activity);
+        if (current != null) current.keyboard.refresh(null);
+    }
+
+    // The activity handles the keyboard's configuration changes itself (it is not made again), so
+    // a hardware keyboard shown or hidden (a slider, a cover) arrives here.
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        for (Attached current : new java.util.ArrayList<>(attached.values())) current.keyboard.refresh(configuration);
+    }
 
     @Override
     public void onActivityPaused(Activity activity) {}

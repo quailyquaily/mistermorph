@@ -61,6 +61,13 @@ export interface ConsoleOptions {
    * browser's (`env(safe-area-inset-*)`, under its home indicator or a cutout).
    */
   safeArea?: SafeArea;
+  /**
+   * With `platform: "android"`: what the native part answers of a hardware keyboard
+   * (`morph.keyboard.state`, android/src/.../HardwareKeyboard.java). Without it the app has no such
+   * answer, as an APK without the native part: the state is unknown and the keyboard shortcuts are
+   * off (lib/shortcutPolicy.ts). Tests that use the app's shortcuts on Android say "connected".
+   */
+  keyboard?: "connected" | "disconnected" | "unknown";
   /** The desktop's OS (default `linux`): `macos` has Apple's keys (`mod` is Command, ⌘ labels). */
   os?: "linux" | "macos" | "windows";
   /** The user asks for less motion. */
@@ -206,7 +213,10 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         "quail-language": "en",
         ...(options.kv || {}),
       },
-      host: options.host || options.scrollProbe || options.barRooms ? { handlers: { ...probe, ...(options.host || {}) } } : null,
+      host:
+        options.host || options.scrollProbe || options.barRooms || options.keyboard
+          ? { handlers: { ...probe, ...(options.keyboard ? { "morph.keyboard.state": { physical: options.keyboard } } : {}), ...(options.host || {}) } }
+          : null,
       clock: options.clock ? {} : null,
       network,
     });

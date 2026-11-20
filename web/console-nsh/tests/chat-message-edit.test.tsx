@@ -192,6 +192,26 @@ test("Cancel and Escape give the draft back and send nothing", async () => {
   }
 });
 
+test("in a browser's phone layout Escape and Enter are not the edit's: Cancel leaves it, the button sends it", async () => {
+  // No application shortcuts there (lib/shortcutPolicy.ts), with a hardware keyboard's keys too.
+  const runtime = topicRuntime();
+  const { app, calls } = await openTopic(runtime, { width: 390, height: 844 });
+  await app.type("id:chat-composer-input", "half a thought");
+  await app.press("id:chat-edit >> nth=0");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "What is a fox?");
+  expect(app.shows("label:Send edited message")).toBe(true);
+  expect(app.shows("label:Send edited message (Enter)")).toBe(false);
+  await app.keyboard.press("escape");
+  await app.keyboard.press("enter");
+  await app.wait(300);
+  expect(app.shows("id:chat-composer-edit-quote")).toBe(true);
+  expect(runtime.edits.length).toBe(0);
+  expect(calls.some((call) => call.method === "POST" && String(call.uri || "").startsWith("/tasks"))).toBe(false);
+  await app.press("id:chat-composer-edit-cancel");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "half a thought");
+  expect(app.shows("id:chat-composer-edit-quote")).toBe(false);
+});
+
 test("an empty edit cannot be sent", async () => {
   const runtime = topicRuntime();
   const { app } = await openTopic(runtime);

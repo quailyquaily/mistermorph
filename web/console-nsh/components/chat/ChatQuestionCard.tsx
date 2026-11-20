@@ -3,6 +3,7 @@
 // once closed it shows the answer. Ported from web/console/src/components/ChatQuestionCard.js.
 // The draft, busy and error states are the page's, keyed by question, since rows recycle.
 import { cleanup, effect, keymap, signal, Text, untracked, View } from "nsh";
+import { shortcutsEligible } from "../../lib/shortcutPolicy";
 import { Input } from "nsh/base";
 import { Button } from "../ui";
 import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
@@ -83,9 +84,10 @@ export function ChatQuestionCard(props: {
     if (text) send({ text });
   };
 
-  // The number keys choose while a choice has the keyboard focus, as the card's keydown did.
+  // The number keys choose while a choice has the keyboard focus, as the card's keydown did: an
+  // application shortcut, bound only where those are on (lib/shortcutPolicy.ts).
   effect(() => {
-    if (!choiceFocused() || !open()) return;
+    if (!shortcutsEligible() || !choiceFocused() || !open()) return;
     const count = Math.min(9, options().length);
     const bindings: Record<string, () => void> = {};
     for (let index = 0; index < count; index += 1) bindings[String(index + 1)] = () => choose(index);
