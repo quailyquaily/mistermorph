@@ -42,3 +42,15 @@ Built and pushed commit `2e1a5c85` on `factory/FT166-polish-load-older-posts-but
 - Not checked visually: pressed state, dark theme (Console pinned light), full Console page, safe areas separately, desktop GPUI, Android/iOS emulator or device. Native layout tests are not native-device verification.
 - Manager's first push lacked repository credential path; retry with command-local credential.useHttpPath=true succeeded. No settings changed.
 Moved from `new/` to `review/`, round 1. Owner should inspect the full Console on current native/mobile runtime, especially wrapping, focus and touch appearance.
+
+## factory · review · 2026-11-20 11:30
+head: 2e1a5c858083424eb641a1e89e368c0920063e1d
+verdict: pass
+notes:
+- Claude Code reviewed all three changed files against origin/master, the request and plan; no qualifying findings. Pagination, chronological order, scroll-anchor behavior, loading/blocked presses, keyboard access, accessible labels and shared button reuse were checked.
+- Required Go gate passed: gofmt clean, go vet ./... and go test ./... exit 0 (166 packages ok). nsh check passed on pinned nsh 0.6.0 (5541637).
+- Required parallel Console scripts/test.sh passed: 148 files, 0 failed. settings-page and settings-agent-name-set passed the script's solo retry after initial parallel failures; base comparison was not run. Older-history and scroll-anchor tests passed.
+- Installs: none; existing cached TypeScript copied into temporary test HOME. No manifest/lock or code changes; reviewed worktree clean.
+- No new screenshots or native-device checks. Owner should inspect the full Console on pinned runtime: focus/pressed appearance, mobile/safe-area behavior and wrapping. Build screenshots used older 0.5.1 web runtime. Wide touch windows above 980pt use the planned desktop 38pt size rather than the mobile 44pt size.
+- Coder commands used run-scoped temporary directories; Claude's own harness reported writing background-task output outside the run directory. Those shared temporary paths were not deleted.
+Moved from `review/` to `ready/`.
