@@ -434,6 +434,78 @@ test("normalizing an already normalized activity keeps each process with its act
   assert.deepEqual(twice, once);
 });
 
+// A running task's activity comes from its stream; a poll in between brings none (the server stores
+// it only when the task ends), so the page normalizes what it already shows again. Each subtask
+// keeps its own task_id through those polls and its completion, and an entry not given one yet
+// gets none.
+test("a coder subtask's task_id survives normalizing the shown activity again, per subtask", () => {
+  const coder = (id, status) => ({ id, kind: "tool", name: "coder", status, args: { task: `fix ${id}` } });
+  const subtask = (id, status, extra = {}) => ({
+    id, kind: "subtask", name: id, status, task_id: id, mode: "direct", profile: "default", ...extra,
+  });
+  const frames = [
+    // The coder call started; its subtask has no task_id yet.
+    { history: [coder("call-a", "running")] },
+    // Its subtask started, and another coder with its own subtask beside it.
+    { history: [coder("call-a", "running"), subtask("sub_a", "running"), coder("call-b", "running"), subtask("sub_b", "running")] },
+    // A status update: running again, nothing new about the subtasks.
+    { history: [coder("call-a", "running"), subtask("sub_a", "running"), coder("call-b", "running"), subtask("sub_b", "running")] },
+  ];
+  const taskIDs = (activity) => activity.history.map((entry) => [entry.id, entry.taskId]);
+  let shown = null;
+  for (const frame of frames) {
+    shown = normalizeActivity(frame);
+    // Polls between stream frames: the shown activity again, as often as they come.
+    for (let poll = 0; poll < 3; poll++) {
+      const again = normalizeActivity(shown);
+      assert.deepEqual(again, shown);
+      shown = again;
+    }
+  }
+  assert.deepEqual(taskIDs(shown), [["call-a", ""], ["sub_a", "sub_a"], ["call-b", ""], ["sub_b", "sub_b"]]);
+  assert.deepEqual(shown.history.map((entry) => entry.outputKind), ["", "", "", ""]);
+
+  // Before its subtask started, a coder call shows no task_id.
+  assert.deepEqual(taskIDs(normalizeActivity(normalizeActivity(frames[0]))), [["call-a", ""]]);
+
+  // Done: each subtask still has its own, with its output kind, normalized once or again.
+  const done = { history: [
+    coder("call-a", "done"), subtask("sub_a", "done", { output_kind: "text" }),
+    coder("call-b", "failed"), subtask("sub_b", "failed", { output_kind: "text", error: "exit 1" }),
+  ] };
+  for (const activity of [normalizeActivity(done), normalizeActivity(normalizeActivity(done))]) {
+    assert.deepEqual(taskIDs(activity), [["call-a", ""], ["sub_a", "sub_a"], ["call-b", ""], ["sub_b", "sub_b"]]);
+    assert.deepEqual(activity.history.map((entry) => entry.status), ["done", "done", "failed", "failed"]);
+    assert.equal(activity.history[1].outputKind, "text");
+    assert.equal(activity.current.taskId, "sub_b");
+  }
+
+  // The next coder call (a new task, or after a reset) starts from its own entries: no task_id of
+  // the earlier ones carries over to it.
+  const next = normalizeActivity(normalizeActivity({ history: [coder("call-c", "running")] }));
+  assert.deepEqual(taskIDs(next), [["call-c", ""]]);
+  assert.equal(next.current.taskId, "");
+});
+
+test("normalizing an already normalized activity keeps every field of its entries", () => {
+  const raw = { history: [
+    {
+      id: "c1", kind: "tool", name: "bash", status: "failed", error: "bash exited with code 1",
+      shell: { exit_code: 1, stdout: "out\n", stderr: "", stdout_omitted: 7, stderr_truncated: true, reason: "timed out" },
+    },
+    { id: "code", kind: "tool", name: "codemode", status: "running", children_omitted: 3, children: [
+      { id: "code.0", kind: "subtask", name: "sub_c", status: "running", task_id: "sub_c", output_kind: "json" },
+    ] },
+    { id: "sub_d", kind: "subtask", name: "sub_d", status: "done", task_id: "sub_d", mode: "agent", profile: "long", output_kind: "text" },
+  ] };
+  const once = normalizeActivity(raw);
+  assert.deepEqual(normalizeActivity(once), once);
+  assert.deepEqual(normalizeActivity(normalizeActivity(once)), normalizeActivity(JSON.parse(JSON.stringify(raw))));
+  assert.equal(once.history[0].shell.exitCode, 1);
+  assert.equal(once.history[1].childrenOmitted, 3);
+  assert.equal(once.history[1].children[0].taskId, "sub_c");
+});
+
 test("worker labels omit invalid PIDs", () => {
   const activity = normalizeActivity({ history: [{ id: "spawn", kind: "tool", worker: {
     id: "worker-1", name: "Milo", processes: [{ pid: 0 }, { pid: -1 }, { pid: "123" }, { pid: 1.5 }],
