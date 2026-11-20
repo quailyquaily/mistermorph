@@ -472,9 +472,13 @@ Headless tests prove behaviour, not the look.
   exactly two share the row's width there; put them in the row itself, not each in a column of
   its own (`flex-1` would grow it down).
 - nsh/base's `Sheet` is such a layer: the frame's padding does not reach it, and its panel runs
-  under the status bar unless it is padded. The chat's phone panel (`WorkspaceSheet`) pads its
-  popup with `rightSheetInsets` (`lib/systemInsets.ts`); a new sheet at a side does the same, never
-  adding the frame's inset on top.
+  under the status bar unless it is padded. Every right sheet (`WorkspaceSheet`, a `SidePane` with
+  `sheet`, the skill store's `SkillStoreSheet`) pads its popup with `rightSheetPopupStyle`
+  (`lib/shell.ts`, `rightSheetInsets` in `lib/systemInsets.ts`; Android and iOS, none on the web
+  and the desktops); a new sheet at a side does the same, never adding the frame's inset on top,
+  and nothing inside a drawer pads for the system again. The bottom is the navigation bar's inset
+  only: Android's sheet window already ends above the keyboard (below), and nsh lifts a side
+  panel above it on iOS, so the keyboard's height is never added (tests/right-drawer-insets.test.tsx).
 - The packaged app gets no `usesCleartextTraffic`, and its `fetch` goes through HttpURLConnection,
   which then refuses `http://`: `scripts/build-android.sh` runs `nsh package` with an SDK whose
   `aapt2` adds it, for console servers on the local network.

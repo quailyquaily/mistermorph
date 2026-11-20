@@ -16,7 +16,7 @@ import { WorkspacePathLine } from "../../components/chat/WorkspacePathLine";
 import { t } from "../../components/chat/i18n";
 import { formatBytes } from "../../lib/core/context.js";
 import { workspaceTreeIcon } from "../../lib/core/workspace-icons.js";
-import { rightSheetSystemInsets } from "../../lib/shell";
+import { rightSheetPopupStyle } from "../../lib/shell";
 import type { ChatController } from "./chatController";
 import { TOPIC_TAB_ID, WORKSPACE_TAB_ID } from "./chatController";
 
@@ -414,18 +414,14 @@ export function WorkspacePanelTabs(props: {
 
 /**
  * The panel on phones: a sheet from the right over a scrim. Like the dialogs, it is a layer
- * over the whole surface, outside the app's frame, so on Android it runs under the status bar (and
- * the navigation bar) unless it keeps out from under them itself: its paper reaches the edges and
- * its padding takes the bars' insets (lib/systemInsets.ts `rightSheetInsets`), once. Elsewhere
- * there are none. The detail panel (ActivityDetailPanel) shares it, `wide`: as wide as a phone, up to
+ * over the whole surface, outside the app's frame, so on Android and iOS it runs under the status
+ * bar (and the navigation bar) unless it keeps out from under them itself: its paper reaches the
+ * edges and its padding takes the bars' insets (lib/shell.ts `rightSheetPopupStyle`), once.
+ * Elsewhere there are none. The detail panel (ActivityDetailPanel) shares it, `wide`: as wide as a phone, up to
  * the same 448pt, so output and reasoning get the whole screen; the close in its head and Back
  * take it away (there is no scrim beside it on a phone to press).
  */
 export function WorkspaceSheet(props: { open: boolean; onClose: () => void; children?: any }) {
-  const padding = () => {
-    const insets = rightSheetSystemInsets();
-    return insets ? { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom } : undefined;
-  };
   return (
     <Sheet
       open={props.open}
@@ -437,7 +433,7 @@ export function WorkspaceSheet(props: { open: boolean; onClose: () => void; chil
       }}
       backdropClass="bg-scrim"
       popupClass="h-full w-[88%] max-w-md border-l border-line bg-card"
-      popupStyle={padding()}
+      popupStyle={rightSheetPopupStyle()}
     >
       {props.children}
     </Sheet>

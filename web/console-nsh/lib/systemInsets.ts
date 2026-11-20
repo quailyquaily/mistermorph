@@ -21,9 +21,10 @@
 //   layer takes every inset, and the keyboard's height in place of the bottom one, plus a small
 //   gap, as its padding, so the paper's own bottom edge shows above the inset (lib/mobilePopup.ts,
 //   on iOS and the web too);
-// - so are the sheets docked at a side (nsh/base's `Sheet`, the chat's topic and workspace panel on
-//   phones): the panel takes the insets of the edges it touches, inside its own paper, and the
-//   frame's padding never reaches it, so nothing is taken twice;
+// - so are the sheets docked at a side (nsh/base's `Sheet`: the chat's topic and workspace panel, a
+//   `SidePane` and the skill store's panel on phones): the panel takes the insets of the edges it
+//   touches, inside its own paper, and the frame's padding never reaches it, so nothing is taken
+//   twice (`rightSheetInsets`, on iOS too, where the sheet covers the whole screen as well);
 // - the dropdowns (nsh/base's Menu, Select, DatePicker) are that paper too on touch screens, where
 //   nsh would draw them as sheets flush with the bottom edge, padded with nothing.
 //
@@ -111,17 +112,38 @@ export function dialogLayerInsets(area: Partial<Edges>, keyboard: number, gap: n
 
 /**
  * The padding of a sheet docked at the right edge, from the top of the surface to its bottom (the
- * chat's topic and workspace panel on phones): the status bar's inset at the top, the right inset
- * (a cutout or the navigation bar in landscape) at its edge, and at the bottom the navigation bar's
- * inset, or the keyboard's height while it is up. Its left edge is in the middle of the surface:
- * nothing there. The sheet is a layer of its own, outside the frame: this is all the room it gets.
+ * chat's topic and workspace panel, a `SidePane`, the skill store's panel on phones): the status
+ * bar's inset (and a cutout's) at the top, the right inset (a cutout or the navigation bar in
+ * landscape) at its edge, and the navigation bar's inset at the bottom. Its left edge is in the
+ * middle of the surface: nothing there. The sheet is a layer of its own, outside the frame: this is
+ * all the room it gets, and its paper runs to the edges behind it.
+ *
+ * `keyboard` is the software keyboard's height where the platform already lays the sheet's layer
+ * out above the keyboard (Android: nsh draws a `Sheet` in a window of its own, the surface's height
+ * less the keyboard's), 0 elsewhere. The layer's foot is then the keyboard's top, which covers the
+ * navigation bar: no bottom inset, and never the keyboard's height again (that stood the content a
+ * keyboard's height too high, as it did the dialogs: lib/mobilePopup.ts `layerAboveKeyboard`). On
+ * iOS nsh ends the panel above the keyboard less the bottom inset, so the inset stays (pass 0).
  */
-export function rightSheetInsets(area: Partial<Edges>, keyboard: number): Edges {
-  const raised = size(keyboard);
+export function rightSheetInsets(area: Partial<Edges>, keyboard = 0): Edges {
   return {
     top: size(area.top),
     right: size(area.right),
-    bottom: raised > 0 ? Math.max(raised, size(area.bottom)) : size(area.bottom),
+    bottom: size(keyboard) > 0 ? 0 : size(area.bottom),
     left: 0,
+  };
+}
+
+/**
+ * A right sheet's padding as a style: its insets (`rightSheetInsets`, null where the platform gives
+ * none) added to the padding the sheet has of its own (`own`, the skill store's gaps around its
+ * card). undefined when there is nothing to pad, so a sheet without insets keeps its classes.
+ */
+export function rightSheetPadding(insets: Edges | null, own?: { top?: number; right?: number; bottom?: number }) {
+  if (!insets && !own) return undefined;
+  return {
+    paddingTop: size(insets?.top) + size(own?.top),
+    paddingRight: size(insets?.right) + size(own?.right),
+    paddingBottom: size(insets?.bottom) + size(own?.bottom),
   };
 }
