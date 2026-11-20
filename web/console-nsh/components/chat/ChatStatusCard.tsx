@@ -13,6 +13,7 @@ import { t } from "./i18n";
 import { OverflowLine } from "./OverflowLine";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { KindChip, NEON, StatusTag, statusTag, TerminalText } from "./TerminalText";
+import { TreeBranch, treePart } from "./TreeBranch";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
 import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
 
@@ -397,71 +398,77 @@ export function ShellResult(props: { shell: any; command?: string }) {
   );
 }
 
-/** Nested calls (a subtask's, a subagent's) as a tree: `├─`/`└─`, a state dot, the call and its
- *  first value, an error under it. */
+/** The middle of a nested call's line (its 18pt state mark), from its row's top. */
+const CALL_MID = 9;
+/** The room above every row of a call tree after its first (the row's own: trunks run through it). */
+const CALL_GAP = 2;
+
+/** Nested calls (a subtask's, a subagent's) as a tree: each row's connector (TreeBranch), a state
+ *  dot, the call and its first value, a failed shell call's result or an error under it. Calls not
+ *  kept are counted above them, on a dashed trunk. */
 export function ActivityCallTree(props: { itemID: string; calls: any[]; omitted?: number }) {
   const omitted = () => Number(props.omitted) || 0;
   return (
-    <View class="gap-0.5">
+    <View>
       <If when={omitted() > 0}>
-        <Text class={`font-mono text-[11px] ${TERMINAL_MUTED}`}>
-          {"┆  "}
-          {t("chat_activity_calls_omitted", { count: omitted() })}
-        </Text>
+        <View class="flex-row" {...treePart(() => `row:${props.itemID}:omitted`)}>
+          <TreeBranch mid={CALL_MID} last={false} elided id={`${props.itemID}:omitted`} />
+          <Text class={`min-w-0 flex-1 font-mono text-[11px] leading-[18px] ${TERMINAL_MUTED}`} testID="chat-activity-calls-omitted">
+            {t("chat_activity_calls_omitted", { count: omitted() })}
+          </Text>
+        </View>
       </If>
       <Each of={props.calls} key={(child, index) => `${props.itemID}:activity:child:${entryKey(child, index)}`}>
-        {(child, index) => (
-          <View class="gap-0.5">
-            <View class="flex-row items-start gap-1.5">
-              <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
-                {index() === props.calls.length - 1 ? "└─" : "├─"}
-              </Text>
-              <Text class="font-mono text-xs leading-[18px]" style={{ color: statusTag(normalizeTaskStatus(child()?.status)).color }}>
-                ●
-              </Text>
-              {/* The call and its first value as one text that wraps in the room left, as a
-                  parameter's value does (ParamRow). */}
-              <View
-                class="min-w-0 flex-1"
-                testID="chat-activity-call"
-                {...params.probe(() => `call:${entryTitle(child())}=${activityParams(child())[0]?.value ?? ""}`)}
-              >
-                <Text class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`}>
-                  {entryTitle(child())}
-                  {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
-                  <If when={activityParams(child())[0]?.value}>
-                    {" "}
-                    <TerminalText
-                      text={activityParams(child())[0]?.value ?? ""}
-                      limit={PARAM_LIMIT}
-                      class={TERMINAL_MUTED}
-                      testID="chat-activity-call-value"
-                    />
-                  </If>
-                </Text>
+        {(child, index) => {
+          const pad = () => (index() > 0 || omitted() > 0 ? CALL_GAP : 0);
+          const id = () => `${props.itemID}:${entryKey(child(), index())}`;
+          return (
+            <View class="flex-row" testID="chat-activity-call-row" {...treePart(() => `row:${id()}`)}>
+              <TreeBranch mid={pad() + CALL_MID} last={index() === props.calls.length - 1} id={id()} />
+              <View class="min-w-0 flex-1 gap-0.5" style={{ paddingTop: pad() }} {...treePart(() => `content:${id()}`)}>
+                <View class="flex-row items-start gap-1.5">
+                  <View class="h-[18px] justify-center" {...treePart(() => `mark:${id()}`)}>
+                    <Text class="font-mono text-xs leading-[18px]" style={{ color: statusTag(normalizeTaskStatus(child()?.status)).color }}>
+                      ●
+                    </Text>
+                  </View>
+                  {/* The call and its first value as one text that wraps in the room left, as a
+                      parameter's value does (ParamRow). */}
+                  <View
+                    class="min-w-0 flex-1"
+                    testID="chat-activity-call"
+                    {...params.probe(() => `call:${entryTitle(child())}=${activityParams(child())[0]?.value ?? ""}`)}
+                  >
+                    <Text class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`}>
+                      {entryTitle(child())}
+                      {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
+                      <If when={activityParams(child())[0]?.value}>
+                        {" "}
+                        <TerminalText
+                          text={activityParams(child())[0]?.value ?? ""}
+                          limit={PARAM_LIMIT}
+                          class={TERMINAL_MUTED}
+                          testID="chat-activity-call-value"
+                        />
+                      </If>
+                    </Text>
+                  </View>
+                </View>
+                <If when={child()?.shell}>
+                  <View {...treePart(() => `detail:${id()}`)}>
+                    {/* The line above shows the command's start: one cut there is here whole. */}
+                    <ShellResult shell={child()?.shell} command={clippedCommand(child())} />
+                  </View>
+                </If>
+                <If when={!child()?.shell && child()?.error}>
+                  <View {...treePart(() => `detail:${id()}`)}>
+                    <TerminalText text={String(child()?.error ?? "")} copyOnly class={`font-mono text-xs leading-[18px] ${TERMINAL_ERROR}`} />
+                  </View>
+                </If>
               </View>
             </View>
-            <If when={child()?.shell}>
-              <View class="flex-row gap-1.5">
-                <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
-                  {index() === props.calls.length - 1 ? "  " : "│ "}
-                </Text>
-                <View class="min-w-0 flex-1">
-                  {/* The line above shows the command's start: one cut there is here whole. */}
-                  <ShellResult shell={child()?.shell} command={clippedCommand(child())} />
-                </View>
-              </View>
-            </If>
-            <If when={!child()?.shell && child()?.error}>
-              <View class="flex-row gap-1.5">
-                <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
-                  {index() === props.calls.length - 1 ? "  " : "│ "}
-                </Text>
-                <TerminalText text={String(child()?.error ?? "")} copyOnly class={`min-w-0 flex-1 font-mono text-xs leading-[18px] ${TERMINAL_ERROR}`} />
-              </View>
-            </If>
-          </View>
-        )}
+          );
+        }}
       </Each>
     </View>
   );

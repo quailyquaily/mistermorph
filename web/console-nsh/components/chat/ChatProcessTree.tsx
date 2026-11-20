@@ -14,6 +14,7 @@ import { runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { KindChip, NEON } from "./TerminalText";
 import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_NOTE } from "./ChatTerminal";
+import { TreeBranch, treePart } from "./TreeBranch";
 import { refreshTaskProcesses, watchTaskProcesses, type ProcNode } from "./taskProcesses";
 
 /** How long after a Stop pressed here the last process ending counts as the Stop's doing. */
@@ -135,14 +136,14 @@ export function ChatProcessTree(props: {
                       </Text>
                     </If>
                   </View>
-                  <ProcessRows nodes={group().processes ?? []} prefix="" stopping={stopping()} onStop={stop} />
+                  <ProcessRows nodes={group().processes ?? []} stopping={stopping()} onStop={stop} />
                 </View>
               )}
             </Each>
             <If when={other().length > 0}>
               <View class="gap-1">
                 <Text class={TERMINAL_LABEL}>{t("chat_processes_other")}</Text>
-                <ProcessRows nodes={other()} prefix="" stopping={stopping()} onStop={stop} />
+                <ProcessRows nodes={other()} stopping={stopping()} onStop={stop} />
               </View>
             </If>
             <If when={stopped().length > 0}>
@@ -173,54 +174,63 @@ export function ChatProcessTree(props: {
   );
 }
 
-/** Processes as a tree: `├─`/`└─`, the pid and name, its command, and Stop. */
-function ProcessRows(props: { nodes: ProcNode[]; prefix: string; stopping: Record<number, boolean>; onStop: (pid: number) => void }) {
+/** The middle of a process's header line (the Stop button's 20pt line), from its row's top. */
+const PROCESS_MID = 10;
+/** The room above every row after its parent's first (the row's own: trunks run through it). */
+const ROW_GAP = 2;
+
+/**
+ * Processes as a tree: each row's connector (TreeBranch), the pid and name, its command, and Stop;
+ * its children's rows under it, one level in.
+ */
+export function ProcessRows(props: { nodes: ProcNode[]; stopping: Record<number, boolean>; onStop: (pid: number) => void }) {
   return (
-    <View class="gap-0.5">
+    <View>
       <Each of={props.nodes} key={(node) => `${node.pid}:${node.started_at}`}>
         {(node, index) => {
           const last = () => index() === props.nodes.length - 1;
+          const pad = () => (index() > 0 ? ROW_GAP : 0);
+          const id = () => String(node().pid);
           return (
-            <View class="gap-0.5" testID="chat-process-row">
-              <View class="flex-row items-start gap-1.5">
-                <Text class="font-mono text-xs leading-[18px]" style={{ color: NEON.idle }}>
-                  {`${props.prefix}${last() ? "└─" : "├─"}`}
-                </Text>
-                <View class="min-w-0 flex-1 gap-0.5">
-                  <View class="flex-row flex-wrap items-center gap-2">
+            <View class="flex-row" testID="chat-process-row" {...treePart(() => `row:${id()}`)}>
+              <TreeBranch mid={pad() + PROCESS_MID} last={last()} id={id()} />
+              <View class="min-w-0 flex-1 gap-0.5" style={{ paddingTop: pad() }} {...treePart(() => `content:${id()}`)}>
+                <View class="flex-row flex-wrap items-center gap-2">
+                  {/* The line's height, whatever wraps after the name: the branch points at its middle. */}
+                  <View class="min-h-5 justify-center" {...treePart(() => `mark:${id()}`)}>
                     <Text class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`}>{`${node().pid} ${node().name}`}</Text>
-                    <If when={node().orphan}>
-                      <Text class="font-mono text-[11px]" style={{ color: NEON.orange }} testID="chat-process-orphan">
-                        {t("chat_processes_orphan")}
-                      </Text>
-                    </If>
-                    <Text class="font-mono text-[11px]" style={{ color: NEON.idle }}>
-                      {clock(node().started_at)}
-                    </Text>
-                    <View class="flex-1" />
-                    <BaseButton
-                      onPress={() => props.onStop(node().pid)}
-                      disabled={Boolean(props.stopping[node().pid])}
-                      accessibilityLabel={t("chat_processes_stop_label", { pid: node().pid })}
-                      testID="chat-process-stop"
-                      class="h-5 items-center justify-center rounded-[2px] border px-1.5 hover:bg-white/8"
-                      style={{ borderColor: `${NEON.fail}66` }}
-                    >
-                      <Text class="font-mono text-[10px] leading-[14px]" style={{ color: NEON.fail }}>
-                        {props.stopping[node().pid] ? t("chat_processes_stopping") : t("chat_processes_stop")}
-                      </Text>
-                    </BaseButton>
                   </View>
-                  <If when={node().command}>
-                    <View selectable>
-                      <Text class={`font-mono text-[11px] leading-[16px] ${TERMINAL_MUTED}`}>{node().command}</Text>
-                    </View>
+                  <If when={node().orphan}>
+                    <Text class="font-mono text-[11px]" style={{ color: NEON.orange }} testID="chat-process-orphan">
+                      {t("chat_processes_orphan")}
+                    </Text>
                   </If>
+                  <Text class="font-mono text-[11px]" style={{ color: NEON.idle }}>
+                    {clock(node().started_at)}
+                  </Text>
+                  <View class="flex-1" />
+                  <BaseButton
+                    onPress={() => props.onStop(node().pid)}
+                    disabled={Boolean(props.stopping[node().pid])}
+                    accessibilityLabel={t("chat_processes_stop_label", { pid: node().pid })}
+                    testID="chat-process-stop"
+                    class="h-5 items-center justify-center rounded-[2px] border px-1.5 hover:bg-white/8"
+                    style={{ borderColor: `${NEON.fail}66` }}
+                  >
+                    <Text class="font-mono text-[10px] leading-[14px]" style={{ color: NEON.fail }}>
+                      {props.stopping[node().pid] ? t("chat_processes_stopping") : t("chat_processes_stop")}
+                    </Text>
+                  </BaseButton>
                 </View>
+                <If when={node().command}>
+                  <View selectable testID="chat-process-command" {...treePart(() => `command:${id()}`)}>
+                    <Text class={`font-mono text-[11px] leading-[16px] ${TERMINAL_MUTED}`}>{node().command}</Text>
+                  </View>
+                </If>
+                <If when={(node().children ?? []).length > 0}>
+                  <ProcessRows nodes={node().children ?? []} stopping={props.stopping} onStop={props.onStop} />
+                </If>
               </View>
-              <If when={(node().children ?? []).length > 0}>
-                <ProcessRows nodes={node().children ?? []} prefix={`${props.prefix}${last() ? "   " : "│  "}`} stopping={props.stopping} onStop={props.onStop} />
-              </If>
             </View>
           );
         }}

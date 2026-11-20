@@ -199,6 +199,7 @@ const FILES = {
     group: "chat",
     items: { ChatProcessTree: L("live"), ProcessRows: L("part", "ChatProcessTree") },
   },
+  "components/chat/TreeBranch.tsx": { group: "chat", items: { TreeBranch: C("ActivityCallTree") } },
   "components/chat/ChatWorkerRoster.tsx": {
     group: "chat",
     items: { WorkerAvatar: D(), ChatWorkerRoster: D(), ChatWorkerOutput: D(), WorkerChip: C("ChatWorkerRoster"), Speaker: C("ChatWorkerOutput") },
