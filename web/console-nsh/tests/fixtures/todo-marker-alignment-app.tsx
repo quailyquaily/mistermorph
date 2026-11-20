@@ -2,7 +2,8 @@
 // stand-in page state, as the TODO page lays it out (a 310pt column with the editor 4pt beside it on
 // a desktop, the whole width on a phone), with Heartbeat and items in every marker state (on, off, queued, running) and long
 // titles. The frames its head's last button, markers and titles lie at are read out beside it. The
-// modes along the top: `list` and `empty` (no items yet: the add row in their place).
+// modes along the top: `list` and `empty` (no items yet: the add row in their place). `adds:N`
+// counts the presses of Add (the head's button or the empty list's add row).
 import { batch, mount, signal, Text, View } from "nsh";
 import { isMobile } from "../../lib/shell";
 import { TODO_INDEX_WIDTH, TodoIndex } from "../../components/todo/TodoIndex";
@@ -13,6 +14,7 @@ type Mode = "list" | "empty";
 
 const mode = signal<Mode>("list");
 const frames = signal<Record<string, PartFrame>>({});
+const adds = signal(0);
 
 const LONG = "A very long TODO item title that runs well past the width of the list so it has to wrap and clamp at two lines";
 const task = (id: string, title: string, enabled = true) =>
@@ -25,7 +27,7 @@ const runs: Record<string, TodoRun> = {
 const empty = () => mode() === "empty";
 
 const state = {
-  addTask: () => undefined,
+  addTask: () => adds.update((count) => count + 1),
   toggleTodoView: () => undefined,
   heartbeatDisabled: () => false,
   heartbeatIndexMeta: () => "Every 30 minutes",
@@ -81,6 +83,7 @@ function Page() {
         <ModeButton mode="list" />
         <ModeButton mode="empty" />
         <Text class="text-xs">{mode()}</Text>
+        <Text class="text-xs">{`adds:${adds()}`}</Text>
       </View>
       <Text class="text-[6px]">{JSON.stringify(frames())}</Text>
       <View class="flex-1 flex-row gap-1">
