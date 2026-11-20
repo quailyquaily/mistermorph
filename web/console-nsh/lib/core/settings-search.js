@@ -50,7 +50,6 @@ const HAND_WRITTEN_FIELDS = {
   system: [
     "settings_logs_title",
     "settings_auto_update_card_title",
-    "settings_update_channel_title",
     "settings_update_auto_title",
     "settings_update_shell_title",
     "settings_update_server_title",
