@@ -36,3 +36,13 @@ Checks: nsh check passed; prescribed Console runner passed all 146 files; Androi
 Not checked: real browser UI/IME, physical keyboards, emulator/device, iOS, or APK build. Native detection may count misreporting alphabetic accessories; first boot host call failure is not retried until restart. Review should inspect native state refresh and keyboard classification.
 
 Coder reported an unauthorized tooling-memory append outside the build directory; manager did not access or change that outside file. Board move initially omitted metadata due to a manager script error; this follow-up records the missing header, plan and build results without rewriting history.
+
+
+## factory · review · 2026-11-20 10:54
+head: f39cb23f46c137d2eca18499e2bcd04fb3dd0060
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/ui.tsx:885: the new shared gate only covers bindPaneEscape; SkillsPage.tsx:533 and ContactsPage.tsx:747 still bypass shortcutsEligible(). Verified headless examples: mobile web 390x844, open skill + Escape closes detail; native Android 1280x800 with disconnected/unknown keyboard, Right then Enter opens contact and Escape closes it. Gate both page bindings with the shared policy and add regressions. These are limited navigation defects, not P0/P1; factory pass does not mean no findings.
+- Configured gofmt/vet/Go tests passed. nsh check passed; prescribed Console test runner passed all 146 files after its automatic solo retries of six initially failing files. Node library tests 280/280 and Android manifest tests 11/11 passed. No installs or manifest changes; worktree remained clean.
+- Android JVM/SDK compilation not rerun: Java/JDK unavailable to this reviewer. No device/emulator/browser UI/IME/physical keyboard or APK verification. Headless stubs cover state updates; device classification and boot-time event ordering remain unverified.
+- Reviewed origin/master...HEAD, all 30 changed files, with Claude Code. No P0/P1 findings; moved to ready per factory policy. Owner should inspect the P2 shortcut bypass before shipping.
