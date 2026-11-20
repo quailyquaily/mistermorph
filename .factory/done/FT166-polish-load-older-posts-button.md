@@ -54,3 +54,6 @@ notes:
 - No new screenshots or native-device checks. Owner should inspect the full Console on pinned runtime: focus/pressed appearance, mobile/safe-area behavior and wrapping. Build screenshots used older 0.5.1 web runtime. Wide touch windows above 980pt use the planned desktop 38pt size rather than the mobile 44pt size.
 - Coder commands used run-scoped temporary directories; Claude's own harness reported writing background-task output outside the run directory. Those shared temporary paths were not deleted.
 Moved from `review/` to `ready/`.
+
+## factory · 2026-11-20 20:34
+Shipped: merged into master as 5d17fcd32c62ef15983b9254514552270c26c435, tagged v0.3.123 and pushed. Merged master passed nsh check, the Console scripts/test.sh (152 files, 0 failed) and the test command (gofmt, go vet, go test: 166 packages). No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

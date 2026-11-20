@@ -56,3 +56,6 @@ Validation by Claude Code: required gofmt check, go vet ./... and go test ./... 
 Residual risks: full Settings page, desktop app and physical mobile devices not visually checked; mobile software keyboard layout unverified. Keyboard-trigger focus restoration not verified in a real browser and not reported as an introduced defect. Focused-field Escape and desktop backdrop rely on builder's earlier 0.5.1 runtime fixture check. Core Node and Android JVM suites not rerun in this review.
 
 Moved review/ → ready/. Owner should inspect the P2 read-only visibility regression and P3 whitespace validation discrepancy before shipping.
+
+## factory · 2026-11-20 20:34
+Shipped: merged into master as 79fa78f16e8a3f3ef4db1dc09fd7fa017d4d203a, tagged v0.3.123 and pushed. Merged master passed nsh check, the Console scripts/test.sh (152 files, 0 failed) and the test command (gofmt, go vet, go test: 166 packages). No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

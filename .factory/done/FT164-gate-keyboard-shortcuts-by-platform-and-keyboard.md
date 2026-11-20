@@ -46,3 +46,6 @@ notes:
 - Configured gofmt/vet/Go tests passed. nsh check passed; prescribed Console test runner passed all 146 files after its automatic solo retries of six initially failing files. Node library tests 280/280 and Android manifest tests 11/11 passed. No installs or manifest changes; worktree remained clean.
 - Android JVM/SDK compilation not rerun: Java/JDK unavailable to this reviewer. No device/emulator/browser UI/IME/physical keyboard or APK verification. Headless stubs cover state updates; device classification and boot-time event ordering remain unverified.
 - Reviewed origin/master...HEAD, all 30 changed files, with Claude Code. No P0/P1 findings; moved to ready per factory policy. Owner should inspect the P2 shortcut bypass before shipping.
+
+## factory · 2026-11-20 20:34
+Shipped: merged into master as 9d82e81d56282d90917948e433435d73f05d4006, tagged v0.3.123 and pushed. Merged master passed nsh check, the Console scripts/test.sh (152 files, 0 failed) and the test command (gofmt, go vet, go test: 166 packages). No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

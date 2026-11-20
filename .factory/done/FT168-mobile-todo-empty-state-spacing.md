@@ -47,3 +47,6 @@ Validation: configured gofmt/vet/go test gate passed (166 packages); nsh check p
 Residual checks: no independent screenshot/pixel validation; nsh 0.6.0 web runtime is unavailable and headless nsh screenshots rendered blank. Real Android/desktop app, real fonts, dark theme, dashed-border appearance and long non-English text were not checked. Owner should inspect the mobile empty state in the actual Console. No security-sensitive behavior changed.
 
 Moved review/ → ready/.
+
+## factory · 2026-11-20 20:34
+Shipped: merged into master as ef37c15fbbc137fb6bac1d017f746729a51520f5, tagged v0.3.123 and pushed. Merged master passed nsh check, the Console scripts/test.sh (152 files, 0 failed) and the test command (gofmt, go vet, go test: 166 packages). No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).
