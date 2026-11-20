@@ -42,3 +42,15 @@ Installs: none.
 Tests: required gofmt/vet/go test command passed, independently rerun by manager. nsh check passed (nsh 0.6.0). Required parallel Console runner final run: 149 files, 0 failed, inventory gate passed; eight parallel failures passed solo retries. Initial run failed the missing SkillStoreSheet inventory entry, which was fixed before the passing rerun. New drawer tests: 20/20; removing SidePane fix causes 8 failures.
 
 Verification limits: UI changed but not visually inspected in a browser or native device/emulator. Insets/navigation modes/cutouts/landscape simulated in headless tests, not device verified. No actual Settings/channel/Audit/Skill Store content walkthrough. Software keyboard handling arithmetic/source inspection only; no real keyboard check. iOS runtime unavailable on Linux, no iOS build/device verification. Live inset rotation unavailable in headless engine; separate launches tested landscape values. Owner/reviewer should inspect drawer close/header, scrolling and bottom actions on real pages, Android keyboard behavior, and iOS portrait/landscape.
+
+## factory · review · 2026-11-20 11:09
+head: 4951f19ef76fc95ae58216d1efdef59e3b8bff01
+verdict: pass
+notes:
+- [P3] web/console-nsh/PORTING.md:480: correct the new claim that nsh lifts these drawers above the iOS keyboard (also lib/systemInsets.ts:126 and lib/shell.ts:171). Their h-full overrides the Sheet bottom offset, leaving the drawer full-height. Verified headless example: top-0 right-0 h-full with bottom:100 inside a 400pt parent remains height 400; without h-full it becomes 300. This is pre-existing runtime behavior, not an introduced keyboard regression; the newly added explanation is incorrect.
+
+Scope: Claude Code reviewed all ten changed files in origin/master...HEAD against the request and plan. No P0/P1/P2 findings. Worktree remained clean; head unchanged. Native source confirms Android modal root subtracts IME height and iOS modal root remains full-screen. Drawer consumers have no duplicate safe-area owners.
+
+Validation: gofmt check, go vet ./..., and go test ./... all exited 0 (166 packages, no failures). nsh check 0.6.0 exited 0. Required parallel Console scripts/test.sh exited 0: 149 files, 0 failed, 251 seconds, no solo retries. All scripted tests used a throwaway HOME and temporary/cache paths in the review run's temporary folder. Installs: none; reused pinned cached dependencies.
+
+Residual risks: no browser visual walkthrough, device/emulator, Android build or iOS runtime verification. Headless engine does not show a software keyboard. Rotation coverage retains portrait insets; browser-labelled regression cases use linux, not the actual web runtime. Android keyboardFrame may report zero while a modal owns the IME, leaving a small navigation-inset gap above the keyboard. iOS pre-existing full-height drawers can extend under the keyboard; native focused-input avoidance was not verified. Owner should check actual Settings/channel/Audit/Skill Store headers, close controls, scrolling and bottom actions, portrait/landscape cutouts, and keyboard/navigation modes before shipping.
