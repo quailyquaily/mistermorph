@@ -41,3 +41,15 @@ Checking: manager independently ran gofmt cleanliness, go vet ./..., and go test
 Visual checks: coder inspected headless Chrome screenshots at 1280×800 and 390×844 with mocked API and simulated phone boot, using available nsh 0.5.1 web runtime (0.6 web runtime unavailable). Not visually checked: real GPUI desktop, actual Android device, surrounding full Settings page, or zh/ja layouts. Review should inspect these limitations and shared notes/download presentation.
 
 Moved new/ → review/. Code branch pushed; no base merge or tag. Initial code push lacked repository credential path; retried successfully with command-local credential.useHttpPath=true.
+
+## factory · review · 2026-11-20 09:31
+head: 3741ead2a6872fdc97706d409bf67e9fae60bb40
+verdict: pass
+notes:
+- No qualifying defects found; no P0/P1. Reviewed all eight changed files against the request and plan with Claude Code, using the review-code skill.
+- Community checks on an installed Pro build can offer a channel switch even at the same version. This is the explicitly planned community-only behavior, not a defect against this request; the coder's proposed P3 was excluded for that reason. Owner should confirm whether existing Pro installations still matter.
+- Validation passed: gofmt cleanliness, go vet ./..., go test ./... (165 packages ok); nsh check (0.6.0); required Console scripts/test.sh (145 files, 0 failed; seven unrelated parallel failures passed the script's solo retries); extra JavaScript tests (280 passed).
+- Installs: none. Worktree remained clean; no code commits.
+- Visual limits remain: no real GPUI desktop, Android device, full Settings page or zh/ja visual checks. Frame-probe layout tests passed. On Pro desktop with automatic updates enabled, checks can cache a Community package via existing host behavior; no install occurs, and this path was inspected but not executed.
+
+Moved review/ → ready/. No base merge, tag or code push.
