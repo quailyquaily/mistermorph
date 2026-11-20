@@ -48,3 +48,14 @@ Visual checks: coder used existing Chrome with nsh 0.5.1 web runtime at 320, 390
 Not checked: actual camera/permission prompts and real QR codes on devices; Android BarcodeDetector availability and APK build; iOS device behavior (WKWebView lacks BarcodeDetector, expected unsupported); live camera preview appearance; nsh 0.6 web-runtime rendering; dark mode and rendered zh/ja layout. Owner/reviewer should check real Android QR success and camera cleanup, and assess the iOS unsupported limitation.
 
 Installs: none (existing Chrome, playwright-core and runtime reused; no dependency manifest or lockfile changes). Branch pushed; not merged or shipped. Initial branch credential-helper request needed a command-scoped credential.useHttpPath=true retry, which succeeded.
+
+## factory · review · 2026-11-21 08:56
+head: 83ce7dd1dc23bf04ef3b2be6cf98fab430775783
+verdict: pass
+notes:
+- Claude Code reviewed all 20 changed files in origin/master...HEAD against the request and plan, including security-sensitive endpoint handling, camera permissions, WebView messaging and lifecycle. No qualifying findings; worktree stayed clean and no commits were made.
+- Required gofmt + go vet ./... + go test ./... gate passed. nsh 0.6.0 check passed. Required Console scripts/test.sh passed (155 files, zero final failures); mobile-popup.test.tsx passed its prescribed solo retry after a parallel failure. Scanner-page tests passed 10/10, Android manifest tests 12/12, all lib Node tests 313/313.
+- Installs: none. Existing cached TypeScript toolchain reused in throwaway HOME.
+- Not checked on real devices: camera preview, permission prompt, real QR decoding, camera cleanup and page visibility during the permission prompt. No APK build (JDK unavailable). Android requires BarcodeDetector availability; iOS WKWebView is expected to show unsupported and keep manual entry only. Owner should verify Android QR success and cleanup and accept the iOS limitation before shipping.
+- Visual limits: dark mode, zh/ja rendering and nsh 0.6 web-runtime pixels not checked in review. URL edge-case probe used Node URL rather than the app engine.
+- No linked GitHub issue or PR was identified in this item, so no review comments were posted. Moved review/ → ready/; not merged or shipped.
