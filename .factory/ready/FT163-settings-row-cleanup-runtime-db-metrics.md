@@ -40,3 +40,17 @@ Tests: manager independently passed Go formatting check, go vet ./..., go test .
 Visual checks: headless Chrome real components with stub data at 1280/390 touch widths, using available 0.5.1 web runtime rather than repository 0.6.0. Full running Settings page, desktop GPUI and Android NOT visually checked; owner should inspect those platforms and metric labels.
 
 Push: initial credential helper lacked repository-path context; retried successfully with command-local GH_REPO and credential.useHttpPath=true. Branch pushed; new/ → review/, round 1. No deployment.
+
+## factory · review · 2026-11-20 10:07
+head: 7377fb6d7593b2e83146f6e687bd90cf3fcbaf3a
+verdict: pass
+notes:
+- [P3] internal/dbmetrics/dbmetrics.go:187: A request cancelled during count caches unavailable/unknown rows for healthy databases for up to 30 seconds. Avoid caching cancellation/timeouts, or detach counts from request cancellation while retaining their budget. Verified probe: memory.db with 2 rows, cancellation as counting starts -> unavailable and nil rows; a fresh request 10 seconds later still unavailable; at 35 seconds status=ok and rows=2.
+
+Review: Claude Code inspected all 12 changed files on origin/master...HEAD. No P0/P1 findings. Manager checked clean worktree, item-only commits, no never-path changes and clean merge with base. No branch changes or installs.
+
+Validation (coder): formatting, go vet ./... and go test ./... passed (166 packages); nsh check passed; required parallel Console scripts/test.sh passed, 145 files, 0 failures (303 seconds). No sequential duplicate suite. Scratch probes checked cancellation caching, count interruption and aggregate counting cost.
+
+Residual risks: a very large/slow journal can exhaust the shared budget ahead of memory/usage counts; reproduced only with budget reduced to 20ms, not at production 1.5s. Cold-disk timings unmeasured. No pixel check on desktop web, mobile web, desktop GPUI or Android; nsh 0.6.0 web runtime/JDK unavailable. Owner should inspect rounded Advanced row and database metric labels on those platforms. Layout/state/interaction regression tests passed.
+
+Move: review/ → ready/. No linked issue or PR found in source/header or owner sections; no GitHub comments required.
