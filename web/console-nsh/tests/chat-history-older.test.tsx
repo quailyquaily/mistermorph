@@ -114,17 +114,29 @@ function rowReport(app: App): RowReport {
   return JSON.parse(app.texts().find((text) => text.startsWith('{"frames"')) ?? "{}") as RowReport;
 }
 
+const LONG_LABEL = "Load the older messages of this conversation from the history store";
+
 for (const screen of [
-  { name: "desktop", width: 1000, platform: "linux" as const },
-  { name: "phone", width: 390, platform: "android" as const },
+  // The button's height: the console's 38pt command beside a pointer, the whole 44pt row on a phone.
+  { name: "desktop", width: 1000, platform: "linux" as const, button: 38 },
+  { name: "phone", width: 390, platform: "android" as const, button: 44 },
+  { name: "small phone", width: 320, platform: "android" as const, button: 44 },
 ]) {
-  test(`${screen.name}: the row spans the conversation's column, its button and rules on one centre line, the same idle and loading`, async () => {
+  const openRow = async () => {
     const app = await open("./fixtures/chat-history-older-app.tsx", { width: screen.width, height: 600, platform: screen.platform, locale: "en-US" });
     await app.waitUntil(() => Boolean(rowReport(app).frames?.["rule-end"]));
+    return app;
+  };
+
+  test(`${screen.name}: the row spans the conversation's column, its button and rules on one centre line, the same idle and loading`, async () => {
+    const app = await openRow();
     const idle = rowReport(app).frames;
     // The messages' column: at most 832pt, inside the 20pt gutters.
     expect(idle.row.w).toBe(Math.min(832, screen.width - 40));
     expect(idle.row.h).toBe(44);
+    // The button itself is the target: a phone's is the row's whole height, no slop lent to it.
+    expect(idle.button.h).toBe(screen.button);
+    expect(idle.button.w).toBeGreaterThanOrEqual(44);
     const centre = idle.row.h / 2;
     expect(Math.abs(idle.button.y + idle.button.h / 2 - centre)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(idle.button.x + idle.button.w / 2 - idle.row.w / 2)).toBeLessThanOrEqual(0.5);
@@ -134,15 +146,80 @@ for (const screen of [
     }
     expect(idle["rule-start"].x).toBe(0);
     expect(idle["rule-end"].x + idle["rule-end"].w).toBe(idle.row.w);
+    // The same room between each rule and the button.
+    const gapStart = idle.button.x - (idle["rule-start"].x + idle["rule-start"].w);
+    const gapEnd = idle["rule-end"].x - (idle.button.x + idle.button.w);
+    expect(gapStart).toBe(8);
+    expect(Math.abs(gapEnd - gapStart)).toBeLessThanOrEqual(1);
     // Loading: nothing moves, it says so, and presses do nothing.
+    expect(app.shows("role:button[Loading older messages...]")).toBe(false);
     await app.press("role:button[Load older messages]");
     expect(rowReport(app).presses).toBe(1);
     await app.press("id:do-loading");
     await app.waitFor("role:button[Loading older messages...]");
+    await app.waitFor("id:chat-history-load-older-loading");
+    expect(app.shows("role:button[Load older messages]")).toBe(false);
     await app.press("id:chat-history-load-older").catch(() => {});
     const busy = rowReport(app);
     expect(busy.loading).toBe(true);
     expect(busy.presses).toBe(1);
     expect(busy.frames).toEqual(idle);
+    // Idle again (a page landed, or failed to: the retry), it takes presses as before, where it was.
+    await app.press("id:do-loading");
+    await app.waitFor("role:button[Load older messages]");
+    await app.waitFor("id:chat-history-load-older-loading", { state: "gone" });
+    await app.press("role:button[Load older messages]");
+    expect(rowReport(app).presses).toBe(2);
+    expect(rowReport(app).frames).toEqual(idle);
+  });
+
+  test(`${screen.name}: a label too long for one line stays in the column, whole`, async () => {
+    const app = await openRow();
+    const short = rowReport(app).frames;
+    await app.press("id:do-long");
+    await app.waitUntil(() => rowReport(app).frames.button.w !== short.button.w);
+    const long = rowReport(app).frames;
+    expect(app.shows(`role:button[${LONG_LABEL}]`)).toBe(true);
+    // Inside the column, a stub of each rule kept beside it, all on one centre line.
+    expect(long.row.w).toBe(short.row.w);
+    expect(long["rule-start"].x).toBe(0);
+    expect(long["rule-start"].w).toBeGreaterThanOrEqual(16);
+    expect(long["rule-end"].w).toBeGreaterThanOrEqual(16);
+    expect(long["rule-end"].x + long["rule-end"].w).toBe(long.row.w);
+    expect(long.button.x).toBeGreaterThanOrEqual(long["rule-start"].w);
+    expect(long.button.x + long.button.w).toBeLessThanOrEqual(long["rule-end"].x);
+    expect(Math.abs(long.button.y + long.button.h / 2 - long.row.h / 2)).toBeLessThanOrEqual(0.5);
+    for (const rule of [long["rule-start"], long["rule-end"]]) expect(Math.abs(rule.y + rule.h / 2 - long.row.h / 2)).toBeLessThanOrEqual(0.5);
+    if (long.button.w < short.row.w - 100) {
+      // Room for it on one line: the row as it was.
+      expect(long.row.h).toBe(44);
+      expect(long.button.h).toBe(screen.button);
+    } else {
+      // It wraps, and the button and the row grow with its lines.
+      expect(long.button.h).toBeGreaterThan(screen.button);
+      expect(long.row.h).toBe(long.button.h);
+    }
+    // Still one command.
+    await app.press(`role:button[${LONG_LABEL}]`);
+    expect(rowReport(app).presses).toBe(1);
   });
 }
+
+test("the keyboard reaches the button and presses it; loading, it takes no key", async () => {
+  const app = await open("./fixtures/chat-history-older-app.tsx", { width: 1000, height: 600, platform: "linux", locale: "en-US" });
+  await app.waitUntil(() => Boolean(rowReport(app).frames?.["rule-end"]));
+  // Third in the Tab order, after the fixture's two switches.
+  for (let i = 0; i < 3; i++) await app.keyboard.press("tab");
+  await app.keyboard.press("enter");
+  await app.waitUntil(() => rowReport(app).presses === 1);
+  expect(rowReport(app).loading).toBe(false);
+  await app.keyboard.press("space");
+  await app.waitUntil(() => rowReport(app).presses === 2);
+  await app.press("id:do-loading");
+  await app.waitFor("role:button[Loading older messages...]");
+  await app.keyboard.press("enter");
+  await app.keyboard.press("space");
+  await app.wait(100);
+  expect(rowReport(app).presses).toBe(2);
+  expect(rowReport(app).loading).toBe(true);
+});
