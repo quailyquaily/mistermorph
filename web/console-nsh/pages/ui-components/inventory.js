@@ -101,6 +101,7 @@ const FILES = {
       SidePane: D("overlays"),
       SidePaneColumn: C("SidePane", "overlays"),
       Fab: D(),
+      FabMark: C("Fab"),
     },
   },
   "components/LanguageSelector.tsx": { group: "controls", items: { LanguageSelector: D() } },
