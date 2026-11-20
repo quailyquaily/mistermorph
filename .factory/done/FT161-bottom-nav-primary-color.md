@@ -50,3 +50,6 @@ notes:
 - Installs: none; no manifest changes. Worktree clean at reviewed head.
 - Limits: no rendered visual comparison, browser/native screenshots or device checks. Headless tests assert tint-bearing IDs sharing the color helper rather than rendered pixels; changing color independently of the ID could escape those tests. Agent-sheet open/close is covered, not selecting another agent.
 - Moved review/ → ready/. No merge or release performed.
+
+## factory · 2026-11-20 10:25
+Shipped: merged into master as 8bfb0dd682b85682b6ea2fd87cb13d9a82ef9987, tagged v0.3.122 and pushed. No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

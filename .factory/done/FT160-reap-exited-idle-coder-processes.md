@@ -60,3 +60,6 @@ notes:
 Review scope: origin/master...44cca346; all 12 changed files and lifecycle callers. Claude Code review only; clean worktree, no code commits. No P0/P1 findings.
 Validation by reviewer: gofmt cleanliness, go vet ./..., go test ./..., go test -race ./internal/codersessions, repeated race lifecycle tests, and race checks for proctrack/taskruntime PASS. Seven new regression tests failed on base in scratch reproduction. Cross-vet darwin/freebsd/openbsd/windows amd64/arm64 PASS; netbsd/dragonfly package vet blocked by sqlite dependency, isolated new-file type checks passed. Installs: none.
 Limits: no live Console UI Stop against real CLIs; non-Linux runtime not exercised. Each live process uses an OS thread in blocking waitid/kevent. Passed under factory policy (no P0/P1), with the two verified low-priority defects above retained for owner review. No ship or deployment.
+
+## factory · 2026-11-20 10:25
+Shipped: merged into master as ecaed1a61dbdadbe82e127a2dee55e805ca5fa8f, tagged v0.3.122 and pushed. No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

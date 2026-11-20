@@ -48,3 +48,6 @@ notes:
 - Validation passed: gofmt cleanliness, go vet ./..., go test ./... (165 packages), nsh check (0.6.0), and the required parallel Console test runner (145 files, 0 final failures, 326s) plus inventory gate. chat-new-topic-nav, settings-page and dialog-sheet initially failed in parallel and passed on the required isolated retry; no base comparison performed. Fab regressions passed 10/10.
 - Review did not perform independent visual/pixel checks. Geometry was checked numerically against the prototype. Build-stage Chrome checks used the older 0.5.1 runtime; actual nsh 0.6.0 rendering, real zoom/devices, desktop output, Safari/Firefox and a distinct dark theme remain unchecked. Fractional-DPR outer-edge antialias clipping remains unverified, not a confirmed defect. Original split was not reproduced.
 - Moved review/ → ready/. Owner should inspect the two marks visually on target runtimes before shipping. No linked GitHub issues or PRs.
+
+## factory · 2026-11-20 10:25
+Shipped: merged into master as 7e401f1a484fce3049f078558860160cd46f8157, tagged v0.3.122 and pushed. No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

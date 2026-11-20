@@ -54,3 +54,6 @@ Validation (coder): formatting, go vet ./... and go test ./... passed (166 packa
 Residual risks: a very large/slow journal can exhaust the shared budget ahead of memory/usage counts; reproduced only with budget reduced to 20ms, not at production 1.5s. Cold-disk timings unmeasured. No pixel check on desktop web, mobile web, desktop GPUI or Android; nsh 0.6.0 web runtime/JDK unavailable. Owner should inspect rounded Advanced row and database metric labels on those platforms. Layout/state/interaction regression tests passed.
 
 Move: review/ → ready/. No linked issue or PR found in source/header or owner sections; no GitHub comments required.
+
+## factory · 2026-11-20 10:25
+Shipped: merged into master as 15ff4444128eeb60bf2ef5f400499b3e46c870b3, tagged v0.3.122 and pushed. No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

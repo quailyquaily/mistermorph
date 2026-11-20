@@ -70,3 +70,6 @@ notes:
 - No unpinned installs or manifest changes. Review worktree clean; no code commits.
 - No screenshots or live desktop/mobile web, GPUI desktop or Android device/emulator checks; no separate dark-mode visual check. Headless geometry covers Linux widths 700/320 and Android 360. Native dashed-stroke appearance and subpixel branch alignment remain visually unverified.
 - Moved review/ → ready/. No linked issue or PR in the item.
+
+## factory · 2026-11-20 10:25
+Shipped: merged into master as 445596ca5dc15c881ae573d8cec9182bed8c408f, tagged v0.3.122 and pushed. No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

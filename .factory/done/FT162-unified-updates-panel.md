@@ -53,3 +53,6 @@ notes:
 - Visual limits remain: no real GPUI desktop, Android device, full Settings page or zh/ja visual checks. Frame-probe layout tests passed. On Pro desktop with automatic updates enabled, checks can cache a Community package via existing host behavior; no install occurs, and this path was inspected but not executed.
 
 Moved review/ → ready/. No base merge, tag or code push.
+
+## factory · 2026-11-20 10:25
+Shipped: merged into master as 762264721e7f6bcb77a51bfa999617c717fc9d6f, tagged v0.3.122 and pushed. No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).

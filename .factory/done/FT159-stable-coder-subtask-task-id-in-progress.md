@@ -45,3 +45,6 @@ notes:
 - No P0, P1, P2 or P3 findings. Claude Code reviewed all four changed files against origin/master...HEAD; confirmed activity-less polls re-normalize camelCase entries and the fix preserves each entry identity without cross-subtask carryover.
 - Validation: configured gofmt/vet/go test gate passed (exit 0); nsh 0.6.0 check passed; required Console scripts/test.sh passed 146 files, 0 failed, no retries; Node core tests passed 282 tests. New core regressions fail against base (22 pass, 2 fail); new polling UI regression fails against base with missing sub_a/sub_b IDs. Worktree unchanged.
 - Installs: none. No real coder-backed session, desktop or Android visual verification; no JDK for Android JVM checks. Browser sample figures from build were not independently reproduced; stream/poll interleaving is covered through activity-bearing and activity-less polls, not live WebSocket traffic.
+
+## factory · 2026-11-20 10:25
+Shipped: merged into master as 72e77ea6b57a085c6c793b133586f07824958d77, tagged v0.3.122 and pushed. No linked GitHub issues or PRs to close. Branch kept (the ship does not delete branches here).
