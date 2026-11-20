@@ -35,3 +35,15 @@ Tests: nsh check passed; focused layout tests 10 passed; required scripts/test.s
 Visual checks: coder checked real TodoIndex fixture in headless Chrome at 320/390/1280; mobile border inset 12pt, desktop 16pt, no clipping. Visual fixture used nsh 0.5.1 web runtime because installed 0.6.0 has none; fonts were fallback sans. Full Console with backend, real Android, desktop app, real fonts, dark theme, non-English strings and before/after pixel diff were not checked. Owner should inspect mobile empty-state appearance in the actual Console.
 
 Moved new/ → review/. Initial branch push needed command-local credential.useHttpPath=true; retry succeeded.
+
+## factory · review · 2026-11-20 15:32
+head: 6c1c98aca6499227c9cccf6da92098e456bf1026
+verdict: pass
+
+Reviewed origin/master...HEAD with Claude Code across all three changed files. No qualifying findings. The reported 2pt difference between the mobile border gutter and section-label inset follows the accepted gutterX plan and is not a defect.
+
+Validation: configured gofmt/vet/go test gate passed (166 packages); nsh check passed using repository-pinned nsh 0.6.0; required scripts/test.sh passed all 148 files in 366s, including six parallel failures that passed the script's isolated retry. Focused TODO layout tests passed 10/10, covering 320/390/800/1280 widths, empty-border gutters, text bounds, marker alignment, populated rows and add action. A base comparison failed four tests because base lacks the added probes; this is not a measured before/after regression proof. No unpinned installs, source edits or commits. Worktree clean and reviewed remote branch head unchanged.
+
+Residual checks: no independent screenshot/pixel validation; nsh 0.6.0 web runtime is unavailable and headless nsh screenshots rendered blank. Real Android/desktop app, real fonts, dark theme, dashed-border appearance and long non-English text were not checked. Owner should inspect the mobile empty state in the actual Console. No security-sensitive behavior changed.
+
+Moved review/ → ready/.
