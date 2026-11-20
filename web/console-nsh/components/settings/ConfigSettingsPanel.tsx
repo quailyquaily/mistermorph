@@ -15,6 +15,7 @@ import { useRevealRow } from "../settings-page/reveal";
 import { LoadingLine, RestartTag, SettingSwitch, SettingsCard } from "../settings-page/parts";
 import { EnvManagedField } from "./EnvManagedField";
 import { SecretInput } from "./SecretInput";
+import { jsonTextError, SettingJson } from "./SettingJson";
 import {
   SettingBytes,
   SettingChoices,
@@ -313,6 +314,10 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
 
   const restartTag = () => <RestartTag />;
 
+  // What the panel's Save asks of a json field (config-fields.js: it must parse), asked when its
+  // dialog applies, so a draft that could not be saved never reaches the panel.
+  const jsonError = (field: ConfigField) => (text: string) => jsonTextError(text, field.label || field.path);
+
   const editor = (field: ConfigField, group: ConfigGroup) => (
     <If when={environmentManaged(field) && !field.secret} else={typedEditor(field, group)}>
       <EnvManagedField name={environmentManagedName(field)} />
@@ -347,7 +352,17 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
             addLabel={field.addLabel || "Add"}
             disabled={disabled()}
             onChange={set}
-            fallback={<TextField value={text()} multiline rows={7} mono disabled={disabled()} onChange={set} />}
+            fallback={
+              <SettingJson
+                value={text()}
+                name={field.label || field.path}
+                note="This value cannot be shown as rows. Edit it as JSON."
+                disabled={disabled()}
+                validate={jsonError(field)}
+                onChange={set}
+                testID={`setting-${field.path}-json`}
+              />
+            }
           />
         );
     }
@@ -380,13 +395,12 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
         />
       );
     }
-    if (field.type === "string_list" || field.type === "json") {
+    if (field.type === "string_list") {
       return (
         <TextField
           value={text()}
           multiline
-          rows={field.type === "json" ? 7 : 4}
-          mono={field.type === "json"}
+          rows={4}
           placeholder={field.placeholder || ""}
           disabled={disabled()}
           accessibilityLabel={field.label}
@@ -454,38 +468,74 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
     );
   };
 
+  // Where a field's value comes from when the settings do not own it, and Clear for one that can
+  // go back to its default.
+  const sourceRow = (field: ConfigField) => (
+    <If when={sourceLabel(field) || showClear(field)}>
+      <View class="min-h-6 flex-row items-center justify-between gap-3">
+        <Text class="flex-1 text-xs text-muted-foreground">{sourceLabel(field)}</Text>
+        <If when={showClear(field)}>
+          <Button
+            variant="plain"
+            size="xs"
+            label="Clear"
+            disabled={props.loading || props.saving}
+            onPress={() => resetField(field)}
+            testID={`setting-${field.path}-clear`}
+          />
+        </If>
+      </View>
+    </If>
+  );
+
+  // A raw JSON field's row: its label and notes at the left, the button that opens its editor at the
+  // right. The value stays out of the row; the dialog's Apply changes the panel's draft, and the
+  // panel's Save sends it as any other field.
+  const jsonRow = (field: ConfigField, group: ConfigGroup) => (
+    <SettingJson
+      class="col-span-full"
+      value={String(draft()[field.path] ?? "")}
+      label={field.label || field.path}
+      labelRight={restartRequired(field) ? restartTag() : undefined}
+      note={fieldInactive(field) ? dependencyNote(field) : field.note}
+      noteItalic={fieldInactive(field)}
+      below={sourceRow(field)}
+      inactive={fieldInactive(field)}
+      disabled={fieldDisabled(field, group)}
+      placeholder={field.placeholder || ""}
+      validate={jsonError(field)}
+      onChange={(next) => updateField(field, next)}
+      testID={`setting-${field.path}`}
+    />
+  );
+
   const fieldView = (field: ConfigField, group: ConfigGroup) => {
     const wide = () => Boolean(field.wide || field.type === "json" || field.type === "string_list" || field.type === "bool");
+    // A json field with no editor of its own (rows) is edited as raw JSON.
+    const rawJson = field.type === "json" && !field.editor;
     return (
       <If
         when={field.type === "bool" && !environmentManaged(field)}
         else={
-          <SettingField
-            label={field.label}
-            labelRight={restartRequired(field) ? restartTag() : undefined}
-            wide={wide()}
-            inactive={fieldInactive(field)}
-            note={fieldInactive(field) ? dependencyNote(field) : field.note}
-            noteItalic={fieldInactive(field)}
-            testID={`setting-${field.path}`}
+          <If
+            when={rawJson && !environmentManaged(field)}
+            else={
+              <SettingField
+                label={field.label}
+                labelRight={restartRequired(field) ? restartTag() : undefined}
+                wide={wide()}
+                inactive={fieldInactive(field)}
+                note={fieldInactive(field) ? dependencyNote(field) : field.note}
+                noteItalic={fieldInactive(field)}
+                testID={`setting-${field.path}`}
+              >
+                {editor(field, group)}
+                {sourceRow(field)}
+              </SettingField>
+            }
           >
-            {editor(field, group)}
-            <If when={sourceLabel(field) || showClear(field)}>
-              <View class="min-h-6 flex-row items-center justify-between gap-3">
-                <Text class="flex-1 text-xs text-muted-foreground">{sourceLabel(field)}</Text>
-                <If when={showClear(field)}>
-                  <Button
-                    variant="plain"
-                    size="xs"
-                    label="Clear"
-                    disabled={props.loading || props.saving}
-                    onPress={() => resetField(field)}
-                    testID={`setting-${field.path}-clear`}
-                  />
-                </If>
-              </View>
-            </If>
-          </SettingField>
+            {jsonRow(field, group)}
+          </If>
         }
       >
         <ToggleRow field={field} group={group} />

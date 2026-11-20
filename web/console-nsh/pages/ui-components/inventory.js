@@ -311,6 +311,7 @@ const FILES = {
     },
   },
   "components/settings/SettingDialog.tsx": { group: "overlays", items: { SettingDialog: C("DialogShell") } },
+  "components/settings/SettingJson.tsx": { group: "settings", items: { SettingJson: C("SettingRows") } },
   "components/settings/SettingFields.tsx": {
     group: "settings",
     items: {
