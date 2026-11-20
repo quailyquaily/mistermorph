@@ -208,8 +208,17 @@ Not available in the Android app yet: attaching files other than images, other s
 
 ## Shell and Server Versions
 
-Settings → System → Updates shows two versions, each from its own source and with its own update
-check. Neither ever stands in for the other: a version that cannot be read is shown as Unknown.
+Settings → System → Updates shows two versions in one list, each from its own source and with its
+own update check. Neither ever stands in for the other: a version that cannot be read is shown as
+Unknown. Each row names its component, the installed version and, after a check, what is available.
+
+One **Check for updates** button runs every check there is, side by side. Each ends for itself: a
+failed check says so in its own row and leaves the other's answer. The card offers no release
+channel to pick: its checks read the Community release (`channel=community`), whatever channel the
+server's settings hold, and save nothing. The release notes of what the checks found are one list
+below both rows; components that found the same release with the same notes share one entry, named
+for both. A download stays its component's own, under that component's row, and is only ever opened
+by pressing it: checking installs and restarts nothing.
 
 - **Shell version**: the installed app the Console runs in (its shell), as that app was built. The
   host reports it in its boot data (`lib/platform.ts` `shellInfo()`): the desktop app as

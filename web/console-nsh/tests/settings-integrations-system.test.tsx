@@ -86,16 +86,18 @@ test("Updates: shows the version, finds a release, opens this device's download 
       },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
+  await app.waitFor("Installed: v0.9.0");
   expect(app.texts()).toContain("Not checked yet");
   expect(app.shows("id:settings-update-server-download")).toBe(false);
-  await app.press("id:settings-update-server-check");
-  await app.waitFor("v1.0.0 is available.");
+  await app.press("id:settings-update-check");
+  await app.waitFor("Available: v1.0.0");
   const check = calls.find((call) => call.path === "/settings/auto-update/check");
   expect(check?.query.get("channel")).toBe("community");
   expect(check?.query.get("download_os")).toBe("darwin");
   expect(check?.query.get("download_arch")).toBe("arm64");
-  await app.waitFor("Community v1.0.0");
+  // The release is told once, in the shared notes, as the server's.
+  await app.waitFor("Server · v1.0.0");
+  expect(app.count("id:settings-update-note")).toBe(1);
   expect(app.texts().some((text) => text.includes("Faster startup"))).toBe(true);
   expect(app.texts().some((text) => text.includes("Changelog"))).toBe(false);
   expect(app.texts()).toContain("Download for macOS (Apple silicon)");
@@ -124,8 +126,8 @@ test("Updates: Android in a browser on a Linux server downloads the Android app,
       },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
   await app.waitFor("Download for Android");
   const check = calls.find((call) => call.path === "/settings/auto-update/check");
   expect(check?.query.get("download_os")).toBe("android");
@@ -141,8 +143,8 @@ test("Updates: an older server without a download offers its file only to the sa
   // The server answers as before this change: only its own file, for linux-amd64.
   const api = { "GET /settings/auto-update": { body: AUTO_UPDATE }, "POST /settings/auto-update/check": { body: { ...RELEASE, ...SERVER_ASSET } } };
   const android = await openFixture({ view: "app", host: { "morph.client.platform": BROWSER.android }, api });
-  await android.app.waitFor("v0.9.0 · Community");
-  await android.app.press("id:settings-update-server-check");
+  await android.app.waitFor("Installed: v0.9.0");
+  await android.app.press("id:settings-update-check");
   await android.app.waitFor("Pick a download for this device on the releases page.");
   expect(android.app.shows("id:settings-update-server-download")).toBe(false);
   expect(android.app.shows("id:settings-update-server-checksum")).toBe(false);
@@ -150,8 +152,8 @@ test("Updates: an older server without a download offers its file only to the sa
   expect(android.app.openedUrls()).toEqual(["https://mistermorph.com/releases/?channel=community"]);
 
   const linux = await openFixture({ view: "app", host: { "morph.client.platform": BROWSER.linuxAmd64 }, api });
-  await linux.app.waitFor("v0.9.0 · Community");
-  await linux.app.press("id:settings-update-server-check");
+  await linux.app.waitFor("Installed: v0.9.0");
+  await linux.app.press("id:settings-update-check");
   await linux.app.waitFor("Download for Linux (x86-64)");
   await linux.app.press("id:settings-update-server-download");
   expect(linux.app.openedUrls()).toEqual([SERVER_ASSET.asset_url]);
@@ -179,8 +181,8 @@ test("Updates: a system of unknown architecture picks its build; each opens its 
       },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
   await app.waitFor("Pick the build for this device.");
   expect(calls.find((call) => call.path === "/settings/auto-update/check")?.query.has("download_arch")).toBe(false);
   expect(app.texts()).toContain("Download for Linux (x86-64)");
@@ -201,8 +203,8 @@ test("Updates: no download for an unknown system or an unpublished one; the rele
       "POST /settings/auto-update/check": () => ({ body: { ...RELEASE, ...SERVER_ASSET, download } }),
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
   await app.waitFor("Couldn't tell which system this device runs. Pick a download on the releases page.");
   expect(calls.find((call) => call.path === "/settings/auto-update/check")?.query.get("download_os")).toBe("");
   expect(app.shows("id:settings-update-server-download")).toBe(false);
@@ -211,7 +213,7 @@ test("Updates: no download for an unknown system or an unpublished one; the rele
   expect(app.openedUrls()).toEqual(["https://mistermorph.com/releases/?channel=community"]);
 
   download = { status: "unavailable", reason: "unreachable", os: "android" };
-  await app.press("id:settings-update-server-check");
+  await app.press("id:settings-update-check");
   await app.waitFor("Couldn't load this release's downloads. Pick one on the releases page.");
   expect(app.shows("id:settings-update-server-download")).toBe(false);
 });
@@ -225,43 +227,40 @@ test("Updates: the Android app's own message for a release without the app", asy
       "POST /settings/auto-update/check": { body: { ...RELEASE, ...SERVER_ASSET, download: { status: "unavailable", reason: "not_published", os: "android" } } },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
   await app.waitFor("This release has no download for Android.");
   expect(app.shows("id:settings-update-server-download")).toBe(false);
   expect(app.shows("id:settings-update-server-open-releases")).toBe(true);
 });
 
-test("Updates: a failed check drops the last download; a new channel starts empty", async () => {
+test("Updates: a failed check drops the last download and its notes", async () => {
   let fail = false;
   const { app } = await openFixture({
     view: "app",
     host: { "morph.client.platform": BROWSER.android },
     api: {
       "GET /settings/auto-update": { body: AUTO_UPDATE },
-      "PUT /settings/auto-update": (request) => ({ body: { auto_update: { enabled: false, ...request.json.auto_update }, config_revision: "r-2" } }),
       "POST /settings/auto-update/check": () =>
         fail
           ? { status: 502, body: { error: "release feed unreachable" } }
           : { body: { ...RELEASE, ...SERVER_ASSET, download: { status: "available", os: "android", url: APK } } },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
   await app.waitFor("Download for Android");
   fail = true;
-  await app.press("id:settings-update-server-check");
+  await app.press("id:settings-update-check");
   await app.waitFor("Couldn't check for updates: release feed unreachable");
   expect(app.shows("id:settings-update-server-download")).toBe(false);
   expect(app.shows("id:settings-update-server-open-releases")).toBe(false);
+  expect(app.shows("id:settings-update-notes")).toBe(false);
 
   fail = false;
-  await app.press("id:settings-update-server-check");
+  await app.press("id:settings-update-check");
   await app.waitFor("Download for Android");
-  await app.press("label:Release channel");
-  await app.press("text:Pro");
-  await app.waitFor("Not checked yet");
-  expect(app.shows("id:settings-update-server-download")).toBe(false);
+  expect(app.shows("id:settings-update-notes")).toBe(true);
 });
 
 test("Updates: a failed check says why; up to date says so", async () => {
@@ -274,13 +273,14 @@ test("Updates: a failed check says why; up to date says so", async () => {
         fail ? { status: 500, body: { error: "release feed unreachable" } } : { body: { channel: "community", latest_version: "0.9.0" } },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
   await app.waitFor("Couldn't check for updates: release feed unreachable");
   fail = false;
-  await app.press("id:settings-update-server-check");
-  await app.waitFor("You're on the latest Community release.");
+  await app.press("id:settings-update-check");
+  await app.waitFor("Up to date");
   expect(app.shows("id:settings-update-server-release")).toBe(false);
+  expect(app.shows("id:settings-update-notes")).toBe(false);
 });
 
 test("Updates: automatic updates save with the page's revision; a failed save reloads", async () => {
@@ -297,7 +297,7 @@ test("Updates: automatic updates save with the page's revision; a failed save re
       },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
+  await app.waitFor("Installed: v0.9.0");
   await app.press("id:settings-update-auto");
   await app.waitUntil(() => eventsNamed("update.revision").length === 1);
   const put = calls.find((call) => call.method === "PUT");
@@ -322,34 +322,7 @@ const DESKTOP_CHECK = {
   checksum: "sha256:desktop",
 };
 
-test("Updates: the desktop app's version is the shell's, the server's its own; the shell checks through its host", async () => {
-  const { app, calls } = await openFixture({
-    view: "app",
-    runtime: "desktop",
-    features: ["checkUpdate"],
-    api: { "GET /settings/auto-update": { body: AUTO_UPDATE } },
-    host: { "morph.desktop.checkUpdate": DESKTOP_CHECK },
-  });
-  await app.waitFor("v1.2.3 · Desktop app");
-  expect(app.texts()).toContain("v0.9.0 · Community");
-  expect(app.texts()).toContain("Shell version");
-  expect(app.texts()).toContain("Server version");
-  await app.press("id:settings-update-shell-check");
-  await app.waitUntil(() => says(app, "shell", "Development build. The latest Pro release is v2.0.0."));
-  expect(says(app, "server", "Not checked yet")).toBe(true);
-  expect(calls.some((call) => call.path === "/settings/auto-update/check")).toBe(false);
-  expect(app.host.calls().some((call) => call.name === "morph.desktop.checkUpdate")).toBe(true);
-  // Its own check is for its own machine: the file it found, under the plain label as before.
-  expect(app.host.calls().some((call) => call.name === "morph.client.platform")).toBe(false);
-  expect(app.texts()).toContain("Download");
-  await app.press("id:settings-update-shell-download");
-  expect(app.openedUrls()).toEqual(["https://downloads.example/MrMorph-darwin-arm64.tar.gz"]);
-  // The versions stay where they came from.
-  expect(app.texts()).toContain("v1.2.3 · Desktop app");
-  expect(app.texts()).toContain("v0.9.0 · Community");
-});
-
-test("Updates: the desktop app's server check is the server's, with no download for this device", async () => {
+test("Updates: the desktop app's version is the shell's, the server's its own; one check asks the host for the shell and the server for itself", async () => {
   const { app, calls } = await openFixture({
     view: "app",
     runtime: "desktop",
@@ -360,19 +333,195 @@ test("Updates: the desktop app's server check is the server's, with no download 
     },
     host: { "morph.desktop.checkUpdate": DESKTOP_CHECK },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
-  await app.waitUntil(() => says(app, "server", "v1.0.0 is available."));
+  await app.waitFor("Installed: v1.2.3 · Desktop app");
+  expect(app.texts()).toContain("Installed: v0.9.0");
+  expect(app.texts()).toContain("Shell version");
+  expect(app.texts()).toContain("Server version");
   expect(says(app, "shell", "Not checked yet")).toBe(true);
-  expect(app.host.calls().some((call) => call.name === "morph.desktop.checkUpdate")).toBe(false);
-  const check = calls.find((call) => call.path === "/settings/auto-update/check");
-  expect(check?.query.has("download_os")).toBe(false);
+  expect(says(app, "server", "Not checked yet")).toBe(true);
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "shell", "Development build. The latest release is v2.0.0."));
+  await app.waitUntil(() => says(app, "server", "Available: v1.0.0"));
+  // Each component was asked once, by its own check: the host for the shell, the server for itself.
+  expect(app.host.calls().filter((call) => call.name === "morph.desktop.checkUpdate")).toHaveLength(1);
+  const checks = calls.filter((call) => call.path === "/settings/auto-update/check");
+  expect(checks).toHaveLength(1);
+  // The server's check names no device: there is a shell to update here.
+  expect(checks[0].query.has("download_os")).toBe(false);
+  expect(app.host.calls().some((call) => call.name === "morph.client.platform")).toBe(false);
+  // The shell's own file, under the plain label as before; opening it is the reader's own press.
+  expect(app.openedUrls()).toEqual([]);
+  expect(app.texts()).toContain("Download");
+  await app.press("id:settings-update-shell-download");
+  expect(app.openedUrls()).toEqual(["https://downloads.example/MrMorph-darwin-arm64.tar.gz"]);
+  // The server's is not this machine's: the releases page, never the server's own file.
   await app.waitFor("The server updates where it runs. Its builds are on the releases page.");
-  // Not the server's own file, nor any for this machine: the releases page.
   expect(app.shows("id:settings-update-server-download")).toBe(false);
-  expect(app.shows("id:settings-update-shell-release")).toBe(false);
   await app.press("id:settings-update-server-open-releases");
-  expect(app.openedUrls()).toEqual(["https://mistermorph.com/releases/?channel=community"]);
+  expect(app.openedUrls()).toContain("https://mistermorph.com/releases/?channel=community");
+  // The versions stay where they came from.
+  expect(app.texts()).toContain("Installed: v1.2.3 · Desktop app");
+  expect(app.texts()).toContain("Installed: v0.9.0");
+});
+
+/** The titles of the shared notes' entries ("Shell and server · v1.0.0"), in order. */
+const noteTitles = (app: { texts(): string[] }) => app.texts().filter((text) => /^(Shell|Server|Shell and server) · v/.test(text));
+
+test("Updates: no channel to pick and no Pro; every check reads Community, whatever channel is saved", async () => {
+  const { app, calls } = await openFixture({
+    view: "app",
+    runtime: "desktop",
+    features: ["checkUpdate"],
+    api: {
+      // A server whose settings hold the Pro channel.
+      "GET /settings/auto-update": { body: { ...AUTO_UPDATE, auto_update: { enabled: false, channel: "pro" } } },
+      "POST /settings/auto-update/check": { body: { ...RELEASE, ...SERVER_ASSET } },
+    },
+    host: { "morph.desktop.checkUpdate": { ...DESKTOP_CHECK, channel: "community" } },
+  });
+  await app.waitFor("Installed: v0.9.0");
+  expect(app.shows("id:settings-update-channel")).toBe(false);
+  expect(app.count("label:Release channel")).toBe(0);
+  expect(app.texts().some((text) => /\bPro\b|Release channel|Community/.test(text))).toBe(false);
+  // One control checks: no check button of the shell's or the server's own.
+  expect(app.count("id:settings-update-check")).toBe(1);
+  expect(app.count("label:Check for updates")).toBe(1);
+  expect(app.shows("id:settings-update-shell-check")).toBe(false);
+  expect(app.shows("id:settings-update-server-check")).toBe(false);
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "server", "Available: v1.0.0"));
+  await app.waitUntil(() => says(app, "shell", "Development build. The latest release is v2.0.0."));
+  expect(calls.find((call) => call.path === "/settings/auto-update/check")?.query.get("channel")).toBe("community");
+  expect(app.host.calls().find((call) => call.name === "morph.desktop.checkUpdate")?.data).toEqual({ channel: "community" });
+  // Checking saved nothing: the stored channel is as it was.
+  expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  // The automatic-updates switch saves itself only, never a channel.
+  await app.press("id:settings-update-auto");
+  await app.waitUntil(() => calls.some((call) => call.method === "PUT"));
+  expect(calls.find((call) => call.method === "PUT")?.json.auto_update).toEqual({ enabled: true });
+});
+
+test("Updates: while the checks run the one button is off and says so; a press then asks nothing again", async () => {
+  const { app, calls } = await openFixture({
+    view: "app",
+    runtime: "desktop",
+    features: ["checkUpdate"],
+    api: {
+      "GET /settings/auto-update": { body: AUTO_UPDATE },
+      // The server takes its time; the shell's host answers at once.
+      "POST /settings/auto-update/check": () => new Promise((resolve) => setTimeout(() => resolve({ body: { ...RELEASE, ...SERVER_ASSET } }), 400)),
+    },
+    host: { "morph.desktop.checkUpdate": DESKTOP_CHECK },
+  });
+  const serverChecks = () => calls.filter((call) => call.path === "/settings/auto-update/check");
+  const shellChecks = () => app.host.calls().filter((call) => call.name === "morph.desktop.checkUpdate");
+  await app.waitFor("Installed: v0.9.0");
+  void app.press("id:settings-update-check").catch(() => {});
+  await app.waitUntil(() => says(app, "server", "Checking for updates…"));
+  // The shell's answer is shown while the server's is awaited; the button stays off until both end.
+  await app.waitUntil(() => says(app, "shell", "Development build. The latest release is v2.0.0."));
+  expect(app.enabled("id:settings-update-check")).toBe(false);
+  await app.press("id:settings-update-check").catch(() => {});
+  await app.waitUntil(() => says(app, "server", "Available: v1.0.0"));
+  expect(serverChecks()).toHaveLength(1);
+  expect(shellChecks()).toHaveLength(1);
+  // Once both ended, a press is another round: each component asked once more.
+  await app.waitUntil(() => app.enabled("id:settings-update-check"));
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => serverChecks().length === 2 && shellChecks().length === 2);
+  await app.waitUntil(() => app.enabled("id:settings-update-check"));
+  expect(serverChecks()).toHaveLength(2);
+  expect(shellChecks()).toHaveLength(2);
+});
+
+test("Updates: the server's check failing leaves the shell's answer, its download and its notes", async () => {
+  const { app } = await openFixture({
+    view: "app",
+    runtime: "desktop",
+    features: ["checkUpdate"],
+    api: {
+      "GET /settings/auto-update": { body: AUTO_UPDATE },
+      "POST /settings/auto-update/check": { status: 502, body: { error: "release feed unreachable" } },
+    },
+    host: { "morph.desktop.checkUpdate": { ...DESKTOP_CHECK, status: "update_available", update_available: true, current_version: "1.2.3", release_notes: "- Shell fix" } },
+  });
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "server", "Couldn't check for updates: release feed unreachable"));
+  await app.waitUntil(() => says(app, "shell", "Available: v2.0.0"));
+  expect(app.shows("id:settings-update-shell-download")).toBe(true);
+  expect(app.shows("id:settings-update-server-release")).toBe(false);
+  expect(noteTitles(app)).toEqual(["Shell · v2.0.0"]);
+  expect(app.texts().some((text) => text.includes("Shell fix"))).toBe(true);
+  expect(app.enabled("id:settings-update-check")).toBe(true);
+});
+
+test("Updates: the shell's check failing leaves the server's answer and its notes", async () => {
+  const { app } = await openFixture({
+    view: "app",
+    runtime: "desktop",
+    features: ["checkUpdate"],
+    api: {
+      "GET /settings/auto-update": { body: AUTO_UPDATE },
+      "POST /settings/auto-update/check": { body: { ...RELEASE, ...SERVER_ASSET } },
+    },
+    // No `morph.desktop.checkUpdate`: the host's check fails.
+  });
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "server", "Available: v1.0.0"));
+  await app.waitUntil(() => app.shows("id:settings-update-shell-state >> text:/^Couldn't check for updates: /"));
+  expect(app.shows("id:settings-update-shell-release")).toBe(false);
+  expect(app.shows("id:settings-update-server-open-releases")).toBe(true);
+  expect(noteTitles(app)).toEqual(["Server · v1.0.0"]);
+  expect(app.texts().some((text) => text.includes("Faster startup"))).toBe(true);
+});
+
+test("Updates: one release for both is told once, for both; different releases each have their entry", async () => {
+  let shellAnswer: Record<string, unknown> = {
+    ...DESKTOP_CHECK,
+    status: "update_available",
+    update_available: true,
+    channel: "community",
+    current_version: "0.9.0",
+    latest_version: "1.0.0",
+    // The same notes, spaced otherwise.
+    release_notes: `## Changelog\n\n-   ${SHA}   Faster startup\n`,
+  };
+  const { app } = await openFixture({
+    view: "app",
+    runtime: "desktop",
+    features: ["checkUpdate"],
+    api: {
+      "GET /settings/auto-update": { body: AUTO_UPDATE },
+      "POST /settings/auto-update/check": { body: { ...RELEASE, ...SERVER_ASSET } },
+    },
+    host: { "morph.desktop.checkUpdate": () => shellAnswer },
+  });
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "shell", "Available: v1.0.0") && says(app, "server", "Available: v1.0.0"));
+  expect(noteTitles(app)).toEqual(["Shell and server · v1.0.0"]);
+  expect(app.texts().filter((text) => text.includes("Faster startup"))).toHaveLength(1);
+  expect(app.count("id:settings-update-all-releases")).toBe(1);
+  // Each keeps its own download under its own row.
+  expect(app.shows("id:settings-update-shell-download")).toBe(true);
+  expect(app.shows("id:settings-update-server-open-releases")).toBe(true);
+
+  // Another version for the shell: its own entry, the shell's first.
+  shellAnswer = { ...shellAnswer, latest_version: "2.0.0", release_notes: "- New window" };
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "shell", "Available: v2.0.0"));
+  await app.waitUntil(() => noteTitles(app).length === 2);
+  expect(noteTitles(app)).toEqual(["Shell · v2.0.0", "Server · v1.0.0"]);
+  expect(app.texts().some((text) => text.includes("New window"))).toBe(true);
+  expect(app.texts().filter((text) => text.includes("Faster startup"))).toHaveLength(1);
+
+  // The same version with other notes is not passed off as one release.
+  shellAnswer = { ...shellAnswer, latest_version: "1.0.0", release_notes: "- Shell only fix" };
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => app.texts().some((text) => text.includes("Shell only fix")));
+  expect(noteTitles(app)).toEqual(["Shell · v1.0.0", "Server · v1.0.0"]);
 });
 
 test("Updates: a server that cannot be read is Unknown, never the desktop app's version", async () => {
@@ -384,25 +533,33 @@ test("Updates: a server that cannot be read is Unknown, never the desktop app's 
     host: { "morph.desktop.checkUpdate": DESKTOP_CHECK },
   });
   await app.waitFor("backend unreachable");
-  expect(app.texts()).toContain("v1.2.3 · Desktop app");
-  expect(app.texts()).toContain("Unknown");
-  expect(app.texts().filter((text) => text.startsWith("v1.2.3"))).toEqual(["v1.2.3 · Desktop app"]);
+  expect(app.texts()).toContain("Installed: v1.2.3 · Desktop app");
+  expect(app.texts()).toContain("Installed: Unknown");
+  expect(app.texts().filter((text) => text.includes("v1.2.3"))).toEqual(["Installed: v1.2.3 · Desktop app"]);
 });
 
 test("Updates: a desktop host that does not tell its version is Unknown, never the server's; without a check it says so", async () => {
-  const { app } = await openFixture({
+  const { app, calls } = await openFixture({
     view: "app",
     runtime: "desktop",
     // An older desktop host: no update check.
     features: [],
     boot: { desktopVersion: "" },
-    api: { "GET /settings/auto-update": { body: AUTO_UPDATE } },
+    api: {
+      "GET /settings/auto-update": { body: AUTO_UPDATE },
+      "POST /settings/auto-update/check": { body: { channel: "community", latest_version: "0.9.0" } },
+    },
   });
-  await app.waitFor("v0.9.0 · Community");
-  expect(app.texts()).toContain("Unknown · Desktop app");
+  await app.waitFor("Installed: v0.9.0");
+  expect(app.texts()).toContain("Installed: Unknown · Desktop app");
   expect(says(app, "shell", "Update checks aren't available for this app.")).toBe(true);
-  expect(app.shows("id:settings-update-shell-check")).toBe(false);
-  expect(app.shows("id:settings-update-server-check")).toBe(true);
+  // The one button still checks what can be checked: the server only.
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "server", "Up to date"));
+  expect(says(app, "shell", "Update checks aren't available for this app.")).toBe(true);
+  expect(calls.filter((call) => call.path === "/settings/auto-update/check")).toHaveLength(1);
+  expect(app.host.calls().some((call) => call.name === "morph.desktop.checkUpdate")).toBe(false);
+  expect(app.shows("id:settings-update-shell-release")).toBe(false);
 });
 
 test("Updates: a host's `shell` is the shell's version", async () => {
@@ -414,7 +571,7 @@ test("Updates: a host's `shell` is the shell's version", async () => {
     api: { "GET /settings/auto-update": { body: AUTO_UPDATE } },
     host: { "morph.desktop.checkUpdate": DESKTOP_CHECK },
   });
-  await app.waitFor("v1.4.0 · Desktop app");
+  await app.waitFor("Installed: v1.4.0 · Desktop app");
 });
 
 test("Updates: a browser has no shell: only the server's version and check", async () => {
@@ -426,16 +583,19 @@ test("Updates: a browser has no shell: only the server's version and check", asy
       "POST /settings/auto-update/check": { body: { ...RELEASE, ...SERVER_ASSET } },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
+  await app.waitFor("Installed: v0.9.0");
   expect(app.texts()).toContain("Server version");
   expect(app.texts()).not.toContain("Shell version");
+  expect(app.texts()).toContain("Check the server for new versions.");
   expect(app.shows("id:settings-update-shell")).toBe(false);
-  expect(app.shows("id:settings-update-shell-check")).toBe(false);
+  expect(app.count("id:settings-update-check")).toBe(1);
   expect(app.texts().some((text) => text.includes("Desktop app") || text.includes("Android app") || text.includes("iOS app"))).toBe(false);
-  await app.press("id:settings-update-server-check");
-  await app.waitUntil(() => says(app, "server", "v1.0.0 is available."));
-  // The browser's check still names this device's download.
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "server", "Available: v1.0.0"));
+  // The browser's check still names this device's download, and it is the only check.
+  expect(calls.filter((call) => call.path === "/settings/auto-update/check")).toHaveLength(1);
   expect(calls.find((call) => call.path === "/settings/auto-update/check")?.query.get("download_os")).toBe("linux");
+  expect(noteTitles(app)).toEqual(["Server · v1.0.0"]);
 });
 
 test("Updates: another server starts over: its own version, no last server's result, Unknown when it fails", async () => {
@@ -453,21 +613,23 @@ test("Updates: another server starts over: its own version, no last server's res
       },
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
-  await app.waitUntil(() => says(app, "server", "v1.0.0 is available."));
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
+  await app.waitUntil(() => says(app, "server", "Available: v1.0.0"));
   await app.waitFor("id:settings-update-server-release");
 
   await app.host.send("morph.fixture.endpoint", "ep_new");
-  await app.waitFor("v1.1.0 · Pro");
-  expect(app.texts()).not.toContain("v0.9.0 · Community");
+  // A build of another channel than the one checked says so beside its version.
+  await app.waitFor("Installed: v1.1.0 · Pro");
+  expect(app.texts()).not.toContain("Installed: v0.9.0");
   expect(says(app, "server", "Not checked yet")).toBe(true);
   expect(app.shows("id:settings-update-server-release")).toBe(false);
+  expect(app.shows("id:settings-update-notes")).toBe(false);
 
   await app.host.send("morph.fixture.endpoint", "ep_gone");
   await app.waitFor("server unreachable");
-  await app.waitUntil(() => app.texts().includes("Unknown"));
-  expect(app.texts().some((text) => text.startsWith("v1.1.0") || text.startsWith("v0.9.0"))).toBe(false);
+  await app.waitUntil(() => app.texts().includes("Installed: Unknown"));
+  expect(app.texts().some((text) => text.includes("v1.1.0") || text.includes("v0.9.0"))).toBe(false);
 });
 
 test("Updates: a failed load shows a notice", async () => {
@@ -549,11 +711,11 @@ test("Updates: a second check that finds another file offers that one", async ()
       "POST /settings/auto-update/check": () => ({ body: { ...RELEASE, ...SERVER_ASSET, download: { status: "available", os: "android", url } } }),
     },
   });
-  await app.waitFor("v0.9.0 · Community");
-  await app.press("id:settings-update-server-check");
+  await app.waitFor("Installed: v0.9.0");
+  await app.press("id:settings-update-check");
   await app.waitFor("Download for Android");
   url = "https://downloads.example/v1.0.1/MrMorph-android.apk";
-  await app.press("id:settings-update-server-check");
+  await app.press("id:settings-update-check");
   await app.waitFor("Download for Android");
   await app.press("id:settings-update-server-download");
   expect(app.openedUrls()).toEqual(["https://downloads.example/v1.0.1/MrMorph-android.apk"]);

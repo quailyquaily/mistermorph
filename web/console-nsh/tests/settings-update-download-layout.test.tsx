@@ -1,6 +1,7 @@
 // Where the Updates card's download buttons lie (SettingsUpdatePanel's `onPartLayout`): on phones
-// they take the release box's whole width and a long label wraps inside the button; on wider
-// screens a button keeps its own width and height beside the release notes, as before.
+// they take the whole width of the download box under their component's row and a long label wraps
+// beside the button; on wider screens a button keeps its own size at the end of that box, beside
+// the file's checksum. The release notes are below both components, in the card's shared list.
 import { expect, test } from "nsh/test";
 import { openFixture } from "./fixtures/integrations-harness";
 
@@ -30,9 +31,9 @@ async function openChecked(width: number, client: Record<string, unknown>, downl
       "POST /settings/auto-update/check": { body: { ...RELEASE, ...SERVER_ASSET, download } },
     },
   });
-  await fixture.app.waitFor("v0.9.0 · Community");
-  await fixture.app.press("id:settings-update-server-check");
-  await fixture.app.waitFor("v1.0.0 is available.");
+  await fixture.app.waitFor("Installed: v0.9.0");
+  await fixture.app.press("id:settings-update-check");
+  await fixture.app.waitFor("Available: v1.0.0");
   /** The last frame each part reported. */
   const frames = () => {
     const out: Record<string, Frame> = {};
@@ -61,8 +62,8 @@ test("on a phone the download's row takes the release box's width, the icon butt
   expect(app.texts().filter((text) => text === "Download for Android")).toHaveLength(1);
   expect(app.shows("id:settings-update-server-download-label")).toBe(true);
   expect(app.count("label:Download for Android")).toBe(1);
-  // Below the release notes, not beside them.
-  expect(downloads.y).toBeGreaterThan(release.y + 20);
+  // The shared notes follow the download, at the card's width.
+  expect(app.count("id:settings-update-notes")).toBe(1);
 });
 
 test("on a narrow phone a long name wraps beside the icon button, inside the row", async () => {
@@ -113,7 +114,7 @@ test("on a phone each build to pick is a full-width row, told apart by its text;
   expect(none.app.count("label:Open releases")).toBe(1);
 });
 
-test("on a desktop screen the download keeps its own size beside the release notes", async () => {
+test("on a desktop screen the download keeps its own size at the end of its box", async () => {
   const { app, frames } = await openChecked(1280, MAC, MAC_DOWNLOAD);
   await app.waitUntil(() => Boolean(frames()["button:settings-update-server-download"] && frames()["server.release"]));
   const { "server.release": release, "button:settings-update-server-download": button } = frames();
@@ -121,7 +122,7 @@ test("on a desktop screen the download keeps its own size beside the release not
   const row = frames()["button:settings-update-server-download-row"];
   expect(square(button)).toBe(true);
   expect(row.w).toBeLessThan(release.w / 2);
-  // At the right of the notes column, on its first line.
+  // At the box's end, on its first line.
   expect(row.x).toBeGreaterThan(release.x + release.w / 2);
   expect(row.y).toBeLessThan(release.y + 20);
 });
