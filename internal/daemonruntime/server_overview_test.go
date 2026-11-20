@@ -5,10 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
+	"github.com/quailyquaily/mistermorph/internal/dbmetrics"
+	"github.com/quailyquaily/mistermorph/internal/sqlitedb"
 )
 
 func TestOverviewAddsVersionAndRuntimeWhenMissing(t *testing.T) {
@@ -354,5 +359,122 @@ func TestPokeRoutePassesBodyToCallback(t *testing.T) {
 	}
 	if got.BodyText != "{\"reason\":\"ci failed\"}" {
 		t.Fatalf("body text = %q, want JSON body", got.BodyText)
+	}
+}
+
+func overviewRuntime(t *testing.T, mux *http.ServeMux) map[string]any {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/overview", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("overview status = %d (%s)", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("overview json: %v", err)
+	}
+	runtimePayload, ok := payload["runtime"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime = %T, want an object", payload["runtime"])
+	}
+	return runtimePayload
+}
+
+func TestOverviewReportsDatabaseMetrics(t *testing.T) {
+	stateDir := t.TempDir()
+	db, err := sqlitedb.Open(context.Background(), filepath.Join(stateDir, "memory.db"), []sqlitedb.Migration{{
+		Name: "memories",
+		SQL:  `CREATE TABLE memories (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO memories (body) VALUES ('a private note'), ('another');`,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := os.WriteFile(filepath.Join(stateDir, "usage.db"), []byte("not a database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		overview OverviewFunc
+	}{
+		{name: "default overview"},
+		// A runtime's own overview (the Console's, a channel's) brings its own runtime object.
+		{name: "own overview", overview: func(context.Context) (map[string]any, error) {
+			return map[string]any{"runtime": map[string]any{"go_version": "custom-go"}}, nil
+		}},
+		{name: "own overview without runtime", overview: func(context.Context) (map[string]any, error) {
+			return map[string]any{"health": "ok"}, nil
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			RegisterRoutes(mux, RoutesOptions{Mode: "serve", AuthToken: "token", RuntimePaths: testRuntimePaths(stateDir), Overview: tc.overview})
+			runtimePayload := overviewRuntime(t, mux)
+			raw, _ := json.Marshal(runtimePayload["databases"])
+			if strings.Contains(string(raw), stateDir) || strings.Contains(string(raw), "private") {
+				t.Fatalf("databases leak a path or content: %s", raw)
+			}
+			var databases []struct {
+				Name      string `json:"name"`
+				File      string `json:"file"`
+				Status    string `json:"status"`
+				SizeBytes *int64 `json:"size_bytes"`
+				Tables    []struct {
+					Name string `json:"name"`
+					Rows *int64 `json:"rows"`
+				} `json:"tables"`
+			}
+			if err := json.Unmarshal(raw, &databases); err != nil {
+				t.Fatalf("databases = %s: %v", raw, err)
+			}
+			got := map[string]string{}
+			for _, item := range databases {
+				got[item.File] = item.Status
+				switch item.File {
+				case "memory.db":
+					if item.SizeBytes == nil || *item.SizeBytes <= 0 {
+						t.Fatalf("memory.db size = %v", item.SizeBytes)
+					}
+					if len(item.Tables) != 1 || item.Tables[0].Name != "memories" || item.Tables[0].Rows == nil || *item.Tables[0].Rows != 2 {
+						t.Fatalf("memory.db tables = %s", raw)
+					}
+				case "usage.db":
+					if item.SizeBytes == nil || *item.SizeBytes != 14 || item.Tables[0].Rows != nil {
+						t.Fatalf("usage.db = %s, want its size and unknown rows", raw)
+					}
+				default:
+					if item.SizeBytes != nil || item.Tables[0].Rows != nil {
+						t.Fatalf("%s = %s, want unknown size and rows", item.File, raw)
+					}
+				}
+			}
+			want := map[string]string{"agent.db": "missing", "journal.db": "missing", "memory.db": "ok", "usage.db": "unavailable"}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("statuses = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestOverviewKeepsProvidedDatabaseMetricsAndOmitsThemWithoutStateDir(t *testing.T) {
+	stateDir := t.TempDir()
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{
+		Mode: "serve", AuthToken: "token", RuntimePaths: testRuntimePaths(stateDir),
+		Overview: func(context.Context) (map[string]any, error) {
+			return map[string]any{"runtime": map[string]any{"databases": []any{}}}, nil
+		},
+	})
+	if got, ok := overviewRuntime(t, mux)["databases"].([]any); !ok || len(got) != 0 {
+		t.Fatalf("provided databases were replaced: %#v", got)
+	}
+
+	payload := map[string]any{"runtime": map[string]any{}}
+	ensureDatabaseMetrics(context.Background(), payload, dbmetrics.New(""))
+	if _, exists := payload["runtime"].(map[string]any)["databases"]; exists {
+		t.Fatal("without a state folder the databases must stay unreported")
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
+	"github.com/quailyquaily/mistermorph/internal/dbmetrics"
 	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
@@ -900,6 +901,24 @@ func ensureRuntimeMetrics(payload map[string]any) {
 		}
 	}
 	payload["runtime"] = current
+}
+
+// ensureDatabaseMetrics adds the state folder's database metrics to the payload's runtime metrics
+// as "databases": each database's file name, size and row counts of named tables (dbmetrics). A
+// payload that brings its own is left as it is. Without a state folder the key stays absent,
+// which a client reads as "not reported", not as empty databases.
+func ensureDatabaseMetrics(ctx context.Context, payload map[string]any, collector *dbmetrics.Collector) {
+	if payload == nil || collector == nil {
+		return
+	}
+	current, ok := payload["runtime"].(map[string]any)
+	if !ok || current == nil {
+		return
+	}
+	if _, exists := current["databases"]; exists {
+		return
+	}
+	current["databases"] = collector.Collect(ctx)
 }
 
 func buildRuntimeMetrics() map[string]any {
