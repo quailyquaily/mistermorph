@@ -44,3 +44,13 @@ Built and pushed `60532090` on `factory/FT169-mobile-back-navigation-subpages-on
 - Checks: `nsh check` passed (repository-pinned nsh 0.6.0); required Console test driver passed, 154 files, zero failures after its isolated retry of chat-attachments. Configured gofmt/vet/Go suite passed; manager independently reran it successfully.
 - Visual verification: headless Chrome at 390×844 checked root pages, Contacts detail, Logs, Settings System and Skill Store; wide Logs checked at 1280. Visual build used locally available nsh 0.5.1 web runtime, not 0.6.0. No physical Android/emulator check; Back/edge-gesture eligibility covered via headless Android harness only.
 - Branch push initially failed because the credential helper lacked the repository path; command-local credential.useHttpPath=true resolved it on the single retry. No user git configuration changed.
+
+## factory · review · 2026-11-21 00:08
+head: 605320901dd1ee1801b69c513ee6d6b916256db8
+verdict: pass
+notes:
+- Claude Code reviewed all 13 changed files against the request and plan on origin/master...HEAD. No findings.
+- Validation: configured gofmt/vet/Go tests passed (166 packages); nsh 0.6.0 check passed; required Console test driver passed (154 files, zero failures, no isolated retries). Worktree clean and HEAD unchanged after review.
+- Installs: no unpinned installs; existing cached TypeScript toolchain copied into the throwaway test HOME.
+- Residual risks: no physical Android/emulator check or new visual inspection; builder visual verification used nsh 0.5.1 web runtime. Android JVM tests not run because JDK unavailable.
+- Owner check: Android navigation roots, including wide windows, no longer consume Back based on earlier page history; native Back may leave the app. Confirm this intended behaviour on a device before release.
