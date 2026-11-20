@@ -4,11 +4,11 @@
 //
 // Vue to nsh: `save` is `onSave(profiles)`.
 import { batch, effect, signal, Text, untracked, View } from "nsh";
-import { Collapsible } from "nsh/base";
 import { HTTP_METHOD_OPTIONS } from "../../lib/core/config-options.js";
-import { Button, Icon, TextField, Toggle } from "../ui";
+import { Button, TextField, Toggle } from "../ui";
 import { SettingsCard } from "../settings-page/parts";
 import { SettingChoices, SettingField, SettingFieldGrid, SettingSelect } from "./SettingFields";
+import { jsonTextError, SettingJson } from "./SettingJson";
 
 /** An auth profile as the runtime reports it. */
 export interface AuthProfile {
@@ -112,8 +112,6 @@ function bindingsFor(profile: ProfileDraft): Record<string, any> {
 export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
   const draft = signal<ProfileDraft[]>([]);
   const error = signal("");
-  // Which profiles show their bindings as JSON, by key.
-  const advancedOpen = signal<Record<string, boolean>>({});
 
   effect(() => {
     const profiles = props.profiles || [];
@@ -287,31 +285,15 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                         </View>
                       )}
                     </Each>
-                    <Collapsible
-                      class="gap-2"
-                      open={advancedOpen()[key] === true}
-                      content={
-                        <TextField
-                          value={profile().bindings_text}
-                          multiline
-                          rows={8}
-                          mono
-                          disabled={busy()}
-                          accessibilityLabel={label("Advanced bindings")}
-                          onChange={(value) => update(key, { bindings_text: value })}
-                        />
-                      }
-                    >
-                      <View
-                        role="button"
-                        accessibilityState={{ expanded: advancedOpen()[key] === true }}
-                        onPress={() => advancedOpen.update((open) => ({ ...open, [key]: !open[key] }))}
-                        class="flex-row items-center gap-1.5 self-start py-1"
-                      >
-                        <Icon name={advancedOpen()[key] ? "PhCaretDown" : "PhCaretRight"} size={12} color="muted-foreground" />
-                        <Text class="text-xs text-subtle">Advanced bindings (JSON)</Text>
-                      </View>
-                    </Collapsible>
+                    <SettingJson
+                      value={profile().bindings_text}
+                      label="Advanced bindings (JSON)"
+                      name={label("Advanced bindings")}
+                      disabled={busy()}
+                      validate={(text) => jsonTextError(text, "Bindings", { shape: "object", empty: true })}
+                      onChange={(value) => update(key, { bindings_text: value })}
+                      testID={`auth-profile-bindings-${index() + 1}`}
+                    />
                   </SettingField>
                   <View class="col-span-full flex-row flex-wrap gap-4">
                     <Toggle

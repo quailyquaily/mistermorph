@@ -1,7 +1,7 @@
 // A test entry that mounts the settings components (components/settings, MarkdownEditor) on their
 // own, with each value read out beside them, for tests/settings-fields*.test.tsx. The boot location
 // picks the gallery: /fields, /secret, /secret-layout, /panel, /routes, /auth, /llm, /markdown,
-// /textarea, /dialog.
+// /textarea, /dialog, /json.
 import type { JSX, ViewRef } from "nsh";
 import { mount, signal, Text, View, Scroll } from "nsh";
 import { configureApiBase, endpointState, localeState } from "../../lib/core/context.js";
@@ -308,6 +308,55 @@ function Panel() {
   );
 }
 
+// Raw JSON settings in a panel: one set (with a secret in it, which the row must not show), one not
+// set, one the runtime locks, and a rows field whose value the rows cannot show.
+const JSON_GROUPS = [
+  {
+    id: "image",
+    title: "Image",
+    fields: [
+      { path: "llm.image.options.openai", label: "OpenAI options", type: "json", wide: true, note: "Extra fields for image requests." },
+      { path: "llm.image.options.gemini", label: "Gemini options", type: "json", wide: true },
+      { path: "llm.image.options.cloudflare", label: "Cloudflare options", type: "json", wide: true },
+      { path: "llm.headers", label: "HTTP headers", type: "json", wide: true, editor: "rows", rows: "map", addLabel: "Add header" },
+      { path: "tools.allow", label: "Allowed tools", type: "string_list" },
+      { path: "llm.model", label: "Model", type: "string" },
+    ],
+  },
+];
+
+function Json() {
+  const values = signal<Record<string, unknown>>({
+    "llm.image.options.openai": { quality: "high", api_token: "sk-secret-1" },
+    "llm.image.options.cloudflare": { steps: 4 },
+    "llm.headers": { "X-Nested": { a: 1 } },
+    "tools.allow": ["bash"],
+    "llm.model": "gpt-5",
+  });
+  const states = { "llm.image.options.cloudflare": { editable: false, source: "runtime_override" } };
+  const saved = signal<unknown>(null);
+  const dirty = signal(false);
+  const saving = signal(false);
+  return (
+    <View class="gap-3 p-4">
+      <ConfigSettingsPanel
+        groups={JSON_GROUPS}
+        values={values()}
+        fieldStates={states}
+        saving={saving()}
+        onSave={(update) => saved.set(update)}
+        onDirtyChange={(value) => dirty.set(value)}
+        testID="panel"
+      />
+      <Out name="saved" value={saved()} />
+      <Out name="dirty" value={dirty()} />
+      <Text testID="busy" onPress={() => saving.update((on) => !on)}>
+        busy
+      </Text>
+    </View>
+  );
+}
+
 function Routes() {
   const saved = signal<unknown>(null);
   const added = signal(0);
@@ -511,6 +560,7 @@ const PANELS: Record<string, () => JSX.Element> = {
   "/markdown": MarkdownGallery,
   "/textarea": TextareaGallery,
   "/dialog": Dialog,
+  "/json": Json,
 };
 
 /** Every gallery, one after another ("/", or a run without a host). */

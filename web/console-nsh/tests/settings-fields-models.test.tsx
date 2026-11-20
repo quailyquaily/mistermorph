@@ -77,10 +77,14 @@ test("auth profiles: Save waits for a complete profile and sends the list", asyn
 test("auth profiles: bad bindings JSON is reported, and a profile can be removed", async () => {
   const { app } = await openFixture("/auth");
   await app.waitFor("text:Advanced bindings (JSON)");
-  await app.press("text:Advanced bindings (JSON)");
-  await app.type("label:Advanced bindings 1", "}");
-  await app.press("id:auth-save");
-  await app.waitFor("text:Bindings must be valid JSON.");
+  // The bindings' JSON is edited in a dialog, which keeps a draft that does not parse.
+  await app.press("id:auth-profile-bindings-1-edit");
+  await app.waitFor("id:auth-profile-bindings-1-input");
+  await app.type("id:auth-profile-bindings-1-input", "}");
+  await app.press("id:auth-profile-bindings-1-dialog-save");
+  await app.waitFor("text:/^Bindings must be valid JSON/");
+  await app.press("id:auth-profile-bindings-1-dialog >> text:Cancel");
+  await app.waitUntil(() => !app.shows("id:auth-profile-bindings-1-input"));
   await app.press("id:auth-profile-remove-1");
   await app.press("id:auth-save");
   await app.waitUntil(() => out(app, "saved") === "[]");

@@ -43,6 +43,7 @@ import { EnvManagedField } from "./EnvManagedField";
 import { InferenceProviderPicker, type ProviderItem } from "./InferenceProviderPicker";
 import { SecretInput, type SecretStatus } from "./SecretInput";
 import { InSidePane, SettingChoices, SettingField, SettingFieldGrid, SettingSelect } from "./SettingFields";
+import { jsonTextError, SettingJson } from "./SettingJson";
 import { isMobile } from "../../lib/shell";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -666,17 +667,18 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
               onChange={(value) => updateField("reasoning_budget_tokens", value)}
             />
           </SettingField>
-          <SettingField label="HTTP headers" wide>
-            <TextField
-              value={String(props.config?.headers_text ?? "")}
-              placeholder="{}"
-              multiline
-              mono
-              disabled={busy()}
-              accessibilityLabel="HTTP headers"
-              onChange={(value) => updateField("headers_text", value)}
-            />
-          </SettingField>
+          {/* Applied to the form's draft; the form's owner saves it. Empty is no headers, as before. */}
+          <SettingJson
+            class="col-span-full"
+            value={String(props.config?.headers_text ?? "")}
+            label="HTTP headers"
+            placeholder="{}"
+            rows={8}
+            disabled={busy()}
+            validate={(text) => jsonTextError(text, "HTTP headers", { shape: "object", empty: true })}
+            onChange={(value) => updateField("headers_text", value)}
+            testID="llm-headers"
+          />
         </If>
       </If>
     </SettingFieldGrid>
