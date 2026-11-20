@@ -45,6 +45,7 @@ import {
   SettingRows,
   SettingSelect,
 } from "../../../components/settings/SettingFields";
+import { SettingJson } from "../../../components/settings/SettingJson";
 import { SetupConnectionTestDialogContent, SetupConnectionTestDialog } from "../../../components/settings/SetupConnectionTestDialog";
 import { SetupPickerDialog } from "../../../components/settings/SetupPickerDialog";
 import { Badge, Button, Muted, TextField } from "../../../components/ui";
@@ -120,8 +121,11 @@ function RowsDemo() {
   const identities = signal("tg:42");
   const patterns = signal("[]");
   const choices = signal<string[]>(["GET"]);
+  const json = signal('{\n  "quality": "high"\n}');
   return (
     <SettingFieldGrid>
+      <SettingJson class="col-span-full" label="SettingJson" note={t("uig_fixture_dialog_text")} value={json()} onChange={(v) => json.set(v)} testID="uig-setting-json" />
+      <SettingJson class="col-span-full" label="SettingJson · disabled" value={json()} disabled />
       <SettingField label="SettingRows · list" wide>
         <SettingRows value={list()} onChange={(v) => list.set(v)} mode="list" addLabel={t("uig_fixture_add")} label="list" testID="uig-setting-rows" />
         <Echo value={list()} />
@@ -136,7 +140,12 @@ function RowsDemo() {
         <SettingRows value={patterns()} onChange={(v) => patterns.set(v)} mode="patterns" addLabel={t("uig_fixture_add")} label="patterns" />
       </SettingField>
       <SettingField label="SettingRows · fallback" wide>
-        <SettingRows value={'{"a": 1}'} mode="map" label="fallback" fallback={<Muted>{t("uig_fixture_empty_text")}</Muted>} />
+        <SettingRows
+          value={'{"a": 1}'}
+          mode="map"
+          label="fallback"
+          fallback={<SettingJson name="fallback" note={t("uig_fixture_empty_text")} value={'{"a": 1}'} />}
+        />
       </SettingField>
       <SettingField label="SettingChoices" wide>
         <SettingChoices value={choices()} onChange={(v) => choices.set(v)} options={["GET", "POST", "PUT", "DELETE"]} disabledOptions={["DELETE"]} label="SettingChoices" testID="uig-setting-choices" />

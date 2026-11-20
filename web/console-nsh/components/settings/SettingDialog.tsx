@@ -34,6 +34,8 @@ export interface SettingDialogProps {
   size?: ModalSize;
   saving?: boolean;
   saveDisabled?: boolean;
+  /** The confirming button's label when it does not save by itself ("Apply"); "Save" by default. */
+  saveLabel?: string;
   children?: JSX.Element;
   testID?: string;
   /** For tests: the panel's frame and motion. */
@@ -73,7 +75,7 @@ export function SettingDialog(props: SettingDialogProps) {
         <Button
           variant="primary"
           size="md"
-          label={t("action_save")}
+          label={props.saveLabel || t("action_save")}
           loading={props.saving}
           disabled={props.saving || props.saveDisabled}
           onPress={() => props.onSave?.()}
