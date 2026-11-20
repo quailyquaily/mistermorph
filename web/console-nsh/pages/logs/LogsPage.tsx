@@ -15,9 +15,11 @@ import { isVisible, saveFile } from "../../lib/platform";
 import { hint, ObserveSection, t } from "../../components/observe/parts";
 import { SCROLLBAR } from "../../components/motion";
 import { gutterX, gutterY } from "../../components/frame/metrics";
+import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { isMobile } from "../../lib/shell";
+import { onSystemBack, openParentPage } from "../../lib/systemBack";
 import type { IconName } from "../../components/icons";
-import { Button, Icon, Page, ProgressBar, SelectField, Skeleton, TextField, Tip, TipButton } from "../../components/ui";
+import { BackButton, Button, Icon, Page, PageTitle, ProgressBar, SelectField, Skeleton, TextField, Tip, TipButton } from "../../components/ui";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const LIMIT_OPTIONS = [100, 300, 1000];
@@ -59,6 +61,11 @@ const LABEL = "font-mono text-[11px] font-medium uppercase leading-[15.4px] trac
 const errorHatch = () => `repeating-linear-gradient(-45deg, color-mix(in srgb, ${token("danger")} 9%, transparent) 0 1px, transparent 1px 7px)`;
 
 export function LogsPage() {
+  // Logs is a page below Settings (its System section opens it) with no navigation of its own on
+  // a phone: its bar leads with a back arrow to that section, and Android's Back does the same,
+  // also when the app opened on Logs. Wide windows keep the sidebar and no arrow.
+  const backToSettings = () => void openParentPage(endpointRoutePath(endpointState.selectedRef, "/settings/system"));
+  onSystemBack(() => isMobile(), backToSettings);
   const err = signal("");
   const unsupported = signal(false);
   const loading = signal(false);
@@ -530,7 +537,20 @@ export function LogsPage() {
   }
 
   return (
-    <Page title={t("logs_title")} error={err()} scroll={false} testID="logs-page">
+    <Page
+      title={t("logs_title")}
+      leading={
+        <If when={isMobile()} else={<PageTitle text={t("logs_title")} />}>
+          <View class="flex-1 flex-row items-center gap-2">
+            <BackButton title={t("settings_title")} onPress={backToSettings} testID="logs-back" />
+            <PageTitle text={t("logs_title")} />
+          </View>
+        </If>
+      }
+      error={err()}
+      scroll={false}
+      testID="logs-page"
+    >
       <View
         class={`flex-1 ${compact() ? "gap-2.5" : "gap-3"}`}
         style={{ paddingTop: gutterY(), paddingLeft: gutterX(), paddingRight: gutterX(), paddingBottom: isMobile() ? 12 : 0 }}

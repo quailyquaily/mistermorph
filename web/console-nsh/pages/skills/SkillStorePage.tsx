@@ -20,6 +20,7 @@ import {
 } from "../../lib/core/skills-install.js";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { isMobile, rightSheetPopupStyle } from "../../lib/shell";
+import { onSystemBack, openParentPage } from "../../lib/systemBack";
 import { StoreSkillDetail, type StoreDoc, type StoreSkill } from "./StoreSkillDetail";
 import { BarRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -81,7 +82,10 @@ export function SkillStorePage() {
     const route = untracked(() => currentRoute());
     void navigate(locationOf(route.path, { ...route.query, skill: undefined }), { replace: true });
   }
-  const backToSkills = () => void navigate(endpointRoutePath(endpointState.selectedRef, "/skills"));
+  const backToSkills = () => void openParentPage(endpointRoutePath(endpointState.selectedRef, "/skills"));
+  // Android's Back does what the bar's back arrow does: the store is a page below Skills, also
+  // when the app opened on it (no history then, and none is asked).
+  onSystemBack(() => true, backToSkills);
   const toggleTag = (value: string) => tag.update((current) => (current === value ? "" : value));
 
   async function load() {

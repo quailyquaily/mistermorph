@@ -10,12 +10,14 @@ On phones (the bottom-navigation layout, at most 980 points wide):
 - **Further in** (a topic, a settings section, a memory subject, an audit log, a skill, a TODO, a
   contact, the context inspector and its steps, Settings → System → Logs, the skill store): the new
   page slides in from the right over the old one, which drifts a third of the width to the left.
-- **Back** (the bar's back arrow, Android's Back button or edge swipe, the browser's back button):
-  the reverse. The page going out slides out to the right over the page it reveals.
+- **Back** (the bar's back arrow, Android's Back button or edge swipe on a page that has that
+  arrow, the browser's back button): the reverse. The page going out slides out to the right over
+  the page it reveals.
 - **Bottom navigation** (the bar and More): the two pages move together, side by side, as tiles of
   a horizontal strip in the navigation's order (Chat, Contacts, TODO, Memories, Skills, Stats,
-  Audit, Settings): to a later page the strip moves left, to an earlier one right. History steps
-  between them replay the step reversed (back) or again (forward).
+  Audit, Settings): to a later page the strip moves left, to an earlier one right. The browser's
+  history steps between them replay the step reversed (back) or again (forward); Android's Back
+  takes no part there (these pages have no back action, `lib/systemBack.ts`).
 - **No motion**: the first page of a run (also after a reload, and for the redirects that lead to
   it), the same page with other data (another topic opened from the topic list's page, another
   agent's copy of the page), the item a page arrives with (an address naming a settings section,
@@ -60,7 +62,8 @@ Only `translateX` moves, natively; slides take 280 ms on the Console's easing cu
   slide starts. Android's Back registered inside it no longer applies: a page going out gives its
   `onSystemBack` registrations a false `when` (`SystemBackScope`, provided per page layer), and a
   pane going out drops its bar's back (`onBack` undefined while `hidden`), so Back mid-slide goes
-  to the page coming in, else the history.
+  to the page coming in, and leaves the app when that page has no back action (a navigation
+  page's own list).
 - It never reacts to the next page's route: pages read their route with `currentRoute()`, which
   inside a page is that page instance's own (`PageRouteContext`), frozen once it goes out. Pages
   whose item clears with the route (Skills' `?skill=`, the context inspector's steps, a deleted
@@ -80,12 +83,13 @@ Only `translateX` moves, natively; slides take 280 ms on the Console's easing cu
   replay, presentation, slide geometry), `tests/page-stack.test.tsx` and `tests/pane-stack.test.tsx`
   (fixtures whose slide driver holds every slide part-way: both pages during a slide, the outgoing
   page inert with its own route, rapid switches, resize, reduced motion, wide windows),
-  `tests/page-transitions.test.tsx` (the real Console: bottom navigation and Android's Back, a page
+  `tests/page-transitions.test.tsx` (the real Console: bottom navigation, a page
   further in and back, the browser's back and forward buttons, rapid taps, reduced motion, the wide
   entrance, a chat topic in and out, a cancelled leave), `tests/page-transitions-back.test.tsx` (the
   real Console with every slide stretched to a minute by `tests/slowSlidesConsole.tsx`: Android's
   Back from a settings section, also mid-slide-in, keeps the section on the leaving pane; Back while
-  a page slides out goes through the history, not the outgoing page's own back).
+  a page slides out over a navigation page is the system's, not the outgoing page's own back),
+  `tests/mobile-back-subpages.test.tsx` (which pages have a back action at all).
 - Headless steps do not wait for a slide on the system clock: a test that checks a page has gone
   right after a navigation waits for it (`app.waitFor(sel, { state: "gone" })`).
 - Chrome (the real Console served by `console serve`, Playwright, 390×844 touch and 1280×800):

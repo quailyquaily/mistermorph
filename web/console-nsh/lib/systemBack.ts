@@ -8,16 +8,22 @@
 //    modals): nsh asks them before any listener here. The keyboard, when shown, is closed by the
 //    system first.
 // 2. The newest action registered with `onSystemBack` whose `when` holds: what the screen's own
-//    back arrow does (the open topic back to the list, a settings section back to the sections),
-//    or closing the phone's More and agent sheets.
-// 3. The place before in this run's history (lib/platform.ts `goBack`), which the router takes as
-//    a browser's back: the page's leave guard asks first, and the guard redirects as usual.
-// With none of them, nothing listens, and Back leaves the app.
+//    back arrow does (the open topic back to the list, a settings section back to the sections,
+//    the skill store back to Skills, Logs back to Settings), or closing the phone's More and agent
+//    sheets.
+// With neither, nothing listens, and Back leaves the app.
+//
+// The page hierarchy decides, never the history: a navigation page's own list (Topics, Contacts,
+// TODO, ...) has no back arrow and takes no Back, however many pages were opened before it, and a
+// page below one (an open item, a page reached from another) has both, also when the app opened
+// on it. So a page that shows a back arrow registers the same action here with the same `when`,
+// and one without an arrow registers nothing.
 //
 // Other platforms keep what they have: the browser's back button and Escape on the desktop.
 import { cleanup, computed, context, effect, platform, signal, untracked } from "nsh";
 import { BackHandler } from "nsh/mobile";
-import { canGoBack, goBack } from "./platform";
+import { OWN_HISTORY } from "./platform";
+import { navigate } from "./router";
 
 interface BackAction {
   when: () => boolean;
@@ -34,8 +40,8 @@ const actions = signal<BackAction[]>([]);
 export const SystemBackScope = context<(() => boolean) | null>(null);
 
 /**
- * While the calling component lives (and `when` holds), Back runs `run` instead of going back in
- * the history. Newer registrations go first, so a sheet opened over a page closes before the
+ * While the calling component lives (and `when` holds), Back runs `run` instead of leaving the
+ * app. Newer registrations go first, so a sheet opened over a page closes before the
  * page's own back. Call it in a component body; it is removed with the component. Inside a page
  * going out (SystemBackScope) it no longer applies.
  */
@@ -55,17 +61,25 @@ const currentAction = computed(() => {
   return null;
 });
 
-/** Whether Back stays in the app now: an action applies or there is a place to go back to. */
-export const handlesBack = computed(() => currentAction() !== null || canGoBack());
+/** Whether Back stays in the app now: an action applies (the history alone never keeps it). */
+export const handlesBack = computed(() => currentAction() !== null);
 
 /** Takes one Back press: true when the app handled it, false when it should leave. */
 export function handleBack(): boolean {
   const action = untracked(currentAction);
-  if (action) {
-    action.run();
-    return true;
-  }
-  return goBack();
+  if (!action) return false;
+  action.run();
+  return true;
+}
+
+/**
+ * What the back arrow of a page below another does: opens its parent page (`parent`, a location).
+ * In the phone apps the parent takes this page's place in the run's history, which is going back
+ * to it when it is the place before (lib/mobileHost.ts), so the pages left this way do not pile
+ * up there. On the web it is a navigation like any other: the browser's history is the browser's.
+ */
+export function openParentPage(parent: string) {
+  return navigate(parent, { replace: OWN_HISTORY });
 }
 
 /**

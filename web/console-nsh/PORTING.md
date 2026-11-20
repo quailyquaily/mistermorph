@@ -24,7 +24,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/core/resource-cache.js`, `lib/cache.ts`, `lib/cacheFiles.ts` | The pages' last answers, shown while a page asks again: in memory everywhere, on disk in the phone apps. Pages use `peekResource` / `readResource` / `writeResource` from `lib/core/resources.js` (docs/feat/feat_20261120_console_local_cache.md) |
 | `lib/scrollMemory.ts` | Where a page's columns were scrolled, in memory only: `useScrollMemory({ column, area, selection, ready })` on a page's `Scroll` or `List` (docs/console/scroll-memory.md) |
 | `lib/shell.ts` | The frame's state: endpoints, nav items, mobile breakpoint |
-| `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back, then the history |
+| `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back; a screen without one takes none |
 | `lib/softKeyboard.ts` | Whether the software keyboard is up; a phone back arrow lowers it before it leaves |
 | `lib/systemInsets.ts` | The room Android's status and navigation bars take: the frame's, the bottom nav's, the dialogs' |
 | `components/ui.tsx` | The design system: Button, TextField, Toggle, SelectField, DropdownMenu, Modal, MessageDialog, confirm, Badge, Section, Page, Markdown, Icon, ... |
@@ -456,10 +456,13 @@ Headless tests prove behaviour, not the look.
   so a headless Android phone with a focused field is one with a hardware keyboard.
 - Back (the button, and the edge swipe of gesture navigation, which the system turns into the same
   event) reaches the app only while it listens (`BackHandler`); otherwise the system leaves the app.
-  `lib/systemBack.ts` listens only while there is something to go back to: a view registered with
-  `onSystemBack` (a page whose phone layout has its own back arrow registers what the arrow does;
-  `MobileBar` does it for its users), else the run's history, which `lib/mobileHost.ts` keeps and
-  the router hears as a browser's back. A new phone detail view with a back arrow registers too.
+  `lib/systemBack.ts` listens only while a view registered with `onSystemBack` applies (a page
+  whose phone layout has its own back arrow registers what the arrow does, with the arrow's own
+  condition; `MobileBar` does it for its users). The run's history (`lib/mobileHost.ts`) never
+  makes it listen: a navigation page's own list has no arrow and takes no Back, however it was
+  reached. A new phone detail view with a back arrow registers too, and a page below another
+  (the skill store, Logs) opens its parent with `openParentPage`, so it works when the app
+  opened on it.
 - The surface runs under the status bar and the navigation bar (nsh draws Android edge to edge;
   `safeArea()` has their sizes). The app's frame takes them once (`lib/systemInsets.ts`): pages and
   their 57pt bars need no inset of their own, and `env(safe-area-inset-*)` must not be added inside

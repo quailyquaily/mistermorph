@@ -1,6 +1,7 @@
 // Page transitions in the console on phones (components/frame/PageStack.tsx, lib/navMotion.ts):
 // which way each committed navigation moves, through page controls, the bottom navigation, the
-// browser's history and Android's Back. The page host names its layers by how they came in
+// browser's history and Android's Back (a page's own back: the navigation's pages take none,
+// lib/systemBack.ts). The page host names its layers by how they came in
 // (`page-layer.in.<presentation>`, the page going out `page-layer-out`); the layer that stays after
 // a slide tells which slide it was. Mid-slide lifecycles are in tests/page-stack.test.tsx and
 // tests/pane-stack.test.tsx.
@@ -18,7 +19,7 @@ const layer = (app: App, presentation: string) => app.count(`id:page-layer.in.${
 /** The slide has ended: one page, none going out. */
 const settled = (app: App) => app.waitUntil(() => app.count("id:page-layer-out") === 0);
 
-test("bottom navigation moves pages as tiles in its order; Android's Back replays them reversed", async () => {
+test("bottom navigation moves pages as tiles in its order, both ways", async () => {
   const { app } = await openConsole({ platform: "android", location: "/e/default/todo", api: QUIET });
   await app.waitFor("id:mobile-bottom-nav");
   // The first page arrives without motion.
@@ -37,15 +38,15 @@ test("bottom navigation moves pages as tiles in its order; Android's Back replay
   await app.waitUntil(() => location(app) === "/e/default/memories");
   expect(layer(app, "tab-forward")).toBe(1);
   await settled(app);
-
-  await app.back();
-  await app.waitUntil(() => location(app) === "/e/default/contacts");
-  expect(layer(app, "tab-back")).toBe(1);
-  await app.back();
-  await app.waitUntil(() => location(app) === "/e/default/todo");
-  expect(layer(app, "tab-forward")).toBe(1);
-  await settled(app);
   expect(app.count("id:contacts-page")).toBe(0);
+
+  // Memories → TODO: an earlier one again, from the left. (Android's Back does not walk these
+  // back: the browser's buttons, below, replay a step reversed.)
+  await app.press("id:mobile-nav-todo");
+  await app.waitUntil(() => location(app) === "/e/default/todo");
+  expect(layer(app, "tab-back")).toBe(1);
+  await settled(app);
+  expect(app.count("id:memories-page")).toBe(0);
 });
 
 test("a page further in slides in from the right, Back slides it out to the right", async () => {

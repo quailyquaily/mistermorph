@@ -83,10 +83,11 @@ test(`with contacts and TODOs, ${CYCLES} round trips keep both pages and their p
   }
   // The pages still load what they show: one contacts list request for each Contacts page at least.
   expect(calls.filter((call) => call.uri === "/contacts/list").length).toBeGreaterThan(CYCLES);
-  // And navigation still goes back through the places it went through.
-  await app.back();
-  await app.waitFor("id:todo-item-task-0");
-  expect(location(app)).toBe("/e/default/todo");
+  // The list is a navigation page: after all those places Back is still the system's, not a way
+  // back through them (lib/systemBack.ts).
+  await expect(app.back()).rejects.toMatchObject({ code: "ERR_NSH_TEST_NO_BACK" });
+  expect(location(app)).toBe("/e/default/contacts");
+  expect(app.count("id:contact-row:tg:1000")).toBe(1);
 }, TIMEOUT);
 
 test(`with no contacts and no TODOs, ${CYCLES} round trips keep both empty pages working`, async () => {
