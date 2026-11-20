@@ -52,7 +52,7 @@ import {
 import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 import { boundsFrame, createPartProbe, type PartFrame, type PartLayoutListener } from "./shared/partProbe";
 import type { ScrollMemory } from "../lib/scrollMemory";
-import { isMobile, MOBILE_BREAKPOINT } from "../lib/shell";
+import { isMobile, MOBILE_BREAKPOINT, rightSheetPopupStyle } from "../lib/shell";
 
 export type { IconName };
 
@@ -2805,6 +2805,10 @@ export function BackButton(props: {
  * The panel at the right of a list that edits or inspects one of its items (the Vue console's
  * AppSidePane). On wide windows it is a column beside the list: put it last in a `flex-row`.
  * With `sheet` (phones) it is a drawer from the right over a scrim. Escape closes it.
+ * The drawer is a layer over the whole surface, outside the app's frame: its paper runs to the top,
+ * right and bottom edges and its padding takes the system bars' and cutouts' insets, once
+ * (lib/shell.ts `rightSheetPopupStyle`), so what is put in it needs none. The column is inside
+ * the frame, which has taken them already.
  */
 export function SidePane(props: {
   open: boolean;
@@ -2833,6 +2837,7 @@ export function SidePane(props: {
         }}
         backdropClass="bg-scrim"
         popupClass={`h-full w-[88%] max-w-md border-l border-line bg-card ${props.class ?? ""}`}
+        popupStyle={rightSheetPopupStyle()}
       >
         {props.children}
       </Sheet>

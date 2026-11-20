@@ -19,7 +19,7 @@ import {
   stripFrontmatter,
 } from "../../lib/core/skills-install.js";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
-import { isMobile } from "../../lib/shell";
+import { isMobile, rightSheetPopupStyle } from "../../lib/shell";
 import { StoreSkillDetail, type StoreDoc, type StoreSkill } from "./StoreSkillDetail";
 import { BarRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
@@ -339,21 +339,39 @@ export function SkillStorePage() {
         </If>
       </View>
 
-      {/* Phones: the panel slides in from the right over a mask (Vue: .store-panel-mobile). */}
-      <Sheet
-        open={isMobile() && Boolean(selected())}
-        side="right"
-        onOpenChange={({ open: next }) => {
-          if (!next) close();
-        }}
-        backdropClass="bg-black/24"
-        popupClass="h-full w-[92%] max-w-[440px] pb-1 pr-1 pt-1.5"
-      >
-        <View class="flex-1 overflow-hidden rounded-lg bg-card" style={{ boxShadow: "0 1px 4px rgba(24, 24, 50, 0.07)" }}>
-          {detail()}
-        </View>
-      </Sheet>
+      <SkillStoreSheet open={isMobile() && Boolean(selected())} onClose={close}>
+        {detail()}
+      </SkillStoreSheet>
     </Page>
+  );
+}
+
+/** The gaps between the phone panel's card and the sheet's top, right and bottom edges. */
+const SHEET_GAPS = { top: 6, right: 4, bottom: 4 };
+
+/**
+ * Phones: the panel slides in from the right over a mask (Vue: .store-panel-mobile), a white card
+ * a small gap in from the sheet's edges. The sheet is a layer over the whole surface, outside the
+ * app's frame: its padding takes the system bars' and cutouts' insets, once, on top of those gaps
+ * (lib/shell.ts `rightSheetPopupStyle`), so the card, its close button and its install button
+ * stay clear of them while the mask covers the whole screen.
+ */
+export function SkillStoreSheet(props: { open: boolean; onClose: () => void; children?: any }) {
+  return (
+    <Sheet
+      open={props.open}
+      side="right"
+      onOpenChange={({ open: next }) => {
+        if (!next) props.onClose();
+      }}
+      backdropClass="bg-black/24"
+      popupClass="h-full w-[92%] max-w-[440px]"
+      popupStyle={rightSheetPopupStyle(SHEET_GAPS)}
+    >
+      <View class="flex-1 overflow-hidden rounded-lg bg-card" style={{ boxShadow: "0 1px 4px rgba(24, 24, 50, 0.07)" }}>
+        {props.children}
+      </View>
+    </Sheet>
   );
 }
 

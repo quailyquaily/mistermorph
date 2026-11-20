@@ -11,7 +11,7 @@ import { NAV_TAB_PATHS } from "./navOrder";
 import { useContactsStore } from "./stores/contactsStore.js";
 import { usePersonaStore } from "./stores/personaStore.js";
 import { localStore } from "./platform";
-import { frameInsets, rightSheetInsets } from "./systemInsets";
+import { frameInsets, rightSheetInsets, rightSheetPadding } from "./systemInsets";
 import { SystemBackScope } from "./systemBack";
 
 export { currentPath };
@@ -165,8 +165,23 @@ export const systemInsets = computed(() =>
     ? frameInsets(safeArea(), keyboardFrame().height, mobileBottomNavVisible(), isMobile() ? { workbench: phoneWorkbenchOpen() } : undefined)
     : null,
 );
-/** A right-docked sheet's room for the system bars on Android (it covers the frame); null elsewhere. */
-export const rightSheetSystemInsets = computed(() => (EDGE_TO_EDGE ? rightSheetInsets(safeArea(), keyboardFrame().height) : null));
+/**
+ * A right-docked sheet's room for the system bars and cutouts (lib/systemInsets.ts): the sheet is
+ * a layer over the whole surface on Android and on iOS, outside the frame, so it takes them
+ * itself. On Android its window already ends above the keyboard; on iOS nsh lifts the panel. null
+ * elsewhere (the desktops, the web: unchanged).
+ */
+export const rightSheetSystemInsets = computed(() =>
+  EDGE_TO_EDGE ? rightSheetInsets(safeArea(), keyboardFrame().height) : platform.os === "ios" ? rightSheetInsets(safeArea()) : null,
+);
+/**
+ * The padding style of a right-docked sheet's popup (WorkspaceSheet, a SidePane sheet, the skill
+ * store's panel): the system's insets, once, plus the popup's `own` padding. The one owner of
+ * a drawer's insets: nothing inside the drawer adds them again.
+ */
+export function rightSheetPopupStyle(own?: { top?: number; right?: number; bottom?: number }) {
+  return rightSheetPadding(rightSheetSystemInsets(), own);
+}
 
 function normalizeNavPath(path: string) {
   const normalized = String(path || "").trim().replace(/\/+$/, "");

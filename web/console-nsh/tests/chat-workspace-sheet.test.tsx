@@ -104,13 +104,14 @@ test("a press on a sheet's tab selects it, and the selected label is the ink one
   expect(label("Topic").color).toBe(ink);
 });
 
-test("the right sheet's insets: the status bar, its side, the bottom bar or the keyboard; never its open side", () => {
+test("the right sheet's insets: the status bar, its side, the bottom bar unless the keyboard covers it; never its open side", () => {
   expect(rightSheetInsets(BARS, 0)).toEqual({ top: 24, right: 0, bottom: 16, left: 0 });
   // Zero or unreported insets: nothing at all.
   expect(rightSheetInsets({}, 0)).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
   expect(rightSheetInsets({ top: 0, right: 0, bottom: 0, left: 0 }, 0)).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
-  // The keyboard covers the navigation bar: its height replaces the bottom inset.
-  expect(rightSheetInsets(BARS, 300)).toEqual({ top: 24, right: 0, bottom: 300, left: 0 });
+  // The keyboard covers the navigation bar, and the sheet's window already ends at the keyboard's
+  // top: no bottom inset, and not the keyboard's height again.
+  expect(rightSheetInsets(BARS, 300)).toEqual({ top: 24, right: 0, bottom: 0, left: 0 });
   // Landscape with button navigation: the bar at the right is the sheet's edge, the cutout at the
   // left is under the scrim.
   expect(rightSheetInsets({ top: 24, right: 48, bottom: 0, left: 32 }, 0)).toEqual({ top: 24, right: 48, bottom: 0, left: 0 });

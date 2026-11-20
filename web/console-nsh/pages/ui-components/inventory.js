@@ -506,7 +506,7 @@ const FILES = {
       DoneStage: L("part", "SetupPage"),
     },
   },
-  "pages/skills/SkillStorePage.tsx": { group: "pages", items: { SkillStorePage: L("page"), TagChip: L("part", "SkillStorePage") } },
+  "pages/skills/SkillStorePage.tsx": { group: "pages", items: { SkillStorePage: L("page"), TagChip: L("part", "SkillStorePage"), SkillStoreSheet: L("part", "SkillStorePage") } },
   "pages/skills/SkillsPage.tsx": { group: "pages", items: { SkillsPage: L("page") } },
   "pages/skills/StoreSkillDetail.tsx": { group: "knowledge", items: { StoreSkillDetail: D() } },
   "pages/stats/StatsPage.tsx": {
