@@ -23,7 +23,14 @@ const OVERVIEW = {
     discord_running: false,
   },
   running_tasks: { console: 12, cli: 0, telegram: 3 },
-  runtime: { go_version: "go1.25" },
+  runtime: {
+    go_version: "go1.25",
+    databases: [
+      { name: "agent", file: "agent.db", status: "ok", size_bytes: 1048576, tables: [{ name: "contacts", rows: 12 }, { name: "topic_contexts", rows: null }] },
+      { name: "journal", file: "journal.db", status: "ok", size_bytes: 52428800, tables: [{ name: "journal_events", rows: 1234567 }] },
+      { name: "memory", file: "memory.db", status: "missing", size_bytes: null, tables: [{ name: "memories", rows: null }] },
+    ],
+  },
 };
 
 const UNCONFIGURED = ["slack", "line", "lark", "mixin", "wechat", "whatsapp", "bluesky"];
@@ -104,6 +111,12 @@ for (const [name, width] of [
     await app.waitFor("id:runtime-unconfigured");
     await app.waitUntil(() => !!frames(app)["entry-x"] && !!frames(app).metrics);
     expectContained(app, width, false);
+    // The databases are inside the metrics card, whose lines stay on the page at every width.
+    await app.waitUntil(() => !!frames(app).databases);
+    expectInside(frames(app).databases, frames(app).metrics, "databases in the metrics card");
+    expectInside(frames(app).metrics, { x: 0, y: 0, w: width, h: 1e6 }, "metrics card on the page");
+    expect(app.shows("id:runtime-database-rows >> text:journal.db · journal_events")).toBe(true);
+    expect(app.shows("id:runtime-database-rows >> text:1,234,567 rows")).toBe(true);
     await app.press("id:runtime-unconfigured");
     await app.waitFor("id:runtime-unconfigured-list");
     await app.waitUntil(() => !!frames(app)["unconfigured-bluesky"]);

@@ -13,6 +13,7 @@ import (
 	uniaiapi "github.com/quailyquaily/uniai"
 
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
+	"github.com/quailyquaily/mistermorph/internal/dbmetrics"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/pricingutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimecommands"
@@ -38,6 +39,8 @@ func (routes *routeRegistration) registerSystemRoutes() {
 	topicMetadata := opts.TaskTopic.TopicMetadata
 	var pokeMu sync.RWMutex
 	lastPokeAt := ""
+	// The state folder's databases, for the overview's runtime metrics; nil without a state folder.
+	databaseMetrics := dbmetrics.New(capturedPaths.StateDir)
 	if overview == nil {
 		overview = func(context.Context) (map[string]any, error) {
 			return buildDefaultOverviewPayload(mode, startedAt), nil
@@ -199,6 +202,7 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			}
 		}
 		ensureRuntimeMetrics(payload)
+		ensureDatabaseMetrics(r.Context(), payload, databaseMetrics)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(payload)
 	})

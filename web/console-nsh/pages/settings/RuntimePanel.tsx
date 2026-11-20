@@ -1,5 +1,5 @@
 // Settings › Runtime (the Vue console's RuntimeView, mounted as RuntimePanel): the selected agent's
-// health, its model, its channels with the tasks running in each, process metrics and technical
+// health, its model, its channels with the tasks running in each, process and database metrics and technical
 // details, refreshed every minute, and Poke, which wakes the agent's awareness loop with a message.
 import type { JSX } from "nsh";
 import { batch, cleanup, computed, effect, Image, signal, Text, untracked, View } from "nsh";
@@ -20,7 +20,7 @@ import { Button, Icon, StatusMark } from "../../components/ui";
 import { Button as BaseButton, Collapsible } from "nsh/base";
 import { isMobile } from "../../lib/shell";
 import { createPartProbe, type PartLayoutListener } from "../../components/shared/partProbe";
-import { SettingsCard } from "../../components/settings-page/parts";
+import { GroupTitle, SettingsCard } from "../../components/settings-page/parts";
 import { PokeDialog } from "../../components/settings-page/PokeDialog";
 import { CHANNEL_LOGOS } from "./constants";
 import { t } from "./i18n";
@@ -52,6 +52,85 @@ export function runningTasksText(count: number | null) {
   if (count === null) return t("runtime_tasks_running_unknown");
   if (count === 0) return t("runtime_tasks_running_none");
   return t(count === 1 ? "runtime_tasks_running_one" : "runtime_tasks_running_many", { count });
+}
+
+/** One database of GET /overview's `runtime.databases`: its file name, never its path. */
+export type DatabaseMetric = {
+  file: string;
+  /** `missing`: not created yet. `unavailable`: there, but it could not be inspected or read. */
+  status: "ok" | "missing" | "unavailable";
+  /** The file with its write-ahead log; null when unknown. */
+  sizeBytes: number | null;
+  /** Row counts by table; null where the count is unknown, never a guessed 0. */
+  tables: { name: string; rows: number | null }[];
+};
+
+function wholeCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+/**
+ * The databases an overview reports, or null when it reports none (an agent of an earlier build,
+ * or one without a state folder): "not reported" is not "no databases". Entries without a file
+ * name are dropped; a size or count that is not a whole number is unknown.
+ */
+export function parseDatabaseMetrics(raw: unknown): DatabaseMetric[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: DatabaseMetric[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as Record<string, unknown>;
+    const file = String(entry.file || "").trim();
+    if (!file) continue;
+    const status = entry.status === "ok" || entry.status === "missing" ? entry.status : "unavailable";
+    const tables: DatabaseMetric["tables"] = [];
+    for (const table of Array.isArray(entry.tables) ? entry.tables : []) {
+      const name = table && typeof table === "object" ? String((table as Record<string, unknown>).name || "").trim() : "";
+      if (name) tables.push({ name, rows: wholeCount((table as Record<string, unknown>).rows) });
+    }
+    out.push({ file, status, sizeBytes: status === "missing" ? null : wholeCount(entry.size_bytes), tables });
+  }
+  return out;
+}
+
+/** 1234567 as "1,234,567". */
+export function formatCount(value: number) {
+  return String(Math.trunc(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/**
+ * The databases as ledger rows, each naming its file: a missing database is one line saying so; any
+ * other has its size, then one line per counted table, named as "file · table" with its rows. An
+ * unknown size or count says it is unavailable.
+ */
+export function databaseRows(databases: DatabaseMetric[]) {
+  const rows: { key: string; label: string; value: string }[] = [];
+  for (const db of databases) {
+    if (db.status === "missing") {
+      rows.push({ key: `${db.file}:state`, label: db.file, value: t("runtime_db_missing") });
+      continue;
+    }
+    if (db.status === "unavailable" && db.sizeBytes === null) {
+      rows.push({ key: `${db.file}:state`, label: db.file, value: t("runtime_db_unavailable") });
+      continue;
+    }
+    rows.push({
+      key: `${db.file}:size`,
+      label: t("runtime_db_size", { file: db.file }),
+      value: db.sizeBytes === null ? t("runtime_db_unavailable") : formatBytes(db.sizeBytes),
+    });
+    for (const table of db.tables) {
+      rows.push({
+        key: `${db.file}:${table.name}`,
+        label: t("runtime_db_table", { file: db.file, table: table.name }),
+        value:
+          table.rows === null
+            ? t("runtime_db_rows_unknown")
+            : t(table.rows === 1 ? "runtime_db_rows_one" : "runtime_db_rows_many", { count: formatCount(table.rows) }),
+      });
+    }
+  }
+  return rows;
 }
 
 function stringValue(value: unknown, fallback = "-") {
@@ -104,6 +183,7 @@ function emptyOverview() {
     runtime_heap_objects: 0,
     runtime_gc_cycles: 0,
     running_tasks: null,
+    runtime_databases: null,
     ...channels,
   } as Record<string, any>;
 }
@@ -277,6 +357,10 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
     { key: "heap_objects", label: t("stat_heap_objects"), value: String(overview.runtime_heap_objects || 0) },
     { key: "gc", label: t("stat_gc_cycles"), value: String(overview.runtime_gc_cycles || 0) },
   ]);
+  const databaseLedger = computed(() => {
+    const databases = overview.runtime_databases as DatabaseMetric[] | null;
+    return databases ? databaseRows(databases) : null;
+  });
   const channelRows = computed(() =>
     CHANNELS.map((id) => ({
       key: id,
@@ -360,6 +444,7 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
         overview.runtime_heap_sys_bytes = toInt(rt.heap_sys_bytes, 0);
         overview.runtime_heap_objects = toInt(rt.heap_objects, 0);
         overview.runtime_gc_cycles = toInt(rt.gc_cycles, 0);
+        overview.runtime_databases = parseDatabaseMetrics(rt.databases);
         overview.running_tasks = data && typeof data.running_tasks === "object" ? data.running_tasks : null;
         loadedEndpointRef.set(endpointRef);
         lastUpdated.set(new Date().toISOString());
@@ -557,6 +642,21 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
         <View {...parts.probe(() => "metrics")}>
           <SettingsCard title={t("group_runtime")} list>
             <Ledger rows={runtimeMetrics()} columns={2} testID="runtime-metrics" />
+            {/* One column: a label names both the file and the table. */}
+            <View class="gap-1 border-t border-line-soft pb-1 pt-3" testID="runtime-databases" {...parts.probe(() => "databases")}>
+              <GroupTitle text={t("runtime_databases")} />
+              <If
+                when={databaseLedger()}
+                else={
+                  <Text class="py-2.5 text-sm leading-normal text-subtle" testID="runtime-databases-unreported">
+                    {t("runtime_databases_unreported")}
+                  </Text>
+                }
+              >
+                <Text class="text-xs leading-normal text-muted-foreground">{t("runtime_databases_note")}</Text>
+                <Ledger rows={databaseLedger() || []} testID="runtime-database-rows" />
+              </If>
+            </View>
           </SettingsCard>
         </View>
 

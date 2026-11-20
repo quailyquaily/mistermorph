@@ -1,6 +1,8 @@
 // Settings sections: tools, channels, security, models, search, the restart banner, phones.
 import { expect, test } from "nsh/test";
 import { type ApiHandler, openConsole } from "./harness";
+import { CARD_CORNERS } from "../components/corners";
+import { BOX_FOLD_BAR_CLASS } from "../components/settings-page/parts";
 
 const PERSONA: Record<string, ApiHandler> = {
   "GET /proxy:/persona/identity": {
@@ -382,28 +384,49 @@ test("on a phone the sections come first, then a section with a back button", as
   await app.waitFor("id:settings-persona", { state: "gone" });
 });
 
-test("System: says the config is kept in agent.db, or names the --config file", async () => {
-  const dbPath = "/home/u/.morph/agent.db#config.yaml";
-  const { app } = await openConsole({
-    location: "/e/default/settings/system",
-    api: {
-      "GET /settings/system": { body: { config_path: dbPath, config_revision: "rev-1", config_values: {}, field_states: {} } },
-      "GET /settings/auto-update": { body: { auto_update: { enabled: false, channel: "" }, channels: [] } },
-    },
+// The row that only said where the config is kept is gone; the forms that edit the config stay.
+for (const configPath of ["/home/u/.morph/agent.db#config.yaml", "/etc/morph/config.yaml"]) {
+  test(`System: no row about where the config is kept (${configPath.endsWith("#config.yaml") ? "agent.db" : "--config file"}); Logs and the config forms stay`, async () => {
+    const { app } = await openConsole({
+      location: "/e/default/settings/system",
+      api: {
+        "GET /settings/system": {
+          body: { config_path: configPath, config_revision: "rev-1", config_values: { "logging.format": "json" }, field_states: {} },
+        },
+        "GET /settings/auto-update": { body: { auto_update: { enabled: false, channel: "" }, channels: [] } },
+      },
+    });
+    await app.waitFor("id:settings-open-logs");
+    await app.waitFor("id:setting-logging.level");
+    expect(app.count("id:settings-config-store")).toBe(0);
+    const texts = app.texts().join("\n");
+    for (const gone of ["Kept in agent.db", "morph config export", "The file named with --config", configPath, "agent.db"]) {
+      expect(texts.includes(gone)).toBe(false);
+    }
+    // The card starts with Logs; the config groups are still forms.
+    expect(app.shows("text:Logs")).toBe(true);
+    expect(app.shows("id:setting-logging.format")).toBe(true);
   });
-  await app.waitFor("id:settings-config-store");
-  await app.waitFor("text:Kept in agent.db in the state folder. Use morph config export and import to edit it as a file.");
-  expect(app.texts()).toContain("agent.db");
-});
+}
 
-test("System: names the config file given with --config", async () => {
+test("System: Advanced is a rounded bar that still opens and closes its config groups", async () => {
+  // The bar is a box of the cards' radius, like the cards above it (a headless test reads no
+  // radius back from a view: the class the bar is built from is checked).
+  for (const part of CARD_CORNERS.split(" ")) expect(BOX_FOLD_BAR_CLASS.split(" ")).toContain(part);
+  for (const part of ["border", "border-line-soft", "bg-paper", "min-h-[54px]", "px-5"]) expect(BOX_FOLD_BAR_CLASS.split(" ")).toContain(part);
+
   const { app } = await openConsole({
     location: "/e/default/settings/system",
     api: {
-      "GET /settings/system": { body: { config_path: "/etc/morph/config.yaml", config_revision: "rev-1", config_values: {}, field_states: {} } },
+      "GET /settings/system": { body: { config_path: "", config_revision: "rev-1", config_values: {}, field_states: {} } },
       "GET /settings/auto-update": { body: { auto_update: { enabled: false, channel: "" }, channels: [] } },
     },
   });
-  await app.waitFor("id:settings-config-store");
-  await app.waitFor("text:The file named with --config: /etc/morph/config.yaml");
+  await app.waitFor("id:settings-system-advanced");
+  expect(app.shows("role:button[Advanced settings]")).toBe(true);
+  expect(app.shows("id:setting-logging.file.dir")).toBe(false);
+  await app.press("role:button[Advanced settings]");
+  await app.waitFor("id:setting-logging.file.dir");
+  await app.press("id:settings-system-advanced");
+  await app.waitFor("id:setting-logging.file.dir", { state: "gone" });
 });

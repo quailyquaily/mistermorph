@@ -203,8 +203,15 @@ export function Fold(props: {
 }
 
 /**
+ * The boxed fold's bar: a hairline box on the paper with the cards' corners (the settings cards
+ * above and below it are boxes of the same radius).
+ */
+export const BOX_FOLD_BAR_CLASS = `min-h-[54px] flex-row items-center justify-between gap-3 ${CARD_CORNERS} border border-line-soft bg-paper px-5`;
+
+/**
  * A boxed fold (`.settings-system-advanced`): a 54pt bar with its title at the left and a caret at
- * the right that turns over when open.
+ * the right that turns over when open. The bar keeps its own corners when open: what it opens are
+ * cards of their own below it.
  */
 export function BoxFold(props: { open: boolean; onToggle: () => void; title: string; children?: JSX.Element; testID?: string }) {
   return (
@@ -215,7 +222,7 @@ export function BoxFold(props: { open: boolean; onToggle: () => void; title: str
         accessibilityState={{ expanded: props.open }}
         onPress={() => props.onToggle()}
         testID={props.testID}
-        class="min-h-[54px] flex-row items-center justify-between gap-3 border border-line-soft bg-paper px-5"
+        class={BOX_FOLD_BAR_CLASS}
       >
         <Text class="text-base font-semibold text-subtle">{props.title}</Text>
         <View class="transition-transform duration-160" style={{ transform: [{ rotate: props.open ? "180deg" : "0deg" }] }}>

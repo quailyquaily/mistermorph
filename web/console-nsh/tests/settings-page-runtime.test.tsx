@@ -1,7 +1,14 @@
 // Settings › Runtime: the agent's overview, its channels with the tasks running in each, and Poke.
 import { expect, test } from "nsh/test";
 import { localEndpoint, openConsole } from "./harness";
-import { RUNTIME_FOLD_TOGGLE_CLASS, runningTaskCount, runningTasksText } from "../pages/settings/RuntimePanel";
+import {
+  databaseRows,
+  formatCount,
+  parseDatabaseMetrics,
+  RUNTIME_FOLD_TOGGLE_CLASS,
+  runningTaskCount,
+  runningTasksText,
+} from "../pages/settings/RuntimePanel";
 
 const OVERVIEW = {
   version: "1.2.3",
@@ -189,4 +196,118 @@ test("the unconfigured channels fold opens and closes, its keyboard focus shown"
   expect(app.shows("id:runtime-entry-x >> text:Needs a new login")).toBe(true);
   await app.press("id:runtime-unconfigured");
   await app.waitFor("id:runtime-unconfigured-list", { state: "gone" });
+});
+
+const DATABASES = [
+  {
+    name: "agent",
+    file: "agent.db",
+    status: "ok",
+    size_bytes: 3 * 1024 * 1024,
+    tables: [
+      { name: "contacts", rows: 1 },
+      { name: "jobs", rows: 0 },
+      { name: "topic_contexts", rows: null },
+    ],
+  },
+  { name: "journal", file: "journal.db", status: "ok", size_bytes: 0, tables: [{ name: "journal_events", rows: 1234567 }] },
+  { name: "memory", file: "memory.db", status: "missing", size_bytes: null, tables: [{ name: "memories", rows: null }] },
+  { name: "usage", file: "usage.db", status: "unavailable", size_bytes: null, tables: [{ name: "llm_requests", rows: null }] },
+];
+
+function overviewWithDatabases(databases: unknown) {
+  return { ...OVERVIEW, runtime: { ...OVERVIEW.runtime, databases } };
+}
+
+test("Runtime metrics list each database's size and the rows of its named tables", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/settings/runtime",
+    api: { "GET /proxy:/overview": { body: overviewWithDatabases(DATABASES) } },
+  });
+  await app.waitFor("id:runtime-database-rows");
+  const row = (label: string, value: string) => {
+    expect(app.shows(`id:runtime-database-rows >> text:${label}`)).toBe(true);
+    expect(app.shows(`id:runtime-database-rows >> text:${value}`)).toBe(true);
+  };
+  expect(app.shows("id:runtime-databases >> text:DATABASES") || app.shows("id:runtime-databases >> text:Databases")).toBe(true);
+  // Sizes read as sizes; a count says which table's rows it is, with its thousands grouped.
+  row("agent.db size", "3.00 MiB");
+  row("agent.db · contacts", "1 row");
+  // An empty table is 0 rows; one that could not be counted says so, never 0.
+  row("agent.db · jobs", "0 rows");
+  row("agent.db · topic_contexts", "Row count unavailable");
+  row("journal.db size", "0 B");
+  row("journal.db · journal_events", "1,234,567 rows");
+  // A database not created yet and one that cannot be read are each one line, without counts.
+  row("memory.db", "Not created yet");
+  row("usage.db", "Unavailable");
+  expect(app.shows("id:runtime-database-rows >> text:memory.db · memories")).toBe(false);
+  expect(app.shows("id:runtime-database-rows >> text:usage.db · llm_requests")).toBe(false);
+  expect(app.count("id:runtime-databases-unreported")).toBe(0);
+  // The process metrics are still there.
+  expect(app.shows("id:runtime-metrics >> text:Goroutines")).toBe(true);
+});
+
+test("an agent that reports no database metrics says so, and the rest of the panel stays", async () => {
+  // An agent of an earlier build: no `databases` at all.
+  const { app } = await openConsole({ location: "/e/default/settings/runtime", api: { "GET /proxy:/overview": { body: OVERVIEW } } });
+  await app.waitFor("id:runtime-databases-unreported");
+  expect(app.shows("This agent does not report database metrics.")).toBe(true);
+  expect(app.count("id:runtime-database-rows")).toBe(0);
+  expect(app.shows("id:runtime-metrics >> text:Goroutines")).toBe(true);
+  expect(app.shows("Healthy")).toBe(true);
+});
+
+test("malformed database metrics do not break the panel", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/settings/runtime",
+    api: {
+      "GET /proxy:/overview": {
+        body: overviewWithDatabases([null, "agent.db", { status: "ok" }, { file: "agent.db", status: "odd", size_bytes: "big", tables: "none" }]),
+      },
+    },
+  });
+  await app.waitFor("id:runtime-database-rows");
+  expect(app.shows("id:runtime-database-rows >> text:agent.db")).toBe(true);
+  expect(app.shows("id:runtime-database-rows >> text:Unavailable")).toBe(true);
+  expect(app.shows("Healthy")).toBe(true);
+});
+
+test("database metrics: unknown is never zero, and not reported is not empty", () => {
+  expect(parseDatabaseMetrics(undefined)).toBe(null);
+  expect(parseDatabaseMetrics({})).toBe(null);
+  expect(parseDatabaseMetrics([])).toEqual([]);
+  expect(parseDatabaseMetrics(DATABASES)).toEqual([
+    {
+      file: "agent.db",
+      status: "ok",
+      sizeBytes: 3 * 1024 * 1024,
+      tables: [
+        { name: "contacts", rows: 1 },
+        { name: "jobs", rows: 0 },
+        { name: "topic_contexts", rows: null },
+      ],
+    },
+    { file: "journal.db", status: "ok", sizeBytes: 0, tables: [{ name: "journal_events", rows: 1234567 }] },
+    { file: "memory.db", status: "missing", sizeBytes: null, tables: [{ name: "memories", rows: null }] },
+    { file: "usage.db", status: "unavailable", sizeBytes: null, tables: [{ name: "llm_requests", rows: null }] },
+  ]);
+  // Only whole, non-negative numbers are sizes and counts; a missing database has no size.
+  expect(
+    parseDatabaseMetrics([
+      { file: "a.db", status: "ok", size_bytes: -1, tables: [{ name: "t", rows: 1.5 }, { name: "u", rows: "3" }, { rows: 2 }] },
+      { file: "b.db", status: "missing", size_bytes: 10, tables: [] },
+    ]),
+  ).toEqual([
+    { file: "a.db", status: "ok", sizeBytes: null, tables: [{ name: "t", rows: null }, { name: "u", rows: null }] },
+    { file: "b.db", status: "missing", sizeBytes: null, tables: [] },
+  ]);
+  // A database that is there but unreadable keeps its size line; its counts say they are unavailable.
+  expect(
+    databaseRows([{ file: "usage.db", status: "unavailable", sizeBytes: 2048, tables: [{ name: "llm_requests", rows: null }] }]).map(
+      (row) => `${row.label} = ${row.value}`,
+    ),
+  ).toEqual(["usage.db size = 2.00 KiB", "usage.db · llm_requests = Row count unavailable"]);
+  expect(databaseRows([{ file: "x.db", status: "ok", sizeBytes: null, tables: [] }]).map((row) => row.value)).toEqual(["Unavailable"]);
+  expect([0, 7, 999, 1000, 12345, 1234567].map(formatCount)).toEqual(["0", "7", "999", "1,000", "12,345", "1,234,567"]);
 });
