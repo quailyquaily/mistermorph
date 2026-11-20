@@ -5,7 +5,7 @@ The owner requested: "On mobile view, only the sub page has a back action (and g
 
 ### Requirements
 - On mobile, show and enable the page back action only for subpages with an in-app parent.
-- Root pages, including navigation-group root pages, must have no page back action and must not activate the app's back/swipe-back gesture.
+- Root pages such as Topics, Contacts, and TODO must have no page back action and must not activate the app's back/swipe-back gesture.
 - Apply the same page-hierarchy rule to the visible back control and the app-managed back gesture. Do not use browser-history length alone to decide: arriving at a root page from another page must not give that root page a back action.
 - Subpages retain a working back control and back gesture that return to their appropriate parent, including when opened directly.
 - Keep desktop navigation and unrelated gestures unchanged. Do not attempt to override the browser/OS's native back navigation; this request concerns app-provided controls and gesture handlers.
