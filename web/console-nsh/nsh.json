@@ -15,6 +15,9 @@
     "webview": {
       "hosts": [
         "*"
+      ],
+      "media": [
+        "camera"
       ]
     },
     "clipboard": true,
@@ -48,7 +51,8 @@
       "NSAppTransportSecurity": {
         "NSAllowsArbitraryLoads": true
       },
-      "NSLocalNetworkUsageDescription": "Morph connects to your Mister Morph server on the local network."
+      "NSLocalNetworkUsageDescription": "Morph connects to your Mister Morph server on the local network.",
+      "NSCameraUsageDescription": "Morph uses the camera to scan the QR code of your Mister Morph server's address."
     }
   }
 }

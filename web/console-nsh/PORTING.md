@@ -15,7 +15,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
 | `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the pickers (Gallery: the photo picker; File: the document picker), voice input and task notifications through the native part |
 | `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`), the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) saving files behind `morph.file.save` (`FileSaver`, `SaveDocumentActivity`) and whether a hardware keyboard is connected behind `morph.keyboard.state` (`HardwareKeyboard`, `AndroidHardwareKeyboard`), which the keyboard shortcuts need on a phone (`lib/shortcutPolicy.ts`) |
-| `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
+| `pages/login/ServerDialog.tsx` | The Android app's console server: typed on the login page or read from a QR code, checked before it is saved |
+| `pages/login/QrScanner.tsx`, `lib/qrScan.ts`, `lib/qrScannerPage.js` | The QR scanner: a web view whose page has the camera and the decoder, the app's side of a scan, and the page |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
 | `lib/i18n/index.js` | The Vue console's strings, unchanged: `translate(key, vars)` |
@@ -522,3 +523,29 @@ Headless tests prove behaviour, not the look.
 - A tooltip goes out over a few frames as the next one comes in, so for a moment both show.
 - Headless, a list's own scroll correction is reported at once: at the newest message, a point up
   can be taken back before the test scrolls down again (tests/chat-scroll-anchor.test.tsx `snap`).
+
+## The QR scanner (the phone app's server address)
+
+nsh has no camera and no QR decoder, and the phone app has no browser page of its own (no
+`host.js`). A web view's page has both where the system's web view does, so the scanner is a
+`WebView` given its page as text (`html`, with an `https://…invalid/` `baseUrl`: a secure context,
+which `getUserMedia` needs) that asks for the camera and reads it with `BarcodeDetector`.
+
+- `nsh.json` grants it: `capabilities.webview.media: ["camera"]`. From that `nsh package` declares
+  Android's `CAMERA` permission and iOS's `NSCameraUsageDescription` (ours is in `ios.infoPlist`);
+  `scripts/android-manifest.mjs` adds the permission when nsh did not and marks the camera as not
+  required to install the app. The system asks the user at the first scan, never before.
+- The page talks to the app through `window.nsh.postMessage` (`ready`, `result`, `error`) and
+  hears `"stop"` from `WebViewRef.postMessage`. `lib/qrScan.ts` checks every message, hears at most
+  one result or failure per scan and nothing after the scan closed.
+- A scan only fills the dialog's field, with what `parseServer` makes of the code's text: the
+  page reads no address and opens nothing, and the app asks the address nothing until Save.
+- Where the web view has no `BarcodeDetector` (iOS's WKWebView; an Android System WebView without
+  it) or no camera, the page says `unsupported` and the dialog says to type the address. No decoder
+  is bundled.
+- A headless web view runs no page: `tests/loginProbeConsole.tsx` speaks as the page would
+  (`loginProbe(app).say(…)`), and `lib/qrScannerPage.test.mjs` runs the page's script against a
+  browser made of fakes (`scripts/test.sh` runs it with the whole suite). The page's script is
+  kept as text, since the app's own functions are compiled and have no source to take.
+- Not checked by any test: a real camera, the system's permission question and a real code. Check
+  them on a device after changing the page or the web view's props.

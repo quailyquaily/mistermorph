@@ -51,6 +51,18 @@ if [ "$all" -eq 1 ]; then
     cat "$logs/ui-components-inventory.log"
   fi
 fi
+# And the QR scanner's page (lib/qrScannerPage.js), which runs in a web view no test here opens:
+# against a browser made of fakes.
+if [ "$all" -eq 1 ]; then
+  if node --test lib/qrScannerPage.test.mjs >"$logs/qr-scanner-page.log" 2>&1; then
+    echo "ok    lib/qrScannerPage.test.mjs"
+  else
+    failed=$((failed + 1))
+    echo
+    echo "---- lib/qrScannerPage.test.mjs"
+    cat "$logs/qr-scanner-page.log"
+  fi
+fi
 echo
 echo "$# files, $failed failed, $(($(date +%s) - started))s (output: $logs)"
 [ "$failed" -eq 0 ]

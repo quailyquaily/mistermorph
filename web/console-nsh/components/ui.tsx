@@ -683,6 +683,8 @@ export interface TextFieldProps {
   testID?: string;
   accessibilityLabel?: string;
   inputRef?: (ref: InputRef) => void;
+  /** The field's box (the bordered row the text and its buttons are in), in the field (layout probes in tests). */
+  onBoxLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
 }
 
 // The ui-kit's field (.q-input, the morph theme): white at 92 %, a hairline that turns blue with a
@@ -715,6 +717,7 @@ export function TextField(props: TextFieldProps) {
         } ${props.error ? "border-danger" : "border-input"} ${props.disabled ? "bg-transparent opacity-50" : ""}`}
         focusWithinStyle={props.error ? undefined : FIELD_FOCUS}
         style={{ transitionProperty: "colors, box-shadow", transitionDuration: 200, transitionTimingFunction: "ease-in-out" }}
+        onLayout={props.onBoxLayout}
       >
         <If when={props.leadingIcon}>
           <Icon name={props.leadingIcon!} size={15} color="muted-foreground" />
