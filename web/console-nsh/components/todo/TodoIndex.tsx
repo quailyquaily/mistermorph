@@ -67,6 +67,18 @@ export function todoRowPaddingRight(mobile: boolean): number {
   return mobile ? todoMarkerAxisInset(true) - TODO_MARKER_SLOT / 2 - ROW_BORDER : DESKTOP_ROW_PADDING_RIGHT;
 }
 
+// The empty list's add row is a dashed box, not an edge-to-edge row: on a phone it keeps the pages'
+// phone gutter on both sides, as the head does (on a desktop the list's 16pt gutter, as the rows).
+/** The empty list's add row's side inset from the index's edges. */
+export function todoEmptyGutter(mobile: boolean): number {
+  return mobile ? gutterX() : DESKTOP_LIST_GUTTER_RIGHT;
+}
+
+/** The empty add row's right padding inside its gutter, so its icon stays centred on the axis. */
+export function todoEmptyPaddingRight(mobile: boolean): number {
+  return todoRowPaddingRight(mobile) - (mobile ? todoEmptyGutter(true) : 0);
+}
+
 // Hover: the row's soft fill (accent 6 %) fades in after a short pause and out at once.
 export const ROW_HOVER = { transitionDelay: 60 };
 export const ROW_TRANSITION = { transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease" } as const;
@@ -168,8 +180,9 @@ export function TodoIndex(props: {
   state: TodoState;
   mobile?: boolean;
   /** Hears where parts lie on the page (tests): `index`, `head-action` (the head's last button),
-   * `marker-<item>` and `title-<item>` (`heartbeat`, else the task's id), `empty-marker` (the
-   * empty list's add icon slot), `view-toggle` and `view-toggle-icon` (the calendar toggle and its
+   * `marker-<item>` and `title-<item>` (`heartbeat`, else the task's id), `empty-add`,
+   * `empty-text` and `empty-marker` (the empty list's add row, its text column and its icon
+   * slot), `view-toggle` and `view-toggle-icon` (the calendar toggle and its
    * icon). */
   onPartLayout?: PartLayoutListener;
 }) {
@@ -265,7 +278,9 @@ export function TodoIndex(props: {
               when={state.tasks().length > 0}
               else={
                 <If when={!state.loading()}>
-                  <View class={props.mobile ? "" : "px-4"}>
+                  <View style={{ paddingHorizontal: todoEmptyGutter(!!props.mobile) }}>
+                    {/* The button takes no ref: this view, exactly as large, reports its frame. */}
+                    <View {...parts.probe(() => "empty-add")}>
                     <BaseButton
                       onPress={state.addTask}
                       accessibilityLabel={t("todo_action_add")}
@@ -273,10 +288,10 @@ export function TodoIndex(props: {
                       class={`flex-row items-center gap-2.5 rounded-(--radius) border border-dashed border-line-soft hover:bg-hover-soft ${
                         props.mobile ? "pl-3 py-[11px]" : "pb-[11px] pl-3.5 pt-3"
                       }`}
-                      style={{ ...ROW_TRANSITION, paddingRight: todoRowPaddingRight(!!props.mobile) }}
+                      style={{ ...ROW_TRANSITION, paddingRight: todoEmptyPaddingRight(!!props.mobile) }}
                       hoverStyle={ROW_HOVER}
                     >
-                      <View class="flex-1 gap-1">
+                      <View class="flex-1 gap-1" {...parts.probe(() => "empty-text")}>
                         <Text class="text-sm leading-[15.1px] tracking-[-0.35px] text-subtle">{t("todo_empty_list")}</Text>
                         <Text class="text-xs leading-[16.8px] text-muted-foreground">{t("todo_empty_list_hint")}</Text>
                       </View>
@@ -284,6 +299,7 @@ export function TodoIndex(props: {
                         <Icon name="PhPlus" size={14} color="muted-foreground" />
                       </View>
                     </BaseButton>
+                    </View>
                   </View>
                 </If>
               }
