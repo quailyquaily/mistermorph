@@ -6,6 +6,7 @@ import type { Bounds, ListRef, ViewRef } from "nsh";
 import { cleanup, computed, createMotion, effect, List, signal, Text, untracked, View, windowSize } from "nsh";
 import { createArrivalTracker } from "../../lib/core/arrivals.js";
 import { foldQuietRuns } from "../../lib/core/chat-quiet-runs.js";
+import { isMobile } from "../../lib/shell";
 import { SystemBackScope } from "../../lib/systemBack";
 import { forgetScroll, hasSavedScroll, onPageSettled, recallScroll, rememberScroll, reportScrollArea } from "../../lib/scrollMemory";
 import { SCROLLBAR } from "../motion/ScrollEdges";
@@ -62,14 +63,19 @@ function Skeleton(props: { label: string }) {
   );
 }
 
-/** The height of the row above the oldest loaded message while older ones remain: a touch target's. */
+/** The height of the row above the oldest loaded message while older ones remain: a touch target's (a label that wraps makes it taller). */
 export const HISTORY_OLDER_ROW_HEIGHT = 44;
 
 // Where the loaded conversation begins while the runtime holds older messages: a quiet button
 // between two faint rules, in the conversation's column (its width and gutters), under the
-// messages and the composer in weight. It keeps its size whether idle or loading (the button
-// turns busy in place, its presses blocked, and says so to assistive tech), so nothing on screen
-// moves while a page loads; with no older page left the row goes (ChatHistoryList's `hasOlder`).
+// messages and the composer in weight. The button is the shared plain one at the sizes the
+// console's other commands take: on a phone the 44pt one, so the whole height of the row is the
+// button itself (its press and focus fills too, not room lent to a smaller one); on wider
+// screens the 38pt one, as the topic list's own "load older". It keeps its size whether idle or
+// loading (the button turns busy in place, its presses blocked, and says so to assistive tech),
+// so nothing on screen moves while a page loads; with no older page left the row goes
+// (ChatHistoryList's `hasOlder`). A label too long for the column wraps between rules that keep
+// a stub each, and the row grows with it: never cut off, never pushed out of the column.
 export function OlderBoundary(props: {
   label: string;
   loadingLabel: string;
@@ -82,29 +88,33 @@ export function OlderBoundary(props: {
     props.onPartLayout ? (event: { bounds: Bounds }) => props.onPartLayout?.(part, event.bounds) : undefined;
   return (
     <View
-      class="w-full max-w-[832px] flex-row items-center gap-3 self-center"
-      style={{ height: HISTORY_OLDER_ROW_HEIGHT }}
+      class="w-full max-w-[832px] flex-row items-center gap-2 self-center"
+      style={{ minHeight: HISTORY_OLDER_ROW_HEIGHT }}
       testID="chat-history-older"
       onLayout={report("row")}
     >
-      <View accessibilityElementsHidden class="h-px flex-1 bg-line-faint" onLayout={report("rule-start")} />
+      <View accessibilityElementsHidden class={OLDER_RULE} onLayout={report("rule-start")} />
       <Button
         variant="plain"
-        size="xs"
+        size={isMobile() ? "md" : "sm"}
         align="center"
+        // The keyboard's focus shows as the hover fill (as on the console's tabs).
+        class="min-w-0 shrink focus-visible:bg-hover"
+        wrap
         label={props.label}
         accessibilityLabel={props.loading ? props.loadingLabel : props.label}
         loading={props.loading}
-        // 32pt tall: the row's 44pt are its target.
-        hitSlop={{ top: 6, bottom: 6 }}
         onPress={props.onPress}
         testID="chat-history-load-older"
         onLayout={report("button")}
       />
-      <View accessibilityElementsHidden class="h-px flex-1 bg-line-faint" onLayout={report("rule-end")} />
+      <View accessibilityElementsHidden class={OLDER_RULE} onLayout={report("rule-end")} />
     </View>
   );
 }
+
+// A rule beside the button: the room the label leaves, never less than a stub.
+const OLDER_RULE = "h-px min-w-4 flex-1 bg-line-faint";
 
 function historyID(item: HistoryItem) {
   return String(item?.id ?? "");
