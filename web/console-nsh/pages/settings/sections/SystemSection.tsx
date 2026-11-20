@@ -1,7 +1,7 @@
-// System: where the config is stored and the logs; updates; the system config groups, with the
+// System: the logs; updates; the system config groups, with the
 // rarely changed ones folded under Advanced. Language, notifications and the session belong to this
 // device, not to the server, so they are in General.
-import { signal, Text, View } from "nsh";
+import { signal, View } from "nsh";
 import { endpointState } from "../../../lib/core/context.js";
 import { endpointRoutePath } from "../../../lib/core/endpoint-routes.js";
 import { SYSTEM_ADVANCED_CONFIG_GROUPS, SYSTEM_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
@@ -31,22 +31,7 @@ export function SystemSection(props: { s: SettingsStore }) {
     <View class="gap-4" testID="settings-system">
       <SettingsCard title={s.selectedSection()?.title} meta={s.selectedSection()?.meta} list>
         <View>
-          <If when={s.configPath()}>
-            <SettingRow
-              first
-              title={t("settings_config_store_title")}
-              note={
-                s.configPath().endsWith("agent.db#config.yaml")
-                  ? t("settings_config_store_db")
-                  : t("settings_config_store_file", { path: s.configPath() })
-              }
-            >
-              <Text class="font-mono text-xs text-muted-foreground" testID="settings-config-store">
-                {s.configPath().endsWith("agent.db#config.yaml") ? "agent.db" : s.configPath()}
-              </Text>
-            </SettingRow>
-          </If>
-          <SettingRow first={!s.configPath()} title={t("settings_logs_title")} note={t("settings_logs_hint")}>
+          <SettingRow first title={t("settings_logs_title")} note={t("settings_logs_hint")}>
             <Button
               variant="outlined"
               size="md"
