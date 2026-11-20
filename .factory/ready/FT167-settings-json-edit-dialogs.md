@@ -41,3 +41,18 @@ Checks: nsh check (0.6.0) and nsh build passed; required scripts/test.sh passed 
 Visual/keyboard checks: Coder checked desktop 1100×900 and touch 390×844 fixtures in Chrome using available web runtime 0.5.1 (not 0.6), including field focus, one-Escape close, backdrop dismissal and Tab/Enter opening. Actual full Console Settings page was not visually inspected. Desktop app and Android/iOS devices were not run. Focus after close currently lands on the page body rather than returning to the edit button; left unchanged and flagged for review. Headless tests do not directly drive desktop backdrop dismissal or Escape from a focused field; those were fixture browser checks only.
 
 Moved new/ → review/, round 1. Owner/reviewer should inspect dialog focus restoration and full-page visual integration.
+
+## factory · review · 2026-11-20 12:30
+head: 91e6c152bf716359f0ad44df24d32bcb52addf6e
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/settings/SettingJson.tsx:80-81: Disabled JSON rows cannot open the dialog and display no value, so previously readable disabled settings become hidden. Example: Cloudflare options {"steps":4} with editable=false/runtime_override is readable in the base disabled textarea but unavailable on this head. Allow view-only opening while keeping Apply disabled.
+- [P3] web/console-nsh/components/settings/SettingJson.tsx:26: Whitespace-only drafts pass empty-allowed dialog validation but fail parent Save parsing. Example: one space in auth bindings closes successfully on Apply, then Save reports "Bindings must be valid JSON." Normalize accepted whitespace to an empty string or reject it before closing.
+
+Review scope: origin/master...HEAD, all 12 changed files and relevant callers, request and plan. No P0/P1 findings; passes the factory threshold, with the above nonblocking defects retained for the owner.
+
+Validation by Claude Code: required gofmt check, go vet ./... and go test ./... passed (166 packages); nsh check 0.6.0 passed; required Console scripts/test.sh passed 150 files, zero final failures. Three files needed the script's solo retry: settings-agent-name-set, settings-page-sections and settings-json-page. Verified disabled-value regression against scratch base/head fixtures and auth whitespace Apply/Save behavior. Worktree remained clean; no commits or installs, no manifest/lockfile changes.
+
+Residual risks: full Settings page, desktop app and physical mobile devices not visually checked; mobile software keyboard layout unverified. Keyboard-trigger focus restoration not verified in a real browser and not reported as an introduced defect. Focused-field Escape and desktop backdrop rely on builder's earlier 0.5.1 runtime fixture check. Core Node and Android JVM suites not rerun in this review.
+
+Moved review/ → ready/. Owner should inspect the P2 read-only visibility regression and P3 whitespace validation discrepancy before shipping.
