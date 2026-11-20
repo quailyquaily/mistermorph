@@ -4,6 +4,7 @@ import { authState, authValid, endpointState } from "../stores";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "./endpoints";
 import { recordApiRequest } from "./performance";
 import { loadResource, resourceKey } from "./resources";
+import { cacheClear } from "./resource-cache.js";
 import { basePath as hostBasePath, origin as hostOrigin } from "../platform";
 
 // Live bindings: configureApiBase() sets them from the host's boot data before the app mounts.
@@ -83,6 +84,8 @@ function onAuthExpired(handler) {
 
 function handleUnauthorized(pathname) {
   authState.clear();
+  // The console no longer takes this session: what it answered before goes with it.
+  cacheClear();
   if (pathname !== "/auth/me") {
     authExpiredHandler?.();
   }

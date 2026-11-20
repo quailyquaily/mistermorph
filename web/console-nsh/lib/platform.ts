@@ -4,6 +4,7 @@
 // app, lib/mobileHost.ts answers it inside the app. Pages never touch any of them directly: they use
 // the functions below, and only this file knows a host exists.
 import { Clipboard, host, locale, openUrl, platform } from "nsh";
+import { cacheClear } from "./core/resource-cache.js";
 import * as mobileHost from "./mobileHost";
 import { type BrowserInfo, browserTarget, type DownloadTarget, nativeTarget, UNKNOWN_TARGET } from "./downloadTarget";
 import { type ShellInfo, shellFromBoot } from "./updateTargets";
@@ -129,6 +130,8 @@ export const serverAddress = () => (isMobile() ? (mobileHost.parseServer(config.
 export function setServer(raw: string): string | null {
   const server = mobileHost.parseServer(raw);
   if (!server) return null;
+  // Another server's answers are not this one's.
+  cacheClear();
   config = { ...config, origin: server.origin, basePath: server.basePath, secureContext: server.origin.startsWith("https:") };
   localStore.setItem(mobileHost.SERVER_KEY, server.address);
   return server.address;

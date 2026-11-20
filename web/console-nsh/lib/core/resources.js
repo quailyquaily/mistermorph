@@ -1,4 +1,5 @@
 import { cleanup, effect, signal, untracked } from "nsh";
+import { cacheClear, cacheDrop, cachePeek, cacheRead, cacheWrite } from "./resource-cache.js";
 
 const resourceCache = new Map();
 const resourceInflight = new Map();
@@ -78,6 +79,35 @@ async function loadResource(key, loader, options = {}) {
   return promise;
 }
 
+/* ---------- the last answer, shown while the request runs again ---------- */
+
+// What a page shows at once when it opens: the answer its request gave last time, from memory or
+// (in the phone apps) from disk. The page still asks; the answer it gets replaces this one
+// (lib/core/resource-cache.js, docs/feat/feat_20261120_console_local_cache.md).
+
+/** The key's last answer if memory has it, without a request; undefined otherwise. */
+function peekResource(key) {
+  return cachePeek(normalizeResourceKey(key))?.value;
+}
+
+/** The key's last answer from memory, else from disk; undefined when there is none. */
+async function readResource(key) {
+  return (await cacheRead(normalizeResourceKey(key)))?.value;
+}
+
+/**
+ * Keeps `value` (or what `value(previous)` returns) as the key's last answer: after a request,
+ * or when a change the user made is known without one. Options are `cacheWrite`'s: `group`,
+ * `eager`, `persist`.
+ */
+function writeResource(key, value, options = {}) {
+  const normalizedKey = normalizeResourceKey(key);
+  if (!normalizedKey) return;
+  const next = typeof value === "function" ? value(cachePeek(normalizedKey)?.value) : value;
+  if (next === undefined) return;
+  cacheWrite(normalizedKey, next, options);
+}
+
 function invalidateResource(keyOrPrefix = "") {
   const value = normalizeResourceKey(keyOrPrefix);
   if (!value) {
@@ -86,8 +116,10 @@ function invalidateResource(keyOrPrefix = "") {
     }
     resourceCache.clear();
     resourceInflight.clear();
+    cacheClear();
     return;
   }
+  cacheDrop(value);
   for (const key of new Set([...resourceCache.keys(), ...resourceInflight.keys()])) {
     if (key === value || key.startsWith(`${value}:`)) {
       bumpResourceVersion(key);
@@ -194,6 +226,9 @@ export {
   clearResourceStateForTests,
   invalidateResource,
   loadResource,
+  peekResource,
+  readResource,
   resourceKey,
+  writeResource,
   useResource,
 };

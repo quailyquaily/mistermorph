@@ -193,7 +193,7 @@ export function TodoIndex(props: {
   const taskSelection = createSlidingSelection(() => (props.mobile ? null : state.selectedTaskKey() || null));
   const edges = createScrollEdges({ start: false });
   // Where the list is scrolled, across visits of the page.
-  const memory = useScrollMemory({ column: 2, area: "index", ready: () => !props.state.loading() });
+  const memory = useScrollMemory({ column: 2, area: "index", ready: () => !props.state.tasksPending() });
   return (
     <View class="flex-1" accessibilityLabel={t("todo_nav_title")} testID="todo-index" {...parts.probe(() => "index")}>
       <View
@@ -245,7 +245,7 @@ export function TodoIndex(props: {
           // the list clears the floating add button.
           style={{ paddingBottom: props.mobile ? 84 : gutterY() }}
         >
-          <If when={state.loading() || state.heartbeatLoading()}>
+          <If when={state.placeholderRows()}>
             <View class={`gap-2 ${props.mobile ? "pt-4" : "px-4 pt-4"}`} accessibilityLabel={t("todo_heartbeat_loading")}>
               <Each of={[0, 1, 2]}>{() => <View class="h-15 animate-pulse rounded-(--radius) bg-muted" />}</Each>
             </View>
@@ -270,7 +270,7 @@ export function TodoIndex(props: {
           </View>
 
           <View>
-            <If when={state.tasks().length > 0 || !state.loading()}>
+            <If when={state.tasks().length > 0 || !state.tasksPending()}>
               <Divider label={t("todo_index_scheduled")} mobile={props.mobile} />
             </If>
 

@@ -68,6 +68,7 @@ const c = {
   cronRunning: () => (empty() ? 0 : 1),
   startNewTopic: () => press("new"),
   topicsLoading: () => empty(),
+  topicsFromLastTime: () => false,
   topicsNextCursor: () => "",
   topicsLoadingOlder: () => false,
   topicsLoadError: () => "",

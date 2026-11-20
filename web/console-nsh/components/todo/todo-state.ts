@@ -13,6 +13,7 @@ import {
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { createArrivalTracker, createHighlightWindow } from "../../lib/core/arrivals.js";
 import { pushNotice } from "../../lib/core/notices.js";
+import { peekResource, readResource, resourceKey, writeResource } from "../../lib/core/resources.js";
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { invalidateConsoleSetupReadiness } from "../../lib/core/setup.js";
 import { requestSystemNotificationPermission } from "../../lib/core/system-notifications.js";
@@ -176,10 +177,19 @@ function heartbeatWorkflowFrom(item: any): HeartbeatWorkflow {
   };
 }
 
+const tasksKey = (endpointRef: string) => resourceKey("todo", "tasks", String(endpointRef || "").trim());
+const heartbeatKey = (endpointRef: string) => resourceKey("todo", "heartbeat", String(endpointRef || "").trim());
+
 export function createTodoState() {
   // True from the start: the page loads at once, so its first frame shows the placeholder rows,
   // not the empty list.
   const loading = signal(true);
+  // The list (or the heartbeat's workflows) on screen is last visit's, and the runtime has not
+  // answered yet: it shows in place of the placeholder rows, and nothing is edited until then.
+  const tasksFromLastTime = signal(false);
+  const heartbeatFromLastTime = signal(false);
+  const placeholderRows = computed(() => (loading() && !tasksFromLastTime()) || (heartbeatLoading() && !heartbeatFromLastTime()));
+  const tasksPending = computed(() => loading() && !tasksFromLastTime());
   // How the list's first load went: "" until it answered, then ok or failed.
   const loaded = signal<"" | "ok" | "failed">("");
   const saving = signal(false);
@@ -920,6 +930,7 @@ export function createTodoState() {
         method: "PUT",
         body: saveBody(nextTasks),
       });
+      void keepSavedTasks();
       if (disposed) return;
       applyRevision(data);
       batch(() => {
@@ -1041,18 +1052,34 @@ export function createTodoState() {
 
   async function loadHeartbeat() {
     heartbeatLoading.set(true);
-    try {
-      const data = await runtimeApiFetch("/heartbeat/workflows");
-      if (disposed) return;
+    const key = heartbeatKey(endpointState.selectedRef);
+    const apply = (data: any) => {
       const items = Array.isArray(data?.items) ? data.items : [];
       batch(() => {
         heartbeatWorkflows.set(items.map((item: any) => heartbeatWorkflowFrom(item)));
         heartbeatDirty.set(false);
       });
+    };
+    try {
+      if (untracked(heartbeatWorkflows).length === 0 && !untracked(heartbeatDirty)) {
+        const cached = peekResource(key) ?? (await readResource(key));
+        if (disposed) return;
+        if (cached !== undefined && untracked(heartbeatWorkflows).length === 0 && !untracked(heartbeatDirty)) {
+          apply(cached);
+          heartbeatFromLastTime.set(true);
+        }
+      }
+      const data = await runtimeApiFetch("/heartbeat/workflows");
+      writeResource(key, { items: Array.isArray(data?.items) ? data.items : [] }, { eager: true });
+      if (disposed) return;
+      apply(data);
     } catch (e) {
       notice.error(errorMessage(e) || t("msg_read_failed"));
     } finally {
-      heartbeatLoading.set(false);
+      batch(() => {
+        heartbeatLoading.set(false);
+        heartbeatFromLastTime.set(false);
+      });
     }
   }
 
@@ -1101,6 +1128,7 @@ export function createTodoState() {
       }));
       const data = await runtimeApiFetch("/heartbeat/workflows", { method: "PUT", body: { items } });
       const saved = Array.isArray(data?.items) ? data.items : null;
+      writeResource(heartbeatKey(endpointState.selectedRef), { items: saved ?? items }, { eager: true });
       batch(() => {
         if (saved) heartbeatWorkflows.set(saved.map((item: any) => heartbeatWorkflowFrom(item)));
         heartbeatDirty.set(false);
@@ -1138,36 +1166,88 @@ export function createTodoState() {
     });
   });
 
+  // The list as /todo/tasks gave it. `over` is true for the runtime's answer coming over last
+  // visit's list: the items keep their keys (so none flashes as new) and the selection stays.
+  function applyTasksAnswer(data: any, over: boolean) {
+    const rows = Array.isArray(data?.tasks) ? data.tasks : [];
+    const systemRows = Array.isArray(data?.system_tasks) ? data.system_tasks : [];
+    const heartbeatRow = systemRows.find((item: any) => trimText(item?.id) === model.HEARTBEAT_ITEM_KEY);
+    let loadedTasks = rows.map((item: any) => model.normalizeTask(item, t("todo_untitled"))) as TodoTask[];
+    let nextHeartbeat = heartbeatRow ? (model.normalizeTask(heartbeatRow, t("todo_heartbeat_title")) as TodoTask) : null;
+    let keepSelection = false;
+    if (over) {
+      const keys = new Map<string, string>();
+      for (const task of untracked(tasks)) if (trimText(task.id)) keys.set(trimText(task.id), task._key);
+      loadedTasks = loadedTasks.map((task) => (keys.has(trimText(task.id)) ? { ...task, _key: keys.get(trimText(task.id)) as string } : task));
+      const shownHeartbeat = untracked(heartbeatTask);
+      if (nextHeartbeat && shownHeartbeat) nextHeartbeat = { ...nextHeartbeat, _key: shownHeartbeat._key };
+      const selected = untracked(selectedTaskKey);
+      keepSelection = Boolean(selected) && (selected === model.HEARTBEAT_ITEM_KEY || loadedTasks.some((task) => task._key === selected));
+    }
+    applyRevision(data);
+    batch(() => {
+      applyOptions(data);
+      tasks.set(loadedTasks);
+      persistedTaskSignatures.set(signatures(loadedTasks));
+      heartbeatEnabled.set(data?.heartbeat_enabled !== false);
+      applyTaskRuns(data?.runs);
+      heartbeatTask.set(nextHeartbeat);
+      if (keepSelection) {
+        // Nothing was edited meanwhile (the list takes no edits while it loads): the editor shows
+        // the item as the runtime has it.
+        if (untracked(selectedTaskDraft)) openSelectedTaskDraft();
+      } else {
+        selectedTaskKey.set("");
+        selectedTaskDraft.set(null);
+        mobileEditorVisible.set(false);
+      }
+      draftDirty.set(false);
+      tasksDirty.set(false);
+    });
+  }
+
+  // Keeps /todo/tasks' answer for the next visit, without its runs: what ran then is not running now.
+  function keepTasksAnswer(endpointRef: string, data: any) {
+    if (!data || typeof data !== "object") return;
+    const { runs: _runs, ...rest } = data;
+    writeResource(tasksKey(endpointRef), rest, { eager: true });
+  }
+
+  // After a save the list the runtime has is asked for again, only to keep it for the next visit.
+  async function keepSavedTasks() {
+    const endpointRef = endpointState.selectedRef;
+    try {
+      keepTasksAnswer(endpointRef, await runtimeApiFetchForEndpoint(endpointRef, "/todo/tasks"));
+    } catch (e) {
+      console.warn("todo: the saved list was not kept for the next visit:", errorMessage(e));
+    }
+  }
+
   async function load() {
     loading.set(true);
     let failed = false;
+    const endpointRef = endpointState.selectedRef;
     try {
+      if (!untracked(loaded)) {
+        // The first load of this visit: last visit's list shows while the runtime answers.
+        const cached = peekResource(tasksKey(endpointRef)) ?? (await readResource(tasksKey(endpointRef)));
+        if (disposed) return;
+        if (cached !== undefined && !untracked(loaded)) {
+          applyTasksAnswer(cached, false);
+          tasksFromLastTime.set(true);
+        }
+      }
       const data = await runtimeApiFetch("/todo/tasks");
+      if (endpointRef === endpointState.selectedRef) keepTasksAnswer(endpointRef, data);
       if (disposed) return;
-      const rows = Array.isArray(data?.tasks) ? data.tasks : [];
-      const systemRows = Array.isArray(data?.system_tasks) ? data.system_tasks : [];
-      const heartbeatRow = systemRows.find((item: any) => trimText(item?.id) === model.HEARTBEAT_ITEM_KEY);
-      const loadedTasks = rows.map((item: any) => model.normalizeTask(item, t("todo_untitled"))) as TodoTask[];
-      applyRevision(data);
-      batch(() => {
-        applyOptions(data);
-        tasks.set(loadedTasks);
-        persistedTaskSignatures.set(signatures(loadedTasks));
-        heartbeatEnabled.set(data?.heartbeat_enabled !== false);
-        applyTaskRuns(data?.runs);
-        heartbeatTask.set(heartbeatRow ? (model.normalizeTask(heartbeatRow, t("todo_heartbeat_title")) as TodoTask) : null);
-        selectedTaskKey.set("");
-        selectedTaskDraft.set(null);
-        draftDirty.set(false);
-        tasksDirty.set(false);
-        mobileEditorVisible.set(false);
-      });
+      applyTasksAnswer(data, untracked(tasksFromLastTime));
     } catch (e) {
       failed = true;
       notice.error(errorMessage(e) || t("msg_load_failed"));
     } finally {
       batch(() => {
         loading.set(false);
+        tasksFromLastTime.set(false);
         if (!untracked(loaded)) loaded.set(failed ? "failed" : "ok");
       });
     }
@@ -1202,6 +1282,7 @@ export function createTodoState() {
         method: "PUT",
         body: saveBody(nextTasks),
       });
+      void keepSavedTasks();
       if (disposed) return false;
       applyRevision(data);
       batch(() => {
@@ -1440,6 +1521,8 @@ export function createTodoState() {
     selectedCalendarDateTitle,
     selectedCalendarTasks,
     heartbeatLoading,
+    placeholderRows,
+    tasksPending,
     heartbeatSaving,
     heartbeatSelected,
     heartbeatWorkflows,

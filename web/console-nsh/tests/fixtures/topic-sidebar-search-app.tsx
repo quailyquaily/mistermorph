@@ -53,6 +53,7 @@ const c = {
   topicSearchRevealed: signal(false),
   topicSidebarView: () => view(),
   topicsLoading: () => loading(),
+  topicsFromLastTime: () => false,
   topicsLoadingOlder: () => false,
   topicsLoadError: () => "",
   topicsLoadErrorInSidebar: () => false,

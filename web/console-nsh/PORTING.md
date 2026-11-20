@@ -21,6 +21,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/i18n/index.js` | The Vue console's strings, unchanged: `translate(key, vars)` |
 | `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()`, the last committed `navigation()` |
 | `lib/navMotion.ts` | Which way a navigation moves (further in, back, the navigation's order); `lib/navOrder.ts` is that order |
+| `lib/core/resource-cache.js`, `lib/cache.ts`, `lib/cacheFiles.ts` | The pages' last answers, shown while a page asks again: in memory everywhere, on disk in the phone apps. Pages use `peekResource` / `readResource` / `writeResource` from `lib/core/resources.js` (docs/feat/feat_20261120_console_local_cache.md) |
 | `lib/scrollMemory.ts` | Where a page's columns were scrolled, in memory only: `useScrollMemory({ column, area, selection, ready })` on a page's `Scroll` or `List` (docs/console/scroll-memory.md) |
 | `lib/shell.ts` | The frame's state: endpoints, nav items, mobile breakpoint |
 | `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back, then the history |

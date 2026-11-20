@@ -17,6 +17,7 @@ import {
   runtimeEndpointByRef,
 } from "../../lib/core/context.js";
 import { useNotice } from "../../lib/core/notices.js";
+import { cacheClear } from "../../lib/core/resource-cache.js";
 import { captureUnsavedScopes, mergeConfigUpdates, restoreUnsavedScopes } from "../../lib/core/settings-save.js";
 import { inferenceProviderLogo } from "../../lib/core/inference-provider-logos.js";
 import { hasLLMFieldValue, isLLMFieldEnvManaged, llmFieldEnvRawValue, llmFieldValue } from "../../lib/core/llm-env-managed.js";
@@ -3242,6 +3243,8 @@ export function createSettingsStore() {
       console.warn("settings: logout", (error as Error)?.message);
     } finally {
       authState.clear();
+      // Logged out: nothing this account was shown stays on the device.
+      cacheClear();
       await navigate("/login", { replace: true, force: true });
       loggingOut.set(false);
     }

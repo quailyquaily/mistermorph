@@ -81,6 +81,11 @@ export interface ConsoleOptions {
    * read them with `scrollProbe(app)`.
    */
   scrollProbe?: boolean;
+  /**
+   * The phone app keeps its cache on disk (tests/cacheFilesConsole.tsx): the store's files are in
+   * the app's storage, so `kv: first.app.storage()` opens the app again as after it was closed.
+   */
+  cacheFiles?: boolean;
   /** The window draws glass (tests/glassConsole.tsx): bars over the lists, a glass composer and navigation. */
   glass?: boolean;
   /**
@@ -188,7 +193,9 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
   const routes = { ...defaults(options), ...(options.api || {}) };
   // A bare "*" is a GET of any URL; each method needs its own catch-all.
   const network = Object.fromEntries(["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => [`${method} *`, answer]));
-  const entry = options.slowSlides
+  const entry = options.cacheFiles
+    ? "./cacheFilesConsole.tsx"
+    : options.slowSlides
     ? "./slowSlidesConsole.tsx"
     : options.scrollProbe
       ? "./scrollProbeConsole.tsx"

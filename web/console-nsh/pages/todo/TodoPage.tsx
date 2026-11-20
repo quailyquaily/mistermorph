@@ -175,7 +175,7 @@ function Calendar(props: { state: TodoState; mobile?: boolean }) {
     <TodoCalendar
       mobile={props.mobile}
       tasks={state.tasks()}
-      tasksLoading={state.loading()}
+      tasksLoading={state.tasksPending()}
       taskTitle={state.taskTitle}
       scheduleLabel={state.scheduleLabel}
       onAddTask={state.addTask}

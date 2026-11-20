@@ -503,7 +503,7 @@ export function TopicSidebar(props: {
         />
       </View>
       <Scroll
-        class={`flex-1 ${c.topicsLoading() ? "opacity-70" : ""}`}
+        class={`flex-1 ${c.topicsLoading() && !c.topicsFromLastTime() ? "opacity-70" : ""}`}
         testID="chat-topic-list"
         ref={memory.ref}
         onScroll={(event) => {

@@ -62,7 +62,7 @@ import { endpointChannelLabel } from "../../lib/core/endpoints.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { modelVendorMeta } from "../../lib/core/model-vendor.js";
 import { SETUP_PROVIDER_OPTIONS } from "../../lib/core/setup-contract.js";
-import { loadResource, resourceKey } from "../../lib/core/resources.js";
+import { invalidateResource, loadResource, peekResource, readResource, resourceKey, writeResource } from "../../lib/core/resources.js";
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../../lib/core/workspace-tree.js";
 import { topicIcon, useTopicMetadata } from "../../lib/core/topic-metadata.js";
@@ -632,8 +632,17 @@ export function createChatController() {
       cronModels.set(null);
       return;
     }
+    // The TODO page's list (components/todo/todo-state.ts keeps the same answer): shown from last
+    // time while it loads.
+    const key = resourceKey("todo", "tasks", endpointRef);
     try {
+      if (untracked(cronModels) === null) {
+        const cached = peekResource(key) ?? (await readResource(key));
+        if (cached !== undefined && seq === cronModelsLoadSeq && untracked(cronModels) === null) cronModels.set(cronTopicModels(cached));
+      }
       const data = await runtimeApiFetchForEndpoint(endpointRef, "/todo/tasks");
+      // Without its runs, as the TODO page keeps it: what ran then is not running at the next visit.
+      if (data && typeof data === "object") writeResource(key, { ...data, runs: undefined }, { eager: true });
       if (seq === cronModelsLoadSeq) cronModels.set(cronTopicModels(data));
     } catch (error) {
       // The rows keep what they showed; a blank second row is better than a wrong one.
@@ -780,10 +789,23 @@ export function createChatController() {
   const topicLayout = signal<any>(normalizeTopicLayout(null));
   const topicLayoutSupported = signal(false);
   let topicLayoutEndpoint: string | null = null;
+  // The agent whose layout the runtime gave in this visit: its changes are kept as the last answer.
+  let topicLayoutKept: string | null = null;
+  const topicLayoutKey = (endpointRef: string) => resourceKey("chat", "topic-layout", endpointRef);
 
   async function loadTopicLayout() {
     const endpointRef = untracked(submitEndpointRef);
     topicLayoutEndpoint = endpointRef;
+    topicLayoutKept = null;
+    // Last time's layout while the runtime answers, so the tag view opens arranged.
+    const cached = peekResource(topicLayoutKey(endpointRef)) ?? (await readResource(topicLayoutKey(endpointRef)));
+    if (untracked(submitEndpointRef) !== endpointRef || topicLayoutEndpoint !== endpointRef) return;
+    if (cached !== undefined) {
+      batch(() => {
+        topicLayout.set(normalizeTopicLayout(cached));
+        topicLayoutSupported.set(true);
+      });
+    }
     try {
       const data = await runtimeApiFetchForEndpoint(endpointRef, "/topics/layout");
       if (untracked(submitEndpointRef) !== endpointRef) return;
@@ -791,14 +813,25 @@ export function createChatController() {
         topicLayout.set(normalizeTopicLayout(data));
         topicLayoutSupported.set(true);
       });
-    } catch {
+      topicLayoutKept = endpointRef;
+      writeResource(topicLayoutKey(endpointRef), untracked(topicLayout), { eager: true });
+    } catch (error) {
       if (untracked(submitEndpointRef) !== endpointRef) return;
+      // The network failing says nothing about the runtime: last time's layout stays.
+      if (cached !== undefined && transientRequestError(error)) return;
       batch(() => {
         topicLayout.set(normalizeTopicLayout(null));
         topicLayoutSupported.set(false);
       });
     }
   }
+  // A group or a topic the user moved: the layout as it is now is what the next visit opens with.
+  effect(() => {
+    const layout = topicLayout();
+    untracked(() => {
+      if (topicLayoutKept && topicLayoutKept === submitEndpointRef()) writeResource(topicLayoutKey(topicLayoutKept), layout, { eager: true });
+    });
+  });
 
   const topicTagGroups = computed(() =>
     arrangeTopicGroups(groupTopicsByTag(visibleTopics(), { pinned: t("chat_topics_pinned"), untagged: t("chat_topics_untagged") }), topicLayout()),
@@ -1260,15 +1293,24 @@ export function createChatController() {
       });
       return;
     }
-    try {
-      const data = await runtimeApiFetchForEndpoint(endpointRef, "/llm/profiles");
-      if (seq !== composerLLMProfilesLoadSeq) return;
+    const key = resourceKey("chat", "llm-profiles", endpointRef);
+    const apply = (data: any) =>
       batch(() => {
         composerDefaultLLMProfile.set(normalizeChatLLMProfileMetadata(data?.default));
         composerLLMProfiles.set(normalizeChatLLMProfiles(data?.items));
         syncComposerLLMProfile();
       });
-    } catch {
+    // Last time's profiles while the runtime answers, so the composer's model does not pop in.
+    const cached = peekResource(key) ?? (await readResource(key));
+    if (seq !== composerLLMProfilesLoadSeq) return;
+    if (cached !== undefined) apply(cached);
+    try {
+      const data = await runtimeApiFetchForEndpoint(endpointRef, "/llm/profiles");
+      writeResource(key, data, { eager: true });
+      if (seq !== composerLLMProfilesLoadSeq) return;
+      apply(data);
+    } catch (error) {
+      if (cached !== undefined && transientRequestError(error)) return;
       if (seq === composerLLMProfilesLoadSeq) {
         batch(() => {
           composerDefaultLLMProfile.set(null);
@@ -2340,8 +2382,25 @@ export function createChatController() {
 
   /* ---------- topics ---------- */
 
+  // The topic list's first page as the runtime gave it in this visit, for the agent it is of: what
+  // the user then changes in the list (a title, tags, a pin, a deleted topic) is kept with it, so
+  // the next visit opens with the list as it was left.
+  let topicsKept: { endpointRef: string; cursor: string } | null = null;
+  const topicsKey = (endpointRef: string) => resourceKey("chat", "topics", endpointRef);
+  /** The list on screen is last time's, and the runtime has not answered yet. */
+  const topicsFromLastTime = signal(false);
+  effect(() => {
+    const items = topics();
+    untracked(() => {
+      if (!topicsKept || topicsKept.endpointRef !== submitEndpointRef()) return;
+      writeResource(topicsKey(topicsKept.endpointRef), { items: items.slice(0, TOPIC_PAGE_LIMIT), next_cursor: topicsKept.cursor }, { eager: true });
+    });
+  });
+
   function resetTopicState() {
+    topicsKept = null;
     batch(() => {
+      topicsFromLastTime.set(false);
       topics.set([]);
       topicsLoading.set(false);
       topicsLoadingOlder.set(false);
@@ -2374,6 +2433,24 @@ export function createChatController() {
     const draftKey = composerFileDraftKey(untracked(composerDraftScope));
     topicsLoading.set(true);
     try {
+      if (topicsKept?.endpointRef !== endpointRef) topicsKept = null;
+      if (untracked(topics).length === 0) {
+        // Nothing listed yet: last time's list shows while the runtime answers.
+        const cached: any = peekResource(topicsKey(endpointRef)) ?? (await readResource(topicsKey(endpointRef)));
+        if (
+          Array.isArray(cached?.items) &&
+          cached.items.length > 0 &&
+          untracked(topics).length === 0 &&
+          endpointRef === untracked(submitEndpointRef) &&
+          draftKey === composerFileDraftKey(untracked(composerDraftScope))
+        ) {
+          batch(() => {
+            topics.set(cached.items);
+            topicsNextCursor.set(String(cached.next_cursor || "").trim());
+            topicsFromLastTime.set(true);
+          });
+        }
+      }
       const data = await runtimeApiFetchForEndpoint(endpointRef, `/topics?limit=${encodeURIComponent(TOPIC_PAGE_LIMIT)}`);
       if (draftKey !== composerFileDraftKey(untracked(composerDraftScope))) return false;
       const items = Array.isArray(data?.items) ? [...data.items] : [];
@@ -2388,10 +2465,12 @@ export function createChatController() {
       }
       if (draftKey !== composerFileDraftKey(untracked(composerDraftScope))) return false;
       items.sort(compareTopicsNewestFirst);
+      topicsKept = endpointRef === untracked(submitEndpointRef) ? { endpointRef, cursor: String(data?.next_cursor || "").trim() } : null;
       batch(() => {
         topics.set(items);
         topicsNextCursor.set(String(data?.next_cursor || "").trim());
         topicsLoadError.set("");
+        topicsFromLastTime.set(false);
       });
       if (preferredTopicID && items.some((topic) => normalizeTopicID(topic?.id) === preferredTopicID)) {
         batch(() => {
@@ -2448,7 +2527,10 @@ export function createChatController() {
       }
       return false;
     } finally {
-      topicsLoading.set(false);
+      batch(() => {
+        topicsLoading.set(false);
+        topicsFromLastTime.set(false);
+      });
     }
   }
 
@@ -2504,6 +2586,13 @@ export function createChatController() {
     return path;
   }
 
+  // Keeps a conversation's newest page as its last answer, without the runs still under way.
+  function keepHistoryAnswer(key: string, data: any) {
+    if (!Array.isArray(data?.items)) return;
+    const items = data.items.filter((task: any) => isTerminalStatus(normalizeTaskStatus(task?.status)));
+    writeResource(key, { ...data, items }, { group: "history" });
+  }
+
   function followRunningTasks(endpointRef: string, onlyNew: boolean) {
     for (const item of untracked(chatHistoryItems)) {
       const taskID = String(item?.taskId || "").trim();
@@ -2547,21 +2636,43 @@ export function createChatController() {
         return true;
       }
       const path = historyPath();
-      const data = await loadResource(resourceKey("chat", "history", endpointRef, path), () => runtimeApiFetchForEndpoint(endpointRef, path));
+      const key = resourceKey("chat", "history", endpointRef, path);
+      const show = (data: any) => {
+        const tasks = Array.isArray(data?.items) ? data.items : [];
+        historyNextCursor.set(String(data?.next_cursor || "").trim());
+        if (untracked(consoleTopicsEnabled)) applyComposerTopicLLMProfile(lastUsedChatLLMProfile(tasks));
+        const current = untracked(chatHistoryItems);
+        const next = keepHistoryItemIDs(
+          current,
+          keepLiveTaskState(current, taskListHistoryItems(tasks, t, { agentName: untracked(activeAgentName), endpointRef, locale: currentLocale() })),
+        );
+        batch(() => {
+          replaceHistoryItems(next.length > 0 ? next : [emptyHistoryItem()]);
+          historyLoadError.set(null);
+        });
+      };
+      // Another conversation is on screen (or none): this one as it was last time shows while the
+      // runtime answers. Its finished runs only (keepHistoryAnswer), so no reply is shown stopped
+      // half way; the answer brings the running ones.
+      let shownFromLastTime = false;
+      if (!options.preserveCurrent && untracked(historyItemsScope) !== scope) {
+        const cached: any = peekResource(key) ?? (await readResource(key));
+        if (!viewActive || version !== historyLoadVersion) return true;
+        if (Array.isArray(cached?.items) && cached.items.length > 0) {
+          batch(() => {
+            show(cached);
+            historyItemsScope.set(scope);
+          });
+          scrollHistoryToBottom({ force: true });
+          shownFromLastTime = true;
+        }
+      }
+      const data = await loadResource(key, () => runtimeApiFetchForEndpoint(endpointRef, path));
+      keepHistoryAnswer(key, data);
       if (!viewActive || version !== historyLoadVersion) return true;
-      const tasks = Array.isArray(data?.items) ? data.items : [];
-      historyNextCursor.set(String(data?.next_cursor || "").trim());
-      if (untracked(consoleTopicsEnabled)) applyComposerTopicLLMProfile(lastUsedChatLLMProfile(tasks));
-      const current = untracked(chatHistoryItems);
-      const next = keepHistoryItemIDs(
-        current,
-        keepLiveTaskState(current, taskListHistoryItems(tasks, t, { agentName: untracked(activeAgentName), endpointRef, locale: currentLocale() })),
-      );
-      batch(() => {
-        replaceHistoryItems(next.length > 0 ? next : [emptyHistoryItem()]);
-        historyLoadError.set(null);
-      });
-      scrollHistoryToBottom({ force: true });
+      show(data);
+      // The list follows its end while it is there: moved away from it meanwhile, the user stays.
+      if (!shownFromLastTime) scrollHistoryToBottom({ force: true });
       void loadApprovalDetails(endpointRef, version);
       followRunningTasks(endpointRef, false);
       return true;
@@ -2598,7 +2709,9 @@ export function createChatController() {
     const version = historyLoadVersion;
     let data: any;
     try {
-      data = await loadResource(resourceKey("chat", "history", endpointRef, path), () => runtimeApiFetchForEndpoint(endpointRef, path));
+      const key = resourceKey("chat", "history", endpointRef, path);
+      data = await loadResource(key, () => runtimeApiFetchForEndpoint(endpointRef, path));
+      keepHistoryAnswer(key, data);
     } catch {
       // The tasks being followed keep their own polling; the next refresh tries again.
       return;
@@ -2890,6 +3003,8 @@ export function createChatController() {
     try {
       await runtimeApiFetchForEndpoint(endpointRef, `/topics/${encodeURIComponent(topicID)}`, { method: "DELETE" });
       clearChatDraft(endpointRef, topicID);
+      // A deleted conversation is not kept for a next visit.
+      invalidateResource(resourceKey("chat", "history", endpointRef, `/tasks?limit=${CHAT_HISTORY_LIMIT}&topic_id=${encodeURIComponent(topicID)}`));
       if (normalizeTopicID(untracked(selectedTopicID)) === topicID) {
         batch(() => {
           selectedTopicID.set("");
@@ -3622,6 +3737,7 @@ export function createChatController() {
     historySwitching,
     topics,
     topicsLoading,
+    topicsFromLastTime,
     topicsLoadingOlder,
     topicsNextCursor,
     selectedTopicID,

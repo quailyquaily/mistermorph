@@ -13,6 +13,7 @@ import { Shell } from "./components/Shell";
 import { authState, configureApiBase, endpointState, localeState } from "./lib/core/context.js";
 import { currentLocale } from "./lib/i18n/index.js";
 import { installSystemNotifications } from "./lib/core/system-notifications.js";
+import { startCache } from "./lib/cache";
 import { boot, isMobile, reportFrontendReady, setDocumentLanguage, startVisibilityTracking } from "./lib/platform";
 import { route, router, startRouter } from "./lib/router";
 import { inShellless, inStandalone, startShell, systemInsets } from "./lib/shell";
@@ -73,6 +74,8 @@ async function start() {
   localeState.hydrateLanguage();
   authState.hydrate();
   endpointState.hydrateEndpointSelection();
+  // The pages' last answers, read before the first page mounts so it opens with them.
+  await startCache();
   installSystemNotifications(router);
   startRouter();
   mount(App);
