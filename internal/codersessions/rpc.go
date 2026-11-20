@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -33,19 +34,31 @@ type rpcError struct {
 
 // rpc has one consumer per session. Calls dispatch notifications and server requests while
 // waiting for their response, so an approval cannot deadlock a pending prompt.
+//
+// The process is watched from its start (watch): however it ends (a close, a task's
+// cancellation, the Console stopping it, a crash, its own exit), it is reaped at once, also while
+// its session waits for a task and nobody reads its output.
 type rpc struct {
 	cmd      *exec.Cmd
 	in       io.WriteCloser
-	out      io.ReadCloser
+	out      *os.File
 	messages chan message
-	done     chan struct{}
-	stopped  chan struct{}
+	done     chan struct{} // the output reader ended
+	stopped  chan struct{} // close began
+	exit     chan struct{} // the process has exited
+	waited   chan struct{} // the process is reaped and its stderr read
 	once     sync.Once
-	waitOnce sync.Once
-	waited   chan struct{}
-	next     int
-	err      error
-	stderr   stderrTail
+	// mu orders signaling the process with reaping it: it is signaled by its pid (its group's id
+	// too), which is the process's only until it is reaped.
+	mu sync.Mutex
+	// released: the process is reaped, or about to be; its pid must not be signaled any more.
+	released bool
+	// unwatched: its exit cannot be seen before it is reaped (exitWatch failed or is not
+	// supported); only the process itself is signaled, through its handle.
+	unwatched bool
+	next      int
+	err       error
+	stderr    stderrTail
 }
 
 // stderrTail keeps the end of what the CLI wrote to stderr, for the error of a process that died.
@@ -79,28 +92,38 @@ func startRPC(req Request, args ...string) (*rpc, error) {
 // startProcess starts a CLI that talks JSON lines. With lines set, its lines are handed over
 // whole (message.line) instead of being read as JSON-RPC messages.
 func startProcess(req Request, lines bool, args ...string) (*rpc, error) {
-	cmd := exec.CommandContext(context.Background(), req.Command, args...)
+	cmd := exec.Command(req.Command, args...)
 	configureCoderProcess(cmd)
 	cmd.Dir = req.CWD
 	// The server outlives the run that starts it: it carries its own tag, not the run's, so a run
 	// can tell what the server left behind from what it keeps (internal/proctrack).
 	cmd.Env = append(proctrack.WithoutTags(envOrProcess(req.Env)), proctrack.EnvCoder+"="+uuid.NewString())
-	cmd.WaitDelay = time.Second
+	// Wait gives up on a stderr that what the process started still holds open this long after
+	// it exited.
+	cmd.WaitDelay = outputDelay
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
-	out, err := cmd.StdoutPipe()
+	// Not StdoutPipe: Wait would close it, and the reaping does not wait for the output to be
+	// read (nobody reads it while the session waits for a task). The reader ends at the end of
+	// the output instead, or when what holds it open outlives the process too long.
+	out, w, err := os.Pipe()
 	if err != nil {
 		in.Close()
 		return nil, err
 	}
-	r := &rpc{cmd: cmd, in: in, out: out, messages: make(chan message, 128), done: make(chan struct{}), stopped: make(chan struct{}), waited: make(chan struct{})}
+	cmd.Stdout = w
+	r := &rpc{cmd: cmd, in: in, out: out, messages: make(chan message, 128), done: make(chan struct{}), stopped: make(chan struct{}), exit: make(chan struct{}), waited: make(chan struct{})}
 	cmd.Stderr = &r.stderr
-	if err = cmd.Start(); err != nil {
+	err = cmd.Start()
+	w.Close()
+	if err != nil {
 		in.Close()
+		out.Close()
 		return nil, err
 	}
+	go r.watch()
 	go func() {
 		defer close(r.done)
 		defer close(r.messages)
@@ -120,35 +143,87 @@ func startProcess(req Request, lines bool, args ...string) (*rpc, error) {
 				return
 			}
 		}
-		if r.err == nil {
-			r.err = scan.Err()
+		// A closed output is its end: closed by close, or by watch after the process exited.
+		if err := scan.Err(); r.err == nil && !errors.Is(err, os.ErrClosed) {
+			r.err = err
 		}
 	}()
 	return r, nil
 }
+
+// outputDelay is how long the output may stay open after the process exited: what the process
+// started (outside its group) can hold it open for good.
+const outputDelay = time.Second
+
+// watch is the only waiter of the process. It sees the process exit before reaping it, where the
+// system tells (exitWatch): the exited process still holds its pid, so its group is stopped
+// safely (nothing else can have its id yet), with what it left running there. Then it reaps it.
+func (r *rpc) watch() {
+	pid := r.cmd.Process.Pid
+	held := exitWatch(pid)
+	r.mu.Lock()
+	if held {
+		_ = killGroup(pid)
+		r.released = true
+	} else {
+		r.unwatched = true
+	}
+	r.mu.Unlock()
+	if held {
+		r.markExited()
+	}
+	_ = r.cmd.Wait()
+	if !held {
+		r.mu.Lock()
+		r.released = true
+		r.mu.Unlock()
+		r.markExited()
+	}
+	close(r.waited)
+}
+
+// markExited marks the process's exit, and ends its output after outputDelay if nothing else does.
+func (r *rpc) markExited() {
+	close(r.exit)
+	time.AfterFunc(outputDelay, func() {
+		select {
+		case <-r.done:
+		default:
+			_ = r.out.Close()
+		}
+	})
+}
+
+// kill stops the process and its group, unless it is reaped (or being reaped) already.
+func (r *rpc) kill() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	switch {
+	case r.released:
+	case r.unwatched:
+		// It can be reaped any time: only its handle knows whether the pid is still its.
+		_ = r.cmd.Process.Kill()
+	default:
+		_ = killGroup(r.cmd.Process.Pid)
+	}
+}
+
 func (r *rpc) close() {
 	r.once.Do(func() {
 		close(r.stopped)
 		r.in.Close()
-		_ = r.cmd.Cancel()
+		r.kill()
 		_ = r.out.Close()
 		<-r.done
-		r.wait()
 		<-r.waited
 	})
 }
 
-// wait reaps the process once; waited closes when it has exited and its stderr was read.
-func (r *rpc) wait() {
-	r.waitOnce.Do(func() {
-		go func() {
-			_ = r.cmd.Wait()
-			close(r.waited)
-		}()
-	})
-}
-func (r *rpc) exited() bool {
+// ended tells whether the process exited or its output ended: it takes no more tasks.
+func (r *rpc) ended() bool {
 	select {
+	case <-r.exit:
+		return true
 	case <-r.done:
 		return true
 	default:
@@ -189,16 +264,20 @@ func (r *rpc) read(ctx context.Context) (message, error) {
 			if r.err != nil {
 				return m, r.err
 			}
-			// The output ended: the process is gone or going. Its last words on stderr say why.
-			r.wait()
+			// The output ended: the process is gone or going. Its exit and its last words on
+			// stderr say why.
+			text := "coder server closed its output"
 			select {
 			case <-r.waited:
+				if state := r.cmd.ProcessState; state != nil {
+					text = "coder server exited (" + state.String() + ")"
+				}
 			case <-time.After(500 * time.Millisecond):
 			}
 			if tail := r.stderr.String(); tail != "" {
-				return m, fmt.Errorf("coder server closed its output; stderr: %s", tail)
+				return m, fmt.Errorf("%s; stderr: %s", text, tail)
 			}
-			return m, fmt.Errorf("coder server closed its output")
+			return m, errors.New(text)
 		}
 		return m, nil
 	}

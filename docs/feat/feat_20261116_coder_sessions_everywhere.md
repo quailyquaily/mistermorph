@@ -90,6 +90,8 @@ scope + backend + cwd ──► open or reuse a session ──► run(task) ─�
 - Telegram and Slack chats get a session per run. Keeping one per chat (with an idle timeout) is left for later.
 - A session takes one task at a time; a second one is refused while it is busy.
 - A task that fails or is cancelled closes the process. The session keeps its id, and the next task of the scope reopens it.
+- A process that ends by itself or is stopped from outside (Stop in a task's process panel, a crash) is reaped at once, also while its session waits for a task, and what it left running in its process group is stopped with it. A task it was running ends with its exit status and the end of its stderr; the next task of the scope reopens the session. Stopping one of the commands it runs leaves the process and its session as they are.
+- Every process has one waiter (`rpc.watch`). On Linux (`waitid` with `WNOWAIT`), macOS and the BSDs (kqueue `NOTE_EXIT`) it sees the exit before reaping, so the process group is signaled only while the exited process still holds its id and no other process can have it. Elsewhere (Windows) only the process itself is stopped, through its handle.
 - A changed `bypass_approvals` setting reopens the process before the next task.
 
 ### Approvals and questions
