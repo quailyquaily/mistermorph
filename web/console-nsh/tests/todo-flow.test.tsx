@@ -333,18 +333,23 @@ test("a replay travels a column at a time: pulses into the next jobs, none out o
   // job's mark is its own state again, not the ring.
   expect(app.count("label:Risk summary, failed, Failed: the model timed out")).toBe(1);
   expect(app.count("label:Morning report, Today 09:00, by schedule")).toBe(1);
-  // Nothing is edited from a replay: no join rule, no link button, no picker.
+  // Nothing is edited from a replay: no join rule, no link button, no picker. A job can still be
+  // selected, to open it (the one that failed), and the picture stays the chain's.
   expect(app.count("id:todo-flow-join-brief")).toBe(0);
-  await app.press("id:todo-flow-job-brief");
-  expect(app.count("id:todo-flow-link-from-brief")).toBe(0);
+  await app.press("id:todo-flow-job-risk");
+  expect(app.count("id:todo-flow-link-from-risk")).toBe(0);
+  expect(fadedJobs(app)).toEqual(["backup", "heartbeat", "notes", "peer", "triage"]);
+  await app.press("label:Open Risk summary");
+  expect(calls(app)).toEqual(["open(risk)"]);
   expect(app.count("label:Weekly brief uses Team digest: each new result")).toBe(1);
   await app.press("id:todo-flow-link-digest>brief");
   await app.wait(200);
   expect(app.count("text:Remove this link")).toBe(0);
 
-  // Back to now.
+  // Back to now, with nothing selected.
   await app.press("id:live");
   expect(fadedJobs(app)).toEqual([]);
+  expect(app.count("id:todo-flow-open-risk")).toBe(0);
   expect(app.texts()).toContain("Tells Slack #team");
   expect(app.texts()).not.toContain("Finished");
   expect(app.count("id:todo-flow-line-report>digest.each.rest.live")).toBe(1);

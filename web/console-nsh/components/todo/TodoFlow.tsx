@@ -121,6 +121,8 @@ const LIVE_PERIOD_MS = 1800;
 const LIT_MS = 900;
 /** Fades: a job's 180ms, a link's 240ms. */
 const LINK_FADE_MS = 240;
+/** How long a link just asked for may take to arrive and still open its picker. */
+const PENDING_PICKER_MS = 4000;
 /** The room round the picture inside the canvas: a border light's halo, the link button on a job's edge. */
 const INSET = 14;
 /** Under the last row: its join rule. */
@@ -685,7 +687,16 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       untracked(() => eventListener?.(out ? "links:out" : "links:in"));
     });
   }
-  // A link just asked for opens its picker once it is drawn (the prototype's next step: its kind).
+  // A link just asked for opens its picker once it is drawn (the prototype's next step: its kind);
+  // one that has not come after a few seconds (the page refused it, or saved for long) opens nothing.
+  let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    const key = pendingPop();
+    untracked(() => {
+      drop(pendingTimer);
+      pendingTimer = key ? later(() => pendingPop() === key && pendingPop.set(null), PENDING_PICKER_MS) : undefined;
+    });
+  });
   effect(() => {
     const key = pendingPop();
     if (!key || settling() || busy()) return;
@@ -745,9 +756,10 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       stepTimers = [];
       void clock.stop();
       clock.set(0);
+      // A replay starts and ends with nothing selected: its picture is the chain's, not a job's line.
+      clear();
       const chain = steps ? run() : null;
       if (!chain) return;
-      clear();
       const reach = (at: number) => {
         step.set(at);
         eventListener?.(`step:${at}:${layout().nodes.filter((node) => chain.status.has(node.id) && node.col <= at).map((node) => node.id).join("+")}`);
@@ -829,7 +841,7 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       const mark: StatusState = chain ? (failed ? "error" : job.enabled ? "on" : "off") : !job.enabled ? "off" : job.running ? "running" : "on";
       const note = reached ? (chain?.note.get(job.id) ?? job.note) : job.note;
       const state = failed ? t("todo_flow_state_failed") : mark === "running" ? t("todo_flow_state_running") : mark === "off" ? t("todo_flow_state_off") : "";
-      const isSelected = !chain && job.id === selected;
+      const isSelected = job.id === selected;
       looks.set(job.id, {
         job,
         faded: from ? !(target || job.id === from) : chain ? !reached : !onLine(job.id),
@@ -947,7 +959,8 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
   /* the page */
   const viewport = signal({ width: 0, height: 0 });
   const padX = () => (mobile() ? gutterX() : Math.max(gutterX(), 24));
-  const padTop = () => (mobile() ? 16 : 24);
+  // Clear of link mode's line of words over the top (23pt).
+  const padTop = () => (mobile() ? 16 : 28);
   // The phone's bottom navigation floats over the foot of the page.
   const padBottom = () => (mobile() ? 84 : gutterY() * 2 + 20);
   const canvasWidth = () => layout().width + 2 * INSET;
@@ -1035,7 +1048,7 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       </Scroll>
       {/* Link mode says what to do next, over the picture's top; screen readers hear it as it comes. */}
       <If when={linking()}>
-        <View class="absolute left-0 right-0 top-0 bg-paper-dense" style={{ paddingHorizontal: padX(), paddingVertical: 6, pointerEvents: "none" }}>
+        <View class="absolute left-0 right-0 top-0 bg-paper-dense" style={{ paddingHorizontal: padX(), paddingVertical: 2, pointerEvents: "none" }}>
           <Text role="alert" class="text-[13px] leading-[19px] text-muted-foreground" testID="todo-flow-hint">
             {t("todo_flow_link_hint", { job: linkingTitle() })}
           </Text>
