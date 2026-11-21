@@ -13,6 +13,7 @@ import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPi
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import { TodoHeartbeatEditor } from "../../components/todo/TodoHeartbeatEditor";
 import { TodoRuns } from "../../components/todo/TodoRuns";
+import { TodoFlow } from "../../components/todo/TodoFlow";
 import { ROW_TRANSITION, TodoIndex } from "../../components/todo/TodoIndex";
 import { TodoCard } from "../../components/todo/TodoCard";
 import { gutterX, gutterY } from "../../components/frame/metrics";
@@ -243,6 +244,46 @@ export function TodoPage() {
       {/* The list and an open item take turns (a phone slides between them; a desktop swaps them).
           Only the desktop calendar keeps the open item beside it. */}
       <If
+        when={!state.flowView()}
+        else={
+          // The flow of jobs into each other: its own head (back to the list, the replay), then the graph.
+          <View class="flex-1" testID="todo-flow-page">
+            <PageBar
+              glass
+              leading={
+                <View class="flex-1 flex-row items-center gap-2">
+                  <BackButton title={t("todo_nav_title")} testID="todo-flow-back" onPress={() => state.setTodoView("list")} />
+                  <PageTitle text={t("todo_view_flow")} />
+                </View>
+              }
+              actions={
+                <Button
+                  variant="plain"
+                  size="xs"
+                  label={state.flow.replay() ? t("todo_flow_replay_stop") : t("todo_flow_replay")}
+                  loading={state.flow.replayLoading()}
+                  testID="todo-flow-replay"
+                  onPress={() => void state.flow.toggleReplay()}
+                />
+              }
+            />
+            <View class="flex-1">
+              <TodoFlow
+                jobs={state.flow.jobs()}
+                replay={state.flow.replay()}
+                mobile={isMobile()}
+                busy={state.saving() || state.loading()}
+                onOpenJob={state.flow.openJob}
+                onAddUse={state.flow.addUse}
+                onSetUseMode={state.flow.setUseMode}
+                onRemoveUse={state.flow.removeUse}
+                onSetJoin={state.flow.setJoin}
+              />
+            </View>
+          </View>
+        }
+      >
+      <If
         when={!isMobile() && state.calendarView()}
         else={
           <View class="flex-1">
@@ -316,6 +357,7 @@ export function TodoPage() {
             <EditorPane state={state} />
           </View>
         </View>
+      </If>
       </If>
 
       <WorkspaceDirPickerDialog

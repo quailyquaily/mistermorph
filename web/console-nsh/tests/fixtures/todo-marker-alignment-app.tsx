@@ -44,6 +44,7 @@ const state = {
   taskTitle: (item: TodoTask) => item.title,
   scheduleLabel: (item: TodoTask) => item.cron,
   whenLabel: (item: TodoTask) => item.cron,
+  setTodoView: () => {},
   composeText: Object.assign(() => "", { set: () => {} }),
   composeSending: () => false,
   composeTopicID: () => "",

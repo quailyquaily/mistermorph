@@ -525,7 +525,7 @@ export function createTodoState() {
     mobileEditorVisible.set(false);
   }
 
-  function setTodoView(view: "list" | "calendar") {
+  function setTodoView(view: "list" | "calendar" | "flow") {
     mobileEditorVisible.set(false);
     const route = untracked(currentRoute);
     const query: Record<string, string> = { ...(route?.query || {}) };
@@ -536,6 +536,9 @@ export function createTodoState() {
       if (!/^\d{4}-\d{2}$/.test(trimText(query.month))) {
         query.month = `${now.getFullYear()}-${model.pad2(now.getMonth() + 1)}`;
       }
+    } else if (view === "flow") {
+      query.view = "flow";
+      delete query.month;
     } else {
       delete query.view;
       delete query.month;
@@ -1022,6 +1025,102 @@ export function createTodoState() {
     rememberRecentWorkspaceDir(dir);
     editTask(task, (copy) => model.updateTaskField(copy, "workspace_dir", dir));
   }
+
+  /* ---------- the flow view ---------- */
+
+  // The jobs and the links between them, as a graph (TodoFlow). A change made there is one link of
+  // one job: it is saved at once, with the list, as a change on the job's page is with Save.
+  const flowView = () => trimText(currentRoute()?.query?.view).toLowerCase() === "flow";
+  const flowJobs = computed(() =>
+    tasks()
+      .filter((task) => trimText(task.id) !== "" && persistedTaskSignatures().has(task._key))
+      .map((task) => {
+        const shown = taskListDisplayTask(task) as TodoTask;
+        // The links say what a job waits for; its line says the rest: its schedule and other triggers.
+        const parts: string[] = [];
+        if (model.taskMode(shown) !== "none") parts.push(scheduleLabel(shown));
+        for (const trigger of model.extraTriggers(shown) as TodoTrigger[]) parts.push(triggerPhrase(trigger));
+        return {
+          id: task.id,
+          title: taskTitle(shown),
+          note: parts.join(t("todo_when_separator")),
+          enabled: shown.enabled !== false,
+          running: taskRun(task)?.state === TODO_RUN_RUNNING,
+          uses: (shown.uses ?? []).map((use) => ({ job_id: use.job_id, mode: use.mode })),
+          join: (shown.join === "any" ? "any" : "all") as "all" | "any",
+        };
+      }),
+  );
+  /** The chain of runs the flow replays, or null for the live state. */
+  const flowReplay = signal<{ job_id: string; status: "done" | "failed" | "skipped" | "canceled"; note: string }[] | null>(null);
+  const flowReplayLoading = signal(false);
+
+  function flowEdit(jobID: string, edit: Editor) {
+    const job = jobByID(jobID);
+    if (!job || untracked(saving) || untracked(loading)) return;
+    editTask(job, edit);
+    void saveTasks();
+  }
+
+  // The latest chain: the newest run that started others, with every run it led to, in order.
+  async function toggleFlowReplay() {
+    if (untracked(flowReplay)) {
+      flowReplay.set(null);
+      return;
+    }
+    const endpointRef = untracked(() => endpointState.selectedRef);
+    if (!endpointRef || untracked(flowReplayLoading)) return;
+    flowReplayLoading.set(true);
+    try {
+      const data = await runtimeApiFetchForEndpoint(endpointRef, "/todo/runs/history?limit=200");
+      const items = (Array.isArray(data?.items) ? data.items : []) as any[];
+      const ended = items.filter((run) => ["done", "failed", "skipped", "canceled"].includes(run?.status));
+      const byOrigin = new Map<string, any[]>();
+      for (const run of ended) {
+        const origin = trimText(run?.cause?.origin_run_id) || trimText(run?.run_id);
+        byOrigin.set(origin, [...(byOrigin.get(origin) || []), run]);
+      }
+      // Newest first, as the history lists them: the first chain of more than one run, else the newest run.
+      const chain = [...byOrigin.values()].find((runs) => runs.length > 1) || [...byOrigin.values()][0];
+      if (disposed) return;
+      if (!chain) {
+        notice.error(t("todo_flow_replay_none"));
+        return;
+      }
+      flowReplay.set(
+        [...chain]
+          .sort((left, right) => trimText(left.queued_at).localeCompare(trimText(right.queued_at)))
+          .map((run) => ({
+            job_id: trimText(run.job_id),
+            status: run.status,
+            note: trimText(run.status === "failed" ? run.error : run.cause?.note) || t(`todo_run_status_${run.status}`),
+          })),
+      );
+    } catch (e) {
+      notice.error(errorMessage(e) || t("msg_load_failed"));
+    } finally {
+      if (!disposed) flowReplayLoading.set(false);
+    }
+  }
+
+  function openJobFromFlow(jobID: string) {
+    const job = jobByID(jobID);
+    if (!job) return;
+    setTodoView("list");
+    selectTask(job);
+  }
+
+  const flow = {
+    jobs: flowJobs,
+    replay: flowReplay,
+    replayLoading: flowReplayLoading,
+    toggleReplay: toggleFlowReplay,
+    openJob: openJobFromFlow,
+    addUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.addUse(copy, usedJobID, "each")),
+    setUseMode: (jobID: string, usedJobID: string, mode: string) => flowEdit(jobID, (copy) => model.setUseMode(copy, usedJobID, mode)),
+    removeUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.removeUse(copy, usedJobID)),
+    setJoin: (jobID: string, join: string) => flowEdit(jobID, (copy) => model.setJoin(copy, join)),
+  };
 
   /* ---------- writing a job in words ---------- */
 
@@ -1733,6 +1832,8 @@ export function createTodoState() {
     selectedRunStop,
     runningTaskKey,
     calendarView,
+    flowView,
+    flow,
     showIndexPane,
     showEditorPane,
     mobileShowBack,

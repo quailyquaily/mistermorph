@@ -1372,3 +1372,42 @@ test("a runtime without the run history shows no Today and keeps the last-run li
   await app.waitFor("id:todo-last-run");
   expect(app.shows("id:todo-runs")).toBe(false);
 });
+
+/* ---------- the flow view ---------- */
+
+test("the list's flow button opens the jobs as a graph, and the back arrow returns to the list", async () => {
+  const { app } = await openLinked();
+  await app.waitFor("id:todo-item-report");
+  await app.press("id:todo-view-flow");
+  await app.waitFor("id:todo-flow-page");
+  await app.waitUntil(() => lastLocation(app).includes("view=flow"));
+  for (const title of ["Morning report", "Team digest", "Release notes"]) expect(app.shows(`text:${title}`)).toBe(true);
+  // The link says what Team digest waits for; its line says only the rest.
+  expect(app.shows("text:Whenever Morning report has a new result")).toBe(false);
+  await app.press("id:todo-flow-back");
+  await app.waitFor("id:todo-item-report");
+  expect(app.shows("id:todo-flow-page")).toBe(false);
+});
+
+test("the flow replays the latest chain of runs from the history, and says so when there is none", async () => {
+  const { app } = await openLinked(historyApi());
+  await app.press("id:todo-view-flow");
+  await app.waitFor("id:todo-flow-page");
+  await app.press("id:todo-flow-replay");
+  await app.waitFor("text:Back to now");
+  // The chain's last step: the digest, skipped because its input failed.
+  await app.waitFor("text:input job report failed");
+  await app.press("id:todo-flow-replay");
+  await app.waitFor("text:Replay the last run");
+
+  const empty = await openLinked({ "GET /proxy:/todo/runs/history": { body: { items: [], limit: 50 } } });
+  await empty.app.press("id:todo-view-flow");
+  await empty.app.press("id:todo-flow-replay");
+  await empty.app.waitFor("text:No run to replay yet.");
+});
+
+test("a runtime that knows no triggers offers no flow view", async () => {
+  const { app } = await openTodo();
+  await app.waitFor("id:todo-item-task-1");
+  expect(app.shows("id:todo-view-flow")).toBe(false);
+});

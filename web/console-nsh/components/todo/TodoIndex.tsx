@@ -210,6 +210,10 @@ export function TodoIndex(props: {
             {t("todo_title")}
           </Text>
           {/* Buttons sit at the top of their box (self-start); a wrapper centres them in the head. */}
+          {/* The flow of jobs into each other: only where the runtime knows which job uses which. */}
+          <If when={state.tasks().some((task) => Array.isArray(task.triggers))}>
+            <CircleButton icon="PhGitFork" iconSize={BAR_ICON_SIZE} title={t("todo_view_flow")} testID="todo-view-flow" onPress={() => state.setTodoView("flow")} />
+          </If>
           <View {...parts.probe(() => (props.mobile ? "head-action" : null))}>
             <TodoViewToggle calendar={false} onPress={state.toggleTodoView} onPartLayout={props.onPartLayout} />
           </View>
