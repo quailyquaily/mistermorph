@@ -54,3 +54,11 @@ notes:
 - Installs: no unpinned installs; existing cached TypeScript toolchain copied into the throwaway test HOME.
 - Residual risks: no physical Android/emulator check or new visual inspection; builder visual verification used nsh 0.5.1 web runtime. Android JVM tests not run because JDK unavailable.
 - Owner check: Android navigation roots, including wide windows, no longer consume Back based on earlier page history; native Back may leave the app. Confirm this intended behaviour on a device before release.
+
+## factory · 2026-11-21 18:29
+Shipped with Claude Code. Merge commit `3114a8539e18411bcf9e5eb5a168966b2bd38a85`; annotated release `v0.3.125`. Remote master and peeled tag verified at `b2628af670fd6a146c65513f6f0a1caf11f00137`. Both merges conflict-free; no fix commits or installs.
+
+Validation: gofmt/vet/Go tests passed (166 packages ok); nsh 0.6.0 check passed; required Console runner passed (155 nsh test files plus inventory/scanner checks), dialog-sheet passed prescribed isolated retry. Console Node 329/329; scanner/Android manifest 22/22; Cloudflare 24/24 (overlapping checks, not additive).
+
+Limits: Android roots no longer consume Back based on history; native Back may leave the app. No fresh device/visual/JVM validation.
+No linked issues or PRs identified; none closed. Branch retained: clean not configured. Moved ready/ → done/.

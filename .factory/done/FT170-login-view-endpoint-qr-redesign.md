@@ -59,3 +59,11 @@ notes:
 - Not checked on real devices: camera preview, permission prompt, real QR decoding, camera cleanup and page visibility during the permission prompt. No APK build (JDK unavailable). Android requires BarcodeDetector availability; iOS WKWebView is expected to show unsupported and keep manual entry only. Owner should verify Android QR success and cleanup and accept the iOS limitation before shipping.
 - Visual limits: dark mode, zh/ja rendering and nsh 0.6 web-runtime pixels not checked in review. URL edge-case probe used Node URL rather than the app engine.
 - No linked GitHub issue or PR was identified in this item, so no review comments were posted. Moved review/ → ready/; not merged or shipped.
+
+## factory · 2026-11-21 18:29
+Shipped with Claude Code. Merge commit `b2628af670fd6a146c65513f6f0a1caf11f00137`; annotated release `v0.3.125`. Remote master and peeled tag verified at `b2628af670fd6a146c65513f6f0a1caf11f00137`. Both merges conflict-free; no fix commits or installs.
+
+Validation: gofmt/vet/Go tests passed (166 packages ok); nsh 0.6.0 check passed; required Console runner passed (155 nsh test files plus inventory/scanner checks), dialog-sheet passed prescribed isolated retry. Console Node 329/329; scanner/Android manifest 22/22; Cloudflare 24/24 (overlapping checks, not additive).
+
+Limits: Real Android QR decoding, preview, permissions and cleanup remain unverified; BarcodeDetector support required. iOS retains manual entry with unsupported scanner. No APK/iOS build or fresh visual check.
+No linked issues or PRs identified; none closed. Branch retained: clean not configured. Moved ready/ → done/.
