@@ -994,17 +994,17 @@ func (r *consoleLocalRuntime) canRunCron() bool {
 	return r.awarenessCronRequests != nil
 }
 
-func (r *consoleLocalRuntime) runCron(ctx context.Context, task cronstore.Task) error {
+func (r *consoleLocalRuntime) runCron(ctx context.Context, run cronstore.RunRequest) (string, error) {
 	if r == nil {
-		return fmt.Errorf("cron trigger is unavailable")
+		return "", fmt.Errorf("cron trigger is unavailable")
 	}
 	r.awarenessMu.Lock()
 	cronRequests := r.awarenessCronRequests
 	r.awarenessMu.Unlock()
 	if cronRequests == nil {
-		return fmt.Errorf("cron trigger is unavailable")
+		return "", fmt.Errorf("cron trigger is unavailable")
 	}
-	return awarenessloop.TriggerCron(ctx, cronRequests, task)
+	return awarenessloop.StartCronRun(ctx, cronRequests, run)
 }
 
 const (

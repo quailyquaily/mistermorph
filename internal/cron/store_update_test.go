@@ -135,7 +135,7 @@ func TestStoreUpdateContentKeepsEverythingElse(t *testing.T) {
 			if afterMeta.position != beforeMeta.position || afterMeta.createdAt != beforeMeta.createdAt {
 				t.Fatalf("row meta = %+v, was %+v", afterMeta, beforeMeta)
 			}
-			if got, _, _ := store.FindByID("other"); !reflect.DeepEqual(got, Task{ID: "other", Title: "Other", Cron: "*/5 * * * *", Content: "Ping"}) {
+			if got, _, _ := store.FindByID("other"); !reflect.DeepEqual(got, asStored(Task{ID: "other", Title: "Other", Cron: "*/5 * * * *", Content: "Ping"})[0]) {
 				t.Fatalf("other task = %#v", got)
 			}
 		})
@@ -296,7 +296,7 @@ tasks:
 	weekly, _, _ := store.FindByID("weekly-report")
 	want := Task{ID: "weekly-report", Title: "Weekly report", Cron: "0 10 * * 1", TZ: "UTC+8", ChatID: "tg:-1001", WorkspaceDir: "/srv/reports",
 		Content: "Edited weekly-report", BashEnv: []BashEnvRef{{Name: "REPORT_MODE", Value: "weekly"}, {Name: "API_TOKEN", Value: syntheticSecret}}}
-	if !reflect.DeepEqual(weekly, want) {
+	if want = asStored(want)[0]; !reflect.DeepEqual(weekly, want) {
 		t.Fatalf("weekly = %#v\nwant %#v", weekly, want)
 	}
 	if data, err := os.ReadFile(filepath.Join(dir, "cron.yaml")); err != nil || string(data) != raw {

@@ -296,6 +296,13 @@ returns 400. Upload enforces 64 MiB, persona avatar writes enforce 2 MiB, and
 `/poke` enforces 10 KiB. `/poke` accepts nonblank textual content rather than
 a task envelope, returns 202, and does not return a task ID.
 
+`POST /poke/{job_id}` starts one job instead: it queues a run of a job that has
+a `poke` trigger and returns 202 with the run's `run_id`. Its body is optional,
+under the same 10 KiB limit, and reaches the run as untrusted data, not as
+instructions. `GET /todo/runs/history` lists every recorded job run with its
+cause (`job_id`, `from`, `to` and `limit` filter it); the full OpenAPI document
+has the shapes.
+
 ## Scope and management extensions
 
 Full covers the shared runtime routes, the Console task WebSocket and the

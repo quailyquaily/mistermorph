@@ -394,6 +394,7 @@ tasks:
 	want := cronstore.Task{ID: "weekly-report", Title: "Weekly report", Cron: "0 10 * * 1", TZ: "UTC+8", ChatID: "tg:-1001",
 		WorkspaceDir: "/srv/reports", Content: "Weekly report, with charts",
 		BashEnv: []cronstore.BashEnvRef{{Name: "REPORT_MODE", Value: "weekly"}, {Name: "API_TOKEN", Value: todoSyntheticSecret}}}
+	want.Triggers = cronstore.TriggersForTask(want)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("task = %#v\nwant %#v", got, want)
 	}

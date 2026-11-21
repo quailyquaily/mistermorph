@@ -135,7 +135,7 @@ func TestYAMLImportKeepsIDsOrderFieldsAndStateAndLeavesTheFileAlone(t *testing.T
 			BashEnv: []BashEnvRef{{Name: "REPORT_MODE", Value: "weekly"}, {Name: "API_KEY", Value: "${OPENAI_API_KEY}"}}},
 		{ID: "task-3", Title: DefaultTaskTitle, Cron: "*/5 * * * *", Content: "Ping"},
 	}
-	if !reflect.DeepEqual(tasks, want) {
+	if want = asStored(want...); !reflect.DeepEqual(tasks, want) {
 		t.Fatalf("tasks = %#v\nwant %#v", tasks, want)
 	}
 	status, err := store.Import(context.Background())
@@ -284,7 +284,7 @@ func TestImportKeepsTheJobsAgentDBHeldAndIgnoresStaleYAML(t *testing.T) {
 			LLMProfile: "batch", WorkspaceDir: "/w", BashEnv: []BashEnvRef{{Name: "K", Value: "v"}},
 			LastRunAt: "2026-11-01T09:00:00Z", LastRunStatus: RunStatusFailed},
 	}
-	if !reflect.DeepEqual(tasks, want) {
+	if want = asStored(want...); !reflect.DeepEqual(tasks, want) {
 		t.Fatalf("tasks = %#v\nwant %#v", tasks, want)
 	}
 	meta := readTaskRowMeta(t, store, "b-second")
@@ -504,6 +504,7 @@ func TestUpgradeFromAnAgentDBBeforeTheJobsTableKeepsItsState(t *testing.T) {
 		`INSERT INTO meta (key, value) VALUES ('import_rejects:persona', '{"count":1,"rejects":[]}')`,
 		// What a version before the jobs table left: no jobs table, schema 5.
 		`DROP TABLE jobs`,
+		`DROP TABLE job_runs`,
 		`PRAGMA user_version = 5`,
 	} {
 		if _, err := raw.Exec(stmt); err != nil {
@@ -519,7 +520,7 @@ func TestUpgradeFromAnAgentDBBeforeTheJobsTableKeepsItsState(t *testing.T) {
 	}
 	check := openRawAgentDB(t, path)
 	var version int
-	if err := check.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 6 {
+	if err := check.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 8 {
 		t.Fatalf("user_version = %d, %v", version, err)
 	}
 	for query, want := range map[string]int{
@@ -605,7 +606,7 @@ func TestImportTakesAJobsDBOfAnEarlierBuildWholeAndLeavesItAlone(t *testing.T) {
 			LastRunAt: "2026-11-18T09:00:00Z", LastRunStatus: RunStatusDone},
 		{ID: "cron-z", Title: "Z", Cron: "*/5 * * * *", Content: "z"},
 	}
-	if !reflect.DeepEqual(tasks, want) {
+	if want = asStored(want...); !reflect.DeepEqual(tasks, want) {
 		t.Fatalf("tasks = %#v\nwant %#v", tasks, want)
 	}
 	if meta := readTaskRowMeta(t, store, "job-b"); meta.createdAt != "2026-01-01T00:00:00Z" || meta.updatedAt != "2026-11-18T12:30:00Z" || meta.position != 1 {

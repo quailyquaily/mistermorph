@@ -94,6 +94,13 @@ func (routes *routeRegistration) registerStateRoutes() {
 		}
 		handleTodoRuns(w, r, statePaths.cronPath)
 	})
+	mux.HandleFunc("/todo/runs/history", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handleTodoRunHistory(w, r, statePaths.cronPath)
+	})
 	mux.HandleFunc("/todo/tasks/", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

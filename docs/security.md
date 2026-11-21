@@ -164,6 +164,10 @@ Long-running modes that start the embedded admin server expose management endpoi
   - returns `400 Bad Request` when the body is empty or non-text
   - returns `413 Request Entity Too Large` when the body exceeds 10 KB
   - returns `409 Conflict` if an awareness task is already in progress
+- `POST /poke/{job_id}`
+  - queues one run of a job that has a `poke` trigger; the body is optional, under the same 10 KB limit
+  - the body reaches the run as quoted, untrusted data in a block of its own, never as part of the job's instructions
+  - returns `404 Not Found` for an unknown job, and `409 Conflict` when the job has no poke trigger, is switched off, or is already queued or running
 - `GET /settings/agent`
 - `PUT /settings/agent`
 - `POST /settings/agent/models`

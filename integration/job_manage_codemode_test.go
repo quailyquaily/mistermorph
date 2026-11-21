@@ -104,6 +104,7 @@ return {ok: result.ok, names: result.task.bash_env_names, unknown, invalid};`
 	want := seeded
 	want.Content = "Write the weekly report with charts"
 	want.BashEnv = []cronstore.BashEnvRef{{Name: "API_TOKEN", Value: literal}, {Name: "SESSION", Value: dynamic}}
+	want.Triggers = cronstore.TriggersForTask(want)
 	if len(file.Tasks) != 1 || !reflect.DeepEqual(file.Tasks[0], want) {
 		t.Fatalf("tasks = %#v\nwant %#v", file.Tasks, want)
 	}

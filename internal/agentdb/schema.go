@@ -14,6 +14,8 @@ func migrations() []sqlitedb.Migration {
 		{Name: "create contacts and the contacts bus inbox and outbox", SQL: contactsSQL},
 		{Name: "create the config tables", SQL: configSQL},
 		{Name: "create jobs", SQL: jobsSQL},
+		{Name: "give jobs triggers and uses", SQL: jobTriggersSQL},
+		{Name: "create job runs", SQL: jobRunsSQL},
 	}
 }
 
@@ -297,4 +299,71 @@ CREATE TABLE jobs (
 	CHECK ((at = '') <> (cron = ''))
 );
 CREATE INDEX jobs_by_position ON jobs (position);
+`
+
+// jobTriggersSQL: a job's triggers (the ways it starts: schedules, a poke, a message), the jobs it
+// uses and how those join, each a JSON list as bash_env is. at, cron and tz stay, as the first
+// schedule trigger's, for clients that know only them; a job no schedule starts has neither, so
+// the table is rebuilt without the check that it has one. A row whose triggers is '[]' is one
+// written before triggers: its at or cron is its schedule trigger (see internal/cron).
+const jobTriggersSQL = `
+CREATE TABLE jobs_next (
+	id              TEXT PRIMARY KEY,
+	position        INTEGER NOT NULL,
+	title           TEXT NOT NULL DEFAULT '',
+	enabled         INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+	at              TEXT NOT NULL DEFAULT '',
+	cron            TEXT NOT NULL DEFAULT '',
+	tz              TEXT NOT NULL DEFAULT '',
+	content         TEXT NOT NULL,
+	chat_id         TEXT NOT NULL DEFAULT '',
+	mention         TEXT NOT NULL DEFAULT '',
+	llm_profile     TEXT NOT NULL DEFAULT '',
+	workspace_dir   TEXT NOT NULL DEFAULT '',
+	bash_env        TEXT NOT NULL DEFAULT '[]',
+	created_at      TEXT NOT NULL,
+	updated_at      TEXT NOT NULL,
+	last_run_at     TEXT,
+	last_run_status TEXT NOT NULL DEFAULT '',
+	triggers        TEXT NOT NULL DEFAULT '[]',
+	uses            TEXT NOT NULL DEFAULT '[]',
+	join_mode       TEXT NOT NULL DEFAULT '' CHECK (join_mode IN ('', 'all', 'any')),
+	CHECK (id <> ''),
+	CHECK (at = '' OR cron = '')
+);
+INSERT INTO jobs_next (id, position, title, enabled, at, cron, tz, content, chat_id, mention, llm_profile,
+	workspace_dir, bash_env, created_at, updated_at, last_run_at, last_run_status)
+	SELECT id, position, title, enabled, at, cron, tz, content, chat_id, mention, llm_profile,
+		workspace_dir, bash_env, created_at, updated_at, last_run_at, last_run_status FROM jobs;
+DROP TABLE jobs;
+ALTER TABLE jobs_next RENAME TO jobs;
+CREATE INDEX jobs_by_position ON jobs (position);
+`
+
+// jobRunsSQL: every run of a job, with what started it. A run keeps its row after its job is
+// deleted, so there is no foreign key; internal/cron bounds how many are kept. origin_run_id is
+// the run that started the chain of jobs the run belongs to (its own ID when it started one), and
+// chain_depth its place in that chain, from 1.
+const jobRunsSQL = `
+CREATE TABLE job_runs (
+	seq           INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_id        TEXT NOT NULL UNIQUE,
+	job_id        TEXT NOT NULL,
+	status        TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed', 'canceled', 'skipped')),
+	queued_at     TEXT NOT NULL,
+	started_at    TEXT,
+	finished_at   TEXT,
+	error         TEXT NOT NULL DEFAULT '',
+	cause_kind    TEXT NOT NULL DEFAULT '',
+	trigger_id    TEXT NOT NULL DEFAULT '',
+	from_job_id   TEXT NOT NULL DEFAULT '',
+	origin_run_id TEXT NOT NULL DEFAULT '',
+	note          TEXT NOT NULL DEFAULT '',
+	chain_depth   INTEGER NOT NULL DEFAULT 1,
+	CHECK (run_id <> ''),
+	CHECK (job_id <> '')
+);
+CREATE INDEX job_runs_by_job ON job_runs (job_id, seq);
+CREATE INDEX job_runs_by_origin ON job_runs (origin_run_id);
+CREATE INDEX job_runs_by_queued ON job_runs (queued_at);
 `

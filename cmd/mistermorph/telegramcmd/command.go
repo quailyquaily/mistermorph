@@ -189,8 +189,8 @@ func attachTelegramAwarenessTriggers(telegramOpts *telegramruntime.RunOptions, a
 	if awarenessOpts.CronEnabled {
 		cronRequests := make(chan awarenessruntime.CronRequest)
 		awarenessOpts.CronRequests = cronRequests
-		telegramOpts.Server.CronRun = func(ctx context.Context, task cronstore.Task) error {
-			return awarenessruntime.TriggerCron(ctx, cronRequests, task)
+		telegramOpts.Server.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
+			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
 		}
 	}
 }

@@ -112,7 +112,8 @@ func TestAttachTelegramAwarenessTriggersProvidesCronRunner(t *testing.T) {
 		Content: "Run manually.",
 	}
 	go func() {
-		errCh <- telegramOpts.Server.CronRun(context.Background(), task)
+		_, err := telegramOpts.Server.CronRun(context.Background(), cronstore.RunRequest{Task: task})
+		errCh <- err
 	}()
 
 	select {

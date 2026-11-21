@@ -55,6 +55,10 @@ func (p TaskPatch) apply(task Task) (Task, []string) {
 		task.At = ""
 	}
 	set("tz", p.TZ, &task.TZ)
+	if task.Triggers != nil && (p.At != nil || p.Cron != nil || p.TZ != nil) {
+		// at, cron and tz are the first schedule trigger's; the job's other triggers stay.
+		task.Triggers = withLegacySchedule(task.Triggers, task.At, task.Cron, task.TZ)
+	}
 	set("chat_id", p.ChatID, &task.ChatID)
 	set("workspace_dir", p.WorkspaceDir, &task.WorkspaceDir)
 	if p.BashEnv != nil {

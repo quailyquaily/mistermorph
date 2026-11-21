@@ -314,6 +314,20 @@ func (routes *routeRegistration) registerSystemRoutes() {
 		})
 	})
 
+	// POST /poke/{job_id} starts one job; /poke above wakes the agent and starts none.
+	mux.HandleFunc("/poke/", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		jobID, ok := parseJobPokePath(r.URL)
+		if !ok {
+			http.Error(w, "invalid job poke path: want /poke/{job_id}", http.StatusBadRequest)
+			return
+		}
+		handleJobPoke(w, r, statePaths.cronPath, opts.CronRun, jobID)
+	})
+
 	registerCoderQuotaRoutes(mux, authToken, func(ctx context.Context) (*llmstats.UsageStore, error) {
 		return openUsageStats(ctx, capturedPaths.UsageDBPath, settingsReader, pricingConfigPath)
 	}, settingsReader)

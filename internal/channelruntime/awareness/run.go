@@ -212,7 +212,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 	}
 
 	// runCtx is the run's own context: a cron item's execution context, so stopping it ends the run.
-	runAwarenessTaskWithOpts := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool) (string, error) {
+	runAwarenessTaskWithOpts := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool, sourceData awarenessdomain.PokeInput) (string, error) {
 		var contextScope topiccontext.Scope
 		if topicID != "" && opts.TopicContextScope != nil {
 			contextScope = opts.TopicContextScope(topicID)
@@ -245,12 +245,13 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			ContextScope:             contextScope,
 			TopicRunStarted:          opts.TopicRunStarted,
 			CronManual:               cronManual,
+			SourceData:               sourceData,
 			DecisionClient:           decisionClient,
 			DecisionModel:            decisionModel,
 		})
 	}
 	runTask := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(runCtx, behavior, task, meta, taskRunID, "", "", nil, "", "", false)
+		return runAwarenessTaskWithOpts(runCtx, behavior, task, meta, taskRunID, "", "", nil, "", "", false, awarenessdomain.PokeInput{})
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -383,9 +384,17 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 							extra["notify_target"] = notifyTarget
 						}
 					}
+					// What started the run, when it was not the job's schedule or a person.
+					switch due.Cause.Kind {
+					case cronstore.CausePoke:
+						extra["started_by"] = cronstore.CausePoke
+					case cronstore.CauseJob:
+						extra["started_by"] = cronstore.CauseJob
+						extra["started_by_job_id"] = strings.TrimSpace(due.Cause.FromJobID)
+					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
 					summary, err := runAwarenessTaskWithOpts(ctx, awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
-						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual)
+						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual, due.Input)
 					if err != nil {
 						if errors.Is(context.Cause(ctx), cronstore.ErrRunStopped) {
 							err = cronstore.ErrRunStopped
@@ -398,9 +407,12 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 					}
 					notifyCronResult(ctx, opts.CronNotify, logger, task, due.Manual, taskRunID, summary, nil)
 					logger.Info("awareness_summary", "source", opts.Source, "behavior", awarenessutil.BehaviorCron, "task_id", strings.TrimSpace(task.ID), "message", summary)
-					if !due.Manual && strings.TrimSpace(task.At) != "" {
-						if _, deleteErr := cronstore.NewStore(cronPath).DeleteByID(task.ID); deleteErr != nil {
-							return deleteErr
+					// A one-time schedule that has run is spent: the job goes with it, unless something
+					// else starts the job or another job uses it. A run started any other way (by a
+					// person, a poke, another job) leaves the job's schedule alone.
+					if onceTriggerID := firedOnceTrigger(due); onceTriggerID != "" {
+						if _, consumeErr := cronstore.NewStore(cronPath).ConsumeOnceTrigger(ctx, task.ID, onceTriggerID); consumeErr != nil {
+							return consumeErr
 						}
 					}
 					return nil
@@ -450,6 +462,9 @@ type awarenessTaskOptions struct {
 	TopicRunStarted func(TopicRun)
 	// CronManual marks a TODO item's run a person asked for, rather than one its schedule fired.
 	CronManual bool
+	// SourceData is the body of the request that started a job's run (POST /poke/{job_id}). The
+	// run reads it as untrusted data, in a block of its own; it is never part of the task.
+	SourceData awarenessdomain.PokeInput
 	// DecisionClient, when set, is the decision route's own client. A run a TODO item's schedule
 	// fired is checked with it once it ends done (see finishedRunOutcome).
 	DecisionClient llm.Client
@@ -639,6 +654,7 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		return "", err
 	}
 	promptSpec.FinalOnlyResponse = true
+	promptprofile.AppendWakeSignalBlock(&promptSpec, opts.SourceData)
 	if block := workspace.PromptBlock(workspaceDir); strings.TrimSpace(block.Content) != "" {
 		promptSpec.Blocks = append(promptSpec.Blocks, block)
 	}
@@ -879,6 +895,32 @@ type topicTitledTaskRecorder interface {
 }
 
 // cronTopicTitle names a TODO item's topic: the item's title, or its default.
+// firedOnceTrigger returns the ID of the one-time ("at") schedule trigger that started the run,
+// or "" when the run was started any other way.
+func firedOnceTrigger(due cronstore.DueTask) string {
+	if due.Manual {
+		return ""
+	}
+	switch due.Cause.Kind {
+	case "", cronstore.CauseSchedule:
+	default:
+		return ""
+	}
+	if trigger, ok := cronstore.FindTrigger(due.Task, due.Cause.TriggerID); ok {
+		if trigger.Kind == cronstore.TriggerSchedule && strings.TrimSpace(trigger.At) != "" {
+			return trigger.ID
+		}
+		return ""
+	}
+	// A run queued without naming its trigger: the job's own one-time schedule, as before.
+	if strings.TrimSpace(due.Cause.TriggerID) == "" && strings.TrimSpace(due.Task.At) != "" {
+		if trigger, ok := cronstore.TriggerOfKind(due.Task, cronstore.TriggerSchedule); ok {
+			return trigger.ID
+		}
+	}
+	return ""
+}
+
 func cronTopicTitle(task cronstore.Task) string {
 	if title := strings.TrimSpace(task.Title); title != "" {
 		return title

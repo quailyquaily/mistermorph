@@ -189,8 +189,8 @@ func attachSlackAwarenessTriggers(slackOpts *slackruntime.RunOptions, awarenessO
 	if awarenessOpts.CronEnabled {
 		cronRequests := make(chan awarenessruntime.CronRequest)
 		awarenessOpts.CronRequests = cronRequests
-		slackOpts.Server.CronRun = func(ctx context.Context, task cronstore.Task) error {
-			return awarenessruntime.TriggerCron(ctx, cronRequests, task)
+		slackOpts.Server.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
+			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
 		}
 	}
 }

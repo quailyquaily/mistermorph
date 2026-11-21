@@ -188,7 +188,7 @@ func TestConsoleLocalRoutesOptionsCronRun(t *testing.T) {
 	if got := rt.routesOptions("token").CronRun; got == nil {
 		t.Fatal("CronRun = nil, want dynamic callback")
 	}
-	if err := rt.routesOptions("token").CronRun(context.Background(), cronstore.Task{ID: "cron-a"}); err == nil {
+	if _, err := rt.routesOptions("token").CronRun(context.Background(), cronstore.RunRequest{Task: cronstore.Task{ID: "cron-a"}}); err == nil {
 		t.Fatal("CronRun() error = nil, want unavailable error when awareness loop is unavailable")
 	}
 
@@ -201,7 +201,8 @@ func TestConsoleLocalRoutesOptionsCronRun(t *testing.T) {
 		Content: "Run cron.",
 	}
 	go func() {
-		errCh <- rt.routesOptions("token").CronRun(context.Background(), task)
+		_, err := rt.routesOptions("token").CronRun(context.Background(), cronstore.RunRequest{Task: task})
+		errCh <- err
 	}()
 
 	req := <-requests
