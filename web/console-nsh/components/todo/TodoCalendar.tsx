@@ -218,7 +218,8 @@ export function TodoCalendar(props: TodoCalendarProps) {
     range,
     liveKey: () => props.liveKey ?? "",
     // The stored jobs are read again when the page's list is replaced (a load, a save), not on each edit.
-    jobsKey: () => props.tasks.map((task) => task._key).join("|"),
+    // The page's jobs carry their triggers and uses where the runtime lists them: no second read then.
+    jobsKey: () => (props.tasks.some((task) => Array.isArray(task.triggers)) ? "" : props.tasks.map((task) => task._key).join("|")),
     fetch: untracked(() => props.fetch),
   });
   const jobs = computed(() => [...taskByID().values()].map((task) => jobWiring(task, history.stored().get(task.id)) as Job));
