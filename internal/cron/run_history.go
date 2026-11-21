@@ -33,6 +33,9 @@ const (
 	// MaxChainDepth is how many jobs deep a chain of jobs may go, the run that starts it counted.
 	MaxChainDepth = 5
 
+	// QueueFullNote is the note of a run skipped because the loop's queue had no room.
+	QueueFullNote = "the run queue was full"
+
 	runErrorMaxLen = 300
 	staleRunError  = "the runtime stopped before this run ended"
 )
@@ -48,6 +51,9 @@ type RunRecord struct {
 	FinishedAt string   `json:"finished_at,omitempty"`
 	Error      string   `json:"error,omitempty"`
 	Cause      RunCause `json:"cause"`
+	// TaskID is the ID of the task record the run wrote under its job's topic, which keeps the
+	// run's output; empty for a run that never started.
+	TaskID string `json:"task_id,omitempty"`
 	// ChainDepth is the run's place in its chain of jobs, from 1.
 	ChainDepth int `json:"-"`
 }
@@ -150,6 +156,44 @@ func (s *Store) MarkRunFinished(ctx context.Context, runID, status, errText, not
 	return err
 }
 
+// SetRunTaskID notes in the history the task record the run writes under its job's topic.
+func (s *Store) SetRunTaskID(ctx context.Context, runID, taskID string) error {
+	runID, taskID = strings.TrimSpace(runID), strings.TrimSpace(taskID)
+	if runID == "" || taskID == "" {
+		return nil
+	}
+	db, err := s.handle(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `UPDATE job_runs SET task_id = ? WHERE run_id = ?`, taskID, runID)
+	return err
+}
+
+// LatestRun returns the newest run of job jobID in the history that has one of statuses (any
+// status without them).
+func (s *Store) LatestRun(ctx context.Context, jobID string, statuses ...string) (RunRecord, bool, error) {
+	db, err := s.handle(ctx)
+	if err != nil {
+		return RunRecord{}, false, err
+	}
+	where := "WHERE job_id = ?"
+	args := []any{strings.TrimSpace(jobID)}
+	if len(statuses) > 0 {
+		marks := make([]string, 0, len(statuses))
+		for _, status := range statuses {
+			marks = append(marks, "?")
+			args = append(args, status)
+		}
+		where += " AND status IN (" + strings.Join(marks, ", ") + ")"
+	}
+	runs, err := queryRuns(ctx, db, where+` ORDER BY seq DESC LIMIT 1`, args...)
+	if err != nil || len(runs) == 0 {
+		return RunRecord{}, false, err
+	}
+	return runs[0], true, nil
+}
+
 // FailStaleRuns ends, as failed, the runs still queued or running that were queued before before:
 // a runtime that stopped without ending them left them so. It returns how many.
 func (s *Store) FailStaleRuns(ctx context.Context, before time.Time) (int64, error) {
@@ -212,7 +256,7 @@ func (s *Store) ChainRuns(ctx context.Context, originRunID string) ([]RunRecord,
 
 func queryRuns(ctx context.Context, q rowsQueryer, tail string, args ...any) ([]RunRecord, error) {
 	rows, err := q.QueryContext(ctx, `SELECT run_id, job_id, status, queued_at, started_at, finished_at, error,
-		cause_kind, trigger_id, from_job_id, origin_run_id, note, chain_depth FROM job_runs `+tail, args...)
+		cause_kind, trigger_id, from_job_id, origin_run_id, note, chain_depth, task_id FROM job_runs `+tail, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +266,7 @@ func queryRuns(ctx context.Context, q rowsQueryer, tail string, args ...any) ([]
 		var run RunRecord
 		var startedAt, finishedAt sql.NullString
 		if err := rows.Scan(&run.RunID, &run.JobID, &run.Status, &run.QueuedAt, &startedAt, &finishedAt, &run.Error,
-			&run.Cause.Kind, &run.Cause.TriggerID, &run.Cause.FromJobID, &run.Cause.OriginRunID, &run.Cause.Note, &run.ChainDepth); err != nil {
+			&run.Cause.Kind, &run.Cause.TriggerID, &run.Cause.FromJobID, &run.Cause.OriginRunID, &run.Cause.Note, &run.ChainDepth, &run.TaskID); err != nil {
 			return nil, err
 		}
 		run.StartedAt, run.FinishedAt = startedAt.String, finishedAt.String
@@ -252,4 +296,71 @@ func shortRunError(text string) string {
 		cut--
 	}
 	return text[:cut] + "…"
+}
+
+// OnceRetryDelays is how long a one-time ("at") schedule waits before each new try after a run it
+// started failed: the first retry a minute after the first failure, and so on. After the last
+// one fails too, the schedule is not tried again.
+var OnceRetryDelays = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour}
+
+// OnceRetry is where a one-time schedule stands after failed runs.
+type OnceRetry struct {
+	// Failures is how many runs the schedule started, at or after its time, that failed or were
+	// skipped (an input it needed fresh did not finish). A run dropped for a full queue is not
+	// one.
+	Failures int
+	// LastFailedAt is when the last of them ended.
+	LastFailedAt time.Time
+}
+
+// GaveUp reports whether every try was used: the schedule fires no more.
+func (r OnceRetry) GaveUp() bool { return r.Failures > len(OnceRetryDelays) }
+
+// NextAt is the earliest time of the next try; zero when there was no failure or none is left.
+func (r OnceRetry) NextAt() time.Time {
+	if r.Failures < 1 || r.GaveUp() {
+		return time.Time{}
+	}
+	return r.LastFailedAt.Add(OnceRetryDelays[r.Failures-1])
+}
+
+// OnceRetryState counts the failed tries of the one-time trigger triggerID of job jobID whose
+// time was scheduledAt. Runs queued before that time are of an earlier setting of the trigger and
+// do not count, so a new time starts afresh; a run a person, a poke or another job started is
+// never counted.
+func (s *Store) OnceRetryState(ctx context.Context, jobID, triggerID string, scheduledAt time.Time) (OnceRetry, error) {
+	db, err := s.handle(ctx)
+	if err != nil {
+		return OnceRetry{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var retry OnceRetry
+	var last sql.NullString
+	err = db.QueryRowContext(ctx, `SELECT count(*), max(finished_at) FROM job_runs
+		WHERE job_id = ? AND trigger_id = ? AND cause_kind = ? AND status IN (?, ?) AND note <> ? AND queued_at >= ?`,
+		strings.TrimSpace(jobID), strings.TrimSpace(triggerID), CauseSchedule, RunStatusFailed, RunStatusSkipped,
+		QueueFullNote, formatTime(scheduledAt)).Scan(&retry.Failures, &last)
+	if err != nil {
+		return OnceRetry{}, err
+	}
+	if last.Valid {
+		retry.LastFailedAt, _ = time.Parse(time.RFC3339, last.String)
+	}
+	return retry, nil
+}
+
+// onceHeldBack reports whether the one-time trigger, due since scheduledAt, must not fire at now:
+// a run it started failed and the wait before the next try is not over, or no try is left. The
+// history is read only for a job whose last run did not end done.
+func (s *Store) onceHeldBack(task Task, trigger Trigger, scheduledAt, now time.Time) bool {
+	if strings.TrimSpace(trigger.At) == "" || strings.TrimSpace(task.LastRunAt) == "" {
+		return false
+	}
+	retry, err := s.OnceRetryState(context.Background(), task.ID, trigger.ID, scheduledAt)
+	if err != nil || retry.Failures == 0 {
+		return false
+	}
+	return retry.GaveUp() || now.Before(retry.NextAt())
 }

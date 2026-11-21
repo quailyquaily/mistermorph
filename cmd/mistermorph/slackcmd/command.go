@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -192,6 +194,8 @@ func attachSlackAwarenessTriggers(slackOpts *slackruntime.RunOptions, awarenessO
 		slackOpts.Server.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
 			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
 		}
+		// The jobs whose message triggers watch a chat of this runtime start through the same loop.
+		slackOpts.JobTriggers = jobtriggers.New(awarenessOpts.CronPath, slackOpts.Server.CronRun, slog.Default())
 	}
 }
 

@@ -22,6 +22,8 @@ type jobLoop struct {
 	store    *cronstore.Store
 	requests chan CronRequest
 	now      time.Time
+	// freshWait bounds the wait for a fresh input another worker holds (the default when 0).
+	freshWait time.Duration
 
 	mu   sync.Mutex
 	fail map[string]error
@@ -56,7 +58,12 @@ func startJobLoop(t *testing.T, tasks []cronstore.Task, configure func(*jobLoop)
 			Path:           path,
 			Requests:       l.requests,
 			MaxConcurrency: 4,
-			Now:            func() time.Time { return l.now },
+			FreshWait:      l.freshWait,
+			Now: func() time.Time {
+				l.mu.Lock()
+				defer l.mu.Unlock()
+				return l.now
+			},
 			Run: func(ctx context.Context, due cronstore.DueTask) error {
 				id := due.Task.ID
 				l.mu.Lock()
@@ -161,6 +168,13 @@ func (l *jobLoop) waitSettled(want int) []cronstore.RunRecord {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// advance moves the loop's clock on.
+func (l *jobLoop) advance(d time.Duration) {
+	l.mu.Lock()
+	l.now = l.now.Add(d)
+	l.mu.Unlock()
 }
 
 func (l *jobLoop) ranIDs() string {

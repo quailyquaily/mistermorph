@@ -49,10 +49,7 @@ func (r *cronLoopRunner) chain(ctx context.Context, item cronstore.DueTask, stat
 		}
 		return
 	}
-	how := "failed"
-	if status == cronstore.RunStatusCanceled {
-		how = "was canceled"
-	}
+	how := endedHow(status)
 	seen := map[string]bool{}
 	for _, dependent := range dependents {
 		r.chainSkip(tasks, dependent, link, fmt.Sprintf("input job %s %s", id, how), seen)
@@ -156,4 +153,16 @@ func (r *cronLoopRunner) recordSkip(id string, link chainLink, note string) {
 		return
 	}
 	r.info("cron_chain_skip", "task_id", id, "from_job_id", link.from, "origin_run_id", link.origin, "reason", note)
+}
+
+// endedHow says in words how a run that did not end done ended: "input job x <how>".
+func endedHow(status string) string {
+	switch status {
+	case cronstore.RunStatusCanceled:
+		return "was canceled"
+	case cronstore.RunStatusSkipped:
+		return "was skipped"
+	default:
+		return "failed"
+	}
 }

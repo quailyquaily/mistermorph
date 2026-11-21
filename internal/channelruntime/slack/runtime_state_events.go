@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"strings"
 	"time"
 
@@ -408,6 +409,8 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 	if event.IsAgent && strings.EqualFold(strings.TrimSpace(event.BotID), strings.TrimSpace(s.botID)) {
 		return nil
 	}
+	// Jobs that watch this channel start here, before anything decides whether the agent answers.
+	s.options.JobTriggers.HandleAsync(slackJobTriggerMessage(event))
 	s.logger.Info("slack_inbound_event",
 		"event_type", event.EventType,
 		"event_subtype", event.EventSubtype,
@@ -825,4 +828,30 @@ func (s *slackRuntimeState) runSocketLoop() error {
 			callErrorHook(s.ctx, s.logger, s.options.Hooks, ErrorEvent{Stage: ErrorStageSocketRead, Err: readErr})
 		}
 	}
+}
+
+// slackJobTriggerMessage describes an inbound event for the jobs that watch its channel
+// ("slack:<team>:<channel>"). A mention arrives as two events with one timestamp: the message ID
+// is that timestamp, so it starts a job once.
+func slackJobTriggerMessage(event slackInboundEvent) jobtriggers.Message {
+	msg := jobtriggers.Message{
+		Channel:     "slack",
+		MessageID:   strings.TrimSpace(event.MessageTS),
+		SenderName:  strings.TrimSpace(event.DisplayName),
+		SenderIsBot: event.IsAgent,
+		SentAt:      event.SentAt,
+		Text:        strings.TrimSpace(event.Text),
+	}
+	if key, err := buildSlackConversationKey(event.TeamID, event.ChannelID); err == nil {
+		msg.ChatIDs = []string{key}
+	}
+	if msg.SenderName == "" {
+		msg.SenderName = strings.TrimSpace(event.Username)
+	}
+	if userID := strings.TrimSpace(event.UserID); userID != "" {
+		msg.SenderID = "slack:" + userID
+	} else if botID := strings.TrimSpace(event.BotID); botID != "" {
+		msg.SenderID = "slack:" + botID
+	}
+	return msg
 }

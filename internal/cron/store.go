@@ -412,9 +412,9 @@ func (s *Store) AddRecurringWithChatID(title, content, expr, tz, id, chatID stri
 }
 
 // AddOnce adds a one-time task. Only the one-time fields of task are kept, its bash_env among
-// them.
+// them, and its uses and join. Triggers given with it are added after its schedule.
 func (s *Store) AddOnce(task Task) (AddResult, error) {
-	return s.addTask("add_once", Task{
+	return s.addTask("add_once", withAddExtras(task, Task{
 		ID:           normalizeTaskID(task.ID),
 		Title:        normalizeTaskTitle(task.Title),
 		At:           strings.TrimSpace(task.At),
@@ -423,13 +423,27 @@ func (s *Store) AddOnce(task Task) (AddResult, error) {
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
 		BashEnv:      normalizeBashEnvRefs(task.BashEnv),
-	})
+	}))
+}
+
+// withAddExtras gives out, the task an add keeps, what asked may carry beyond its schedule: its
+// uses and join, and triggers that are put after the schedule's own.
+func withAddExtras(asked, out Task) Task {
+	out.Uses = normalizeUses(asked.Uses)
+	out.Join = strings.ToLower(strings.TrimSpace(asked.Join))
+	if len(asked.Triggers) > 0 {
+		out.Triggers = []Trigger{{ID: LegacyScheduleTriggerID, Kind: TriggerSchedule, At: out.At, Cron: out.Cron, TZ: out.TZ}}
+		for _, trigger := range asked.Triggers {
+			out.Triggers = append(out.Triggers, normalizeTrigger(trigger))
+		}
+	}
+	return out
 }
 
 // AddRecurring adds a recurring task. Only the recurring fields of task are kept, its bash_env
-// among them.
+// among them, and its uses and join. Triggers given with it are added after its schedule.
 func (s *Store) AddRecurring(task Task) (AddResult, error) {
-	return s.addTask("add_recurring", Task{
+	return s.addTask("add_recurring", withAddExtras(task, Task{
 		ID:           normalizeTaskID(task.ID),
 		Title:        normalizeTaskTitle(task.Title),
 		Cron:         strings.TrimSpace(task.Cron),
@@ -438,7 +452,7 @@ func (s *Store) AddRecurring(task Task) (AddResult, error) {
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
 		BashEnv:      normalizeBashEnvRefs(task.BashEnv),
-	})
+	}))
 }
 
 func (s *Store) addTask(action string, task Task) (AddResult, error) {
@@ -497,7 +511,10 @@ func (s *Store) Update(ctx context.Context, id string, patch TaskPatch) (UpdateR
 		if idx < 0 {
 			return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
 		}
-		updated, fields := patch.apply(tasks[idx])
+		updated, fields, err := patch.apply(tasks[idx])
+		if err != nil {
+			return err
+		}
 		if err := ValidateTask(updated); err != nil {
 			return err
 		}
@@ -505,6 +522,8 @@ func (s *Store) Update(ctx context.Context, id string, patch TaskPatch) (UpdateR
 		if err := writeTasks(ctx, tx, File{Version: Version, Tasks: tasks}); err != nil {
 			return err
 		}
+		// The task as it was stored: new triggers have their IDs.
+		updated = tasks[idx]
 		result = UpdateResult{OK: true, Action: "update", TaskCount: len(tasks), Task: &updated, Fields: fields}
 		return nil
 	})
@@ -695,7 +714,7 @@ func (s *Store) DueLenient(now time.Time) ([]DueTask, []error, error) {
 			continue
 		}
 		trigger, due, scheduledAt, err := dueTrigger(task, now, func(trigger Trigger, at time.Time) bool {
-			return stoppedOnceAfter(task, trigger, at)
+			return stoppedOnceAfter(task, trigger, at) || s.onceHeldBack(task, trigger, at, now)
 		})
 		if err != nil {
 			taskErrs = append(taskErrs, err)

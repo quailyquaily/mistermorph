@@ -350,3 +350,150 @@ func TestHeartbeatAndPokeJobReferences(t *testing.T) {
 		t.Fatalf("poke: %v, requests = %d", err, len(client.requests))
 	}
 }
+
+// doneRuns lists the done run records of job id, newest first.
+func (h *jobReferenceLoop) doneRuns(id string) []daemonruntime.TaskInfo {
+	var out []daemonruntime.TaskInfo
+	for _, record := range h.taskStore.List(daemonruntime.TaskListOptions{TopicID: daemonruntime.CronTopicID(id), Limit: 20}) {
+		if record.Status == daemonruntime.TaskDone {
+			out = append(out, record)
+		}
+	}
+	return out
+}
+
+// start starts the stored job id and waits until it has want done runs and the loop is idle.
+func (h *jobReferenceLoop) start(id string, want int) {
+	h.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := TriggerCron(ctx, h.requests, storedTask(h.t, h.cronPath, id)); err != nil {
+		h.t.Fatal(err)
+	}
+	waitFor(h.t, id+" to end", func() bool { return len(h.doneRuns(id)) >= want && len(cronstore.Runs(h.cronPath)) == 0 })
+}
+
+// requestFor returns the latest model request of the job whose instructions are content.
+func (h *jobReferenceLoop) requestFor(content string) string {
+	h.t.Helper()
+	requests := h.client.seen()
+	for i := len(requests) - 1; i >= 0; i-- {
+		if requests[i].Messages[len(requests[i].Messages)-1].Content == content {
+			return jobReferenceRequestText(requests[i])
+		}
+	}
+	h.t.Fatalf("no model request for %q", content)
+	return ""
+}
+
+// A job is given the jobs it uses as references, with no link in its text: the latest output for
+// "latest", the output of the run that started it for "each", and for "fresh" the output of the
+// run made for it when the input was stale.
+func TestScheduledRunIsGivenTheJobsItUses(t *testing.T) {
+	report := cronstore.Task{ID: "job-report", Title: "Morning report", Content: "List the overnight alerts.", Triggers: []cronstore.Trigger{}}
+	digest := func(text string, uses ...cronstore.Use) cronstore.Task {
+		return cronstore.Task{ID: "job-digest", Title: "Digest", Content: text, Triggers: []cronstore.Trigger{}, Uses: uses}
+	}
+	const reportOutput = "OUTPUT OF: List the overnight alerts."
+
+	t.Run("latest", func(t *testing.T) {
+		d := digest("Write the digest.", cronstore.Use{JobID: "job-report", Mode: cronstore.UseLatest})
+		h := startJobReferenceLoop(t, report, d)
+		h.start("job-digest", 1)
+		text := h.requestFor(d.Content)
+		for _, want := range []string{"[Job references: read-only source data]", `"used_as": "latest"`, "List the overnight alerts.", `"reason": "never_run"`} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("request lacks %q:\n%s", want, text)
+			}
+		}
+		if h.client.runsOf(report.Content) != 0 {
+			t.Fatal("a latest use ran its input")
+		}
+		h.start("job-report", 1)
+		// The report ended done and "latest" starts nothing.
+		if got := len(h.doneRuns("job-digest")); got != 1 {
+			t.Fatalf("digest runs = %d, want 1", got)
+		}
+		h.start("job-digest", 2)
+		text = h.requestFor(d.Content)
+		for _, want := range []string{reportOutput, `"from_latest_run": true`, `"used_as": "latest"`} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("request lacks %q:\n%s", want, text)
+			}
+		}
+		if strings.Contains(text, `"from_this_chain": true`) {
+			t.Fatalf("request:\n%s", text)
+		}
+	})
+
+	t.Run("linked and used is given once", func(t *testing.T) {
+		d := digest("Write the digest of [the report](job:job-report).", cronstore.Use{JobID: "job-report", Mode: cronstore.UseLatest})
+		h := startJobReferenceLoop(t, report, d)
+		h.start("job-report", 1)
+		h.start("job-digest", 1)
+		text := h.requestFor(d.Content)
+		if strings.Count(text, `"id": "job-report"`) != 1 || strings.Count(text, reportOutput) != 1 || !strings.Contains(text, `"used_as": "latest"`) {
+			t.Fatalf("request:\n%s", text)
+		}
+	})
+
+	t.Run("each", func(t *testing.T) {
+		d := digest("Write the digest.", cronstore.Use{JobID: "job-report", Mode: cronstore.UseEach})
+		h := startJobReferenceLoop(t, report, d)
+		h.start("job-report", 1)
+		waitFor(t, "the digest to run", func() bool { return len(h.doneRuns("job-digest")) == 1 && len(cronstore.Runs(h.cronPath)) == 0 })
+		reportRecord := h.doneRuns("job-report")[0]
+		text := h.requestFor(d.Content)
+		for _, want := range []string{`"used_as": "each"`, reportOutput, `"from_this_chain": true`,
+			`"run_finished_at": "` + reportRecord.FinishedAt.UTC().Format(time.RFC3339) + `"`, "the run of this job that led to this run"} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("request lacks %q:\n%s", want, text)
+			}
+		}
+		// Started by a person, with no run of the input in its chain: the latest, said as such.
+		h.start("job-digest", 2)
+		text = h.requestFor(d.Content)
+		if !strings.Contains(text, reportOutput) || strings.Contains(text, `"from_this_chain": true`) || !strings.Contains(text, "output of the job's latest run") {
+			t.Fatalf("request:\n%s", text)
+		}
+	})
+
+	t.Run("fresh", func(t *testing.T) {
+		d := digest("Write the digest.", cronstore.Use{JobID: "job-report", Mode: cronstore.UseFresh, MaxAge: "1h"})
+		h := startJobReferenceLoop(t, report, d)
+		h.start("job-digest", 1)
+		if got := h.client.runsOf(report.Content); got != 1 {
+			t.Fatalf("report runs = %d, want 1", got)
+		}
+		text := h.requestFor(d.Content)
+		for _, want := range []string{`"used_as": "fresh"`, reportOutput, `"from_this_chain": true`, `"from_latest_run": true`} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("request lacks %q:\n%s", want, text)
+			}
+		}
+		runs, err := cronstore.NewStore(h.cronPath).RunHistory(context.Background(), cronstore.RunHistoryQuery{JobID: "job-report"})
+		if err != nil || len(runs) != 1 || runs[0].Cause.Kind != cronstore.CauseJob || runs[0].Cause.FromJobID != "job-digest" ||
+			!strings.Contains(runs[0].Cause.Note, "fresh result") || runs[0].TaskID != h.doneRuns("job-report")[0].ID {
+			t.Fatalf("report history = %+v, %v", runs, err)
+		}
+		// Fresh enough now: the next run starts with what is there.
+		h.start("job-digest", 2)
+		if got := h.client.runsOf(report.Content); got != 1 {
+			t.Fatalf("report runs = %d, want 1", got)
+		}
+		text = h.requestFor(d.Content)
+		if !strings.Contains(text, reportOutput) || strings.Contains(text, `"from_this_chain": true`) {
+			t.Fatalf("request:\n%s", text)
+		}
+	})
+
+	t.Run("a used job the job may not read fails the run", func(t *testing.T) {
+		d := digest("Write the digest.", cronstore.Use{JobID: "job-report", Mode: cronstore.UseLatest})
+		d.ChatID = "tg:-100"
+		h := startJobReferenceLoop(t, report, d)
+		record := h.run("job-digest")
+		if record.Status != daemonruntime.TaskFailed || !strings.Contains(record.Error, "is not a job that can be referenced here") || len(h.client.seen()) != 0 {
+			t.Fatalf("record = %+v", record)
+		}
+	})
+}

@@ -42,7 +42,7 @@ const (
 // Trigger is one way a job starts. ID names it within its job and never changes. Per kind:
 // TriggerSchedule carries At or Cron, and TZ, with the rules the job's own at, cron and tz have;
 // TriggerPoke carries nothing (POST /poke/{job_id} starts the job); TriggerMessage carries the
-// Channel and ChatID whose messages start it (stored only: it does not fire yet).
+// Channel and ChatID whose messages start it (see internal/jobtriggers).
 type Trigger struct {
 	ID      string `yaml:"id" json:"id"`
 	Kind    string `yaml:"kind" json:"kind"`
@@ -53,11 +53,49 @@ type Trigger struct {
 	ChatID  string `yaml:"chat_id,omitempty" json:"chat_id,omitempty"`
 }
 
-// Use is a job this one depends on. Mode is UseLatest, UseEach or UseFresh; only UseEach acts
-// today: each run of JobID that ends done starts this job.
+// Use is a job this one depends on. Every run of this job is given the used job's definition and
+// a result of it as source data (see internal/jobrefs). Mode says which result, and whether the
+// used job starts this one:
+//
+//   - UseLatest: the latest finished output, whenever that was.
+//   - UseEach: each run of JobID that ends done starts this job, which is given that run's output.
+//   - UseFresh: before this job runs, JobID is run first when its latest done run is older than
+//     MaxAge (or it never ran), and this job is given the new output.
+//
+// MaxAge is a Go duration ("30m", "1h", "24h") and belongs to UseFresh alone: empty is
+// DefaultFreshMaxAge, and it must be within MinFreshMaxAge and MaxFreshMaxAge.
 type Use struct {
-	JobID string `yaml:"job_id" json:"job_id"`
-	Mode  string `yaml:"mode" json:"mode"`
+	JobID  string `yaml:"job_id" json:"job_id"`
+	Mode   string `yaml:"mode" json:"mode"`
+	MaxAge string `yaml:"max_age,omitempty" json:"max_age,omitempty"`
+}
+
+// The age a "fresh" input's latest done run may have before the input is run again.
+const (
+	DefaultFreshMaxAge = time.Hour
+	MinFreshMaxAge     = time.Minute
+	MaxFreshMaxAge     = 30 * 24 * time.Hour
+)
+
+// FreshMaxAge is the use's max age: its own when it has a valid one, else DefaultFreshMaxAge.
+func FreshMaxAge(use Use) time.Duration {
+	if raw := strings.TrimSpace(use.MaxAge); raw != "" {
+		if age, err := time.ParseDuration(raw); err == nil && age >= MinFreshMaxAge && age <= MaxFreshMaxAge {
+			return age
+		}
+	}
+	return DefaultFreshMaxAge
+}
+
+// FreshInputs lists the task's uses with mode "fresh", in order.
+func FreshInputs(task Task) []Use {
+	var out []Use
+	for _, use := range task.Uses {
+		if use.Mode == UseFresh {
+			out = append(out, use)
+		}
+	}
+	return out
 }
 
 // ErrJobInUse is a delete of a job other jobs use. Nothing is deleted.
@@ -213,18 +251,25 @@ func normalizeTask(task Task, stored *Task) Task {
 	if first, ok := TriggerOfKind(task, TriggerSchedule); ok {
 		task.At, task.Cron, task.TZ = first.At, first.Cron, first.TZ
 	}
+	task.Uses = normalizeUses(task.Uses)
+	task.Join = strings.ToLower(strings.TrimSpace(task.Join))
+	return task
+}
+
+// normalizeUses returns uses as the store keeps them: trimmed, the mode in lower case and
+// UseLatest when left out. An empty list is nil.
+func normalizeUses(list []Use) []Use {
 	var uses []Use
-	for _, use := range task.Uses {
+	for _, use := range list {
 		use.JobID = strings.TrimSpace(use.JobID)
 		use.Mode = strings.ToLower(strings.TrimSpace(use.Mode))
 		if use.Mode == "" {
 			use.Mode = UseLatest
 		}
+		use.MaxAge = strings.TrimSpace(use.MaxAge)
 		uses = append(uses, use)
 	}
-	task.Uses = uses
-	task.Join = strings.ToLower(strings.TrimSpace(task.Join))
-	return task
+	return uses
 }
 
 // normalizeTrigger trims the trigger and drops the fields its kind does not carry.
@@ -356,6 +401,18 @@ func validateUsesShape(task Task) error {
 		case UseLatest, UseEach, UseFresh:
 		default:
 			return fmt.Errorf("task %s: unknown use mode %q for job %s (want latest, each or fresh)", id, strings.TrimSpace(use.Mode), jobID)
+		}
+		if raw := strings.TrimSpace(use.MaxAge); raw != "" {
+			if strings.TrimSpace(use.Mode) != UseFresh {
+				return fmt.Errorf("task %s: max_age for job %s needs mode fresh", id, jobID)
+			}
+			age, err := time.ParseDuration(raw)
+			if err != nil {
+				return fmt.Errorf("task %s: invalid max_age %q for job %s (want a duration such as 30m, 1h or 24h)", id, raw, jobID)
+			}
+			if age < MinFreshMaxAge || age > MaxFreshMaxAge {
+				return fmt.Errorf("task %s: max_age %s for job %s is out of range (want %s to %s)", id, raw, jobID, MinFreshMaxAge, MaxFreshMaxAge)
+			}
 		}
 	}
 	switch strings.TrimSpace(task.Join) {

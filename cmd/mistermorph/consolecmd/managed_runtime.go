@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"log/slog"
 	"strings"
 	"sync"
@@ -336,6 +337,15 @@ func stopManagedRuntimeExecution(active *managedRuntimeExecution, localRuntime *
 	}
 }
 
+// jobTriggers gives a managed channel runtime the Console's cron loop to start jobs through: the
+// Console runs the only loop of the process. Nil without a Console runtime.
+func (s *managedRuntimeSupervisor) jobTriggers(deps depsutil.CommonDependencies) *jobtriggers.Dispatcher {
+	if s == nil || s.localRuntime == nil {
+		return nil
+	}
+	return jobtriggers.New(deps.RuntimeToolsConfig.JobManage.CronPath, s.localRuntime.runCron, s.logger())
+}
+
 func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper) (func(context.Context) error, func(), daemonruntime.TaskReader, error) {
 	if reader == nil {
 		return nil, nil, nil, fmt.Errorf("managed runtime config reader is required")
@@ -364,6 +374,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.Server.Listen = ""
 		runOpts.Server.AuthToken = ""
 		runOpts.Server.Poke = nil
+		runOpts.JobTriggers = s.jobTriggers(deps)
 		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.Server.MaxQueue, deps)
 		if err != nil {
 			cleanup()
@@ -398,6 +409,7 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		runOpts.Server.Listen = ""
 		runOpts.Server.AuthToken = ""
 		runOpts.Server.Poke = nil
+		runOpts.JobTriggers = s.jobTriggers(deps)
 		taskStore, err := newManagedRuntimeTaskStore(kind, runOpts.Server.MaxQueue, deps)
 		if err != nil {
 			cleanup()

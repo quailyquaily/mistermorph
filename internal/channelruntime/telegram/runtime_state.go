@@ -395,6 +395,7 @@ func (s *telegramRuntimeState) serveDaemon() error {
 		return err
 	}
 	s.agentLinkStop = agentlinkruntime.StartForChannel(s.ctx, s.dependencies.CommonDependencies, agentlinkruntime.Options{
+		JobTriggers:       s.options.JobTriggers,
 		TaskTimeout:       s.options.TaskTimeout,
 		MaxConcurrency:    s.options.MaxConcurrency,
 		AgentLimits:       s.options.AgentLimits,

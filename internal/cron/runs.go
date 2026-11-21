@@ -215,6 +215,17 @@ func (b *RunBoard) Stop(id, runID string) StopResult {
 	return result
 }
 
+// Stopping reports whether execution runID of task id is held and was asked to stop.
+func (b *RunBoard) Stopping(id, runID string) bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	run, ok := b.runs[id]
+	return ok && run.RunID == runID && run.Stopping
+}
+
 // Finish removes an execution that ended and remembers how (status is RunStatusDone,
 // RunStatusFailed or RunStatusCanceled). A runID that is no longer the task's execution only
 // adds the record.

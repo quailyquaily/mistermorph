@@ -85,8 +85,10 @@ func (t *JobManageTool) Name() string { return jobconfig.ToolName }
 func (t *JobManageTool) Description() string {
 	return "Manages jobs: the scheduled agent tasks of the TODO list. Supports add_once, add_recurring, get, update, and delete actions. " +
 		"Every job has a stable id (new jobs get a generated `job-<uuid>` id, returned by add); get, update and delete take that id. " +
-		"To change an existing job (its content, schedule, title, or bash_env), use update with the job id: " +
-		"it changes only the fields you pass and keeps everything else, including the id. Never delete and re-add a job to edit it."
+		"To change an existing job (its content, schedule, title, bash_env, triggers, uses or join), use update with the job id: " +
+		"it changes only the fields you pass and keeps everything else, including the id. Never delete and re-add a job to edit it. " +
+		"A job starts on its triggers (get lists them, each with an id): schedules, a poke (POST /poke/{job_id}), or a message in a chat. " +
+		"A job may use other jobs (uses): each of its runs is then given their definitions and results as read-only data."
 }
 
 func (t *JobManageTool) ParameterSchema() string {
@@ -97,9 +99,9 @@ func (t *JobManageTool) ParameterSchema() string {
 				"type": "string",
 				"enum": []string{"add_once", "add_recurring", "get", "update", "delete"},
 				"description": "Action: add_once|add_recurring|get|update|delete. " +
-					"get returns the job with this id (bash_env values are left out, only their names are listed). " +
+					"get returns the job with this id, with its triggers, uses and join (bash_env values are left out, only their names are listed). " +
 					"update edits an existing job by id in place: pass only the fields to change; every omitted field " +
-					"(including bash_env, workspace_dir, schedule, tz, chat_id and title) keeps its current value, and the id stays the same. " +
+					"(including bash_env, workspace_dir, schedule, tz, chat_id, title, triggers, uses and join) keeps its current value, and the id stays the same. " +
 					"Do not delete and re-add a task to edit it.",
 			},
 			"content": map[string]any{
@@ -145,6 +147,54 @@ func (t *JobManageTool) ParameterSchema() string {
 					"required":             []string{"name", "value"},
 					"additionalProperties": false,
 				},
+			},
+			"add_triggers": map[string]any{
+				"type": "array",
+				"description": "Triggers to add to the job, for update, add_once and add_recurring: more ways the job starts, beside the ones it has. " +
+					"Each is {\"kind\": \"schedule\", \"cron\": \"0 9 * * *\", \"tz\": \"UTC\"} (or \"at\" instead of \"cron\"), " +
+					"{\"kind\": \"poke\"} (POST /poke/{job_id} starts the job; one per job), or " +
+					"{\"kind\": \"message\", \"channel\": \"telegram\", \"chat_id\": \"tg:-1001234567890\"} (a message in that chat starts the job). " +
+					"The job's at, cron and tz are its first schedule trigger. Each new trigger gets an id, which the result shows.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"kind":    map[string]any{"type": "string", "enum": []string{cronstore.TriggerSchedule, cronstore.TriggerPoke, cronstore.TriggerMessage}},
+						"at":      map[string]any{"type": "string", "description": "schedule: one time, YYYY-MM-DD HH:mm. Exactly one of at and cron."},
+						"cron":    map[string]any{"type": "string", "description": "schedule: five-field numeric cron expression."},
+						"tz":      map[string]any{"type": "string", "description": "schedule: IANA timezone or UTC offset."},
+						"channel": map[string]any{"type": "string", "description": "message: the channel, such as telegram, slack or agentlink."},
+						"chat_id": map[string]any{"type": "string", "description": "message: the chat whose messages start the job, such as tg:-1001234567890."},
+					},
+					"required":             []string{"kind"},
+					"additionalProperties": false,
+				},
+			},
+			"remove_triggers": map[string]any{
+				"type":        "array",
+				"description": "For update: ids of triggers to remove from the job (get lists them). A job left without triggers runs only when a person or another job starts it.",
+				"items":       map[string]any{"type": "string"},
+			},
+			"uses": map[string]any{
+				"type": "array",
+				"description": "The jobs this job uses, as [{\"job_id\": \"job-...\", \"mode\": \"each\"}], at most 8. Each run is given their definitions and results as read-only data. " +
+					"mode latest (the default): the latest finished output. each: every finished run of that job starts this job, with that run's output. " +
+					"fresh: that job is run first when its latest result is older than max_age (a duration such as \"30m\", \"1h\", \"24h\"; default 1h). " +
+					"For update, the list replaces the job's whole uses, [] clears it, and omitting uses keeps it unchanged.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"job_id":  map[string]any{"type": "string", "description": "The id of the job to use."},
+						"mode":    map[string]any{"type": "string", "enum": []string{cronstore.UseLatest, cronstore.UseEach, cronstore.UseFresh}},
+						"max_age": map[string]any{"type": "string", "description": "fresh only: how old the used job's latest result may be, 1m to 720h."},
+					},
+					"required":             []string{"job_id"},
+					"additionalProperties": false,
+				},
+			},
+			"join": map[string]any{
+				"type":        "string",
+				"enum":        []string{"", cronstore.JoinAll, cronstore.JoinAny},
+				"description": "How several uses with mode each combine: all (the default) starts the job once every one of them has finished in the same chain; any starts it after each. For update, \"\" resets it to all.",
 			},
 			"people": map[string]any{
 				"type": "array",
@@ -256,7 +306,12 @@ func (t *JobManageTool) Execute(ctx context.Context, params map[string]any) (str
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		addResult, addErr := store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: cronstore.NewJobID(), ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
+		links, linksErr := parseJobManageAddLinks(params)
+		if linksErr != nil {
+			return "", linksErr
+		}
+		addResult, addErr := store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: cronstore.NewJobID(), ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv,
+			Triggers: links.Triggers, Uses: links.Uses, Join: links.Join})
 		addResult.Warnings = append(append(addResult.Warnings, warnings...), idWarnings...)
 		result, err = jobManageAddOutput(addResult), addErr
 	case "add_recurring":
@@ -305,7 +360,12 @@ func (t *JobManageTool) Execute(ctx context.Context, params map[string]any) (str
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		addResult, addErr := store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: cronstore.NewJobID(), ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv})
+		links, linksErr := parseJobManageAddLinks(params)
+		if linksErr != nil {
+			return "", linksErr
+		}
+		addResult, addErr := store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: cronstore.NewJobID(), ChatID: chatID, WorkspaceDir: workspaceDir, BashEnv: bashEnv,
+			Triggers: links.Triggers, Uses: links.Uses, Join: links.Join})
 		addResult.Warnings = append(append(addResult.Warnings, warnings...), idWarnings...)
 		result, err = jobManageAddOutput(addResult), addErr
 	case "get":

@@ -520,7 +520,7 @@ func TestUpgradeFromAnAgentDBBeforeTheJobsTableKeepsItsState(t *testing.T) {
 	}
 	check := openRawAgentDB(t, path)
 	var version int
-	if err := check.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 8 {
+	if err := check.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
 		t.Fatalf("user_version = %d, %v", version, err)
 	}
 	for query, want := range map[string]int{

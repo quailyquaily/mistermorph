@@ -5959,6 +5959,14 @@ components:
         last_run_status:
           type: string
           description: Kept by the store; ignored when sent. Empty, done, failed or canceled.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Response only (GET and PUT /todo/tasks); never stored, ignored when sent, left out
+            when empty. Short plain-text notes on a job that is stored as written but will not do what
+            it says. Today, join all over each inputs that share no common upstream job (the job never
+            starts), and a one-time schedule that failed five times and is not tried again.
       required:
       - id
       - content
@@ -5991,16 +5999,19 @@ components:
           description: schedule only.
         channel:
           type: string
-          description: message only, such as telegram, slack or agentlink.
+          description: message only. telegram, slack and agentlink fire; another channel is stored and
+            never fires.
         chat_id:
           type: string
-          description: message only.
+          description: message only. The chat whose messages start the job, matched without regard to
+            case. telegram is tg:<chat id> (or tg:<chat id>_<thread id> for one forum topic), slack is
+            slack:<team id>:<channel id>, agentlink is mm:<instance id>.
       required:
       - kind
       x-source: internal/cron/triggers.go:Trigger
       description: One way a job starts. A job fires on any of its schedule triggers; a poke trigger lets
-        POST /poke/{job_id} start it (at most one per job); a message trigger is stored and checked for
-        shape only, and does not fire yet.
+        POST /poke/{job_id} start it (at most one per job); a message trigger starts it when a message
+        arrives in its chat, at most once a minute, with the message given to the run as source data.
     JobUse:
       type: object
       properties:
@@ -6012,8 +6023,15 @@ components:
           - latest
           - each
           - fresh
-          description: Only each acts today (each run of job_id that ends done starts this job); latest and
-            fresh are stored. Left out means latest.
+          description: Which result of job_id each run of this job is given as read-only source data, and
+            whether job_id starts this job. latest gives the latest finished output. each starts this job
+            after every run of job_id that ends done and gives that run's output. fresh runs job_id first
+            when its latest done run is older than max_age, and gives the new output. Left out means
+            latest.
+        max_age:
+          type: string
+          description: fresh only (400 on another mode). A Go duration such as 30m, 1h or 24h, from 1m to
+            720h. Left out means 1h.
       required:
       - job_id
       x-source: internal/cron/triggers.go:Use
@@ -6030,7 +6048,7 @@ components:
           - job
         trigger_id:
           type: string
-          description: The job's trigger that fired (schedule, poke), else empty.
+          description: The job's trigger that fired (schedule, poke, message), else empty.
         from_job_id:
           type: string
           description: The job whose run started this one (job), else empty.
@@ -6039,7 +6057,8 @@ components:
           description: The run that started the whole chain; a run that starts one is its own origin.
         note:
           type: string
-          description: More in words, such as why a run was skipped.
+          description: More in words, such as why a run was skipped, that an input was run for a fresh
+            result, or when a failed one-time schedule is tried again.
       required:
       - kind
       - trigger_id
@@ -6079,6 +6098,10 @@ components:
           description: A short reason, for a run that did not end done. Left out when empty.
         cause:
           $ref: '#/components/schemas/JobRunCause'
+        task_id:
+          type: string
+          description: The task record the run wrote under its job's topic, which keeps its output. Left
+            out for a run that never started.
       required:
       - run_id
       - job_id

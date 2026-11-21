@@ -1505,6 +1505,23 @@ type cronTopicTitler interface {
 	SetCronTopicTitle(taskID, title string) error
 }
 
+// todoTaskView is a job as the TODO API answers it: the stored job, and the warnings worked out
+// for it as the list is read (see cronstore.Store.Warnings). Warnings are never stored, and a
+// write that carries them has them ignored.
+type todoTaskView struct {
+	cronstore.Task
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+func todoTaskViews(ctx context.Context, store *cronstore.Store, tasks []cronstore.Task) []todoTaskView {
+	warnings := store.Warnings(ctx, tasks)
+	views := make([]todoTaskView, 0, len(tasks))
+	for _, task := range tasks {
+		views = append(views, todoTaskView{Task: task, Warnings: warnings[strings.TrimSpace(task.ID)]})
+	}
+	return views
+}
+
 // topics, when it keeps a topic per TODO item, has the saved items' topics renamed after them.
 func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, stateDir string, contactsDir string, mode string, settingsReader agentsettings.Reader, topics TopicReader) {
 	store := cronstore.NewStore(cronPath)
@@ -1532,7 +1549,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 			"exists":            true,
 			"revision":          revision,
 			"task_count":        len(tasks),
-			"tasks":             tasks,
+			"tasks":             todoTaskViews(r.Context(), store, tasks),
 			"system_tasks":      todoSystemTasks(settingsReader),
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
@@ -1593,7 +1610,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 			"version":           file.Version,
 			"revision":          revision,
 			"task_count":        len(file.Tasks),
-			"tasks":             file.Tasks,
+			"tasks":             todoTaskViews(r.Context(), store, file.Tasks),
 			"system_tasks":      todoSystemTasks(settingsReader),
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,

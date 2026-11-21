@@ -365,6 +365,12 @@ func TestSaveValidatesTriggersUsesAndJoin(t *testing.T) {
 		{"more than eight uses", append(append([]Task{}, nineJobs...), job("a", nine...)), "task a uses 9 jobs; the limit is 8"},
 		{"unknown mode", []Task{job("a"), job("b", Use{JobID: "a", Mode: "sometimes"})}, `unknown use mode "sometimes"`},
 		{"a use without a job", []Task{job("b", Use{Mode: UseEach})}, "a use needs a job_id"},
+		{"a fresh use with a max age saves", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "90m"})}, ""},
+		{"a fresh use at the bounds saves", []Task{job("a"), job("c"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "1m"}, Use{JobID: "c", Mode: UseFresh, MaxAge: "720h"})}, ""},
+		{"a max age that is not a duration", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "1 day"})}, `invalid max_age "1 day" for job a`},
+		{"a max age below the bound", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "30s"})}, "max_age 30s for job a is out of range"},
+		{"a max age above the bound", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "721h"})}, "max_age 721h for job a is out of range"},
+		{"a max age on another mode", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseEach, MaxAge: "1h"})}, "max_age for job a needs mode fresh"},
 		{"unknown join", []Task{{ID: "a", Content: "x", Triggers: []Trigger{}, Join: "most"}}, `unknown join "most"`},
 		{"unknown trigger kind", []Task{{ID: "a", Content: "x", Triggers: []Trigger{{Kind: "webhook"}}}}, `unknown trigger kind "webhook"`},
 		{"a schedule trigger without a time", []Task{{ID: "a", Content: "x", Triggers: []Trigger{{Kind: TriggerSchedule}}}}, "task a must use exactly one of at or cron"},
@@ -527,5 +533,26 @@ func TestTaskJSONShape(t *testing.T) {
 	var legacy Task
 	if err := json.Unmarshal([]byte(`{"id":"a","cron":"* * * * *","content":"x"}`), &legacy); err != nil || legacy.Triggers != nil {
 		t.Fatalf("legacy = %+v, %v", legacy, err)
+	}
+}
+
+func TestFreshMaxAge(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want time.Duration
+	}{
+		{"", DefaultFreshMaxAge},
+		{"15m", 15 * time.Minute},
+		{" 24h ", 24 * time.Hour},
+		{"nonsense", DefaultFreshMaxAge},
+		{"1s", DefaultFreshMaxAge},
+	}
+	for _, tc := range cases {
+		if got := FreshMaxAge(Use{JobID: "a", Mode: UseFresh, MaxAge: tc.raw}); got != tc.want {
+			t.Fatalf("FreshMaxAge(%q) = %s, want %s", tc.raw, got, tc.want)
+		}
+	}
+	if DefaultFreshMaxAge != time.Hour {
+		t.Fatalf("default max age = %s", DefaultFreshMaxAge)
 	}
 }

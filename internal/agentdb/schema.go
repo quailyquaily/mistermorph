@@ -16,6 +16,7 @@ func migrations() []sqlitedb.Migration {
 		{Name: "create jobs", SQL: jobsSQL},
 		{Name: "give jobs triggers and uses", SQL: jobTriggersSQL},
 		{Name: "create job runs", SQL: jobRunsSQL},
+		{Name: "give job runs their task record", SQL: jobRunTaskSQL},
 	}
 }
 
@@ -366,4 +367,10 @@ CREATE TABLE job_runs (
 CREATE INDEX job_runs_by_job ON job_runs (job_id, seq);
 CREATE INDEX job_runs_by_origin ON job_runs (origin_run_id);
 CREATE INDEX job_runs_by_queued ON job_runs (queued_at);
+`
+
+// jobRunTaskSQL: task_id is the ID of the task record a run wrote under its job's topic, which
+// keeps the run's output; empty for a run that never started or wrote none.
+const jobRunTaskSQL = `
+ALTER TABLE job_runs ADD COLUMN task_id TEXT NOT NULL DEFAULT '';
 `

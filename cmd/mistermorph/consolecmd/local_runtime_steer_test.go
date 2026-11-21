@@ -252,3 +252,32 @@ func TestConsoleSteerWhenTheTaskEndsBeforeTakingItIn(t *testing.T) {
 		t.Fatalf("reply = %q, want a not-applied notice instead", output)
 	}
 }
+
+// A message with a job reference is not handed to a run in progress, which would take the link as
+// text and read no job: it is refused with words that say what to do. A plain message still steers.
+func TestConsoleSteerRefusesAMessageWithAJobReference(t *testing.T) {
+	f := newConsoleSteerFixture(t)
+	for _, text := range []string{
+		"also use [Morning report](job:job-report)",
+		"[x]( JOB:job-1 ) and nothing else",
+	} {
+		_, err := f.rt.submitTask(context.Background(), daemonruntime.SubmitTaskRequest{Task: text, TopicID: f.topicID})
+		if err == nil || !strings.Contains(err.Error(), "cannot be added to a run that is in progress") || !strings.Contains(err.Error(), "stop the run first") {
+			t.Fatalf("submitTask(%q) error = %v", text, err)
+		}
+	}
+	// Nothing was recorded or asked of a model: a steer does both.
+	f.mu.Lock()
+	requests := len(f.requests)
+	f.mu.Unlock()
+	if tasks := f.store.List(daemonruntime.TaskListOptions{TopicID: f.topicID, Limit: 10}); requests != 0 || len(tasks) != 2 {
+		t.Fatalf("requests = %d, tasks = %d", requests, len(tasks))
+	}
+	if !f.control.Steerable("console", buildConsoleConversationKey(f.topicID)) || f.control.Steerable("console", buildConsoleConversationKey("topic_other")) {
+		t.Fatal("Steerable")
+	}
+	if resp := f.submit(t, "keep it short"); resp.SteerTargetTaskID != "task_active" {
+		t.Fatalf("a plain message did not steer: %+v", resp)
+	}
+	f.rt.steerResponder().Wait()
+}

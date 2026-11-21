@@ -30,6 +30,9 @@ type CronLoopOptions struct {
 	// MaxConcurrency is how many TODO items may run at once; values below 1 mean 1. System tasks
 	// (the heartbeat) run beside them in a lane of their own, so long items do not hold them up.
 	MaxConcurrency int
+	// FreshWait bounds how long a run waits for a "fresh" input that another worker holds
+	// (DefaultFreshWait when 0).
+	FreshWait time.Duration
 }
 
 // CronRequest asks a cron loop to run a task now. A zero Cause is a person's (manual).
@@ -183,6 +186,7 @@ func newCronLoopRunner(opts CronLoopOptions) *cronLoopRunner {
 		systemQueue: make(chan cronstore.DueTask, cronSystemQueueSize),
 		systemIDs:   map[string]bool{},
 		inFlight:    map[string]bool{},
+		pending:     map[string]cronstore.DueTask{},
 		board:       &cronstore.RunBoard{},
 	}
 	for _, task := range opts.SystemTasks {
@@ -203,6 +207,10 @@ type cronLoopRunner struct {
 
 	mu       sync.Mutex
 	inFlight map[string]bool
+	// pending holds the queued runs no worker has taken yet, by job ID. A worker takes a run from
+	// it before it runs it, and so does a run that needs the job's fresh result (see freshen): the
+	// queue's own copy of a run taken that way is then dropped.
+	pending map[string]cronstore.DueTask
 
 	// queueMu guards the queues against a send after they closed: a worker that ends a run at
 	// shutdown may still try to queue the jobs that use it.
@@ -331,8 +339,30 @@ func (r *cronLoopRunner) enqueue(ctx context.Context, item cronstore.DueTask) (s
 	if item.ChainDepth < 1 {
 		item.ChainDepth = 1
 	}
+	item.Cause = cause
+	item = r.admit(item)
+	r.setPending(id, item)
+	select {
+	case queue <- item:
+		return item.RunID, nil
+	default:
+		r.takePending(id, item.RunID)
+		r.board.Done(id)
+		r.clearInFlight(id)
+		r.recordEnd(id, item.RunID, cronstore.RunStatusSkipped, "", cronstore.QueueFullNote)
+		return "", fmt.Errorf("cron queue is full")
+	}
+}
+
+// admit puts a run of the item's task, which the caller marked in flight, on the board and in the
+// run history as queued, and returns the item with its run ID and recorded cause.
+func (r *cronLoopRunner) admit(item cronstore.DueTask) cronstore.DueTask {
+	id := strings.TrimSpace(item.Task.ID)
+	if item.ChainDepth < 1 {
+		item.ChainDepth = 1
+	}
 	now := r.now()
-	item.RunID, item.Cause = r.board.QueueRun(id, cause, now)
+	item.RunID, item.Cause = r.board.QueueRun(id, item.Cause, now)
 	if r.stored(id) {
 		if _, err := r.store.RecordRun(context.Background(), cronstore.RunRecord{
 			RunID: item.RunID, JobID: id, Status: cronstore.RunStatusQueued, QueuedAt: cronstore.RunTime(now),
@@ -341,15 +371,27 @@ func (r *cronLoopRunner) enqueue(ctx context.Context, item cronstore.DueTask) (s
 			r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
 		}
 	}
-	select {
-	case queue <- item:
-		return item.RunID, nil
-	default:
-		r.board.Done(id)
-		r.clearInFlight(id)
-		r.recordEnd(id, item.RunID, cronstore.RunStatusSkipped, "", "the run queue was full")
-		return "", fmt.Errorf("cron queue is full")
+	return item
+}
+
+func (r *cronLoopRunner) setPending(id string, item cronstore.DueTask) {
+	r.mu.Lock()
+	if r.pending == nil {
+		r.pending = map[string]cronstore.DueTask{}
 	}
+	r.pending[id] = item
+	r.mu.Unlock()
+}
+
+// takePending takes the queued run runID of job id for running; false when it was taken already.
+func (r *cronLoopRunner) takePending(id, runID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if item, ok := r.pending[id]; ok && item.RunID == runID {
+		delete(r.pending, id)
+		return true
+	}
+	return false
 }
 
 // stored reports whether id is a job of the list, whose runs the store records, rather than a
@@ -381,6 +423,10 @@ func (r *cronLoopRunner) now() time.Time {
 func (r *cronLoopRunner) worker(ctx context.Context, queue <-chan cronstore.DueTask) {
 	for item := range queue {
 		id := strings.TrimSpace(item.Task.ID)
+		if !r.takePending(id, item.RunID) {
+			// A run that needed this job's fresh result ran it already.
+			continue
+		}
 		if ctx.Err() != nil {
 			r.warn("cron_skip", "task_id", id, "reason", "shutdown")
 			r.recordEnd(id, item.RunID, cronstore.RunStatusCanceled, "", "the runtime shut down before the run started")
@@ -391,7 +437,18 @@ func (r *cronLoopRunner) worker(ctx context.Context, queue <-chan cronstore.DueT
 	}
 }
 
-func (r *cronLoopRunner) runItem(ctx context.Context, id string, item cronstore.DueTask) {
+// runItem runs one queued run to its end and returns how it ended: a run status. A job with
+// "fresh" inputs has them brought up to date first (see freshen); when one cannot be, the run is
+// recorded as skipped and never starts.
+func (r *cronLoopRunner) runItem(ctx context.Context, id string, item cronstore.DueTask) string {
+	if note := r.freshen(ctx, item); note != "" {
+		r.info("cron_fresh_skip", "task_id", id, "run_id", item.RunID, "reason", note)
+		r.recordEnd(id, item.RunID, cronstore.RunStatusSkipped, "", note)
+		r.board.Done(id)
+		r.clearInFlight(id)
+		r.chain(ctx, item, cronstore.RunStatusSkipped)
+		return cronstore.RunStatusSkipped
+	}
 	runCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	if !r.board.Start(id, item.RunID, r.now(), cancel) {
@@ -401,7 +458,7 @@ func (r *cronLoopRunner) runItem(ctx context.Context, id string, item cronstore.
 		r.board.Finish(id, item.RunID, cronstore.RunStatusCanceled, r.now())
 		r.clearInFlight(id)
 		r.chain(ctx, item, cronstore.RunStatusCanceled)
-		return
+		return cronstore.RunStatusCanceled
 	}
 	stored := r.stored(id)
 	if stored {
@@ -433,10 +490,39 @@ func (r *cronLoopRunner) runItem(ctx context.Context, id string, item cronstore.
 			r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
 		}
 	}
-	r.recordEnd(id, item.RunID, status, errText, "")
+	note := ""
+	if status == cronstore.RunStatusFailed && stored {
+		note = r.onceRetryNote(item)
+	}
+	r.recordEnd(id, item.RunID, status, errText, note)
 	r.board.Finish(id, item.RunID, status, r.now())
 	r.clearInFlight(id)
 	r.chain(ctx, item, status)
+	return status
+}
+
+// onceRetryNote says, for a failed run a one-time ("at") schedule started, when the schedule is
+// tried again, or that it is not (see cronstore.OnceRetryDelays). "" for any other run.
+func (r *cronLoopRunner) onceRetryNote(item cronstore.DueTask) string {
+	triggerID := firedOnceTrigger(item)
+	if triggerID == "" {
+		return ""
+	}
+	id := strings.TrimSpace(item.Task.ID)
+	retry, err := r.store.OnceRetryState(context.Background(), id, triggerID, item.ScheduledAtUTC)
+	if err != nil {
+		r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
+		return ""
+	}
+	// This run is not counted yet: it ends as this note is written.
+	retry.Failures++
+	retry.LastFailedAt = r.now()
+	if retry.GaveUp() {
+		return fmt.Sprintf("one-time schedule: try %d of %d failed; it will not be tried again. Set a new time or run the job by hand.",
+			retry.Failures, len(cronstore.OnceRetryDelays)+1)
+	}
+	return fmt.Sprintf("one-time schedule: try %d of %d failed; the next try is in %s",
+		retry.Failures, len(cronstore.OnceRetryDelays)+1, cronstore.OnceRetryDelays[retry.Failures-1])
 }
 
 func (r *cronLoopRunner) finish(id string) {
