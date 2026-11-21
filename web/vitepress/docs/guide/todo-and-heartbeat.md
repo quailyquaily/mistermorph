@@ -85,6 +85,43 @@ The referenced text is given to the agent as data, apart from the task and the s
 
 Channel notes: a message with a job reference is never answered by the lightweight emoji pre-check. On a channel, the owner's private-chat reference gets the output only when that channel runtime's own run records hold the job's runs; otherwise it gets the definition with the no-result note.
 
+### Triggers
+
+A job can be started in more than one way. Its triggers are a list, and any one of them starts it:
+
+- **Schedule**: a one-time `at` or a repeating `cron`, with a `tz`. A job may have several. The top-level `at` / `cron` / `tz` fields are the first schedule and keep working on their own.
+- **Poke**: `POST /poke/<job id>` with the runtime's bearer token starts a job that has a poke trigger. The request body reaches the run as quoted data, never as instructions. A job that is switched off, or already queued or running, answers `409`.
+- **Message**: a message in a named chat starts the job. This fires for Telegram, Slack and Agent Link chats, at most once a minute per trigger; the message reaches the run as quoted data. The conversation itself is handled as usual, so a message the agent would otherwise ignore can still start the job. Other channels store the trigger but do not fire it yet.
+
+A job with no trigger runs only when someone starts it. In the Console these are edited on the job's page under **When**, and the list's line under each job names what starts it.
+
+### Jobs that use other jobs
+
+A job can take in another job's result. Each use has a kind:
+
+| Kind | What it does |
+| --- | --- |
+| `latest` | Reads the other job's latest finished result. Never starts anything. |
+| `each` | Runs this job every time the other job finishes, with that result. |
+| `fresh` | When this job starts, runs the other job first if its result is older than `max_age` (default one hour), then uses the new result. |
+
+The result arrives the way a [job reference](#job-references) does: as delimited source data with the same access rules, so a job listed in `uses` needs no link in its text.
+
+Rules:
+
+- With several `each` inputs, `join: all` (the default) runs the job once when every input has finished in the same chain; `join: any` runs it for each. A job whose `each` inputs share no common upstream job can never start under `all`; the runtime lists that as a warning on the job.
+- When an input fails or is stopped, the jobs after it are recorded as skipped, with the input named.
+- A chain stops after five jobs. A job cannot use itself, and a loop is refused when saved, naming the jobs in it.
+- A job that others use cannot be deleted until their uses are removed.
+
+The Console shows these links on the job's page (**Uses** and **Used by**) and as a graph in the **Flow** view, where a link can be added, changed or removed and the latest chain of runs replayed.
+
+### Run history
+
+Every run is kept with why it started (a schedule, a person, a poke, a message, or another job) and how it ended: the newest 200 per job, for up to 180 days. The Console shows it on the job's page, in the list's **Today** column and on the calendar, where past days show what ran and future days what is planned. Heartbeat runs are not recorded.
+
+A one-time job that fails is tried again after 1, 5, 15 and 60 minutes, then left alone with a warning until it is given a new time or run by hand.
+
 ### Storage
 
 TODOs are stored in the `jobs` table of `file_state_dir/agent.db`, the SQLite database that also holds the agent's config, persona and contacts. The scheduler, the Console and the tools all use it, from one process or several: each change is one transaction, every read sees what the others committed, and the Console refuses to save a list that changed after it loaded it (for example a job the agent added meanwhile) instead of overwriting the change; reload the page and make the edit again.
