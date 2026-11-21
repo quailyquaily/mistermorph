@@ -3,8 +3,10 @@
 // highlighting, and an Edit / Preview switch shows it rendered (TextView). A hint goes below.
 //
 // AppMarkdownEditor adds the toolbar that inserts, at the caret, a mention of a contact
-// ("[Alice](tg:42)") or a reference to a conversation ("[Team](tg:-100)"), each picked from a
-// filterable list; conversations split into a tab per channel once there are several.
+// ("[Alice](tg:42)"), a reference to a conversation ("[Team](tg:-100)") or a reference to a
+// scheduled job ("[Morning report](job:job-1234)"), each picked from a filterable list;
+// conversations split into a tab per channel once there are several. A job reference is keyed by
+// the job's ID: the label is the job's title when it was picked, and may be edited freely.
 //
 // The Editor's rows take presses only over the text: a press beside it (the padding, the room below
 // the last line, the 8pt over the caret the console's scroll bars take on the desktops) reaches the
@@ -333,7 +335,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
   );
 }
 
-/* ---------- AppMarkdownEditor: mention and conversation pickers ---------- */
+/* ---------- AppMarkdownEditor: mention, conversation and job pickers ---------- */
 
 const CHANNEL_LOGOS: Record<string, any> = {
   discord: discordLogo,
@@ -417,6 +419,37 @@ export function conversationItemsForProfiles(profiles: any[]): PickerItem[] {
     });
   }
   return items.sort((left, right) => left.title.localeCompare(right.title));
+}
+
+/** A job ID that fits in a reference: "(job:<id>)" ends at the first space or parenthesis. */
+function referenceableJobID(value: unknown) {
+  const id = trimText(value);
+  return id && !/[\s()]/.test(id) ? id : "";
+}
+
+/**
+ * The saved jobs as picker items, in the list's order: "[title](job:<id>)". The ID is what the
+ * reference means, so two jobs with one title stay apart, and the ID shows under each title.
+ */
+export function jobItemsForTasks(tasks: any[]): PickerItem[] {
+  const items: PickerItem[] = [];
+  const seen = new Set<string>();
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    const jobID = referenceableJobID(task?.id);
+    if (!jobID || seen.has(jobID)) continue;
+    seen.add(jobID);
+    const title = trimText(task?.title) || t("markdown_editor_job_untitled");
+    const label = safeMentionLabel(title) || jobID;
+    const schedule = trimText(task?.at) || trimText(task?.cron);
+    const disabled = task?.enabled === false ? t("markdown_editor_job_disabled") : "";
+    items.push({
+      id: `job-${jobID}`,
+      title,
+      subtitle: [schedule, disabled, jobID].filter(Boolean).join(" · "),
+      value: `[${label}](job:${jobID})`,
+    });
+  }
+  return items;
 }
 
 /** A toolbar button that opens a filterable list in a dialog and inserts the chosen item. */
@@ -503,7 +536,7 @@ function PickerButton(props: {
 
 export type AppMarkdownEditorProps = MarkdownEditorProps;
 
-/** The MarkdownEditor with the mention and conversation pickers in its toolbar. */
+/** The MarkdownEditor with the mention, conversation and job pickers in its toolbar. */
 export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
   let inner: MarkdownEditorApi | undefined;
   const contactsStore = useContactsStore();
@@ -513,6 +546,10 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
   // The chosen channel tab is kept while the editor lives, so the next pick starts there.
   const conversationTabID = signal("");
   let conversationsSeq = 0;
+  const jobItems = signal<PickerItem[]>([]);
+  const jobsError = signal("");
+  const jobsLoading = signal(false);
+  let jobsSeq = 0;
 
   const endpointRef = () => trimText(endpointState.selectedRef);
   const mentionItems = () => mentionItemsForContacts(contactsStore.items);
@@ -556,16 +593,50 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
     }
   };
 
-  // A new agent: its contacts, and no conversations until the list is opened.
+  // The saved jobs, read each time the list opens: a job added or renamed since shows as it is now.
+  const loadJobs = async () => {
+    if (jobsLoading()) return;
+    const ref = endpointRef();
+    const seq = ++jobsSeq;
+    jobsError.set("");
+    if (!ref) {
+      batch(() => {
+        jobItems.set([]);
+        jobsLoading.set(false);
+      });
+      return;
+    }
+    jobsLoading.set(true);
+    try {
+      const data: any = await runtimeApiFetchForEndpoint(ref, "/todo/tasks", { perfSource: "markdown-editor-toolbar" });
+      if (seq !== jobsSeq) return;
+      jobItems.set(jobItemsForTasks(data?.tasks));
+    } catch (error: any) {
+      if (seq !== jobsSeq) return;
+      console.warn("[AppMarkdownEditor] jobs load failed", error);
+      batch(() => {
+        jobItems.set([]);
+        jobsError.set(error?.message || "failed to load jobs");
+      });
+    } finally {
+      if (seq === jobsSeq) jobsLoading.set(false);
+    }
+  };
+
+  // A new agent: its contacts, and no conversations or jobs until their list is opened.
   effect(() => {
     void endpointRef();
     untracked(() => {
       loadContacts();
       conversationsSeq += 1;
+      jobsSeq += 1;
       batch(() => {
         conversationItems.set([]);
         conversationsError.set("");
         conversationsLoading.set(false);
+        jobItems.set([]);
+        jobsError.set("");
+        jobsLoading.set(false);
       });
     });
   });
@@ -639,6 +710,26 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
                 >
                   <Image src={CHANNEL_LOGOS[item.channel || ""]} style={{ width: 18, height: 18 }} />
                 </If>
+              </View>
+            )}
+            onPick={insertReference}
+          />
+          <PickerButton
+            icon="PhListChecks"
+            title={t("markdown_editor_job")}
+            placeholder={t("markdown_editor_job_placeholder")}
+            empty={jobsError() ? t("markdown_editor_job_load_failed") : t("markdown_editor_job_empty")}
+            items={jobItems()}
+            loading={jobsLoading() && jobItems().length === 0}
+            disabled={locked()}
+            testID="markdown-editor-job"
+            onOpen={() => {
+              void loadJobs();
+              return inner?.holdCaret();
+            }}
+            avatar={() => (
+              <View class="size-7 items-center justify-center overflow-hidden rounded-full bg-paper">
+                <Icon name="PhListChecks" size={16} color="blue" />
               </View>
             )}
             onPick={insertReference}
