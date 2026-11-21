@@ -1187,10 +1187,12 @@ function openLinked(overrides: Record<string, unknown> = {}) {
   });
 }
 
-test("a job with no schedule says so in the list, and its page offers no schedule controls", async () => {
+test("the list says what starts a job with no schedule, and its page offers no schedule controls", async () => {
   const { app } = await openLinked();
   await app.waitFor("id:todo-item-digest");
-  expect(app.shows("id:todo-item-digest >> text:Only when started")).toBe(true);
+  // The list says what starts each job: another job's new result, a poke, or a schedule and more.
+  expect(app.shows("id:todo-item-digest >> text:Whenever Morning report has a new result")).toBe(true);
+  expect(app.shows("id:todo-item-notes >> text:When its URL is poked")).toBe(true);
   await app.press("id:todo-item-digest");
   await app.waitFor("id:todo-task-editor");
   expect(app.shows("text:No schedule")).toBe(true);
@@ -1281,4 +1283,36 @@ test("a runtime that knows no triggers gets the form as before, with nothing abo
   await app.press("id:todo-schedule-mode");
   expect(app.shows("text:No schedule")).toBe(false);
   expect(calls.length).toBeGreaterThan(0);
+});
+
+/* ---------- writing a job in words ---------- */
+
+test("a sentence in the list's composer goes to the agent, and a note leads to the topic where it writes the job", async () => {
+  const { app, calls } = await openTodo({
+    "POST /proxy:/tasks": { body: { id: "task-new", status: "queued", topic_id: "topic-9" } },
+  });
+  await app.waitFor("id:todo-compose");
+  expect(app.shows("id:todo-compose-note")).toBe(false);
+  await app.type("id:chat-composer-input", "every Monday at 8, summarize open issues");
+  await app.press("id:chat-composer-send");
+  await app.waitFor("id:todo-compose-note");
+  const posts = proxied(calls, "POST", "/tasks");
+  expect(posts.length).toBe(1);
+  // The page asks the agent; it does not parse the sentence itself.
+  expect(posts[0].json.task).toContain("every Monday at 8, summarize open issues");
+  expect(posts[0].json.task).toContain("job_manage");
+  expect(posts[0].json.trigger).toEqual({ source: "ui", event: "job_compose", ref: "web/console/todo" });
+  expect(app.value("id:chat-composer-input")).toBe("");
+  await app.press("id:todo-compose-topic");
+  await app.waitUntil(() => lastLocation(app).endsWith("/chat/topic-9"));
+});
+
+test("a request the agent does not take says why and keeps the sentence", async () => {
+  const { app } = await openTodo({ "POST /proxy:/tasks": { status: 500, body: { error: "busy" } } });
+  await app.waitFor("id:todo-compose");
+  await app.type("id:chat-composer-input", "water the plants on Sunday");
+  await app.press("id:chat-composer-send");
+  await app.waitFor("text:/Could not ask the agent: .*busy/");
+  expect(app.value("id:chat-composer-input")).toBe("water the plants on Sunday");
+  expect(app.shows("id:todo-compose-note")).toBe(false);
 });

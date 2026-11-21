@@ -1023,6 +1023,57 @@ export function createTodoState() {
     editTask(task, (copy) => model.updateTaskField(copy, "workspace_dir", dir));
   }
 
+  /* ---------- writing a job in words ---------- */
+
+  // The list's composer: a sentence about what should happen and when goes to the agent, which
+  // writes the job with its own tool (job_manage). The page asks; it does not parse the sentence.
+  const composeText = signal("");
+  const composeSending = signal(false);
+  /** The topic the last request went to, until the job it asked for has arrived. */
+  const composeTopicID = signal("");
+  let composeReloads: ReturnType<typeof setTimeout>[] = [];
+  cleanup(() => composeReloads.forEach(clearTimeout));
+
+  async function composeJob() {
+    const text = trimText(untracked(composeText));
+    const endpointRef = untracked(() => endpointState.selectedRef);
+    if (!text || !endpointRef || untracked(composeSending)) {
+      return;
+    }
+    composeSending.set(true);
+    try {
+      const submitted = await runtimeApiFetchForEndpoint(endpointRef, "/tasks", {
+        method: "POST",
+        body: { task: t("todo_compose_request", { text }), trigger: { source: "ui", event: "job_compose", ref: "web/console/todo" } },
+      });
+      if (disposed) return;
+      const known = new Set(untracked(tasks).map((task) => trimText(task.id)));
+      batch(() => {
+        composeText.set("");
+        composeTopicID.set(trimText(submitted?.topic_id));
+      });
+      // The job arrives when the agent has written it: look again a few times, then leave it to the
+      // page's own refreshes. The note goes once a job the list did not have is there.
+      composeReloads.forEach(clearTimeout);
+      composeReloads = [4000, 10000, 20000, 40000].map((delay) =>
+        setTimeout(() => {
+          if (disposed || !untracked(composeTopicID)) return;
+          void load().then(() => {
+            if (untracked(tasks).some((task) => !known.has(trimText(task.id)))) composeTopicID.set("");
+          });
+        }, delay),
+      );
+    } catch (e) {
+      notice.error(t("todo_compose_failed", { error: errorMessage(e) || t("msg_load_failed") }));
+    } finally {
+      if (!disposed) composeSending.set(false);
+    }
+  }
+
+  function openComposeTopic() {
+    openTaskTopic(untracked(composeTopicID));
+  }
+
   /* ---------- triggers and the jobs a job uses ---------- */
 
   /** A chat's channel as a message trigger names it (the chat's platform; "agentlink" for a peer agent). */
@@ -1055,6 +1106,21 @@ export function createTodoState() {
       return t("todo_trigger_schedule", { schedule: text });
     }
     return t("todo_trigger_poke");
+  }
+
+  /**
+   * When a job runs, in one line for the list: its schedule, then whatever else starts it (a poke,
+   * messages, the jobs whose every new result it waits for), or that only a person starts it.
+   */
+  function whenLabel(task: TodoTask | null | undefined): string {
+    if (!task) return "";
+    const parts: string[] = [];
+    if (model.taskMode(task) !== "none") parts.push(scheduleLabel(task));
+    for (const trigger of model.extraTriggers(task) as TodoTrigger[]) parts.push(triggerPhrase(trigger));
+    for (const use of task.uses ?? []) {
+      if (use.mode === "each") parts.push(t("todo_trigger_each", { job: jobTitle(use.job_id) }));
+    }
+    return parts.length > 0 ? parts.join(t("todo_when_separator")) : t("todo_schedule_none");
   }
 
   function jobByID(jobID: string): TodoTask | undefined {
@@ -1689,6 +1755,12 @@ export function createTodoState() {
     taskRun,
     heartbeatRun,
     triggerPhrase,
+    whenLabel,
+    composeText,
+    composeSending,
+    composeTopicID,
+    composeJob,
+    openComposeTopic,
     messageSourceItems,
     jobTitle,
     openJob,

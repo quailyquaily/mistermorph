@@ -23,6 +23,7 @@ import { createArrivalTint, createScrollEdges, SCROLLBAR } from "../motion";
 import { BAR_ICON_SIZE, CircleButton, Icon, StatusMark } from "../ui";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
+import { ChatComposer } from "../chat/ChatComposer";
 import { TodoViewToggle } from "./TodoViewToggle";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -176,7 +177,7 @@ export function TodoIndex(props: {
   const row = (task: () => TodoTask) => (
     <IndexItem
       title={state.taskTitle(display(task()))}
-      meta={state.scheduleLabel(display(task()))}
+      meta={state.whenLabel(display(task()))}
       runLabel={state.runStateLabel(state.taskRun(task()))}
       run={state.taskRun(task())}
       enabled={on(task())}
@@ -237,6 +238,30 @@ export function TodoIndex(props: {
           style={{ paddingHorizontal: gutterX(), paddingTop: 8, paddingBottom: props.mobile ? 84 : gutterY() * 2 }}
         >
           <View style={column()}>
+            {/* A job written in words: the chat's composer, as in a conversation. The agent writes the
+                job from the sentence; a note under it leads to the topic where it does. */}
+            <View class="gap-2 pb-3 pt-1" style={{ paddingLeft: TODO_MARGIN }} testID="todo-compose">
+              <ChatComposer
+                landing
+                value={state.composeText()}
+                onChange={(value) => state.composeText.set(value)}
+                placeholder={t("todo_compose_placeholder")}
+                sendLabel={t("todo_compose_send")}
+                sending={state.composeSending()}
+                sendDisabled={state.composeSending() || state.composeText().trim() === ""}
+                attachDisabled
+                onSubmit={() => void state.composeJob()}
+              />
+              <If when={state.composeTopicID()}>
+                <View class="flex-row flex-wrap items-baseline gap-x-2 px-3" testID="todo-compose-note">
+                  <Text class="text-xs leading-[17.4px] text-muted-foreground">{t("todo_compose_sent")}</Text>
+                  <BaseButton onPress={state.openComposeTopic} accessibilityLabel={t("todo_action_open_topic")} testID="todo-compose-topic">
+                    <Text class="text-xs leading-[17.4px] text-blue">{t("todo_action_open_topic")}</Text>
+                  </BaseButton>
+                </View>
+              </If>
+            </View>
+
             <If when={state.placeholderRows()}>
               <View class="gap-2 pt-2" accessibilityLabel={t("todo_heartbeat_loading")} style={{ paddingLeft: TODO_MARGIN }}>
                 <Each of={[0, 1, 2]}>{() => <View class="h-13 animate-pulse rounded-(--radius) bg-muted" />}</Each>
