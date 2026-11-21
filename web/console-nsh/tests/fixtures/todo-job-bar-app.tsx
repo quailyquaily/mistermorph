@@ -16,8 +16,8 @@ const STATES: Record<State, { running: boolean; busy: boolean; toggleEnabled: bo
   starting: { running: false, busy: true, toggleEnabled: false, viewEnabled: true },
   stopping: { running: true, busy: true, toggleEnabled: false, viewEnabled: true },
   loading: { running: false, busy: false, toggleEnabled: false, viewEnabled: true },
-  failed: { running: false, busy: false, toggleEnabled: false, viewEnabled: true, error: "Could not load the TODO item: store unreadable" },
-  gone: { running: false, busy: false, toggleEnabled: false, viewEnabled: false, note: "The TODO item “Daily digest” no longer exists." },
+  failed: { running: false, busy: false, toggleEnabled: false, viewEnabled: true, error: "Could not load the job: store unreadable" },
+  gone: { running: false, busy: false, toggleEnabled: false, viewEnabled: false, note: "The job “Daily digest” no longer exists." },
 };
 
 const state = signal<State>("idle");

@@ -110,7 +110,7 @@ test("the search stays within the current view", async () => {
     },
   });
   await app.waitFor("id:chat-topics-search");
-  // TODO runs are not in the date view, so they are not found there.
+  // Job runs are not in the date view, so they are not found there.
   await app.type("id:chat-topics-search", "daily");
   await app.waitFor(NO_MATCH("daily"));
   await app.press("id:chat-topics-view-cron");

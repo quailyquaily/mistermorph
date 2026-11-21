@@ -77,7 +77,7 @@ test("on a desktop the topic search shows while the topics load (its spinner und
   expect(app.count("id:chat-topics-search")).toBe(1);
   expect(app.value("id:chat-topics-search")).toBe("trip");
 
-  // A view with no topics (no TODO runs) keeps it; a console with no topics at all shows no topic
+  // A view with no topics (no Job runs) keeps it; a console with no topics at all shows no topic
   // list (and so no search) on a desktop, as before.
   const empty = await openConsole({ location: "/e/default/chat", api: chatApi(TOPICS) });
   await empty.app.waitFor("id:chat-topic-topic-1");

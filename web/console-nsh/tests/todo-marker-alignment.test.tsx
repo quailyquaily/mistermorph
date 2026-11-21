@@ -91,7 +91,7 @@ for (const item of [CASES[0], CASES[2], { name: "a narrow phone", width: 320, ad
     expect(text.y + text.h).toBeLessThan(box.y + box.h);
     // Room for the label and the hint (wrapped on the narrowest phones), neither dropped.
     expect(text.w).toBeGreaterThan(item.add ? 200 : item.width - 120);
-    expect(await app.shows("text:No scheduled TODOs")).toBe(true);
+    expect(await app.shows("text:No jobs yet")).toBe(true);
     expect(await app.shows("text:Give the agent a one-time or recurring task.")).toBe(true);
     // The whole row is still the add action.
     expect(app.texts()).toContain("adds:0");

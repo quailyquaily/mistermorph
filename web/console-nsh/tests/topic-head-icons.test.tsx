@@ -1,7 +1,7 @@
-// The Topics head's icons (the agents, TODO runs and tag toggles, and New) are drawn at a regular
+// The Topics head's icons (the agents, Job runs and tag toggles, and New) are drawn at a regular
 // icon-only Button's icon size (BAR_BUTTON_SIZE's 16pt, the TODO head's calendar toggle and the
 // phone bars' back arrows), measured against such a Button beside the sidebar: on a desktop and on
-// phones, with New in the head or floating (split mode), with the TODO runs' alarm clock turning,
+// phones, with New in the head or floating (split mode), with the Job runs' alarm clock turning,
 // and with no topics yet. The buttons keep their 38pt squares flush in a row, each icon centred in
 // its square and inside the head; their names, tooltips and presses stay. Status marks and group
 // carets keep their own small sizes (tests/topic-status-alignment.test.tsx, the 7pt marks).
@@ -77,7 +77,7 @@ for (const item of CASES) {
 test("the head's buttons keep their names, tooltips and presses", async () => {
   const { app, presses } = await openHead(1280, "linux", "plus");
   expect(app.count("label:Conversations other agents started")).toBe(1);
-  expect(app.count("label:TODO runs — 1 running")).toBe(1);
+  expect(app.count("label:Job runs — 1 running")).toBe(1);
   expect(app.count("label:Arrange by tag")).toBe(1);
   expect(app.count("label:New Topic")).toBe(1);
   // The TODO toggle's clock is turning (a run is on).

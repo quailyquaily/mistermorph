@@ -539,7 +539,8 @@ function setUseMode(task, jobID, mode) {
   if (!task || !USE_MODES.includes(mode) || !(task.uses || []).some((item) => item.job_id === id && item.mode !== mode)) {
     return EDIT_NONE;
   }
-  task.uses = task.uses.map((item) => (item.job_id === id ? { ...item, mode } : item));
+  // max_age belongs to a fresh use only (the runtime refuses it on the others).
+  task.uses = task.uses.map((item) => (item.job_id === id ? { ...item, mode, max_age: mode === "fresh" ? item.max_age : "" } : item));
 }
 
 function removeUse(task, jobID) {
@@ -821,7 +822,7 @@ function serializeTask(task, fallbackTitle = DEFAULT_TODO_TITLE) {
       return trigger;
     });
     out.triggers = mode === "none" ? rest : [schedule, ...rest];
-    const uses = normalizeUses(task.uses).map((item) => (item.max_age ? item : { job_id: item.job_id, mode: item.mode }));
+    const uses = normalizeUses(task.uses).map((item) => (item.max_age && item.mode === "fresh" ? item : { job_id: item.job_id, mode: item.mode }));
     if (uses.length > 0) {
       out.uses = uses;
     }

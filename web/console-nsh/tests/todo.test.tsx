@@ -173,25 +173,25 @@ test("a failed save shows the error and keeps the edit to save again", async () 
 test("a failed load says so and the list offers to add the first item", async () => {
   const { app } = await openTodo({ "GET /proxy:/todo/tasks": { status: 500, body: { error: "agent offline" } } });
   await app.waitFor("agent offline");
-  await app.waitFor("No scheduled TODOs");
+  await app.waitFor("No jobs yet");
 });
 
 test("an empty list adds a new item that needs content before it can be saved", async () => {
   const { app, calls } = await openTodo({ "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) } });
-  await app.waitFor("No scheduled TODOs");
+  await app.waitFor("No jobs yet");
   await app.press("id:todo-empty-add");
   await app.waitFor("id:todo-task-editor");
-  expect(app.value("id:todo-title")).toBe("Unititled TODO");
+  expect(app.value("id:todo-title")).toBe("Untitled job");
   // Content is required, but its absence is not shouted at.
   expect(app.enabled("id:todo-save")).toBe(false);
-  expect(app.texts()).not.toContain("TODO content is required.");
+  expect(app.texts()).not.toContain("The job needs to say what to do.");
   await app.type("id:todo-content-source", "Water the plants");
   expect(app.enabled("id:todo-save")).toBe(true);
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   const body = proxied(calls, "PUT", "/todo/tasks")[0].json;
   expect(body.tasks.length).toBe(1);
-  expect(body.tasks[0]).toMatchObject({ title: "Unititled TODO", content: "Water the plants" });
+  expect(body.tasks[0]).toMatchObject({ title: "Untitled job", content: "Water the plants" });
   // A new item's ID is a job ID, as the agent makes them: job-<uuid v4>.
   expect(body.tasks[0].id).toMatch(JOB_ID);
   expect(body.tasks[0].at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
@@ -223,7 +223,7 @@ test("Delete asks first, then saves the list without the item", async () => {
   await app.press("id:todo-item-task-2");
   await app.press("id:todo-task-actions");
   await app.press("text:Delete");
-  await app.waitFor('Delete TODO "Report"? This takes effect immediately.');
+  await app.waitFor('Delete job "Report"? This takes effect immediately.');
   await app.press("id:dialog-action-cancel");
   await app.waitFor("id:todo-delete-dialog", { state: "gone" });
   expect(proxied(calls, "PUT", "/todo/tasks").length).toBe(0);
@@ -304,7 +304,7 @@ test("an invalid item is not run: the validation error shows and nothing is sent
   await app.waitFor("id:todo-task-editor");
   // A new item has no content yet.
   await app.press("id:todo-run");
-  await app.waitFor("TODO content is required.");
+  await app.waitFor("The job needs to say what to do.");
   expect(agentWrites(calls).length).toBe(0);
 });
 
@@ -371,7 +371,7 @@ test("running and waiting items say so, and a running item cannot be run again",
   await expect(app.press("id:todo-run")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
 });
 
-/** A runtime whose TODO runs the test changes: `state.runs` and `state.finished` as /todo/runs lists them. */
+/** A runtime whose Job runs the test changes: `state.runs` and `state.finished` as /todo/runs lists them. */
 function liveRuns(initial: any[]) {
   const state = { runs: initial, finished: [] as any[] };
   return {
@@ -675,7 +675,7 @@ test("the calendar shows a month of runs; a day lists its items, and an item ope
   // Another day selects the day again.
   await jan.press("id:todo-calendar-day-2030-01-03");
   await jan.waitFor("Scheduled · 0");
-  await jan.waitFor("No TODOs scheduled for this day.");
+  await jan.waitFor("No jobs scheduled for this day.");
   // Back to the list.
   await jan.press("id:todo-view-toggle");
   await jan.waitFor("id:todo-index");
@@ -686,7 +686,7 @@ test("a month with nothing on it says so", async () => {
     { "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) } },
     { location: `${LOCATION}?view=calendar&month=2030-01` },
   );
-  await app.waitFor("No TODOs this month");
+  await app.waitFor("No jobs this month");
 });
 
 test("the workspace picker browses the agent's folders and fills in the chosen one", async () => {
@@ -826,7 +826,7 @@ test("on a phone the list and the editor take turns, with a back button and a fl
   await app.waitFor("id:todo-index");
   await app.press("id:todo-fab");
   await app.waitFor("id:todo-task-editor");
-  expect(app.value("id:todo-title")).toBe("Unititled TODO");
+  expect(app.value("id:todo-title")).toBe("Untitled job");
   expect(agentWrites(calls).length).toBe(0);
 });
 
@@ -1141,7 +1141,7 @@ test("a save sends the revision the list was read at, and one the list has moved
   stale = true;
   await app.type("id:todo-title", " again");
   await app.press("id:todo-save");
-  await app.waitUntil(() => app.texts().some((text: string) => text.startsWith("The TODO list changed since this page loaded it")));
+  await app.waitUntil(() => app.texts().some((text: string) => text.startsWith("The list of jobs changed since this page loaded it")));
   expect(app.value("id:todo-title")).toBe("Weekly review! again");
   expect(app.enabled("id:todo-save")).toBe(true);
 });

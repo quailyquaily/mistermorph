@@ -2,7 +2,7 @@
 // axis, not the button's outer edge): New on a desktop and on a phone with New in the head, the tag
 // toggle in a phone's split mode (New floats over the list). The head keeps its buttons where they
 // were (the last one ends at the pages' phone gutter on phones, and where the rows end on desktops, 16pt in); the marks
-// move under the icon, for running, pending and unread topics, long titles and TODO runs. Titles
+// move under the icon, for running, pending and unread topics, long titles and Job runs. Titles
 // keep their room and stop short of the marks (a title with no mark where a mark would end), and
 // nothing runs past the sidebar. TODO's own list: tests/todo-marker-alignment.test.tsx.
 import { expect, open, test } from "nsh/test";
