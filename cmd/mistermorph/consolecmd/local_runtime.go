@@ -37,6 +37,7 @@ import (
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/elevate"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
@@ -581,6 +582,10 @@ func (r *consoleLocalRuntime) prepareGeneration(reader *viper.Viper) (*consoleLo
 	bundle, commonDeps, err := buildConsoleLocalRuntimeBundle(logger, r.inspectors, snapshot)
 	if err != nil {
 		return nil, err
+	}
+	if r.store != nil {
+		// A job reference in a message reads the job's latest output from the runs kept here.
+		bundle.taskRuntime.JobRuns = r.store
 	}
 	r.generationMu.Lock()
 	r.nextGeneration++
@@ -2819,6 +2824,15 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	if reasoningEffort != "" {
 		selectedRoute = llmutil.ResolvedRouteWithReasoningEffort(selectedRoute, reasoningEffort)
 	}
+	// The task's job references are read before anything is asked of a model, the precheck
+	// included. A run resumed after an approval keeps the ones it started with.
+	var jobReferences *jobrefs.Resolved
+	if strings.TrimSpace(job.ResumeApprovalID) == "" && !projectGuide {
+		jobReferences, err = bundle.taskRuntime.ResolveJobReferences(ctx, task, nil, selectedRoute.ClientConfig.ContextWindowTokens)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	lightweightDecided := false
 	if !projectGuide && routePurpose == "" && consoleLightweightPrecheckApplies(job, task) {
 		switch result, emoji := r.runConsoleLightweightPrecheck(ctx, generation, job, selectedRoute); result {
@@ -2930,6 +2944,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "console.loop",
 		LightweightDecided:      lightweightDecided,
+		JobReferences:           jobReferences,
 		History:                 historyMsgs,
 		CurrentMessage:          currentMsg,
 		Registry:                reg,

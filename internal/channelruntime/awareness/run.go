@@ -22,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/codersessions"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
@@ -212,7 +213,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 	}
 
 	// runCtx is the run's own context: a cron item's execution context, so stopping it ends the run.
-	runAwarenessTaskWithOpts := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool, sourceData awarenessdomain.PokeInput) (string, error) {
+	runAwarenessTaskWithOpts := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool, sourceData awarenessdomain.PokeInput, job *cronstore.Task) (string, error) {
 		var contextScope topiccontext.Scope
 		if topicID != "" && opts.TopicContextScope != nil {
 			contextScope = opts.TopicContextScope(topicID)
@@ -248,10 +249,12 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			SourceData:               sourceData,
 			DecisionClient:           decisionClient,
 			DecisionModel:            decisionModel,
+			Job:                      job,
+			CronPath:                 opts.CronPath,
 		})
 	}
 	runTask := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(runCtx, behavior, task, meta, taskRunID, "", "", nil, "", "", false, awarenessdomain.PokeInput{})
+		return runAwarenessTaskWithOpts(runCtx, behavior, task, meta, taskRunID, "", "", nil, "", "", false, awarenessdomain.PokeInput{}, nil)
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -394,7 +397,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
 					summary, err := runAwarenessTaskWithOpts(ctx, awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
-						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual, due.Input)
+						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual, due.Input, &task)
 					if err != nil {
 						if errors.Is(context.Cause(ctx), cronstore.ErrRunStopped) {
 							err = cronstore.ErrRunStopped
@@ -469,6 +472,10 @@ type awarenessTaskOptions struct {
 	// fired is checked with it once it ends done (see finishedRunOutcome).
 	DecisionClient llm.Client
 	DecisionModel  string
+	// Job is the scheduled job this run is of, and nil for a heartbeat or a poke. CronPath is the
+	// job list. They say which jobs the task's job references may read (see jobReferences).
+	Job      *cronstore.Task
+	CronPath string
 }
 
 // TopicRun is a run recorded under a topic, as it starts.
@@ -615,6 +622,17 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 			progress.Close(summary, finishErr)
 		}
 	}()
+
+	// The task's job references are read once the run is recorded, so a reference that cannot be
+	// used shows as this run's failure, and before anything is asked of a model.
+	referenceRoute := opts.Route
+	if useTaskRoute {
+		referenceRoute = taskRoute
+	}
+	jobReferences, err := awarenessJobReferences(ctx, opts, task, referenceRoute.ClientConfig.ContextWindowTokens)
+	if err != nil {
+		return "", err
+	}
 
 	if useTaskRoute {
 		var err error
@@ -800,6 +818,9 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		toolSearchOption,
 		codeModeOption,
 	}
+	if note := taskruntime.JobReferencesRunContext(jobReferences); note != nil {
+		engineOptions = append(engineOptions, agent.WithRunContext(note))
+	}
 	if progress != nil {
 		engineOptions = append(engineOptions, agent.WithPlanStepUpdate(progress.PlanStepUpdate))
 	}
@@ -840,6 +861,36 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		return "", fmt.Errorf("record awareness task finish: %w", recordErr)
 	}
 	return summary, nil
+}
+
+// awarenessJobReferences reads the jobs the task references ("[label](job:<id>)"). A scheduled job
+// asks as itself: where it reports decides which jobs it may read, and its own record of this run
+// is left out, so a job that references itself gets its previous run. A heartbeat follows the
+// owner's own checklist and asks as the owner. A poke's text comes from outside: it may reference
+// no job.
+func awarenessJobReferences(ctx context.Context, opts awarenessTaskOptions, task string, contextWindowTokens int64) (*jobrefs.Resolved, error) {
+	if len(jobrefs.ExtractIDs(task)) == 0 {
+		return nil, nil
+	}
+	var requester jobrefs.Requester
+	switch {
+	case opts.Job != nil:
+		requester = jobrefs.ScheduledBy(*opts.Job)
+	case opts.Behavior == awarenessutil.BehaviorHeartbeat:
+		requester.Audience = audience.Owner()
+	}
+	var runs taskdomain.TaskReader
+	if opts.TaskStore != nil {
+		runs = opts.TaskStore
+	}
+	options := taskruntime.JobReferenceOptions(opts.CronPath, runs)
+	options.ExcludeRunID = opts.TaskRunID
+	options.Limits = jobrefs.LimitsForContextWindow(contextWindowTokens)
+	resolved, err := jobrefs.Resolve(ctx, task, requester, options)
+	if err != nil {
+		return nil, err
+	}
+	return &resolved, nil
 }
 
 func closeAwarenessTaskClient(logger *slog.Logger, client llm.Client) {

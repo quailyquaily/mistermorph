@@ -182,6 +182,7 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 	generations, err := runtimecore.BootstrapRuntimeGenerationManager(ctx, d.CommonDependencies, runtimecore.ChannelBootstrapOptions{
 		Mode: "discord", InspectRequest: opts.InspectRequest, InspectPrompt: opts.InspectPrompt,
 		AgentConfig: opts.AgentLimits.ToConfig(), EngineToolsConfig: &opts.EngineToolsConfig, Logger: logger,
+		JobRuns: daemonStore,
 	})
 	if err != nil {
 		return err

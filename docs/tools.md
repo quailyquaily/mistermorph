@@ -319,6 +319,8 @@ The tool was called `todo_update`. The earlier name still works: a call named `t
 
 Every job has a stable `id`. New jobs get a generated `job-<uuid>` ID (a random, version 4 UUID in lower case), the same form the Console gives new TODO items; the ID names the job only and says nothing about what starts its runs. IDs from earlier versions (such as `cron-<uuid>`, the Console's `task-<n>`, or one chosen in `cron.yaml`) stay valid and are never rewritten. A job's topic (`_cron_<job id>`) and each of its runs have IDs of their own; see [TODO and Heartbeat](../web/vitepress/docs/guide/todo-and-heartbeat.md).
 
+A job's `content`, like any task text, may reference another job as `[label](job:<id>)`: the run then gets that job's definition and latest finished output as read-only context. `job_manage` stores such a reference as written and does not resolve it. See [Job references](../web/vitepress/docs/guide/todo-and-heartbeat.md#job-references) for what is given, the fallbacks, and who may reference a job.
+
 Parameters:
 
 | Parameter | Type | Required | Default | Description |

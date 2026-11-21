@@ -1016,6 +1016,101 @@ test("another item's content shows in the same field, and a mention goes into th
   expect(tasks.find((task: { id: string }) => task.id === "task-1").content).not.toContain("Alice");
 });
 
+/* ---------- job references: "[label](job:<id>)" ---------- */
+
+const JOB_DIALOG = "id:markdown-editor-job-dialog";
+
+test("a job picked from the toolbar goes into the content as a reference to its ID, and the caret stays", async () => {
+  const { app, calls } = await openTodo();
+  await app.press("id:todo-item-task-2");
+  await app.waitFor("id:todo-content-source");
+  expect(app.enabled("id:markdown-editor-job")).toBe(true);
+  await app.press("id:markdown-editor-job");
+  await app.waitFor(JOB_DIALOG);
+  // Every saved job is listed with its schedule and its ID, the item being edited too.
+  await app.waitFor(`${JOB_DIALOG} >> text:Review`);
+  expect(app.shows(`${JOB_DIALOG} >> text:15 9 * * 1,3 · task-1`)).toBe(true);
+  expect(app.shows(`${JOB_DIALOG} >> text:Report`)).toBe(true);
+  expect(app.shows(`${JOB_DIALOG} >> text:2030-01-02 12:30 · task-2`)).toBe(true);
+  await app.press(`${JOB_DIALOG} >> text:Review`);
+  await app.waitFor(JOB_DIALOG, { state: "gone" });
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it [Review](job:task-1)");
+  // The caret is back in the field, after the reference.
+  await app.keyboard.press("x");
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it [Review](job:task-1)x");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  const tasks = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
+  expect(tasks[1]).toMatchObject({ id: "task-2", content: "Write it [Review](job:task-1)x" });
+  expect(tasks[0]).toMatchObject({ id: "task-1", content: "Original content" });
+  // Picking only reads the list: nothing was run, changed or deleted for it.
+  expect(agentWrites(calls).map((call) => `${call.method} ${call.uri}`)).toEqual(["PUT /todo/tasks"]);
+});
+
+test("the job list filters, tells same-named jobs apart by ID, and keeps the label safe", async () => {
+  const { app } = await openTodo({
+    "GET /proxy:/todo/tasks": {
+      body: tasksBody({
+        tasks: [
+          { id: "job-aaaa", title: "Daily [ops] report", content: "A", cron: "0 9 * * *" },
+          { id: "job-bbbb", title: "Daily [ops] report", content: "B", cron: "0 18 * * *", enabled: false },
+          { id: "job-cccc", title: "", content: "C", at: "2031-05-06 07:08" },
+          { id: "bad id (1)", title: "Unreferenceable", content: "D", cron: "0 1 * * *" },
+        ],
+      }),
+    },
+  });
+  await app.press("id:todo-item-job-cccc");
+  await app.waitFor("id:todo-content-source");
+  await app.press("id:markdown-editor-job");
+  await app.waitFor(`${JOB_DIALOG} >> text:0 9 * * * · job-aaaa`);
+  expect(app.shows(`${JOB_DIALOG} >> text:0 18 * * * · disabled · job-bbbb`)).toBe(true);
+  expect(app.shows(`${JOB_DIALOG} >> text:Untitled job`)).toBe(true);
+  // An ID that cannot stand in "(job:<id>)" is not offered.
+  expect(app.shows(`${JOB_DIALOG} >> text:Unreferenceable`)).toBe(false);
+  // The filter reads titles and the schedule-and-ID line.
+  await app.type("label:Select a job", "bbbb");
+  await app.waitFor(`${JOB_DIALOG} >> text:0 9 * * * · job-aaaa`, { state: "gone" });
+  expect(app.shows(`${JOB_DIALOG} >> text:Untitled job`)).toBe(false);
+  await app.press(`${JOB_DIALOG} >> text:0 18 * * * · disabled · job-bbbb`);
+  // Brackets in the title would end the label early: they are left out of it. The ID is the job.
+  await app.waitUntil(() => app.value("id:todo-content-source") === "C [Daily ops report](job:job-bbbb)");
+});
+
+test("a job reference typed by hand is kept as typed, and the list is read again each time it opens", async () => {
+  let title = "Review";
+  let fail = false;
+  const { app, calls } = await openTodo({
+    "GET /proxy:/todo/tasks": () =>
+      fail
+        ? { status: 500, body: { error: "boom" } }
+        : { body: tasksBody({ tasks: [{ id: "task-1", title, content: "Original content", cron: "15 9 * * 1,3", tz: "UTC+9" }, { id: "task-2", title: "Report", content: "Write it", at: "2030-01-02 12:30", tz: "UTC" }] }) },
+  });
+  await app.press("id:todo-item-task-2");
+  await app.waitFor("id:todo-content-source");
+  await app.type("id:todo-content-source", " after [any label at all](job:task-1)");
+  expect(app.value("id:todo-content-source")).toBe("Write it after [any label at all](job:task-1)");
+  // The job is renamed elsewhere: the next pick has its new title, and the same ID.
+  title = "Weekly review";
+  await app.press("id:markdown-editor-job");
+  await app.waitFor(`${JOB_DIALOG} >> text:Weekly review`);
+  await app.press(`${JOB_DIALOG} >> text:Weekly review`);
+  await app.waitUntil(() => app.value("id:todo-content-source") === "Write it after [any label at all](job:task-1) [Weekly review](job:task-1)");
+  // A list that cannot be read says so, and inserts nothing.
+  fail = true;
+  await app.press("id:markdown-editor-job");
+  await app.waitFor(`${JOB_DIALOG} >> text:Could not load jobs.`);
+  await app.press(`${JOB_DIALOG} >> label:Close`);
+  await app.waitFor(JOB_DIALOG, { state: "gone" });
+  fail = false;
+  expect(app.value("id:todo-content-source")).toBe("Write it after [any label at all](job:task-1) [Weekly review](job:task-1)");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/todo/tasks").at(-1)!.json.tasks[1].content).toBe(
+    "Write it after [any label at all](job:task-1) [Weekly review](job:task-1)",
+  );
+});
+
 test("a save sends the revision the list was read at, and one the list has moved past is refused without losing the edit", async () => {
   let revision = 7;
   let stale = false;
