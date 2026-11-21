@@ -33,8 +33,19 @@ func TestHandleToolSchemas(t *testing.T) {
 		for _, tool := range body.Channels["console"] {
 			console[tool.Name] = true
 		}
-		if !console["message_react"] || !console["skill_install"] {
-			t.Fatalf("console tools = %v", console)
+		for _, name := range []string{"send_file", "message_react", "ask_user", "skill_install_preview", "skill_install"} {
+			if !console[name] {
+				t.Fatalf("console tools = %v, want %s", console, name)
+			}
+		}
+		for _, channel := range []string{"telegram", "slack"} {
+			asks := false
+			for _, tool := range body.Channels[channel] {
+				asks = asks || tool.Name == "ask_user"
+			}
+			if !asks {
+				t.Fatalf("%s tools lack ask_user", channel)
+			}
 		}
 		if body.Tools["codemode"].Name != "codemode" || len(body.Channels["telegram"]) == 0 {
 			t.Fatalf("catalog = %d tools, %d channels", len(body.Tools), len(body.Channels))

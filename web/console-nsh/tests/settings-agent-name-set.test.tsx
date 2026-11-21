@@ -20,11 +20,6 @@ function open(api: Record<string, ApiHandler>) {
   return openConsole({ location: "/e/default/settings/tools", api });
 }
 
-// The examples line, read from the screen's texts.
-function examples(app: { texts(): string[] }) {
-  return app.texts().find((text) => /^(For example|例如)/.test(text)) ?? "";
-}
-
 test("the name set sits below the tools, saves with them and survives a reload", async () => {
   // The runtime's stored value, as the PUT handler writes it.
   let stored = "scientists";
@@ -46,7 +41,6 @@ test("the name set sits below the tools, saves with them and survives a reload",
   expect(at("Agent name set")).toBeGreaterThan(at("coder"));
   expect(at("Agent name set")).toBeLessThan(texts.findIndex((text) => /channel tools/i.test(text)));
   expect(app.shows("text:Great scientists")).toBe(true);
-  expect(examples(app)).toBe("For example: Einstein, Curie, Newton, Darwin");
   expect(app.shows("text:/applies to new subagent and coder sessions/i")).toBe(true);
   expect(app.shows("id:settings-save-bar")).toBe(false);
 
@@ -56,7 +50,6 @@ test("the name set sits below the tools, saves with them and survives a reload",
     expect(app.shows(`text:${title}`)).toBe(true);
   }
   await app.press("text:Great musicians");
-  await app.waitUntil(() => examples(app) === "For example: Bach, Mozart, Beethoven, Chopin");
   await app.waitFor("id:settings-save-bar");
   await app.press("id:settings-save-bar-save");
   await app.waitUntil(() => body !== null);
@@ -71,7 +64,7 @@ test("the name set sits below the tools, saves with them and survives a reload",
   // A reload reads the saved set back.
   const { app: reloaded } = await open(api);
   await reloaded.waitFor("id:settings-agent-name-set");
-  await reloaded.waitUntil(() => examples(reloaded) === "For example: Bach, Mozart, Beethoven, Chopin");
+  await reloaded.waitFor("text:Great musicians");
   expect(reloaded.shows("text:Great musicians")).toBe(true);
   expect(reloaded.shows("id:settings-save-bar")).toBe(false);
 });
@@ -79,7 +72,6 @@ test("the name set sits below the tools, saves with them and survives a reload",
 test("picking the saved set again leaves nothing to save", async () => {
   const { app } = await open({ "GET /settings/agent": { body: agentSettings({ agent_name_set: "artists" }) } });
   await app.waitFor("id:settings-agent-name-set");
-  expect(examples(app)).toBe("For example: Leonardo, Michelangelo, Raphael, Rembrandt");
   await app.press("label:Agent name set");
   await app.press("text:Great scientists");
   await app.waitFor("id:settings-save-bar");
@@ -92,7 +84,6 @@ test("an unknown stored set shows as the scientists", async () => {
   const { app } = await open({ "GET /settings/agent": { body: agentSettings({ agent_name_set: "poets" }) } });
   await app.waitFor("id:settings-agent-name-set");
   expect(app.shows("text:Great scientists")).toBe(true);
-  expect(examples(app)).toBe("For example: Einstein, Curie, Newton, Darwin");
   expect(app.shows("id:settings-save-bar")).toBe(false);
 });
 
@@ -109,18 +100,17 @@ test("a failed save shows the error and keeps the picked set", async () => {
   await app.waitFor("id:settings-save-bar-failed");
   expect(app.shows("text:/disk full/")).toBe(true);
   expect(app.shows("text:Great artists")).toBe(true);
-  expect(examples(app)).toBe("For example: Leonardo, Michelangelo, Raphael, Rembrandt");
 });
 
-test("the examples follow the Console language", async () => {
+test("the set's title follows the Console language, and no example names are shown", async () => {
   const { app } = await openConsole({
     location: "/e/default/settings/tools",
     kv: { "quail-language": "zh" },
     api: { "GET /settings/agent": { body: agentSettings({ agent_name_set: "musicians" }) } },
   });
   await app.waitFor("id:settings-agent-name-set");
-  await app.waitUntil(() => examples(app) === "例如：巴赫、莫扎特、贝多芬、肖邦");
-  expect(app.shows("text:伟大的音乐家")).toBe(true);
+  await app.waitFor("text:伟大的音乐家");
+  expect(app.texts().some((text) => /例如|巴赫/.test(text))).toBe(false);
 });
 
 test("a runtime that reports no name set shows no control and is sent none", async () => {

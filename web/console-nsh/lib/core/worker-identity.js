@@ -145,11 +145,6 @@ export function workerNamePool(lang, nameSet = DEFAULT_WORKER_NAME_SET) {
   return poolFor(WORKER_NAME_SET_POOLS[normalizeWorkerNameSet(nameSet)], lang);
 }
 
-// workerNameExamples is the first count names of a set in lang, for showing what it is like.
-export function workerNameExamples(nameSet, lang, count = 4) {
-  return workerNamePool(lang, nameSet).slice(0, count);
-}
-
 function nameAt(pool, nameIndex) {
   const round = Math.floor(nameIndex / pool.length);
   const name = pool[nameIndex % pool.length];

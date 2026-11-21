@@ -78,8 +78,6 @@ export function SettingToggleRow(props: {
   leading?: JSX.Element;
   /** Buttons before the switch. */
   actions?: JSX.Element;
-  /** Replaces the switch (a tool with no setting). */
-  control?: JSX.Element;
   /** Under the note ("Restart required"). */
   extra?: JSX.Element;
   first?: boolean;
@@ -107,20 +105,13 @@ export function SettingToggleRow(props: {
       </View>
       <View class="flex-row items-center gap-2">
         {props.actions}
-        <If
-          when={props.control}
-          else={
-            <SettingSwitch
-              checked={props.checked}
-              disabled={props.disabled}
-              onChange={(checked) => props.onChange?.(checked)}
-              accessibilityLabel={props.title}
-              testID={props.testID ? `${props.testID}-switch` : undefined}
-            />
-          }
-        >
-          {props.control}
-        </If>
+        <SettingSwitch
+          checked={props.checked}
+          disabled={props.disabled}
+          onChange={(checked) => props.onChange?.(checked)}
+          accessibilityLabel={props.title}
+          testID={props.testID ? `${props.testID}-switch` : undefined}
+        />
       </View>
     </View>
   );

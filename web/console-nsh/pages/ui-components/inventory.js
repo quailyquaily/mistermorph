@@ -328,6 +328,7 @@ const FILES = {
       SettingChoices: C("SettingRows"),
       SettingRows: D(),
       Sep: C("SettingRows"),
+      MenuCaret: C("SettingFieldGrid"),
       Part: C("SettingFieldGrid"),
     },
   },

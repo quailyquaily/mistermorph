@@ -89,6 +89,12 @@ test("the Tools page keeps its tools and the name set, and has no Load skills", 
   await app.waitFor("id:settings-agent-name-set");
   expect(app.shows("label:bash")).toBe(true);
   expect(app.shows("id:settings-tool-matrix")).toBe(true);
+  // The matrix has what each channel's chats add: the Console sends files and asks, as Telegram
+  // and Slack do; a channel without questions has no ask_user.
+  for (const cell of ["send_file-console", "ask_user-console", "ask_user-telegram", "ask_user-slack", "send_file-whatsapp"]) {
+    expect(app.shows(`id:settings-tool-matrix-${cell}`)).toBe(true);
+  }
+  expect(app.shows("id:settings-tool-matrix-ask_user-lark")).toBe(false);
   expect(app.shows("id:settings-skills-enabled")).toBe(false);
   expect(app.shows("label:Load skills")).toBe(false);
 

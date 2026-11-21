@@ -13,7 +13,6 @@ import {
   normalizeWorkerNameSet,
   readWorkerIndices,
   workerDisplayName,
-  workerNameExamples,
   workerNameIndex,
   workerNamePool,
 } from "./worker-identity.js";
@@ -74,15 +73,11 @@ test("every set has the same people at the same positions in every language, wit
   assert.deepEqual(at(ARTIST_WORKER_NAME_POOLS, "Hokusai"), ["Hokusai", "葛饰北斋", "北斎"]);
 });
 
-test("a set's pool and examples follow the Console language", () => {
+test("a set's pool follows the Console language", () => {
   assert.equal(workerNamePool("zh", "musicians"), MUSICIAN_WORKER_NAME_POOLS.zh);
   assert.equal(workerNamePool("fr", "artists"), ARTIST_WORKER_NAME_POOLS.en);
   assert.equal(workerNamePool("ja"), WORKER_NAME_POOLS.ja);
   assert.equal(workerNamePool("en", "poets"), WORKER_NAME_POOLS.en);
-  assert.deepEqual(workerNameExamples("scientists", "en"), ["Einstein", "Curie", "Newton", "Darwin"]);
-  assert.deepEqual(workerNameExamples("musicians", "en"), ["Bach", "Mozart", "Beethoven", "Chopin"]);
-  assert.deepEqual(workerNameExamples("artists", "ja", 3), ["ダ・ヴィンチ", "ミケランジェロ", "ラファエロ"]);
-  assert.deepEqual(workerNameExamples("", "zh", 2), ["爱因斯坦", "居里"]);
 });
 
 test("a worker shows from the set it was named from, in each language", () => {
