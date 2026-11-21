@@ -3,8 +3,8 @@
 // stretched to a minute (tests/slowSlidesConsole.tsx), so each step acts mid-slide:
 // - a settings section going back to the sections keeps showing that section as it slides out,
 //   never the sections' own (Persona);
-// - a page going out no longer takes Back: Back goes to the place before (the history), not to
-//   what the outgoing page's own back arrow did.
+// - a page going out no longer takes Back: over a navigation page coming in, which takes none
+//   itself, Back is the system's at once, not what the outgoing page's own back arrow did.
 // A resize ends a running slide at once (both hosts), which the tests use to let one end.
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
@@ -91,7 +91,7 @@ test("Back while a settings section still slides in turns it round with that sec
   await expectSystemBack(app);
 });
 
-test("a page going out does not take Back: it goes to the place before, not the outgoing page's own back", async () => {
+test("a page going out does not take Back: over a navigation page it is the system's, not the outgoing page's own back", async () => {
   // The shortcut below needs the hardware keyboard the native part tells of (lib/shortcutPolicy.ts).
   const { app } = await openConsole({ platform: "android", location: "/e/default/skills?skill=weather", api: { ...QUIET, ...SKILLS }, slowSlides: true, keyboard: "connected" });
   await app.waitFor("id:skill-detail");
@@ -107,12 +107,18 @@ test("a page going out does not take Back: it goes to the place before, not the 
   expect(app.count("id:page-layer-out")).toBe(1);
   expect(app.count("id:skill-detail")).toBe(1);
 
-  await app.back();
-  // The history's Back, as after the slide: Skills with its skill again (closing the outgoing
-  // skill instead would have left the address on TODO).
-  await app.waitUntil(() => location(app) === "/e/default/skills?skill=weather");
+  // TODO's list takes no Back, and the skill going out no longer does: nothing in the app
+  // listens, as after the slide (closing the outgoing skill would have shown Skills' list in the
+  // layer going out; the history would have reopened Skills).
+  await expectSystemBack(app);
+  expect(location(app)).toBe("/e/default/todo");
+  expect(app.count("id:page-layer-out")).toBe(1);
+  expect(app.count("id:skill-detail")).toBe(1);
+  expect(app.count("id:todo-page")).toBe(1);
+
   await endSlides(app, 843);
-  await app.waitFor("id:todo-page", { state: "gone" });
-  await app.waitFor("id:skill-detail");
+  await app.waitFor("id:skill-detail", { state: "gone" });
   expect(app.count("id:page-layer-out")).toBe(0);
+  expect(app.count("id:todo-page")).toBe(1);
+  await expectSystemBack(app);
 });

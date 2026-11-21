@@ -97,10 +97,10 @@ const session: Record<string, string> = {};
 let location = "/";
 
 // The places the app went through in this run, as a browser tab keeps them: the router pushes and
-// replaces (morph.history), and Back (lib/systemBack.ts) goes to the one before, which reaches the
-// router as the browser's back button does (morph.pop). Nothing to go back to at the first one:
-// there the system takes Back and leaves the app. Not saved: the next launch starts with the last
-// location alone.
+// replaces (morph.history). A page's own back may go to the one before (`goBack`, which reaches
+// the router as the browser's back button does, morph.pop) or replace itself with it; Android's
+// Back never walks them by itself (lib/systemBack.ts: a page without a back action takes none,
+// and the system leaves the app). Not saved: the next launch starts with the last location alone.
 let entries: string[] = [];
 const depth = signal(0);
 
@@ -120,9 +120,6 @@ function writeEntry(op: string, url: string) {
   depth.set(entries.length - 1);
 }
 
-/** Whether Back has a place in this run's history to go back to. */
-export const canGoBack = () => depth() > 0;
-
 /** Goes back one place: the router hears it as a browser's back. False at the first place. */
 export function goBack(): boolean {
   const index = untracked(depth);
@@ -135,7 +132,7 @@ export function goBack(): boolean {
   return true;
 }
 
-/** The place Back goes to, or "" at the first one. */
+/** The place before this one, or "" at the first one. */
 export function previousEntry(): string {
   const index = untracked(depth);
   return index > 0 ? entries[index - 1] : "";

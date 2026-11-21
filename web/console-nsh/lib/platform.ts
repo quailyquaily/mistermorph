@@ -188,10 +188,10 @@ export function onHistoryPop(listener: (location: string) => void) {
 }
 
 /**
- * Whether the phone app has a place to go back to in this run (its own history: no browser keeps
- * one there). Always false on the web and the desktop, whose back buttons are the browser's.
+ * Whether the app keeps the run's history itself (the phone apps: no browser keeps one there).
+ * False on the web and the desktop, whose back buttons are the browser's.
  */
-export const canGoBack = () => MOBILE && mobileHost.canGoBack();
+export const OWN_HISTORY = MOBILE;
 /** Goes back a place in the phone app's history; the router hears it as `onHistoryPop`. False when it cannot. */
 export function goBack(): boolean {
   return MOBILE ? mobileHost.goBack() : false;

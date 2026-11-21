@@ -1,6 +1,8 @@
 // The phone app on Android: Back (the back button, or the edge swipe gesture navigation turns into
-// the same event) goes back through the app before it leaves it, and the frame keeps the pages
-// out from under the status and navigation bars (lib/systemBack.ts, lib/systemInsets.ts).
+// the same event) closes a sheet or a dialog, then does what the page's own back arrow does, and
+// leaves the app from a page without one (tests/mobile-back-subpages.test.tsx has the pages'
+// hierarchy); and the frame keeps the pages out from under the status and navigation bars
+// (lib/systemBack.ts, lib/systemInsets.ts).
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import { dialogLayerInsets, frameInsets, workbenchInsets } from "../lib/systemInsets";
@@ -30,7 +32,7 @@ async function expectSystemBack(app: App) {
   await expect(app.back()).rejects.toMatchObject({ code: "ERR_NSH_TEST_NO_BACK" });
 }
 
-test("on the first screen Back is the system's; after moving around it goes back through the pages", async () => {
+test("on a navigation page Back is the system's, also after moving between them", async () => {
   const { app } = await openConsole({
     platform: "android",
     safeArea: BARS,
@@ -46,13 +48,13 @@ test("on the first screen Back is the system's; after moving around it goes back
   await app.press("id:mobile-nav-more");
   await app.press("id:mobile-more-memories");
   await app.waitUntil(() => location(app) === "/e/default/memories");
+  await app.waitFor("id:memories-index");
 
-  await app.back();
-  await app.waitUntil(() => location(app) === "/e/default/contacts");
-  await app.back();
-  await app.waitUntil(() => location(app) === "/e/default/todo");
-  // Back at the first page: leaving is the system's again.
+  // The pages opened before are not where Back goes: Memories' list has no back arrow, so
+  // leaving is the system's there too.
   await expectSystemBack(app);
+  expect(location(app)).toBe("/e/default/memories");
+  expect(app.count("id:memories-index")).toBe(1);
 });
 
 test("Back closes the More and agent sheets before it leaves the page", async () => {
@@ -100,7 +102,7 @@ test("Back from an open topic goes to the topic list, also when the app reopened
   await expectSystemBack(app);
 });
 
-test("Back from a settings section goes to the sections, then to the page before", async () => {
+test("Back from a settings section goes to the sections, and no further", async () => {
   const { app } = await openConsole({
     platform: "android",
     location: "/e/default/todo",
@@ -119,11 +121,11 @@ test("Back from a settings section goes to the sections, then to the page before
   await app.waitFor("id:settings-back", { state: "gone" });
   await app.waitFor("id:settings-section-agent");
   await app.waitUntil(() => location(app) === "/e/default/settings");
-  // The next Back leaves Settings: no press that only changes the address.
-  await app.back();
-  await app.waitUntil(() => location(app) === "/e/default/todo");
-  await app.waitFor("id:settings-section-agent", { state: "gone" });
+  // The sections are a navigation page: the next Back is the system's, whatever came before
+  // them (TODO), and no press only changes the address.
   await expectSystemBack(app);
+  expect(location(app)).toBe("/e/default/settings");
+  expect(app.count("id:settings-section-agent")).toBe(1);
 });
 
 test("Back steps up through the context inspector, then to its topic, also when the app reopened there", async () => {
@@ -335,18 +337,23 @@ test("Android's dialogs keep out from under the system bars, rising with the key
   expect(dialogLayerInsets({ top: 24, right: 48, bottom: 0, left: 0 }, 0, 16)).toEqual({ top: 40, right: 64, bottom: 16, left: 16 });
 });
 
-test("turning the phone to landscape keeps the places Back goes through", async () => {
+test("turning the phone to landscape keeps what Back does", async () => {
   const { app } = await openConsole({
     platform: "android",
     safeArea: BARS,
-    location: "/e/default/todo",
+    location: "/e/default/settings",
     api: QUIET,
   });
   await app.waitFor("id:mobile-bottom-nav");
-  await app.press("id:mobile-nav-contacts");
-  await app.waitUntil(() => location(app) === "/e/default/contacts");
+  await app.press("id:settings-section-agent");
+  await app.waitUntil(() => location(app) === "/e/default/settings/agent");
+  await app.waitFor("id:settings-back");
   await app.setViewport(844, 390);
-  await app.waitFor("id:mobile-bottom-nav");
+  await app.waitFor("id:settings-back");
+  // The open section still goes back to the sections, and the sections still take no Back.
   await app.back();
-  await app.waitUntil(() => location(app) === "/e/default/todo");
+  await app.waitUntil(() => location(app) === "/e/default/settings");
+  await app.waitFor("id:settings-back", { state: "gone" });
+  await app.waitFor("id:mobile-bottom-nav");
+  await expectSystemBack(app);
 });

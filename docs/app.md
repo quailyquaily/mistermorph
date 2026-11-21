@@ -155,8 +155,10 @@ warning about them.
 
 Android's Back (the back button, or the swipe in from the screen's edge with gesture navigation) closes
 an open dialog or menu, then does what the screen's own back arrow does (an open topic back to the topic
-list, a settings section back to the sections), then goes back through the pages opened since launch;
-on the first screen it leaves the app. The app keeps its pages clear of the status bar and the
+list, a settings section back to the sections, the skill store back to Skills, Logs back to Settings),
+also when the app opened on that screen. A screen without a back arrow (Topics, Contacts, TODO and the
+other pages of the bottom navigation) takes no Back, whatever pages were opened before it: there Back
+leaves the app. The app keeps its pages clear of the status bar and the
 navigation bar in portrait and landscape.
 
 Voice input works as in the web console: the composer's mic shows while the agent's
