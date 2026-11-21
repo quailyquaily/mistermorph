@@ -347,6 +347,10 @@ const FILES = {
   "components/todo/TodoCalendar.tsx": { group: "todo", items: { TodoCalendar: L("frame") } },
   "components/todo/TodoCard.tsx": { group: "todo", items: { TodoCard: D() } },
   "components/todo/TodoFields.tsx": { group: "todo", items: { Prepend: C("TodoInput"), FieldNote: D(), TodoInput: D() } },
+  "components/todo/TodoFlow.tsx": {
+    group: "todo",
+    items: { TodoFlow: D(), FlowJobBox: C("TodoFlow"), FlowLinkLine: C("TodoFlow"), FlowLinkPicker: C("TodoFlow") },
+  },
   "components/todo/TodoHeartbeatEditor.tsx": {
     group: "todo",
     items: { TodoHeartbeatEditor: L("live"), WorkflowCard: L("part", "TodoHeartbeatEditor") },
