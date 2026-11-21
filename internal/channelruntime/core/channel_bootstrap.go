@@ -13,6 +13,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -23,6 +24,9 @@ type ChannelBootstrapOptions struct {
 	AgentConfig       agent.Config
 	EngineToolsConfig *agent.EngineToolsConfig
 	Logger            *slog.Logger
+	// JobRuns holds the channel's task records, where a job reference in a message reads the
+	// referenced job's latest output (see taskruntime.Runtime.JobRuns).
+	JobRuns taskdomain.TaskReader
 }
 
 type ChannelRuntimeBundle struct {
@@ -95,6 +99,7 @@ func BootstrapChannelRuntime(ctx context.Context, d depsutil.CommonDependencies,
 		cleanupInspectors()
 		return ChannelRuntimeBundle{}, err
 	}
+	execRuntime.JobRuns = opts.JobRuns
 	mainRoute := execRuntime.BootstrapMainRoute
 	addressingRoute, err := d.ResolveLLMRoute(llmutil.RoutePurposeDecision)
 	if err != nil {

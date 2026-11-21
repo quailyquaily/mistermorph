@@ -115,6 +115,7 @@ func bootstrapTelegramRuntimeState(ctx context.Context, d Dependencies, opts Run
 		AgentConfig:       opts.AgentLimits.ToConfig(),
 		EngineToolsConfig: &opts.EngineToolsConfig,
 		Logger:            logger,
+		JobRuns:           taskStore,
 	})
 	if err != nil {
 		return nil, err
