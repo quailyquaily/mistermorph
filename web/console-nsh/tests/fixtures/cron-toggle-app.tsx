@@ -1,4 +1,4 @@
-// A test entry for tests/cron-toggle.test.tsx: the topic head's TODO runs toggle (ViewToggle) as
+// A test entry for tests/cron-toggle.test.tsx: the topic head's Job runs toggle (ViewToggle) as
 // TopicSidebar draws it, with buttons that turn its running and selected states on and off and
 // mount it again, and its frame, its centre, its presses and its alarm clock's hands (`read-hands`:
 // their angles in radians and how they move) read out beside it.
@@ -32,8 +32,8 @@ function Gallery() {
           <View onLayout={({ bounds }) => frame.set(`${bounds.origin.x},${bounds.origin.y},${bounds.size.width}x${bounds.size.height}`)}>
             <ViewToggle
               icon="PhAlarm"
-              label={running() ? "TODO runs — 2 running" : "TODO runs"}
-              title="TODO runs"
+              label={running() ? "Job runs — 2 running" : "Job runs"}
+              title="Job runs"
               active={active()}
               running={running()}
               onPress={() => presses.update((n) => n + 1)}

@@ -20,11 +20,13 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/codersessions"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/memories"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
+	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -136,6 +138,11 @@ type Runtime struct {
 	ImageClient    llm.ImageClient
 	ImageSession   *imagesession.Store
 	imageRetention *toolsutil.ImageToolRetentionStore
+
+	// JobRuns holds the run records of the scheduled jobs (each job's runs under its topic), where
+	// a job reference reads the job's latest output. Nil: this runtime keeps none, and a reference
+	// gives the job's definition with a note that no result is available.
+	JobRuns taskdomain.TaskReader
 }
 
 type PromptAugmentFunc func(spec *agent.PromptSpec, reg *tools.Registry)
@@ -191,6 +198,14 @@ type RunRequest struct {
 	// ($contacts_send) or ToolTriggers asks for it: tool search does not offer it. Channels set it
 	// for group chats, whose registries leave contacts_send out, and for public social threads.
 	ContactsSendOptIn bool
+	// JobReferences, when set, are the task's job references ("[label](job:<id>)") as the caller
+	// already resolved them (Runtime.ResolveJobReferences). Nil has the run resolve the references
+	// of ReferenceText, or of Task, as it is prepared, before anything is asked of a model; a
+	// reference that cannot be used fails the run there.
+	JobReferences *jobrefs.Resolved
+	// JobReferenceRequester, when set, is who asks for the referenced jobs instead of the
+	// audience in the run's context.
+	JobReferenceRequester *jobrefs.Requester
 }
 
 type RunResult struct {
@@ -494,6 +509,8 @@ func (rt *Runtime) Run(ctx context.Context, req RunRequest) (RunResult, error) {
 }
 
 func (rt *Runtime) Resume(ctx context.Context, approvalRequestID string, req RunRequest) (RunResult, error) {
+	// A resumed run keeps the job references it started with; they are not read again.
+	req.JobReferences = &jobrefs.Resolved{}
 	prepared, err := rt.prepareRun(ctx, req)
 	if err != nil {
 		return RunResult{}, err
@@ -573,6 +590,19 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	mainRoute = llmutil.SelectRouteCandidate(mainRoute, routeSelectionKey(ctx))
 	if reasoningEffort != "" {
 		mainRoute = llmutil.ResolvedRouteWithReasoningEffort(mainRoute, reasoningEffort)
+	}
+	// Job references are read here, before any client exists to ask a model anything. A subtask's
+	// text is written by a model: references in it are not expanded.
+	jobReferences := req.JobReferences
+	if jobReferences == nil && agent.SubtaskDepthFromContext(ctx) == 0 {
+		text := task
+		if own := strings.TrimSpace(req.ReferenceText); own != "" {
+			text = own
+		}
+		jobReferences, err = rt.ResolveJobReferences(ctx, text, req.JobReferenceRequester, mainRoute.ClientConfig.ContextWindowTokens)
+		if err != nil {
+			return preparedRuntimeRun{}, err
+		}
 	}
 	runClientOwners := &runtimeClientOwners{}
 	mainClient, err := rt.createClientForRoute(mainRoute, runClientOwners)
@@ -828,6 +858,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	}
 	if memoryStore != nil && !memoriesReadOnly {
 		engineOpts = append(engineOpts, agent.WithHook(memoryReminderHook(memoryStore, memoryAudience, logger)))
+	}
+	if note := JobReferencesRunContext(jobReferences); note != nil {
+		engineOpts = append(engineOpts, agent.WithRunContext(note))
 	}
 	if req.PlanStepUpdate != nil {
 		engineOpts = append(engineOpts, agent.WithPlanStepUpdate(req.PlanStepUpdate))

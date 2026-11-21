@@ -85,6 +85,7 @@ func TestRunTaskJobManageKeepsBashEnvAndKeepsValuesOutOfOutput(t *testing.T) {
 	want := seeded
 	want.Content = "Write the weekly report with charts"
 	want.BashEnv = []cronstore.BashEnvRef{{Name: "API_TOKEN", Value: secret + "-rotated"}}
+	want.Triggers = cronstore.TriggersForTask(want)
 	if !reflect.DeepEqual(file.Tasks[0], want) {
 		t.Fatalf("edited task = %#v\nwant %#v", file.Tasks[0], want)
 	}

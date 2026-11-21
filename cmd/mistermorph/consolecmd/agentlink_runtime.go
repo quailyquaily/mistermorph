@@ -3,6 +3,8 @@ package consolecmd
 import (
 	"context"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
+	"log/slog"
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/agentlink"
@@ -42,6 +44,7 @@ func (r *consoleLocalRuntime) reloadAgentLinkRunner() {
 		InactiveAfter:     reader.GetDuration("contacts.agent_link.inactive_after"),
 		TaskStore:         r.store,
 		LateReply:         r.deliverAgentLinkLateReply,
+		JobTriggers:       jobtriggers.New(generation.paths.CronPath, r.runCron, slog.Default()),
 	})
 	r.awarenessMu.Lock()
 	r.agentLinkStop = func() {

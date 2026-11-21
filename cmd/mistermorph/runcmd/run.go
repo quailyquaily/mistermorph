@@ -20,6 +20,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
@@ -425,6 +426,7 @@ func New(deps Dependencies) *cobra.Command {
 				Model:                    strings.TrimSpace(mainCfg.Model),
 				Route:                    &mainRoute,
 				Scene:                    "cli.loop",
+				JobReferenceRequester:    &jobrefs.Requester{LocalOwner: true},
 				Meta:                     runMeta,
 				DisableTodoWorkflow:      isHeartbeat,
 				DisableContextCompaction: isHeartbeat,

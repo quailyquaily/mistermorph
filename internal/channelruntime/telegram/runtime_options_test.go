@@ -22,7 +22,7 @@ func TestNormalizeRunOptionsPreservesFields(t *testing.T) {
 		FileCacheDir:                  " /tmp/cache ",
 		Server: ServerOptions{
 			Listen:  "127.0.0.1:8080",
-			CronRun: func(context.Context, cronstore.Task) error { return nil },
+			CronRun: func(context.Context, cronstore.RunRequest) (string, error) { return "", nil },
 		},
 		BusMaxInFlight: 2048,
 		RequestTimeout: 75 * time.Second,

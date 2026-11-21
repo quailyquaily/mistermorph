@@ -295,14 +295,16 @@ func TestTodoTasksRouteRunTriggersTaskByID(t *testing.T) {
 	stateDir := t.TempDir()
 
 	var got cronstore.Task
+	var gotCause cronstore.RunCause
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, RoutesOptions{
 		Mode:         "serve",
 		AuthToken:    "token",
 		RuntimePaths: testRuntimePaths(stateDir),
-		CronRun: func(_ context.Context, task cronstore.Task) error {
-			got = task
-			return nil
+		CronRun: func(_ context.Context, run cronstore.RunRequest) (string, error) {
+			got = run.Task
+			gotCause = run.Cause
+			return "run_1", nil
 		},
 	})
 
@@ -322,8 +324,11 @@ func TestTodoTasksRouteRunTriggersTaskByID(t *testing.T) {
 	if runRec.Code != http.StatusAccepted {
 		t.Fatalf("expected POST status 202, got %d (%s)", runRec.Code, runRec.Body.String())
 	}
-	if got.ID != "weekly" || got.Content != "Prepare weekly report" {
-		t.Fatalf("CronRun got %#v", got)
+	if got.ID != "weekly" || got.Content != "Prepare weekly report" || gotCause.Kind != cronstore.CauseManual {
+		t.Fatalf("CronRun got %#v, cause %+v", got, gotCause)
+	}
+	if !strings.Contains(runRec.Body.String(), `"run_id":"run_1"`) {
+		t.Fatalf("run answer = %s", runRec.Body.String())
 	}
 }
 
@@ -335,9 +340,9 @@ func TestTodoTasksRouteRunReturnsNotFound(t *testing.T) {
 		Mode:         "serve",
 		AuthToken:    "token",
 		RuntimePaths: testRuntimePaths(stateDir),
-		CronRun: func(_ context.Context, _ cronstore.Task) error {
+		CronRun: func(_ context.Context, _ cronstore.RunRequest) (string, error) {
 			t.Fatal("CronRun should not be called")
-			return nil
+			return "", nil
 		},
 	})
 

@@ -70,7 +70,7 @@ for (const viewport of VIEWPORTS) {
     expect(app.spanStyle("id:contact-row:tg:1001 >> text:@alice").fontSize).toBe(card.handle);
   });
 
-  test(`Memories, Skills and TODO on a ${viewport.name}: ${viewport.title}pt titles over 12pt metas`, async () => {
+  test(`Memories and Skills on a ${viewport.name}: ${viewport.title}pt titles over 12pt metas; TODO's lines are 16pt over 13pt`, async () => {
     const memories = await openConsole({ location: "/e/default/memories", ...size, api: { "GET /proxy:/memories": { body: { items: [] } } } });
     await memories.app.waitFor("id:memories-journal");
     expect(memories.app.spanStyle("id:memories-journal >> text:Journal").fontSize).toBe(viewport.title);
@@ -99,8 +99,11 @@ for (const viewport of VIEWPORTS) {
       },
     });
     await todo.app.waitFor("id:todo-item-task-1");
-    expect(todo.app.spanStyle("id:todo-item-task-1 >> text:Review").fontSize).toBe(viewport.title);
-    expect(todo.app.spanStyle("id:todo-heartbeat-item >> text:Heartbeat").fontSize).toBe(viewport.title);
+    // The TODO list is a page of lines, not a column beside a pane: 16pt names over 13pt, on a
+    // desktop as on a phone.
+    expect(todo.app.spanStyle("id:todo-item-task-1 >> text:Review").fontSize).toBe(16);
+    expect(todo.app.spanStyle("id:todo-heartbeat-item >> text:Heartbeat").fontSize).toBe(16);
+    expect(todo.app.spanStyle("id:todo-heartbeat-item >> text:Every 30 minutes").fontSize).toBe(13);
   });
 
   test(`an empty list's note on a ${viewport.name} keeps its size`, async () => {

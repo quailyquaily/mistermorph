@@ -150,7 +150,8 @@ func TestAttachSlackAwarenessTriggersProvidesCronRunner(t *testing.T) {
 		Content: "Run manually.",
 	}
 	go func() {
-		errCh <- slackOpts.Server.CronRun(context.Background(), task)
+		_, err := slackOpts.Server.CronRun(context.Background(), cronstore.RunRequest{Task: task})
+		errCh <- err
 	}()
 
 	select {

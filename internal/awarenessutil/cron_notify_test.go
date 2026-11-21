@@ -61,3 +61,12 @@ func TestBuildCronNotifyTargetSkipsEmptyChatID(t *testing.T) {
 		t.Fatalf("target = %#v, want nil", got)
 	}
 }
+
+// A job reference in a task names a job, not someone to notify.
+func TestBuildCronNotifyTargetLeavesOutJobReferences(t *testing.T) {
+	target := BuildCronNotifyTarget("Send [Alice](tg:@alice) the [Morning report](job:job-1234) and [it](JOB:task-3).", "tg:-100123", nil)
+	people, ok := target["people"].([]map[string]string)
+	if !ok || len(people) != 1 || people[0]["contact_id"] != "tg:@alice" {
+		t.Fatalf("people = %#v", target["people"])
+	}
+}

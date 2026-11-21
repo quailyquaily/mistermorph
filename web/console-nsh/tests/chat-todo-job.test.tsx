@@ -394,7 +394,7 @@ test("a failed Start says why above the toolbar and leaves Start; a failed load 
   failing.state.tasksStatus = 500;
   failing.state.runs = [RUNNING];
   const second = await openConsole({ location: `/e/default/chat/${TOPIC}`, api: failing.api });
-  await second.app.waitFor("text:/^Could not load the TODO item/");
+  await second.app.waitFor("text:/^Could not load the job/");
   expect(second.app.count("label:Stop")).toBe(0);
   expect(second.app.count("label:Start")).toBe(1);
   expect(second.app.enabled("id:chat-todo-job-toggle")).toBe(false);
@@ -407,7 +407,7 @@ test("an item that is gone says so; both buttons stay, disabled", async () => {
   live.state.tasks = [];
   live.state.runs = [RUNNING];
   const { app } = await openConsole({ location: `/e/default/chat/${TOPIC}`, api: live.api });
-  await app.waitFor("The TODO item “Daily digest” no longer exists.");
+  await app.waitFor("The job “Daily digest” no longer exists.");
   expect(app.count("label:Start")).toBe(1);
   expect(app.count("id:chat-todo-job-toggle-icon.PhPlay.disabled.on-disabled")).toBe(1);
   expect(app.count("id:chat-todo-job-view-icon.PhListChecks.disabled.plain-disabled-text")).toBe(1);
@@ -437,7 +437,7 @@ test("View Job opens the item on the TODO page by its ID, and the address then d
 test("an address naming an item that is gone opens the list and says so", async () => {
   const live = runtime();
   const { app } = await openConsole({ location: "/e/default/todo?task=job9", api: live.api });
-  await app.waitFor("That TODO item no longer exists.");
+  await app.waitFor("That job no longer exists.");
   await app.waitUntil(() => lastLocation(app).endsWith("/e/default/todo"));
   expect(app.shows("id:todo-item-job1")).toBe(true);
 });

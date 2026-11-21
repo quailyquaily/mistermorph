@@ -6,6 +6,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 )
 
 var cronNotifyMarkdownRefPattern = regexp.MustCompile(`\[([^\[\]\r\n]+)\]\(([^)\s]+)\)`)
@@ -39,6 +40,10 @@ func cronNotifyPeople(task string) []map[string]string {
 		label := sanitizeCronNotifyLabel(match[1])
 		contactID := strings.TrimSpace(match[2])
 		if label == "" || !refid.IsValid(contactID) {
+			continue
+		}
+		// "[label](job:<id>)" references a job, which is no one to notify.
+		if jobrefs.IsReferenceID(contactID) {
 			continue
 		}
 		key := strings.ToLower(contactID)

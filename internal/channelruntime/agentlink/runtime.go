@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"log/slog"
 	"strings"
 	"sync"
@@ -60,6 +61,9 @@ type Options struct {
 	// LateReply takes an answer that came after agent_send stopped waiting for it, to show in the
 	// conversation that asked. Without it, or when it fails, the answer runs as a task of its own.
 	LateReply func(ctx context.Context, reply LateReply) error
+	// JobTriggers, when set, starts the jobs whose message triggers watch the agent a message
+	// came from.
+	JobTriggers *jobtriggers.Dispatcher
 }
 
 // LateReply is an agent's answer to a message agent_send sent from Origin.
@@ -313,6 +317,12 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 			return &link.RejectError{Reason: link.ReasonRateLimit}
 		}
 		touchContact(handlerCtx, contactsStore, msg.From, logger)
+		// Jobs that watch this agent start on what it sends of its own accord. An answer to a
+		// message this agent sent (a job's own message among them) starts none: two agents'
+		// jobs answering each other would not stop.
+		if !j.isReply() {
+			opts.JobTriggers.HandleAsync(jobTriggerMessage(j))
+		}
 		if opts.LateReply != nil {
 			if origin, ok := node.AskOrigin(msg); ok {
 				err := opts.LateReply(handlerCtx, LateReply{Origin: origin, PeerName: peerName, ContactID: j.contactID(), Message: msg})
@@ -628,4 +638,22 @@ func StartForChannel(ctx context.Context, d depsutil.CommonDependencies, opts Op
 		opts.InactiveAfter = reader.GetDuration("contacts.agent_link.inactive_after")
 	}
 	return Start(ctx, d, opts)
+}
+
+// jobTriggerMessage describes an inbound message for the jobs that watch its sender: the agent's
+// contact ID ("mm:<instance id>"), or its instance ID alone.
+func jobTriggerMessage(j job) jobtriggers.Message {
+	msg := jobtriggers.Message{
+		Channel:     "agentlink",
+		ChatIDs:     []string{j.contactID(), strings.TrimSpace(j.Message.From)},
+		MessageID:   strings.TrimSpace(j.Message.MessageID),
+		SenderID:    j.contactID(),
+		SenderName:  strings.TrimSpace(j.PeerName),
+		SenderIsBot: true,
+		Text:        strings.TrimSpace(j.Message.Envelope.Text),
+	}
+	if sentAt, err := time.Parse(time.RFC3339, strings.TrimSpace(j.Message.Envelope.SentAt)); err == nil {
+		msg.SentAt = sentAt
+	}
+	return msg
 }

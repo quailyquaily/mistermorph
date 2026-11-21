@@ -3,6 +3,8 @@ package cron
 import (
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/awareness"
 )
 
 const (
@@ -38,6 +40,16 @@ type Task struct {
 	// runtime default.
 	WorkspaceDir string       `yaml:"workspace_dir,omitempty" json:"workspace_dir,omitempty"`
 	BashEnv      []BashEnvRef `yaml:"bash_env,omitempty" json:"bash_env,omitempty"`
+	// Triggers are the ways the job starts (see Trigger). A stored job always has the list, empty
+	// when nothing starts it but a person. At, Cron and TZ above mirror its first schedule trigger,
+	// for clients that know only those. A task written without the list (nil) is a legacy write:
+	// At, Cron and TZ are its schedule, as they always were. In JSON a stored job always shows the
+	// list ("triggers": [] when empty); only a task that has none (nil) leaves the key out.
+	Triggers []Trigger `yaml:"triggers,omitempty" json:"triggers,omitzero"`
+	// Uses are the jobs this one depends on, and Join how several "each" inputs combine: JoinAll
+	// (the default, also "") or JoinAny.
+	Uses []Use  `yaml:"uses,omitempty" json:"uses,omitempty"`
+	Join string `yaml:"join,omitempty" json:"join,omitempty"`
 	// LastRunAt is when the scheduler last started the task (RFC 3339), and LastRunStatus how
 	// that run ended: "", "done", "failed" or "canceled" (stopped by a person). They are kept by the store, not written by clients,
 	// and are not part of cron.yaml.
@@ -45,7 +57,7 @@ type Task struct {
 	LastRunStatus string `yaml:"-" json:"last_run_status,omitempty"`
 }
 
-// Run statuses in LastRunStatus.
+// Run statuses: how a run ended (LastRunStatus holds one of the first three).
 const (
 	RunStatusDone     = "done"
 	RunStatusFailed   = "failed"
@@ -58,6 +70,20 @@ type DueTask struct {
 	Manual         bool
 	// RunID names this one execution of the task (see RunBoard.Queue); empty outside a cron loop.
 	RunID string
+	// Cause is why the run starts. A zero cause is a schedule's, or a person's when Manual is set.
+	Cause RunCause
+	// Input is the body of the request that started the run (a per-job poke), given to the run as
+	// source data, never as instructions.
+	Input awareness.PokeInput
+	// ChainDepth is the run's place in its chain of jobs: 1 for the run that starts one.
+	ChainDepth int
+}
+
+// RunRequest asks a cron loop to run Task now. A zero Cause is a person's (CauseManual).
+type RunRequest struct {
+	Task  Task
+	Cause RunCause
+	Input awareness.PokeInput
 }
 
 type AddResult struct {

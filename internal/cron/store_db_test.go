@@ -74,13 +74,14 @@ func TestStoreRejectsAnInvalidListWhole(t *testing.T) {
 	if len(file.Tasks) != 1 || file.Tasks[0].ID != "ok" {
 		t.Fatalf("list changed by a rejected write: %+v", file.Tasks)
 	}
-	// The table's own checks refuse a row with both or neither schedule, or without an ID.
+	// The table's own checks refuse a row with both schedules, or without an ID. A row with
+	// neither is a job no schedule starts.
 	db, err := store.handle(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO jobs (id, position, content, at, cron, created_at, updated_at) VALUES ('x', 9, 'c', '', '', 'now', 'now')`); err == nil {
-		t.Fatal("a row without at or cron was stored")
+	if _, err := db.Exec(`INSERT INTO jobs (id, position, content, at, cron, created_at, updated_at) VALUES ('x', 9, 'c', '2030-01-01 10:00', '* * * * *', 'now', 'now')`); err == nil {
+		t.Fatal("a row with both at and cron was stored")
 	}
 	if _, err := db.Exec(`INSERT INTO jobs (id, position, content, at, cron, created_at, updated_at) VALUES ('', 9, 'c', '', '* * * * *', 'now', 'now')`); err == nil {
 		t.Fatal("a row without an id was stored")

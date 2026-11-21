@@ -282,6 +282,19 @@ func (c *RunControl) Finish(runtime string, conversationKey string, taskID strin
 	return true
 }
 
+// Steerable reports whether the conversation has a run in progress that Steer would hand an
+// input to. It hands nothing over.
+func (c *RunControl) Steerable(runtime string, conversationKey string) bool {
+	key, err := keyFrom(runtime, conversationKey)
+	if c == nil || err != nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry := c.active[key]
+	return entry != nil && entry.SteerQueue != nil
+}
+
 func (c *RunControl) Steer(runtime string, conversationKey string, input string) SteerResult {
 	key, err := keyFrom(runtime, conversationKey)
 	input = strings.TrimSpace(input)

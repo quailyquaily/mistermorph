@@ -319,6 +319,8 @@ The tool was called `todo_update`. The earlier name still works: a call named `t
 
 Every job has a stable `id`. New jobs get a generated `job-<uuid>` ID (a random, version 4 UUID in lower case), the same form the Console gives new TODO items; the ID names the job only and says nothing about what starts its runs. IDs from earlier versions (such as `cron-<uuid>`, the Console's `task-<n>`, or one chosen in `cron.yaml`) stay valid and are never rewritten. A job's topic (`_cron_<job id>`) and each of its runs have IDs of their own; see [TODO and Heartbeat](../web/vitepress/docs/guide/todo-and-heartbeat.md).
 
+A job's `content`, like any task text, may reference another job as `[label](job:<id>)`: the run then gets that job's definition and latest finished output as read-only context. `job_manage` stores such a reference as written and does not resolve it. The jobs a job lists in its `uses` are given to its runs the same way, without a link in the text. See [Job references](../web/vitepress/docs/guide/todo-and-heartbeat.md#job-references) for what is given, the fallbacks, and who may reference a job.
+
 Parameters:
 
 | Parameter | Type | Required | Default | Description |
@@ -334,8 +336,12 @@ Parameters:
 | `chat_id` | `string` | No | Empty (`console:user` in the Console runtime on add) | Task-context chat ID, for example `tg:-1001234567890`. For `update`, `""` clears it; there is no default. |
 | `workspace_dir` | `string` | No | Runtime default workspace | Workspace directory for the task's runs: an absolute path or `~/...`, or the literal `workspace_dir` for the workspace attached to the current conversation. The directory must exist when the task is added or updated. For `update`, `""` clears it back to the runtime default. |
 | `bash_env` | `array<object>` | No | None | Environment variables injected into `bash` when the task runs, in the task's stored form: `[{"name": "REPORT_MODE", "value": "weekly"}]`. Names are letters, digits and underscores, not starting with a digit; values may reference environment variables as `${NAME}`, which is preferred over literal secrets. For `update`, the list replaces the whole `bash_env`, `[]` clears it, and omitting `bash_env` keeps it unchanged. |
+| `add_triggers` | `array<object>` | No | None | Triggers to add to the job, beside the ones it has (`update` and the add actions): `{"kind": "schedule", "cron": "0 9 * * *", "tz": "UTC"}` (or `at`), `{"kind": "poke"}` (at most one per job), or `{"kind": "message", "channel": "telegram", "chat_id": "tg:-1001234567890"}`. Each new trigger gets an `id`, which the result shows. A job has at most 16 triggers. |
+| `remove_triggers` | `array<string>` | No | None | `update` only: the `id`s of triggers to remove (`get` lists them). An unknown `id` is an error. The job's `at`, `cron` and `tz` are always those of its first schedule trigger. |
+| `uses` | `array<object>` | No | None | The jobs this job uses, at most 8: `[{"job_id": "job-...", "mode": "each"}]`. `mode` is `latest` (the default), `each` or `fresh`; a `fresh` use may carry `max_age`, a duration such as `"30m"` or `"24h"` (1 minute to 720 hours, `1h` by default). For `update`, the list replaces the whole `uses`, `[]` clears it, and omitting it keeps it. |
+| `join` | `string` | No | `all` | How several `each` uses combine: `all` or `any`. For `update`, `""` resets it to `all`. |
 
-`get` returns the job with this `id`, with an explicit `enabled` boolean. An unknown `id` is an error.
+`get` returns the job with this `id`, with an explicit `enabled` boolean, its `triggers` (each with its `id`), its `uses` and its `join`. An unknown `id` is an error.
 
 `update` edits a task in place by `id` and changes only the parameters passed: every omitted field (including `bash_env`, `workspace_dir`, schedule, `tz`, `chat_id` and `title`) and the task's run metadata keep their values, and the `id` stays the same. Edit tasks with `update`, not by deleting and re-adding them. Pass at least one field to change; `null` is rejected for every field rather than read as "keep" or "clear" (omit a field to keep it, pass `""` or `[]` to clear it). Parameters `update` does not use are ignored.
 
@@ -360,6 +366,8 @@ Constraints:
 - Add actions require an LLM client and model when `people` resolution is needed.
 - Add actions validate markdown reference IDs before writing.
 - `get`, `update` and delete by `id` do not require an LLM.
+- A one-time job whose scheduled run fails is tried again after 1, 5, 15 and 60 minutes and then left as it is; `update` with a new `at` starts it afresh.
+- Triggers, `uses` and `join` are checked as `PUT /todo/tasks` checks them, with the same error texts: an unknown trigger `kind`, a schedule trigger without exactly one of `at` and `cron`, a second poke trigger, a message trigger without `channel` or `chat_id`, an unknown used job, a job that uses itself, a loop (named), a job used twice, an unknown `mode` or `join`, a `max_age` that is not a duration, is out of range or is not on a `fresh` use. A job that other jobs use cannot be deleted.
 - `update` runs in one transaction: an unknown `id`, an invalid field, or a resulting task that does not validate (for example a bad schedule or `bash_env` name) returns an error and leaves the stored task unchanged.
 - Delete without `id` uses LLM semantic matching on `content`; no match and ambiguous match both return errors.
 

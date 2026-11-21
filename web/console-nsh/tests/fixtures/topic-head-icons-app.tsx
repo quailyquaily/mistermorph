@@ -3,7 +3,7 @@
 // head's calendar toggle and the phone bars' back arrows), the reference for the head's icons. The
 // frames of every head button and its icon (the sidebar's `onPartLayout`), and the reference
 // button's and its icon's, are read out beside it, with the presses the head's buttons made. The
-// modes along the top: `plus` (topics, an agent topic so the agents toggle shows, TODO runs
+// modes along the top: `plus` (topics, an agent topic so the agents toggle shows, Job runs
 // running, New in the head), `split` (the same in a phone's split mode: New floats over the list)
 // and `empty` (split, loading, no topics yet, nothing running).
 import { batch, mount, signal, Text, View } from "nsh";
@@ -63,8 +63,8 @@ const c = {
   toggleTopicGroup: () => undefined,
   clickTopicSidebarTitle: () => undefined,
   agentTopics: () => (empty() ? [] : topics.slice(1)),
-  cronToggleLabel: () => (empty() ? "TODO runs" : "TODO runs — 1 running"),
-  cronToggleTitle: () => "TODO runs",
+  cronToggleLabel: () => (empty() ? "Job runs" : "Job runs — 1 running"),
+  cronToggleTitle: () => "Job runs",
   cronRunning: () => (empty() ? 0 : 1),
   startNewTopic: () => press("new"),
   topicsLoading: () => empty(),

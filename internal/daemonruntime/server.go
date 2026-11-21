@@ -52,7 +52,10 @@ type AnswerQuestionFunc func(ctx context.Context, req AnswerQuestionRequest) (An
 type AnswerElevationFunc func(ctx context.Context, req AnswerElevationRequest) (AnswerElevationResponse, error)
 type OverviewFunc func(ctx context.Context) (map[string]any, error)
 type PokeFunc func(ctx context.Context, input awarenessdomain.PokeInput) error
-type CronRunFunc func(ctx context.Context, task cronstore.Task) error
+
+// CronRunFunc asks the runtime's cron loop to run a job now, and returns the queued run's ID. It
+// returns ErrCronBusy when the job is already queued or running.
+type CronRunFunc func(ctx context.Context, run cronstore.RunRequest) (string, error)
 type WorkspaceResolution struct {
 	WorkspaceDir string `json:"workspace_dir"`
 	Source       string `json:"source"`
@@ -1502,6 +1505,23 @@ type cronTopicTitler interface {
 	SetCronTopicTitle(taskID, title string) error
 }
 
+// todoTaskView is a job as the TODO API answers it: the stored job, and the warnings worked out
+// for it as the list is read (see cronstore.Store.Warnings). Warnings are never stored, and a
+// write that carries them has them ignored.
+type todoTaskView struct {
+	cronstore.Task
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+func todoTaskViews(ctx context.Context, store *cronstore.Store, tasks []cronstore.Task) []todoTaskView {
+	warnings := store.Warnings(ctx, tasks)
+	views := make([]todoTaskView, 0, len(tasks))
+	for _, task := range tasks {
+		views = append(views, todoTaskView{Task: task, Warnings: warnings[strings.TrimSpace(task.ID)]})
+	}
+	return views
+}
+
 // topics, when it keeps a topic per TODO item, has the saved items' topics renamed after them.
 func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, stateDir string, contactsDir string, mode string, settingsReader agentsettings.Reader, topics TopicReader) {
 	store := cronstore.NewStore(cronPath)
@@ -1529,7 +1549,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 			"exists":            true,
 			"revision":          revision,
 			"task_count":        len(tasks),
-			"tasks":             tasks,
+			"tasks":             todoTaskViews(r.Context(), store, tasks),
 			"system_tasks":      todoSystemTasks(settingsReader),
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
@@ -1590,7 +1610,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, st
 			"version":           file.Version,
 			"revision":          revision,
 			"task_count":        len(file.Tasks),
-			"tasks":             file.Tasks,
+			"tasks":             todoTaskViews(r.Context(), store, file.Tasks),
 			"system_tasks":      todoSystemTasks(settingsReader),
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
@@ -1713,6 +1733,51 @@ func handleTodoRuns(w http.ResponseWriter, r *http.Request, cronPath string) {
 	})
 }
 
+// handleTodoRunHistory serves GET /todo/runs/history: the runs the job store has recorded, newest
+// first. job_id keeps one job's runs; from and to (RFC 3339) keep the runs queued at or after from
+// and before to; limit bounds the answer (50 by default, 500 at most).
+func handleTodoRunHistory(w http.ResponseWriter, r *http.Request, cronPath string) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	values := r.URL.Query()
+	query := cronstore.RunHistoryQuery{JobID: strings.TrimSpace(values.Get("job_id"))}
+	for name, target := range map[string]*time.Time{"from": &query.From, "to": &query.To} {
+		raw := strings.TrimSpace(values.Get(name))
+		if raw == "" {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			http.Error(w, "invalid "+name+": want an RFC 3339 time, such as 2026-11-22T09:00:00Z", http.StatusBadRequest)
+			return
+		}
+		*target = parsed
+	}
+	if !query.From.IsZero() && !query.To.IsZero() && !query.From.Before(query.To) {
+		http.Error(w, "invalid range: from must be before to", http.StatusBadRequest)
+		return
+	}
+	limit, err := parseInt64QueryParamInRange(values.Get("limit"), cronstore.RunHistoryDefaultLimit, 1, cronstore.RunHistoryMaxLimit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid limit: want 1 to %d", cronstore.RunHistoryMaxLimit), http.StatusBadRequest)
+		return
+	}
+	query.Limit = int(limit)
+	runs, err := cronstore.NewStore(cronPath).RunHistory(r.Context(), query)
+	if err != nil {
+		http.Error(w, strings.TrimSpace(err.Error()), todoStoreErrorStatus(err, http.StatusInternalServerError))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"items": runs,
+		"limit": query.Limit,
+	})
+}
+
 // handleTodoTaskAction serves POST /todo/tasks/{id}/run and POST /todo/tasks/{id}/stop.
 func handleTodoTaskAction(w http.ResponseWriter, r *http.Request, cronPath string, cronRun CronRunFunc) {
 	id, action, ok := parseTodoTaskAction(r.URL)
@@ -1790,9 +1855,85 @@ func handleTodoTaskRun(w http.ResponseWriter, r *http.Request, cronPath string, 
 		http.Error(w, strings.TrimSpace(err.Error()), http.StatusBadRequest)
 		return
 	}
-	if err := cronRun(r.Context(), task); err != nil {
+	runID, err := cronRun(r.Context(), cronstore.RunRequest{Task: task, Cause: cronstore.RunCause{Kind: cronstore.CauseManual}})
+	if err != nil {
 		if errors.Is(err, ErrCronBusy) {
 			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+		return
+	}
+	payload := map[string]any{
+		"ok":           true,
+		"id":           strings.TrimSpace(task.ID),
+		"triggered_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if runID != "" {
+		payload["run_id"] = runID
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// handleJobPoke serves POST /poke/{job_id}: it queues one run of the job, started by its poke
+// trigger. The request body, read under /poke's limits, goes to the run as source data in a block
+// of its own (see promptprofile.AppendWakeSignalBlock), never as part of the job's instructions;
+// a poke without a body starts the run all the same.
+//
+// 202 with the queued run; 404 for a job that is not in the list; 409 when the job has no poke
+// trigger, is switched off, or is already queued or running; 413 for a body over the limit; 503
+// when this runtime has no cron loop.
+func handleJobPoke(w http.ResponseWriter, r *http.Request, cronPath string, cronRun CronRunFunc, jobID string) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	input, err := readPokeInput(r)
+	if err != nil {
+		if errors.Is(err, ErrPokeBodyTooLarge) {
+			http.Error(w, strings.TrimSpace(err.Error()), http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, strings.TrimSpace(err.Error()), http.StatusBadRequest)
+		return
+	}
+	task, found, err := cronstore.NewStore(cronPath).FindByID(jobID)
+	if err != nil {
+		http.Error(w, strings.TrimSpace(err.Error()), todoStoreErrorStatus(err, http.StatusInternalServerError))
+		return
+	}
+	if !found {
+		http.Error(w, "job not found: "+jobID, http.StatusNotFound)
+		return
+	}
+	trigger, ok := cronstore.TriggerOfKind(task, cronstore.TriggerPoke)
+	if !ok {
+		http.Error(w, "job "+jobID+" has no poke trigger; add one to start it with POST /poke/{job_id}", http.StatusConflict)
+		return
+	}
+	if !cronstore.TaskEnabled(task) {
+		http.Error(w, "job "+jobID+" is switched off", http.StatusConflict)
+		return
+	}
+	if cronRun == nil {
+		http.Error(w, "cron runner is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := cronstore.ValidateTask(task); err != nil {
+		http.Error(w, strings.TrimSpace(err.Error()), http.StatusConflict)
+		return
+	}
+	runID, err := cronRun(r.Context(), cronstore.RunRequest{
+		Task:  task,
+		Cause: cronstore.RunCause{Kind: cronstore.CausePoke, TriggerID: trigger.ID},
+		Input: input,
+	})
+	if err != nil {
+		if errors.Is(err, ErrCronBusy) {
+			http.Error(w, "job "+jobID+" is already queued or running", http.StatusConflict)
 			return
 		}
 		http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
@@ -1801,10 +1942,33 @@ func handleTodoTaskRun(w http.ResponseWriter, r *http.Request, cronPath string, 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":           true,
-		"id":           strings.TrimSpace(task.ID),
-		"triggered_at": time.Now().UTC().Format(time.RFC3339),
+		"ok":         true,
+		"job_id":     strings.TrimSpace(task.ID),
+		"run_id":     runID,
+		"trigger_id": trigger.ID,
+		"status":     cronstore.RunStatusQueued,
+		"poked_at":   time.Now().UTC().Format(time.RFC3339Nano),
 	})
+}
+
+// parseJobPokePath reads the job ID of /poke/{job_id}.
+func parseJobPokePath(u *url.URL) (string, bool) {
+	if u == nil {
+		return "", false
+	}
+	rawPath := u.EscapedPath()
+	if rawPath == "" {
+		rawPath = u.Path
+	}
+	rest := strings.TrimPrefix(rawPath, "/poke/")
+	if rest == rawPath || rest == "" || strings.Contains(rest, "/") {
+		return "", false
+	}
+	id, err := url.PathUnescape(rest)
+	if err != nil || strings.TrimSpace(id) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(id), true
 }
 
 // parseTodoTaskAction reads /todo/tasks/{id}/{action}.

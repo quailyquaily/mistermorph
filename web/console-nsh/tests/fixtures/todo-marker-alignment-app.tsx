@@ -1,12 +1,11 @@
 // A test entry for tests/todo-marker-alignment.test.tsx: the real TODO list (TodoIndex) on a
-// stand-in page state, as the TODO page lays it out (a 310pt column with the editor 4pt beside it on
-// a desktop, the whole width on a phone), with Heartbeat and items in every marker state (on, off, queued, running) and long
+// stand-in page state, as the TODO page lays it out (the whole page, on a desktop as on a phone), with Heartbeat and items in every marker state (on, off, queued, running) and long
 // titles. The frames its head's last button, markers and titles lie at are read out beside it. The
 // modes along the top: `list` and `empty` (no items yet: the add row in their place). `adds:N`
 // counts the presses of Add (the head's button or the empty list's add row).
 import { batch, mount, signal, Text, View } from "nsh";
 import { isMobile } from "../../lib/shell";
-import { TODO_INDEX_WIDTH, TodoIndex } from "../../components/todo/TodoIndex";
+import { TodoIndex } from "../../components/todo/TodoIndex";
 import type { PartFrame } from "../../components/shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "../../components/todo/todo-state";
 
@@ -44,6 +43,13 @@ const state = {
   taskListDisplayTask: (item: TodoTask) => item,
   taskTitle: (item: TodoTask) => item.title,
   scheduleLabel: (item: TodoTask) => item.cron,
+  whenLabel: (item: TodoTask) => item.cron,
+  setTodoView: () => {},
+  composeText: Object.assign(() => "", { set: () => {} }),
+  composeSending: () => false,
+  composeTopicID: () => "",
+  composeJob: async () => {},
+  openComposeTopic: () => {},
   taskRun: (item: TodoTask) => runs[item.id] ?? null,
   runStateLabel: (run: TodoRun | null) => (run ? run.state : ""),
   selectedTaskKey: () => "k-on",
@@ -70,11 +76,9 @@ function ModeButton(props: { mode: Mode }) {
 function Index() {
   const report = (name: string, frame: PartFrame) => frames.update((all) => ({ ...all, [name]: frame }));
   return (
-    <If when={isMobile()} else={<View style={{ width: TODO_INDEX_WIDTH }}><TodoIndex state={state} onPartLayout={report} /></View>}>
-      <View class="flex-1">
-        <TodoIndex state={state} mobile onPartLayout={report} />
-      </View>
-    </If>
+    <View class="flex-1">
+      <TodoIndex state={state} mobile={isMobile()} onPartLayout={report} />
+    </View>
   );
 }
 

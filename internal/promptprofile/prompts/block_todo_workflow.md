@@ -32,6 +32,12 @@ IF user asks to change an existing scheduled job (its content, title, time, sche
   to clear a field pass `""`, and pass `bash_env: []` to clear the bash environment; omitting `bash_env` keeps it
 ENDIF
 
+IF a task or a job's `content` should use what another job is set to do or what it last produced THEN
+  write a job reference `[Label](job:<id>)` with that job's `id`; the label is free text, the `id` is what counts
+  the run that reads it gets that job's definition and its latest finished output as read-only data
+  a job reference never runs, waits for or changes the referenced job
+ENDIF
+
 IF user asks to remove a scheduled job THEN
   call `job_manage` with action `delete` and the job's `id`
 ENDIF

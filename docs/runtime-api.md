@@ -296,6 +296,39 @@ returns 400. Upload enforces 64 MiB, persona avatar writes enforce 2 MiB, and
 `/poke` enforces 10 KiB. `/poke` accepts nonblank textual content rather than
 a task envelope, returns 202, and does not return a task ID.
 
+`POST /poke/{job_id}` starts one job instead: it queues a run of a job that has
+a `poke` trigger and returns 202 with the run's `run_id`. Its body is optional,
+under the same 10 KiB limit, and reaches the run as untrusted data, not as
+instructions, in a block that names the job and its poke trigger. `GET /todo/runs/history` lists every recorded job run with its
+cause (`job_id`, `from`, `to` and `limit` filter it); the full OpenAPI document
+has the shapes.
+
+A `message` trigger (`channel`, `chat_id`) starts its job when a message arrives
+in that chat on Telegram (`tg:<chat id>`, or `tg:<chat id>_<thread id>` for one
+forum topic), Slack (`slack:<team id>:<channel id>`) or Agent Link
+(`mm:<instance id>`). The run has cause `message` and the trigger's
+`trigger_id`. A trigger starts at most one run per minute; a job that is busy
+gets a `skipped` run. Other channels store the trigger and never fire it.
+
+A job in the answer of `GET /todo/tasks` or `PUT /todo/tasks` may carry
+`warnings`, a list of short plain-text strings about a job that is stored as
+written but will not do what it says: `join: all` over `each` inputs that no
+single run leads to (the job never starts), or a one-time schedule that failed
+five times and is not tried again. They are worked out for the answer, never
+stored, and ignored on write. A one-time schedule whose run fails is tried
+again after 1, 5, 15 and 60 minutes; each failed try's history row says so in
+its cause's `note`.
+
+A job's `uses` (`job_id`, `mode`, and for `fresh` an optional `max_age`) give
+each of its runs the used jobs' definitions and results as read-only source
+data, in the block job references use. `latest` gives the latest finished
+output. `each` starts the job after each `done` run of the input and gives that
+run's output. `fresh` first runs an input whose latest `done` run is older than
+`max_age` (a Go duration, 1 minute to 720 hours, `1h` by default); that run is
+in the history with cause `job` and a note, and when it does not end `done` the
+dependent is recorded as `skipped`. A history row carries `task_id`, the task
+record that keeps the run's output, once the run has started.
+
 ## Scope and management extensions
 
 Full covers the shared runtime routes, the Console task WebSocket and the

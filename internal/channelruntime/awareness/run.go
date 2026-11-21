@@ -22,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/codersessions"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
@@ -212,7 +213,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 	}
 
 	// runCtx is the run's own context: a cron item's execution context, so stopping it ends the run.
-	runAwarenessTaskWithOpts := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool) (string, error) {
+	runAwarenessTaskWithOpts := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool, sourceData awarenessdomain.PokeInput, job *cronstore.Task, jobRun cronstore.DueTask) (string, error) {
 		var contextScope topiccontext.Scope
 		if topicID != "" && opts.TopicContextScope != nil {
 			contextScope = opts.TopicContextScope(topicID)
@@ -245,12 +246,18 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			ContextScope:             contextScope,
 			TopicRunStarted:          opts.TopicRunStarted,
 			CronManual:               cronManual,
+			SourceData:               sourceData,
 			DecisionClient:           decisionClient,
 			DecisionModel:            decisionModel,
+			Job:                      job,
+			JobRunID:                 jobRun.RunID,
+			JobCause:                 jobRun.Cause,
+			JobOriginRunID:           jobRun.Cause.OriginRunID,
+			CronPath:                 opts.CronPath,
 		})
 	}
 	runTask := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(runCtx, behavior, task, meta, taskRunID, "", "", nil, "", "", false)
+		return runAwarenessTaskWithOpts(runCtx, behavior, task, meta, taskRunID, "", "", nil, "", "", false, awarenessdomain.PokeInput{}, nil, cronstore.DueTask{})
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -368,6 +375,11 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 						return nil
 					}
 					taskRunID := awarenessTaskRunID(awarenessutil.BehaviorCron, time.Now().UTC())
+					// The history names the record that will keep this run's output, for the jobs
+					// that use this one.
+					if err := cronstore.NewStore(cronPath).SetRunTaskID(ctx, due.RunID, taskRunID); err != nil {
+						logger.Warn("cron_run_record_error", "task_id", strings.TrimSpace(task.ID), "error", err.Error())
+					}
 					extra := map[string]any{
 						"task_run_id":    taskRunID,
 						"runtime_source": strings.TrimSpace(opts.Source),
@@ -383,9 +395,19 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 							extra["notify_target"] = notifyTarget
 						}
 					}
+					// What started the run, when it was not the job's schedule or a person.
+					switch due.Cause.Kind {
+					case cronstore.CausePoke:
+						extra["started_by"] = cronstore.CausePoke
+					case cronstore.CauseMessage:
+						extra["started_by"] = cronstore.CauseMessage
+					case cronstore.CauseJob:
+						extra["started_by"] = cronstore.CauseJob
+						extra["started_by_job_id"] = strings.TrimSpace(due.Cause.FromJobID)
+					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
 					summary, err := runAwarenessTaskWithOpts(ctx, awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
-						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual)
+						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual, due.Input, &task, due)
 					if err != nil {
 						if errors.Is(context.Cause(ctx), cronstore.ErrRunStopped) {
 							err = cronstore.ErrRunStopped
@@ -398,9 +420,12 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 					}
 					notifyCronResult(ctx, opts.CronNotify, logger, task, due.Manual, taskRunID, summary, nil)
 					logger.Info("awareness_summary", "source", opts.Source, "behavior", awarenessutil.BehaviorCron, "task_id", strings.TrimSpace(task.ID), "message", summary)
-					if !due.Manual && strings.TrimSpace(task.At) != "" {
-						if _, deleteErr := cronstore.NewStore(cronPath).DeleteByID(task.ID); deleteErr != nil {
-							return deleteErr
+					// A one-time schedule that has run is spent: the job goes with it, unless something
+					// else starts the job or another job uses it. A run started any other way (by a
+					// person, a poke, another job) leaves the job's schedule alone.
+					if onceTriggerID := firedOnceTrigger(due); onceTriggerID != "" {
+						if _, consumeErr := cronstore.NewStore(cronPath).ConsumeOnceTrigger(ctx, task.ID, onceTriggerID); consumeErr != nil {
+							return consumeErr
 						}
 					}
 					return nil
@@ -450,10 +475,24 @@ type awarenessTaskOptions struct {
 	TopicRunStarted func(TopicRun)
 	// CronManual marks a TODO item's run a person asked for, rather than one its schedule fired.
 	CronManual bool
+	// SourceData is the data a job's run was started with: the body of a POST /poke/{job_id}
+	// request, or the chat message that fired a message trigger. The run reads it as untrusted
+	// data, in a block of its own; it is never part of the task.
+	SourceData awarenessdomain.PokeInput
 	// DecisionClient, when set, is the decision route's own client. A run a TODO item's schedule
 	// fired is checked with it once it ends done (see finishedRunOutcome).
 	DecisionClient llm.Client
 	DecisionModel  string
+	// Job is the scheduled job this run is of, and nil for a heartbeat or a poke. CronPath is the
+	// job list. They say which jobs the task's job references may read (see jobReferences).
+	Job      *cronstore.Task
+	CronPath string
+	// JobRunID is the run's ID in the run history and JobOriginRunID the run that started its
+	// chain of jobs. They say which run of an input (a job in Job.Uses) led to this one.
+	JobRunID       string
+	JobOriginRunID string
+	// JobCause is what started the job's run. It says how SourceData is introduced to the run.
+	JobCause cronstore.RunCause
 }
 
 // TopicRun is a run recorded under a topic, as it starts.
@@ -601,6 +640,17 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		}
 	}()
 
+	// The task's job references are read once the run is recorded, so a reference that cannot be
+	// used shows as this run's failure, and before anything is asked of a model.
+	referenceRoute := opts.Route
+	if useTaskRoute {
+		referenceRoute = taskRoute
+	}
+	jobReferences, err := awarenessJobReferences(ctx, opts, task, referenceRoute.ClientConfig.ContextWindowTokens)
+	if err != nil {
+		return "", err
+	}
+
 	if useTaskRoute {
 		var err error
 		taskClient, err = d.CreateLLMClient(taskRoute)
@@ -639,6 +689,18 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		return "", err
 	}
 	promptSpec.FinalOnlyResponse = true
+	if opts.Job != nil {
+		// A job's run names the job and the trigger that fired, not the runtime's own /poke.
+		promptprofile.AppendJobStartDataBlock(&promptSpec, promptprofile.JobStartData{
+			Cause:     opts.JobCause.Kind,
+			JobID:     opts.Job.ID,
+			JobTitle:  opts.Job.Title,
+			TriggerID: opts.JobCause.TriggerID,
+			Input:     opts.SourceData,
+		})
+	} else {
+		promptprofile.AppendWakeSignalBlock(&promptSpec, opts.SourceData)
+	}
 	if block := workspace.PromptBlock(workspaceDir); strings.TrimSpace(block.Content) != "" {
 		promptSpec.Blocks = append(promptSpec.Blocks, block)
 	}
@@ -784,6 +846,9 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		toolSearchOption,
 		codeModeOption,
 	}
+	if note := taskruntime.JobReferencesRunContext(jobReferences); note != nil {
+		engineOptions = append(engineOptions, agent.WithRunContext(note))
+	}
 	if progress != nil {
 		engineOptions = append(engineOptions, agent.WithPlanStepUpdate(progress.PlanStepUpdate))
 	}
@@ -824,6 +889,73 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		return "", fmt.Errorf("record awareness task finish: %w", recordErr)
 	}
 	return summary, nil
+}
+
+// awarenessJobReferences reads the jobs the task references ("[label](job:<id>)"). A scheduled job
+// asks as itself: where it reports decides which jobs it may read, and its own record of this run
+// is left out, so a job that references itself gets its previous run. A heartbeat follows the
+// owner's own checklist and asks as the owner. A poke's text comes from outside: it may reference
+// no job.
+//
+// The jobs the run's job uses are read with them, each once, also when the text links to one (see
+// jobInputs).
+func awarenessJobReferences(ctx context.Context, opts awarenessTaskOptions, task string, contextWindowTokens int64) (*jobrefs.Resolved, error) {
+	var uses []jobrefs.Use
+	if opts.Job != nil {
+		uses = jobInputs(ctx, opts)
+	}
+	if len(jobrefs.ExtractIDs(task)) == 0 && len(uses) == 0 {
+		return nil, nil
+	}
+	var requester jobrefs.Requester
+	switch {
+	case opts.Job != nil:
+		requester = jobrefs.ScheduledBy(*opts.Job)
+	case opts.Behavior == awarenessutil.BehaviorHeartbeat:
+		requester.Audience = audience.Owner()
+	}
+	var runs taskdomain.TaskReader
+	if opts.TaskStore != nil {
+		runs = opts.TaskStore
+	}
+	options := taskruntime.JobReferenceOptions(opts.CronPath, runs)
+	options.ExcludeRunID = opts.TaskRunID
+	options.Uses = uses
+	options.Limits = jobrefs.LimitsForContextWindow(contextWindowTokens)
+	resolved, err := jobrefs.Resolve(ctx, task, requester, options)
+	if err != nil {
+		return nil, err
+	}
+	return &resolved, nil
+}
+
+// jobInputs lists the jobs the run's job uses, for the run to be given as references the text need
+// not hold. An input that has a done run in this run's chain of jobs (the run that started this
+// one, or the one made for a fresh result) is named with that run's record, so its output is the
+// one given; any other input gets its latest, as a reference does.
+func jobInputs(ctx context.Context, opts awarenessTaskOptions) []jobrefs.Use {
+	if opts.Job == nil || len(opts.Job.Uses) == 0 {
+		return nil
+	}
+	chainRecords := map[string]string{}
+	if origin := strings.TrimSpace(opts.JobOriginRunID); origin != "" && strings.TrimSpace(opts.CronPath) != "" {
+		runs, err := cronstore.NewStore(opts.CronPath).ChainRuns(ctx, origin)
+		if err != nil && opts.Logger != nil {
+			opts.Logger.Warn("cron_run_record_error", "task_id", strings.TrimSpace(opts.Job.ID), "error", err.Error())
+		}
+		// Oldest first: the newest done run of each job in the chain is kept.
+		for _, run := range runs {
+			if run.Status == cronstore.RunStatusDone && run.RunID != strings.TrimSpace(opts.JobRunID) && strings.TrimSpace(run.TaskID) != "" {
+				chainRecords[run.JobID] = strings.TrimSpace(run.TaskID)
+			}
+		}
+	}
+	uses := make([]jobrefs.Use, 0, len(opts.Job.Uses))
+	for _, use := range opts.Job.Uses {
+		id := strings.TrimSpace(use.JobID)
+		uses = append(uses, jobrefs.Use{JobID: id, Mode: strings.TrimSpace(use.Mode), RunRecordID: chainRecords[id]})
+	}
+	return uses
 }
 
 func closeAwarenessTaskClient(logger *slog.Logger, client llm.Client) {
@@ -879,6 +1011,32 @@ type topicTitledTaskRecorder interface {
 }
 
 // cronTopicTitle names a TODO item's topic: the item's title, or its default.
+// firedOnceTrigger returns the ID of the one-time ("at") schedule trigger that started the run,
+// or "" when the run was started any other way.
+func firedOnceTrigger(due cronstore.DueTask) string {
+	if due.Manual {
+		return ""
+	}
+	switch due.Cause.Kind {
+	case "", cronstore.CauseSchedule:
+	default:
+		return ""
+	}
+	if trigger, ok := cronstore.FindTrigger(due.Task, due.Cause.TriggerID); ok {
+		if trigger.Kind == cronstore.TriggerSchedule && strings.TrimSpace(trigger.At) != "" {
+			return trigger.ID
+		}
+		return ""
+	}
+	// A run queued without naming its trigger: the job's own one-time schedule, as before.
+	if strings.TrimSpace(due.Cause.TriggerID) == "" && strings.TrimSpace(due.Task.At) != "" {
+		if trigger, ok := cronstore.TriggerOfKind(due.Task, cronstore.TriggerSchedule); ok {
+			return trigger.ID
+		}
+	}
+	return ""
+}
+
 func cronTopicTitle(task cronstore.Task) string {
 	if title := strings.TrimSpace(task.Title); title != "" {
 		return title

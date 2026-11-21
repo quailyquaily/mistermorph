@@ -63,6 +63,17 @@ if [ "$all" -eq 1 ]; then
     cat "$logs/qr-scanner-page.log"
   fi
 fi
+# And the job calendar's rules (components/todo/calendar-runs.js): what folds, what is planned.
+if [ "$all" -eq 1 ]; then
+  if node --test components/todo/calendar-runs.test.mjs >"$logs/calendar-runs.log" 2>&1; then
+    echo "ok    components/todo/calendar-runs.test.mjs"
+  else
+    failed=$((failed + 1))
+    echo
+    echo "---- components/todo/calendar-runs.test.mjs"
+    cat "$logs/calendar-runs.log"
+  fi
+fi
 echo
 echo "$# files, $failed failed, $(($(date +%s) - started))s (output: $logs)"
 [ "$failed" -eq 0 ]

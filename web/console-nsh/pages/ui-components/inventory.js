@@ -347,7 +347,15 @@ const FILES = {
 
   "components/todo/TodoCalendar.tsx": { group: "todo", items: { TodoCalendar: L("frame") } },
   "components/todo/TodoCard.tsx": { group: "todo", items: { TodoCard: D() } },
+  "components/todo/TodoDayList.tsx": {
+    group: "todo",
+    items: { TodoDayList: L("live"), DayMark: L("part", "TodoDayList") },
+  },
   "components/todo/TodoFields.tsx": { group: "todo", items: { Prepend: C("TodoInput"), FieldNote: D(), TodoInput: D() } },
+  "components/todo/TodoFlow.tsx": {
+    group: "todo",
+    items: { TodoFlow: D(), FlowJobBox: C("TodoFlow"), FlowLinkLine: C("TodoFlow"), FlowLinkPicker: C("TodoFlow") },
+  },
   "components/todo/TodoHeartbeatEditor.tsx": {
     group: "todo",
     items: { TodoHeartbeatEditor: L("live"), WorkflowCard: L("part", "TodoHeartbeatEditor") },
@@ -357,10 +365,12 @@ const FILES = {
     items: { RunMarker: D(), TodoIndex: L("live"), IndexItem: L("part", "TodoIndex"), Divider: L("part", "TodoIndex") },
   },
   "components/todo/TodoSelect.tsx": { group: "todo", items: { TodoSelect: C("TodoInput"), ItemMedia: C("TodoInput") } },
+  "components/todo/TodoRuns.tsx": { group: "todo", items: { TodoRuns: L("live") } },
   "components/todo/TodoTaskEditor.tsx": {
     group: "todo",
     items: {
       TodoTaskEditor: L("live"),
+      SheetBlock: L("part", "TodoTaskEditor"),
       NormalizedField: L("part", "TodoTaskEditor"),
       WeekdayChip: L("part", "TodoTaskEditor"),
       RunAtField: L("part", "TodoTaskEditor"),

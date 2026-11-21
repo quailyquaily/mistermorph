@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	htmlstd "html"
 	"net/http"
 	"path/filepath"
@@ -115,6 +116,7 @@ func bootstrapTelegramRuntimeState(ctx context.Context, d Dependencies, opts Run
 		AgentConfig:       opts.AgentLimits.ToConfig(),
 		EngineToolsConfig: &opts.EngineToolsConfig,
 		Logger:            logger,
+		JobRuns:           taskStore,
 	})
 	if err != nil {
 		return nil, err
@@ -827,6 +829,8 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 	if fromIsAgent && (fromUserID == s.botID || fromUsername != "" && strings.EqualFold(fromUsername, s.botUser)) {
 		return
 	}
+	// Jobs that watch this chat start here, before anything decides whether the agent answers.
+	s.options.JobTriggers.HandleAsync(telegramJobTriggerMessage(message, conversationKey, fromUserID, fromDisplay, fromUsername, fromIsAgent, text, messageSentAt))
 	commandWord, commandArgs := chatcommands.ParseCommand(text)
 	normalizedCommand := chatcommands.NormalizeCommand(commandWord)
 	if agentpair.IsControlMessage(rawText) {
@@ -1339,4 +1343,29 @@ func telegramPlanStepNotes(final *agent.Final, runCtx *agent.Context) []string {
 		return agent.PlanNotes(final.Plan)
 	}
 	return nil
+}
+
+// telegramJobTriggerMessage describes an inbound message for the jobs that watch its chat. A
+// forum topic's message is in its group ("tg:<chat>") and in its topic ("tg:<chat>_<thread>").
+func telegramJobTriggerMessage(message *telegramMessage, conversationKey string, fromUserID int64, fromDisplay, fromUsername string, fromIsBot bool, text string, sentAt time.Time) jobtriggers.Message {
+	chatID := "tg:" + strconv.FormatInt(message.Chat.ID, 10)
+	msg := jobtriggers.Message{
+		Channel:     "telegram",
+		ChatIDs:     []string{chatID},
+		MessageID:   strconv.FormatInt(message.MessageID, 10),
+		SenderName:  strings.TrimSpace(fromDisplay),
+		SenderIsBot: fromIsBot,
+		SentAt:      sentAt,
+		Text:        text,
+	}
+	if key := strings.TrimSpace(conversationKey); key != "" && !strings.EqualFold(key, chatID) {
+		msg.ChatIDs = append(msg.ChatIDs, key)
+	}
+	if fromUserID != 0 {
+		msg.SenderID = "tg:" + strconv.FormatInt(fromUserID, 10)
+	}
+	if msg.SenderName == "" {
+		msg.SenderName = strings.TrimSpace(fromUsername)
+	}
+	return msg
 }

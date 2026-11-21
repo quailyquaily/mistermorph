@@ -1,4 +1,4 @@
-// Chat's topic list and topic panel: groups, opening a topic, activity marks, the TODO runs toggle,
+// Chat's topic list and topic panel: groups, opening a topic, activity marks, the Job runs toggle,
 // tags, pin and delete, and the failures of each (renaming: chat-topic-rename.test.tsx).
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
@@ -77,7 +77,7 @@ test("activity marks follow the runtime, and the TODO toggle counts running runs
     },
   });
   await app.waitFor("id:chat-topic-status-running");
-  await app.waitFor("label:TODO runs — 2 running");
+  await app.waitFor("label:Job runs — 2 running");
   await app.waitFor("id:chat-cron-running");
   // The TODO view lists the items' topics with their model.
   await app.press("id:chat-topics-view-cron");
@@ -116,7 +116,7 @@ test("the TODO toggle's clock hands turn as long as the runs, through a failed p
   // One of two ends: still running.
   cronRunning = 1;
   await app.clock!.runFor(5000);
-  await app.waitFor("label:TODO runs — 1 running");
+  await app.waitFor("label:Job runs — 1 running");
   expect(app.count("id:chat-cron-running")).toBe(1);
   // A failed poll is not the end of the runs: the hands keep turning.
   pollFails = true;
@@ -127,7 +127,7 @@ test("the TODO toggle's clock hands turn as long as the runs, through a failed p
   cronRunning = 0;
   await app.clock!.runFor(5000);
   await app.waitFor("id:chat-cron-running", { state: "gone" });
-  await app.waitFor("label:TODO runs");
+  await app.waitFor("label:Job runs");
   await app.press("id:chat-topics-view-cron");
   await app.waitFor("Daily digest");
 });
@@ -139,7 +139,7 @@ test("the TODO view says so when no item has run", async () => {
   });
   await app.waitFor("id:chat-topics-view-cron");
   await app.press("id:chat-topics-view-cron");
-  await app.waitFor("No TODO item has run yet. Once an item runs, its runs appear here in a topic of its own.");
+  await app.waitFor("No job has run yet. Once a job runs, its runs appear here in a topic of its own.");
 });
 
 test("the topic panel pins, tags and deletes the topic, and puts things back when a save fails", async () => {
@@ -379,7 +379,7 @@ test("a TODO topic finds its item by job_id: its model while the item is listed,
   await app.waitUntil(() => app.texts().some((text) => text.endsWith("· gpt-4o")));
   await app.press("id:chat-topic-_cron_task-3");
   await app.press(`id:chat-topic-_cron_${JOB}`);
-  await app.waitFor("The TODO item “Weekly report” no longer exists.");
+  await app.waitFor("The job “Weekly report” no longer exists.");
   expect(app.enabled("id:chat-todo-job-view")).toBe(false);
   await app.waitFor("text:Done.");
 });

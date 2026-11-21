@@ -12,6 +12,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/caprefs"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -105,10 +106,17 @@ func RunLightweightPrecheck(ctx context.Context, bundle *ChannelRuntimeBundle, r
 
 // LightweightPrecheckApplies reports whether a message may be pre-checked: it carries text the
 // check can read, has no attachments the check cannot see, is not a command, and references no
-// skill, tool or MCP server with $name, which asks for a task, never for an emoji.
+// skill, tool or MCP server with $name and no job, which ask for a task, never for an emoji.
 func LightweightPrecheckApplies(text string, hasAttachments bool) bool {
 	text = strings.TrimSpace(text)
-	return text != "" && !hasAttachments && !strings.HasPrefix(text, "/") && !HasCapabilityReference(text)
+	return text != "" && !hasAttachments && !strings.HasPrefix(text, "/") && !HasCapabilityReference(text) && !HasJobReference(text)
+}
+
+// HasJobReference reports whether text references a job ("[label](job:<id>)"). Such a message is
+// about that job: it goes to the run, which reads the reference, and is never put to the
+// pre-check, which would see the message without it.
+func HasJobReference(text string) bool {
+	return len(jobrefs.ExtractIDs(text)) > 0
 }
 
 // HasCapabilityReference reports whether text holds a $name reference. Such a message is never

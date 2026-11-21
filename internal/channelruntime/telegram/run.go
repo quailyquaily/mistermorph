@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -28,17 +29,20 @@ type RunOptions struct {
 	MaxConcurrency                int
 	FileCacheDir                  string
 	Server                        ServerOptions
-	BusMaxInFlight                int
-	RequestTimeout                time.Duration
-	AgentLimits                   agent.Limits
-	EngineToolsConfig             agent.EngineToolsConfig
-	FileCacheMaxAge               time.Duration
-	FileCacheMaxFiles             int
-	FileCacheMaxTotalBytes        int64
-	Hooks                         Hooks
-	InspectPrompt                 bool
-	InspectRequest                bool
-	TaskStore                     daemonruntime.TaskView
+	// JobTriggers, when set, starts the jobs whose message triggers watch a chat this runtime
+	// receives a message in.
+	JobTriggers            *jobtriggers.Dispatcher
+	BusMaxInFlight         int
+	RequestTimeout         time.Duration
+	AgentLimits            agent.Limits
+	EngineToolsConfig      agent.EngineToolsConfig
+	FileCacheMaxAge        time.Duration
+	FileCacheMaxFiles      int
+	FileCacheMaxTotalBytes int64
+	Hooks                  Hooks
+	InspectPrompt          bool
+	InspectRequest         bool
+	TaskStore              daemonruntime.TaskView
 }
 
 func Run(ctx context.Context, d Dependencies, opts RunOptions) error {
