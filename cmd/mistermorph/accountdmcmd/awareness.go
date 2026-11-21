@@ -67,8 +67,8 @@ func Run(ctx context.Context, channel string, awarenessDeps awarenessruntime.Dep
 	if cronCfg.Enabled {
 		cronRequests := make(chan awarenessruntime.CronRequest)
 		awarenessOpts.CronRequests = cronRequests
-		opts.CronRun = func(ctx context.Context, task cronstore.Task) error {
-			return awarenessruntime.TriggerCron(ctx, cronRequests, task)
+		opts.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
+			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
 		}
 	}
 	runCtx, cancel := context.WithCancel(ctx)

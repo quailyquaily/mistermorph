@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -189,8 +191,10 @@ func attachTelegramAwarenessTriggers(telegramOpts *telegramruntime.RunOptions, a
 	if awarenessOpts.CronEnabled {
 		cronRequests := make(chan awarenessruntime.CronRequest)
 		awarenessOpts.CronRequests = cronRequests
-		telegramOpts.Server.CronRun = func(ctx context.Context, task cronstore.Task) error {
-			return awarenessruntime.TriggerCron(ctx, cronRequests, task)
+		telegramOpts.Server.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
+			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
 		}
+		// The jobs whose message triggers watch a chat of this runtime start through the same loop.
+		telegramOpts.JobTriggers = jobtriggers.New(awarenessOpts.CronPath, telegramOpts.Server.CronRun, slog.Default())
 	}
 }

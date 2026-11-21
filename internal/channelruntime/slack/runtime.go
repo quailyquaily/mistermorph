@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -38,15 +39,18 @@ type RunOptions struct {
 	MaxConcurrency                int
 	FileCacheDir                  string
 	Server                        ServerOptions
-	BaseURL                       string
-	BusMaxInFlight                int
-	RequestTimeout                time.Duration
-	AgentLimits                   agent.Limits
-	EngineToolsConfig             agent.EngineToolsConfig
-	Hooks                         Hooks
-	InspectPrompt                 bool
-	InspectRequest                bool
-	TaskStore                     daemonruntime.TaskView
+	// JobTriggers, when set, starts the jobs whose message triggers watch a channel this runtime
+	// receives a message in.
+	JobTriggers       *jobtriggers.Dispatcher
+	BaseURL           string
+	BusMaxInFlight    int
+	RequestTimeout    time.Duration
+	AgentLimits       agent.Limits
+	EngineToolsConfig agent.EngineToolsConfig
+	Hooks             Hooks
+	InspectPrompt     bool
+	InspectRequest    bool
+	TaskStore         daemonruntime.TaskView
 }
 
 type ServerOptions struct {

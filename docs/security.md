@@ -164,6 +164,10 @@ Long-running modes that start the embedded admin server expose management endpoi
   - returns `400 Bad Request` when the body is empty or non-text
   - returns `413 Request Entity Too Large` when the body exceeds 10 KB
   - returns `409 Conflict` if an awareness task is already in progress
+- `POST /poke/{job_id}`
+  - queues one run of a job that has a `poke` trigger; the body is optional, under the same 10 KB limit
+  - the body reaches the run as quoted, untrusted data in a block of its own that names the job and its poke trigger, never as part of the job's instructions
+  - returns `404 Not Found` for an unknown job, and `409 Conflict` when the job has no poke trigger, is switched off, or is already queued or running
 - `GET /settings/agent`
 - `PUT /settings/agent`
 - `POST /settings/agent/models`
@@ -339,6 +343,15 @@ The example unit also enables common isolation options:
 - `RestrictNamespaces=true`: reduces attack surface from namespace creation.
 - `MemoryDenyWriteExecute=true`: blocks W+X memory mappings (mitigates some exploit classes).
 - `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`: allow only typical networking families (needed for outbound HTTP(S) and local sockets).
+
+## Jobs: inputs, message triggers and references
+
+- A job's `uses` give its runs the used jobs' definitions and results through the job-reference machinery (`internal/jobrefs`), with its rules unchanged: the data is one JSON block marked read-only source data; a job's `bash_env` values, workspace, model profile and delivery target are never part of it; instructions and outputs are cut to the reference limits; a job that reports to a chat may read only jobs that report to that same chat, and a used job it may not read fails the run with the refusal an unknown job gets. Links inside a used job's text are not followed.
+- A `fresh` use runs the used job. It runs with that job's own settings (its `bash_env`, workspace and profile), exactly as its schedule would run it, and only when it is switched on; a chain of such runs is at most 5 jobs deep, and a job is run for a fresh result at most once per chain.
+- A `message` trigger lets a chat start a job: anyone who can post in that chat can cause a run, at most one per trigger per 60 seconds. The message never becomes instructions: it is given to the run as JSON (sender, time, text; the text cut at 4000 characters) quoted in a block of its own that says it is untrusted source data, beside the job's unchanged instructions. The job runs with the job's own tools and settings, not the sender's; the sender is not checked against the channel's allowlist or group-trigger rules, since the owner named the chat in the trigger. Give a job that a chat can start only the tools and `bash_env` that chat should be able to exercise.
+- The agent's own messages never start a job, so a job that reports to the chat it watches does not start itself. Another bot's message does start it; two bots that answer each other are held to the one run per minute. An Agent Link answer to a message this agent sent starts no job.
+- A Console task started by an Agent Link late answer carries text the remote agent wrote. It asks for job references as no one: a `[label](job:<id>)` in it fails that task with the refusal an unknown job gets, as a reference in a `/poke` body does, and no job is read.
+- A Console message that references a job while a run is in progress in its topic is refused (`400`), not handed to the run: the run would take the link as text and no access check would be made. It is accepted once the run has ended.
 
 ## Notes and limitations
 

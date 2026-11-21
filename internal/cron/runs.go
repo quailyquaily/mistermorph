@@ -23,6 +23,27 @@ const (
 	RunRunning RunState = "running"
 )
 
+// Run cause kinds: what started a run.
+const (
+	CauseSchedule = "schedule"
+	CauseManual   = "manual"
+	CausePoke     = "poke"
+	CauseMessage  = "message"
+	CauseJob      = "job"
+)
+
+// RunCause is why a run started. TriggerID names the job's trigger that fired (schedule, poke,
+// message); FromJobID the job whose run started this one (job). OriginRunID is the run that
+// started the whole chain of jobs: a run that starts a chain is its own origin. Note says more in
+// words, such as why a run was skipped.
+type RunCause struct {
+	Kind        string `json:"kind"`
+	TriggerID   string `json:"trigger_id"`
+	FromJobID   string `json:"from_job_id"`
+	OriginRunID string `json:"origin_run_id"`
+	Note        string `json:"note"`
+}
+
 // ErrRunStopped is the cause a stopped execution's context is cancelled with.
 var ErrRunStopped = errors.New("stopped by user")
 
@@ -33,6 +54,7 @@ type TaskRun struct {
 	RunID     string    `json:"run_id,omitempty"`
 	State     RunState  `json:"state"`
 	Manual    bool      `json:"manual,omitempty"`
+	Cause     RunCause  `json:"cause"`
 	QueuedAt  time.Time `json:"queued_at"`
 	StartedAt time.Time `json:"started_at,omitempty"`
 	// Stopping is set once someone asked to stop this execution; it is still winding down.
@@ -48,6 +70,7 @@ type FinishedRun struct {
 	RunID      string    `json:"run_id"`
 	Status     string    `json:"status"`
 	Stopping   bool      `json:"stopping,omitempty"`
+	Cause      RunCause  `json:"cause"`
 	FinishedAt time.Time `json:"finished_at"`
 }
 
@@ -101,18 +124,36 @@ func NewRunID() string {
 // Queue records a task waiting for a slot and returns the new execution's ID. The methods do
 // nothing on a nil board (Queue then returns "").
 func (b *RunBoard) Queue(id string, manual bool, at time.Time) string {
+	cause := RunCause{Kind: CauseSchedule}
+	if manual {
+		cause.Kind = CauseManual
+	}
+	runID, _ := b.QueueRun(id, cause, at)
+	return runID
+}
+
+// QueueRun is Queue with the run's cause. It returns the cause as recorded: a run without an
+// origin starts a chain, so it is its own origin. A cause without a kind is a schedule's.
+func (b *RunBoard) QueueRun(id string, cause RunCause, at time.Time) (string, RunCause) {
 	if b == nil {
-		return ""
+		return "", cause
 	}
 	runID := NewRunID()
+	if strings.TrimSpace(cause.Kind) == "" {
+		cause.Kind = CauseSchedule
+	}
+	if strings.TrimSpace(cause.OriginRunID) == "" {
+		cause.OriginRunID = runID
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.runs == nil {
 		b.runs = map[string]*boardRun{}
 	}
 	b.seq++
-	b.runs[id] = &boardRun{TaskRun: TaskRun{ID: id, RunID: runID, State: RunQueued, Manual: manual, QueuedAt: at.UTC(), seq: b.seq}}
-	return runID
+	b.runs[id] = &boardRun{TaskRun: TaskRun{ID: id, RunID: runID, State: RunQueued, Manual: cause.Kind == CauseManual,
+		Cause: cause, QueuedAt: at.UTC(), seq: b.seq}}
+	return runID, cause
 }
 
 // Start marks a queued execution as running; cancel stops it. It returns false, and records
@@ -174,6 +215,17 @@ func (b *RunBoard) Stop(id, runID string) StopResult {
 	return result
 }
 
+// Stopping reports whether execution runID of task id is held and was asked to stop.
+func (b *RunBoard) Stopping(id, runID string) bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	run, ok := b.runs[id]
+	return ok && run.RunID == runID && run.Stopping
+}
+
 // Finish removes an execution that ended and remembers how (status is RunStatusDone,
 // RunStatusFailed or RunStatusCanceled). A runID that is no longer the task's execution only
 // adds the record.
@@ -184,8 +236,10 @@ func (b *RunBoard) Finish(id, runID, status string, at time.Time) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	stopping := false
+	var cause RunCause
 	if run, ok := b.runs[id]; ok && (runID == "" || run.RunID == runID) {
 		stopping = run.Stopping
+		cause = run.Cause
 		if runID == "" {
 			runID = run.RunID
 		}
@@ -194,7 +248,7 @@ func (b *RunBoard) Finish(id, runID, status string, at time.Time) {
 	if runID == "" {
 		return
 	}
-	b.finished = append(b.finished, FinishedRun{ID: id, RunID: runID, Status: status, Stopping: stopping, FinishedAt: at.UTC()})
+	b.finished = append(b.finished, FinishedRun{ID: id, RunID: runID, Status: status, Stopping: stopping, Cause: cause, FinishedAt: at.UTC()})
 	if extra := len(b.finished) - finishedRunsKept; extra > 0 {
 		b.finished = append([]FinishedRun(nil), b.finished[extra:]...)
 	}

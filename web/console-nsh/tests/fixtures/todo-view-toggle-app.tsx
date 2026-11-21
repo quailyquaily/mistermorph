@@ -5,7 +5,7 @@
 // shown are read out beside it.
 import { batch, mount, signal, Text, View } from "nsh";
 import { isMobile } from "../../lib/shell";
-import { TODO_INDEX_WIDTH, TodoIndex } from "../../components/todo/TodoIndex";
+import { TodoIndex } from "../../components/todo/TodoIndex";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import type { PartFrame } from "../../components/shared/partProbe";
 import type { TodoState, TodoTask } from "../../components/todo/todo-state";
@@ -37,6 +37,13 @@ const state = {
   taskListDisplayTask: (item: TodoTask) => item,
   taskTitle: (item: TodoTask) => item.title,
   scheduleLabel: (item: TodoTask) => item.cron,
+  whenLabel: (item: TodoTask) => item.cron,
+  setTodoView: () => {},
+  composeText: Object.assign(() => "", { set: () => {} }),
+  composeSending: () => false,
+  composeTopicID: () => "",
+  composeJob: async () => {},
+  openComposeTopic: () => {},
   taskRun: () => null,
   runStateLabel: () => "",
   selectedTaskKey: () => null,
@@ -51,7 +58,7 @@ function Page() {
         <If
           when={calendar()}
           else={
-            <View class={isMobile() ? "flex-1" : ""} style={isMobile() ? undefined : { width: TODO_INDEX_WIDTH }}>
+            <View class="flex-1">
               <TodoIndex state={state} mobile={isMobile()} onPartLayout={report} />
             </View>
           }
@@ -60,7 +67,7 @@ function Page() {
             mobile={isMobile()}
             tasks={[]}
             taskTitle={(task) => task.title}
-            scheduleLabel={() => ""}
+            fetch={async () => ({ items: [], tasks: [] })}
             onShowList={() => show(false)}
             onPartLayout={report}
           />

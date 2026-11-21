@@ -164,7 +164,7 @@ type rowsQueryer interface {
 
 func readTasks(ctx context.Context, q rowsQueryer) ([]Task, error) {
 	rows, err := q.QueryContext(ctx, `SELECT id, title, enabled, at, cron, tz, content, chat_id, mention, llm_profile,
-		workspace_dir, bash_env, last_run_at, last_run_status FROM jobs ORDER BY position, id`)
+		workspace_dir, bash_env, last_run_at, last_run_status, triggers, uses, join_mode FROM jobs ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -173,10 +173,14 @@ func readTasks(ctx context.Context, q rowsQueryer) ([]Task, error) {
 	for rows.Next() {
 		var task Task
 		var enabled int
-		var bashEnv string
+		var bashEnv, triggers, uses string
 		var lastRun sql.NullString
 		if err := rows.Scan(&task.ID, &task.Title, &enabled, &task.At, &task.Cron, &task.TZ, &task.Content, &task.ChatID,
-			&task.Mention, &task.LLMProfile, &task.WorkspaceDir, &bashEnv, &lastRun, &task.LastRunStatus); err != nil {
+			&task.Mention, &task.LLMProfile, &task.WorkspaceDir, &bashEnv, &lastRun, &task.LastRunStatus,
+			&triggers, &uses, &task.Join); err != nil {
+			return nil, err
+		}
+		if err := decodeTriggersAndUses(triggers, uses, &task); err != nil {
 			return nil, err
 		}
 		if enabled == 0 {
@@ -203,6 +207,35 @@ func decodeBashEnv(raw string, task *Task) error {
 	return nil
 }
 
+// decodeTriggersAndUses reads a row's triggers and uses into task. A row without triggers is one
+// written before jobs had them: its at or cron is its one schedule trigger.
+func decodeTriggersAndUses(triggers, uses string, task *Task) error {
+	if triggers != "" && triggers != "[]" {
+		if err := json.Unmarshal([]byte(triggers), &task.Triggers); err != nil {
+			return fmt.Errorf("task %s triggers: %w", task.ID, err)
+		}
+	}
+	task.Triggers = TriggersForTask(*task)
+	if uses != "" && uses != "[]" {
+		if err := json.Unmarshal([]byte(uses), &task.Uses); err != nil {
+			return fmt.Errorf("task %s uses: %w", task.ID, err)
+		}
+	}
+	return nil
+}
+
+// encodeJSONList writes a list column: "[]" for an empty one.
+func encodeJSONList[T any](items []T) (string, error) {
+	if len(items) == 0 {
+		return "[]", nil
+	}
+	data, err := json.Marshal(items)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
 func encodeBashEnv(refs []BashEnvRef) (string, error) {
 	if len(refs) == 0 {
 		return "[]", nil
@@ -219,7 +252,9 @@ func encodeBashEnv(refs []BashEnvRef) (string, error) {
 var ErrRevisionConflict = errors.New("the job list changed since it was read; nothing was saved, reload it and try again")
 
 // Write replaces the list with file's tasks, in their order, in one transaction. The list is
-// validated first, as cron.yaml was. A task keeps its created_at and its last run.
+// validated first, as cron.yaml was. A task keeps its created_at and its last run. The tasks are
+// normalized in place (see normalizeTask), so the caller sees them as they were stored. Leaving
+// out a job that a remaining job uses is refused with ErrJobInUse.
 func (s *Store) Write(file File) error {
 	return s.mutate(context.Background(), func(ctx context.Context, tx *sql.Tx, _ []Task) error {
 		return writeTasks(ctx, tx, file)
@@ -254,8 +289,29 @@ func writeTasks(ctx context.Context, tx *sql.Tx, file File) error {
 	if file.Tasks == nil {
 		file.Tasks = []Task{}
 	}
+	stored, err := readTasks(ctx, tx)
+	if err != nil {
+		return err
+	}
+	storedByID := make(map[string]*Task, len(stored))
+	for i := range stored {
+		storedByID[strings.TrimSpace(stored[i].ID)] = &stored[i]
+	}
+	listed := make(map[string]bool, len(file.Tasks))
 	for i := range file.Tasks {
 		file.Tasks[i].Title = normalizeTaskTitle(file.Tasks[i].Title)
+		id := strings.TrimSpace(file.Tasks[i].ID)
+		file.Tasks[i] = normalizeTask(file.Tasks[i], storedByID[id])
+		listed[id] = true
+	}
+	for _, task := range stored {
+		id := strings.TrimSpace(task.ID)
+		if listed[id] {
+			continue
+		}
+		if dependents := dependentsOf(file.Tasks, id); len(dependents) > 0 {
+			return jobInUseError(id, dependents)
+		}
 	}
 	if err := ValidateFile(file); err != nil {
 		return err
@@ -356,9 +412,9 @@ func (s *Store) AddRecurringWithChatID(title, content, expr, tz, id, chatID stri
 }
 
 // AddOnce adds a one-time task. Only the one-time fields of task are kept, its bash_env among
-// them.
+// them, and its uses and join. Triggers given with it are added after its schedule.
 func (s *Store) AddOnce(task Task) (AddResult, error) {
-	return s.addTask("add_once", Task{
+	return s.addTask("add_once", withAddExtras(task, Task{
 		ID:           normalizeTaskID(task.ID),
 		Title:        normalizeTaskTitle(task.Title),
 		At:           strings.TrimSpace(task.At),
@@ -367,13 +423,27 @@ func (s *Store) AddOnce(task Task) (AddResult, error) {
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
 		BashEnv:      normalizeBashEnvRefs(task.BashEnv),
-	})
+	}))
+}
+
+// withAddExtras gives out, the task an add keeps, what asked may carry beyond its schedule: its
+// uses and join, and triggers that are put after the schedule's own.
+func withAddExtras(asked, out Task) Task {
+	out.Uses = normalizeUses(asked.Uses)
+	out.Join = strings.ToLower(strings.TrimSpace(asked.Join))
+	if len(asked.Triggers) > 0 {
+		out.Triggers = []Trigger{{ID: LegacyScheduleTriggerID, Kind: TriggerSchedule, At: out.At, Cron: out.Cron, TZ: out.TZ}}
+		for _, trigger := range asked.Triggers {
+			out.Triggers = append(out.Triggers, normalizeTrigger(trigger))
+		}
+	}
+	return out
 }
 
 // AddRecurring adds a recurring task. Only the recurring fields of task are kept, its bash_env
-// among them.
+// among them, and its uses and join. Triggers given with it are added after its schedule.
 func (s *Store) AddRecurring(task Task) (AddResult, error) {
-	return s.addTask("add_recurring", Task{
+	return s.addTask("add_recurring", withAddExtras(task, Task{
 		ID:           normalizeTaskID(task.ID),
 		Title:        normalizeTaskTitle(task.Title),
 		Cron:         strings.TrimSpace(task.Cron),
@@ -382,7 +452,7 @@ func (s *Store) AddRecurring(task Task) (AddResult, error) {
 		ChatID:       strings.TrimSpace(task.ChatID),
 		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
 		BashEnv:      normalizeBashEnvRefs(task.BashEnv),
-	})
+	}))
 }
 
 func (s *Store) addTask(action string, task Task) (AddResult, error) {
@@ -400,6 +470,8 @@ func (s *Store) addTask(action string, task Task) (AddResult, error) {
 		if err := writeTasks(ctx, tx, File{Version: Version, Tasks: tasks}); err != nil {
 			return err
 		}
+		// The task as it was stored, with its trigger list.
+		task = tasks[len(tasks)-1]
 		result = AddResult{
 			OK:        true,
 			Action:    action,
@@ -439,7 +511,10 @@ func (s *Store) Update(ctx context.Context, id string, patch TaskPatch) (UpdateR
 		if idx < 0 {
 			return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
 		}
-		updated, fields := patch.apply(tasks[idx])
+		updated, fields, err := patch.apply(tasks[idx])
+		if err != nil {
+			return err
+		}
 		if err := ValidateTask(updated); err != nil {
 			return err
 		}
@@ -447,6 +522,8 @@ func (s *Store) Update(ctx context.Context, id string, patch TaskPatch) (UpdateR
 		if err := writeTasks(ctx, tx, File{Version: Version, Tasks: tasks}); err != nil {
 			return err
 		}
+		// The task as it was stored: new triggers have their IDs.
+		updated = tasks[idx]
 		result = UpdateResult{OK: true, Action: "update", TaskCount: len(tasks), Task: &updated, Fields: fields}
 		return nil
 	})
@@ -555,6 +632,47 @@ func (s *Store) deleteByID(ctx context.Context, id string) (DeleteResult, error)
 	return result, err
 }
 
+// ConsumeOnceTrigger retires the one-time ("at") trigger triggerID of job id after it ran. A job
+// that had nothing else to start it and that no job uses is deleted, as one-time jobs always
+// were (deleted is then true); otherwise only the trigger is removed and the job stays. A job or
+// trigger that is no longer there changes nothing.
+func (s *Store) ConsumeOnceTrigger(ctx context.Context, id, triggerID string) (deleted bool, err error) {
+	id, triggerID = strings.TrimSpace(id), strings.TrimSpace(triggerID)
+	err = s.mutate(ctx, func(ctx context.Context, tx *sql.Tx, tasks []Task) error {
+		idx := -1
+		for i, task := range tasks {
+			if strings.TrimSpace(task.ID) == id {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return nil
+		}
+		trigger, ok := FindTrigger(tasks[idx], triggerID)
+		if !ok || trigger.Kind != TriggerSchedule || strings.TrimSpace(trigger.At) == "" {
+			return nil
+		}
+		if len(tasks[idx].Triggers) == 1 && len(dependentsOf(tasks, id)) == 0 {
+			deleted = true
+			tasks = append(tasks[:idx], tasks[idx+1:]...)
+		} else {
+			kept := make([]Trigger, 0, len(tasks[idx].Triggers))
+			for _, other := range tasks[idx].Triggers {
+				if other.ID != triggerID {
+					kept = append(kept, other)
+				}
+			}
+			tasks[idx].Triggers = kept
+		}
+		return writeTasks(ctx, tx, File{Version: Version, Tasks: tasks})
+	})
+	if err != nil {
+		deleted = false
+	}
+	return deleted, err
+}
+
 func (s *Store) FindByID(id string) (Task, bool, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -595,23 +713,26 @@ func (s *Store) DueLenient(now time.Time) ([]DueTask, []error, error) {
 			taskErrs = append(taskErrs, err)
 			continue
 		}
-		due, scheduledAt, err := IsDue(task, now)
+		trigger, due, scheduledAt, err := dueTrigger(task, now, func(trigger Trigger, at time.Time) bool {
+			return stoppedOnceAfter(task, trigger, at) || s.onceHeldBack(task, trigger, at, now)
+		})
 		if err != nil {
 			taskErrs = append(taskErrs, err)
 			continue
 		}
-		if due && !stoppedOnceAfter(task, scheduledAt) {
-			out = append(out, DueTask{Task: task, ScheduledAtUTC: scheduledAt})
+		if due {
+			out = append(out, DueTask{Task: task, ScheduledAtUTC: scheduledAt,
+				Cause: RunCause{Kind: CauseSchedule, TriggerID: trigger.ID}})
 		}
 	}
 	return out, taskErrs, nil
 }
 
-// stoppedOnceAfter reports whether a one-time task's run at or after its time scheduledAt was
-// stopped by a person. That was its one execution, so the past time does not fire it again (a
+// stoppedOnceAfter reports whether the run of a one-time trigger at or after its time scheduledAt
+// was stopped by a person. That was its one execution, so the past time does not fire it again (a
 // failed one does); the task is kept as it is, and a new time or a manual run runs it again.
-func stoppedOnceAfter(task Task, scheduledAt time.Time) bool {
-	if strings.TrimSpace(task.At) == "" || strings.TrimSpace(task.LastRunStatus) != RunStatusCanceled {
+func stoppedOnceAfter(task Task, trigger Trigger, scheduledAt time.Time) bool {
+	if strings.TrimSpace(trigger.At) == "" || strings.TrimSpace(task.LastRunStatus) != RunStatusCanceled {
 		return false
 	}
 	last, err := time.Parse(time.RFC3339, strings.TrimSpace(task.LastRunAt))

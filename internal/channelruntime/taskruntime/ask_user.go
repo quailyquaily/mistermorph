@@ -133,6 +133,9 @@ func newAskUserTool(ask AskUserFunc) *askUserTool {
 	return &askUserTool{ask: ask}
 }
 
+// AskUserTool is ask_user with nobody to ask: for listing its description and parameters.
+func AskUserTool() tools.Tool { return newAskUserTool(nil) }
+
 func (t *askUserTool) Name() string { return AskUserToolName }
 
 func (t *askUserTool) Description() string {

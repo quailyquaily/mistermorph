@@ -477,13 +477,25 @@ func insertJob(ctx context.Context, tx *sql.Tx, position int, task Task, created
 	if strings.TrimSpace(updatedAt) == "" {
 		updatedAt = createdAt
 	}
+	// A job without a trigger list (one an earlier store kept) is stored without one: its at or
+	// cron is read back as its schedule trigger.
+	triggers, err := encodeJSONList(task.Triggers)
+	if err != nil {
+		return err
+	}
+	uses, err := encodeJSONList(task.Uses)
+	if err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO jobs (id, position, title, enabled, at, cron, tz, content, chat_id,
-		mention, llm_profile, workspace_dir, bash_env, created_at, updated_at, last_run_at, last_run_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		mention, llm_profile, workspace_dir, bash_env, created_at, updated_at, last_run_at, last_run_status,
+		triggers, uses, join_mode)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		strings.TrimSpace(task.ID), position, normalizeTaskTitle(task.Title), boolInt(TaskEnabled(task)),
 		strings.TrimSpace(task.At), strings.TrimSpace(task.Cron), strings.TrimSpace(task.TZ), strings.TrimSpace(task.Content),
 		strings.TrimSpace(task.ChatID), strings.TrimSpace(task.Mention), strings.TrimSpace(task.LLMProfile),
-		strings.TrimSpace(task.WorkspaceDir), bashEnv, createdAt, updatedAt, lastRun, strings.TrimSpace(task.LastRunStatus))
+		strings.TrimSpace(task.WorkspaceDir), bashEnv, createdAt, updatedAt, lastRun, strings.TrimSpace(task.LastRunStatus),
+		triggers, uses, strings.TrimSpace(task.Join))
 	return err
 }
 

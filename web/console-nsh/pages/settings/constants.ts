@@ -32,7 +32,6 @@ export interface ToolItem {
   titleKey: string;
   noteKey: string;
   toggle?: boolean;
-  automatic?: boolean;
 }
 
 export const TOOL_ITEMS: ToolItem[] = [
@@ -41,7 +40,7 @@ export const TOOL_ITEMS: ToolItem[] = [
   { id: "spawn", icon: "PhGitFork", titleKey: "settings_tool_spawn", noteKey: "settings_tool_note_spawn" },
   { id: "coder", icon: "PhCodeBlock", titleKey: "settings_tool_coder", noteKey: "settings_tool_note_coder" },
   { id: "contacts_send", icon: "PhPaperPlaneTilt", titleKey: "settings_tool_contacts_send", noteKey: "settings_tool_note_contacts_send" },
-  { id: "agent_send", icon: "PhRobot", titleKey: "settings_tool_agent_send", noteKey: "settings_tool_note_agent_send", automatic: true },
+  { id: "agent_send", icon: "PhRobot", titleKey: "settings_tool_agent_send", noteKey: "settings_tool_note_agent_send", toggle: false },
   { id: "job_manage", icon: "PhCalendarCheck", titleKey: "settings_tool_job_manage", noteKey: "settings_tool_note_job_manage" },
   { id: "plan_create", icon: "PhListChecks", titleKey: "settings_tool_plan_create", noteKey: "settings_tool_note_plan_create" },
   { id: "codemode", icon: "PhCode", titleKey: "settings_tool_codemode", noteKey: "settings_tool_note_codemode" },
@@ -76,10 +75,12 @@ export interface ToolChannel {
 }
 
 // Tools a channel runtime adds in its own chats. They have no setting: each follows its channel.
+// Keep in step with what the runtimes register and with the schema catalog
+// (internal/toolschema, cmd/mistermorph/consolecmd/tool_schemas.go).
 export const TOOL_CHANNELS: ToolChannel[] = [
-  { id: "console", title: "Console", icon: "PhAppWindow", tools: ["message_react", "skill_install_preview", "skill_install"] },
-  { id: "telegram", title: "Telegram", logo: telegramLogo, tools: ["send_file", "send_photo", "send_voice", "message_react"] },
-  { id: "slack", title: "Slack", logo: slackLogo, tools: ["send_file", "message_react"] },
+  { id: "console", title: "Console", icon: "PhAppWindow", tools: ["send_file", "message_react", "ask_user", "skill_install_preview", "skill_install"] },
+  { id: "telegram", title: "Telegram", logo: telegramLogo, tools: ["send_file", "send_photo", "send_voice", "message_react", "ask_user"] },
+  { id: "slack", title: "Slack", logo: slackLogo, tools: ["send_file", "message_react", "ask_user"] },
   { id: "lark", title: "Lark", logo: larkLogo, tools: ["send_file", "send_photo", "send_voice", "message_react"] },
   { id: "discord", title: "Discord", logo: discordLogo, tools: ["send_file", "message_react"] },
   { id: "mixin", title: "Mixin", logo: mixinLogo, tools: ["send_file", "send_photo", "send_voice"] },
@@ -93,6 +94,7 @@ export const TOOL_CHANNEL_ROWS: { id: string; icon: IconName }[] = [
   { id: "send_photo", icon: "PhImage" },
   { id: "send_voice", icon: "PhMicrophone" },
   { id: "message_react", icon: "PhSmiley" },
+  { id: "ask_user", icon: "PhQuestion" },
   { id: "skill_install_preview", icon: "PhEye" },
   { id: "skill_install", icon: "PhDownloadSimple" },
 ];

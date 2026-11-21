@@ -1472,6 +1472,77 @@ paths:
           $ref: '#/components/responses/Conflict'
         '413':
           $ref: '#/components/responses/TooLarge'
+  /poke/{job_id}:
+    post:
+      operationId: pokeJob
+      tags:
+      - Schedules
+      summary: Start one job by its poke trigger
+      description: Queues one run of the job, with cause poke, when the job has a trigger of kind poke.
+        The body is optional and is read under the limits of POST /poke (10 KiB, text media types). It is
+        given to the run as quoted, untrusted source data in a block of its own, never as part of the
+        job's instructions. POST /poke itself is unchanged and starts no job.
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: false
+        content:
+          text/plain:
+            schema:
+              type: string
+          application/json:
+            schema: {}
+      responses:
+        '202':
+          description: The run was queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  job_id:
+                    type: string
+                  run_id:
+                    type: string
+                  trigger_id:
+                    type: string
+                    description: The ID of the job's poke trigger.
+                  status:
+                    type: string
+                    enum:
+                    - queued
+                  poked_at:
+                    type: string
+                    format: date-time
+                required:
+                - ok
+                - job_id
+                - run_id
+                - trigger_id
+                - status
+                - poked_at
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No job with that ID. Plain text.
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          description: The job has no poke trigger, is switched off, or is already queued or running. Plain
+            text saying which.
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /state/files:
     get:
       operationId: listStateFiles
@@ -1922,7 +1993,13 @@ paths:
         MiB. System tasks are returned separately and are not replaced here. A task without an id gets a
         generated job-<uuid v4> id; ids that are sent are kept. With revision, the save is refused with
         409 when the list has changed since it was read at that revision (a tool, another window or
-        another process changed it); without revision the list is replaced as it is.
+        another process changed it); without revision the list is replaced as it is. A task sent with
+        triggers is taken as written (triggers, uses and join; at, cron and tz are then set from its
+        first schedule trigger). A task sent without triggers is a legacy write, at, cron and tz being
+        its schedule, and the stored job's other triggers, its uses and its join are kept. The save is
+        refused with 400, in plain text a client can show, when a trigger, a use or a join does not
+        validate, when jobs use each other in a loop (the text names it, "a -> b -> a"), or when a job
+        left out of the list is still used by another (the text names the jobs that use it).
       requestBody:
         required: true
         content:
@@ -1957,6 +2034,96 @@ paths:
             imported. Nothing was saved. Plain text.
         '500':
           $ref: '#/components/responses/InternalError'
+  /todo/runs:
+    get:
+      operationId: listJobRunsNow
+      tags:
+      - Schedules
+      summary: List the runs this runtime holds now, and how its recent runs ended
+      description: The live board of this process. runs are the executions queued or running; finished
+        the last 64 that ended. Each entry carries the cause of its run. For every recorded run, of any
+        process, use GET /todo/runs/history.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobLiveRun'
+                  finished:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobFinishedRun'
+                required:
+                - runs
+                - finished
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+  /todo/runs/history:
+    get:
+      operationId: listJobRunHistory
+      tags:
+      - Schedules
+      summary: List recorded job runs, newest first
+      description: Every run of a stored job is recorded in agent.db with what started it. The newest
+        200 runs of each job are kept, and none older than 180 days. The heartbeat's runs are not recorded.
+      parameters:
+      - name: job_id
+        in: query
+        schema:
+          type: string
+        description: Keep one job's runs.
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date-time
+        description: Keep runs queued at or after this time (RFC 3339).
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date-time
+        description: Keep runs queued before this time (RFC 3339).
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobRun'
+                  limit:
+                    type: integer
+                required:
+                - items
+                - limit
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /todo/tasks/{id}/run:
     post:
       operationId: runScheduledTask
@@ -1964,7 +2131,7 @@ paths:
       - Schedules
       summary: Trigger a saved scheduled task now
       description: No request body. Requires a cron runner. A busy runner returns 409; a missing saved
-        schedule returns 404.
+        schedule returns 404. The run's cause is manual; the answer also carries its run_id.
       parameters:
       - name: id
         in: path
@@ -1987,6 +2154,9 @@ paths:
                   triggered_at:
                     type: string
                     format: date-time
+                  run_id:
+                    type: string
+                    description: The queued run, as GET /todo/runs and the history name it.
                 required:
                 - ok
                 - id
@@ -5763,13 +5933,243 @@ components:
           items:
             $ref: '#/components/schemas/BashEnvRef'
           nullable: true
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobTrigger'
+          description: The ways the job starts. Always present on a stored job ([] for one only a person
+            starts); absent on system tasks. Sending it makes it authoritative; leaving it out is a legacy
+            write (see PUT /todo/tasks).
+        uses:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/JobUse'
+          description: The jobs this one depends on. Left out when empty.
+        join:
+          type: string
+          enum:
+          - all
+          - any
+          description: How several each inputs combine. Left out means all.
+        last_run_at:
+          type: string
+          format: date-time
+          description: Kept by the store; ignored when sent.
+        last_run_status:
+          type: string
+          description: Kept by the store; ignored when sent. Empty, done, failed or canceled.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Response only (GET and PUT /todo/tasks); never stored, ignored when sent, left out
+            when empty. Short plain-text notes on a job that is stored as written but will not do what
+            it says. Today, join all over each inputs that share no common upstream job (the job never
+            starts), and a one-time schedule that failed five times and is not tried again.
       required:
       - id
       - content
       x-source: internal/cron/types.go:Task
-      description: A scheduled task, distinct from an agent execution task. Supply exactly one of at (YYYY-MM-DD
-        HH:MM in tz) and cron (five numeric fields). See internal/cron/schedule.go for schedule validation.
-        Missing enabled means enabled.
+      description: A job (a scheduled task), distinct from an agent execution task. A legacy client supplies
+        exactly one of at (YYYY-MM-DD HH:MM in tz) and cron (five numeric fields); a client that sends triggers
+        may leave them out, and reads them back as its first schedule trigger's (empty without one). See
+        internal/cron/schedule.go for schedule validation. Missing enabled means enabled.
+    JobTrigger:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Names the trigger within its job and never changes. Left out on a new trigger, one
+            is generated.
+        kind:
+          type: string
+          enum:
+          - schedule
+          - poke
+          - message
+        at:
+          type: string
+          description: schedule only. YYYY-MM-DD HH:MM in tz. Exactly one of at and cron.
+        cron:
+          type: string
+          description: schedule only. Five numeric fields.
+        tz:
+          type: string
+          description: schedule only.
+        channel:
+          type: string
+          description: message only. telegram, slack and agentlink fire; another channel is stored and
+            never fires.
+        chat_id:
+          type: string
+          description: message only. The chat whose messages start the job, matched without regard to
+            case. telegram is tg:<chat id> (or tg:<chat id>_<thread id> for one forum topic), slack is
+            slack:<team id>:<channel id>, agentlink is mm:<instance id>.
+      required:
+      - kind
+      x-source: internal/cron/triggers.go:Trigger
+      description: One way a job starts. A job fires on any of its schedule triggers; a poke trigger lets
+        POST /poke/{job_id} start it (at most one per job); a message trigger starts it when a message
+        arrives in its chat, at most once a minute, with the message given to the run as source data.
+    JobUse:
+      type: object
+      properties:
+        job_id:
+          type: string
+        mode:
+          type: string
+          enum:
+          - latest
+          - each
+          - fresh
+          description: Which result of job_id each run of this job is given as read-only source data, and
+            whether job_id starts this job. latest gives the latest finished output. each starts this job
+            after every run of job_id that ends done and gives that run's output. fresh runs job_id first
+            when its latest done run is older than max_age, and gives the new output. Left out means
+            latest.
+        max_age:
+          type: string
+          description: fresh only (400 on another mode). A Go duration such as 30m, 1h or 24h, from 1m to
+            720h. Left out means 1h.
+      required:
+      - job_id
+      x-source: internal/cron/triggers.go:Use
+    JobRunCause:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - schedule
+          - manual
+          - poke
+          - message
+          - job
+        trigger_id:
+          type: string
+          description: The job's trigger that fired (schedule, poke, message), else empty.
+        from_job_id:
+          type: string
+          description: The job whose run started this one (job), else empty.
+        origin_run_id:
+          type: string
+          description: The run that started the whole chain; a run that starts one is its own origin.
+        note:
+          type: string
+          description: More in words, such as why a run was skipped, that an input was run for a fresh
+            result, or when a failed one-time schedule is tried again.
+      required:
+      - kind
+      - trigger_id
+      - from_job_id
+      - origin_run_id
+      - note
+      x-source: internal/cron/runs.go:RunCause
+    JobRun:
+      type: object
+      properties:
+        run_id:
+          type: string
+        job_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - done
+          - failed
+          - canceled
+          - skipped
+        queued_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          description: Left out until the run starts; a skipped run never has one.
+        finished_at:
+          type: string
+          format: date-time
+          description: Left out until the run ends.
+        error:
+          type: string
+          description: A short reason, for a run that did not end done. Left out when empty.
+        cause:
+          $ref: '#/components/schemas/JobRunCause'
+        task_id:
+          type: string
+          description: The task record the run wrote under its job's topic, which keeps its output. Left
+            out for a run that never started.
+      required:
+      - run_id
+      - job_id
+      - status
+      - queued_at
+      - cause
+      x-source: internal/cron/run_history.go:RunRecord
+    JobLiveRun:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The job's ID.
+        run_id:
+          type: string
+        state:
+          type: string
+          enum:
+          - queued
+          - running
+        manual:
+          type: boolean
+          description: Set when the cause is manual. Left out otherwise.
+        cause:
+          $ref: '#/components/schemas/JobRunCause'
+        queued_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          description: 0001-01-01T00:00:00Z until the run starts.
+        stopping:
+          type: boolean
+      required:
+      - id
+      - state
+      - cause
+      - queued_at
+      x-source: internal/cron/runs.go:TaskRun
+    JobFinishedRun:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The job's ID.
+        run_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - done
+          - failed
+          - canceled
+        stopping:
+          type: boolean
+        cause:
+          $ref: '#/components/schemas/JobRunCause'
+        finished_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - run_id
+      - status
+      - cause
+      - finished_at
+      x-source: internal/cron/runs.go:FinishedRun
     TodoChatOption:
       type: object
       properties:

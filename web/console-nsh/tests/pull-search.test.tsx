@@ -112,7 +112,7 @@ test("on a phone scrolling back up to the top does not show the topic search; a 
   await app.waitFor("id:chat-topics-search");
 });
 
-test("on a phone an empty topic list (no TODO runs) can be pulled for the search too", async () => {
+test("on a phone an empty topic list (no Job runs) can be pulled for the search too", async () => {
   const app = await openPhoneTopics();
   await app.press("id:chat-topics-view-cron");
   await app.waitFor("id:chat-topic-topic-1", { state: "gone" });

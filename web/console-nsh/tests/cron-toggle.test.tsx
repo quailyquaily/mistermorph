@@ -1,4 +1,4 @@
-// The topic head's TODO runs toggle while TODO runs are running (pages/chat/TopicSidebar.tsx): the
+// The topic head's Job runs toggle while Job runs are running (pages/chat/TopicSidebar.tsx): the
 // hands of its alarm clock turn, each its own way (components/motion/AdjustingClock.tsx), in place
 // of a button's loading look, in all four running and selected states, without moving or resizing
 // the 38pt square; the toggle stays a working toggle (one press, one switch) while it runs, and its
@@ -68,14 +68,14 @@ test("each running and selected combination: the turning follows running alone",
   // running, unselected
   await app.press("id:flip-running");
   expect(app.shows("id:chat-cron-running")).toBe(true);
-  expect(app.shows("label:TODO runs — 2 running")).toBe(true);
+  expect(app.shows("label:Job runs — 2 running")).toBe(true);
   // running, selected
   await app.press("id:flip-active");
   expect(app.shows("id:chat-cron-running")).toBe(true);
   // idle, selected
   await app.press("id:flip-running");
   expect(app.count("id:chat-cron-running")).toBe(0);
-  expect(app.shows("label:TODO runs")).toBe(true);
+  expect(app.shows("label:Job runs")).toBe(true);
 });
 
 test("while running, the toggle is not busy: every press switches once and none is blocked", async () => {

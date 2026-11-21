@@ -1,5 +1,5 @@
 // The TODO head's list/calendar toggle (TodoViewToggle) is the same round button in both views: a
-// 38pt circle (as wide as it is tall) with its 16pt calendar icon in the middle, at the same place in
+// 38pt circle (as wide as it is tall) with its 16pt calendar icon in the middle, at the same height in
 // the list's head and the calendar's, on a desktop and a phone. In the list it is off and named
 // "Calendar"; in the calendar it is on and named "List"; each press switches the view. The
 // calendar's head drew it as a plain square Button with the theme's corners before, 16pt further
@@ -48,7 +48,7 @@ for (const item of [
   { name: "a tablet-wide desktop", width: 1024 },
   { name: "a phone", width: 390 },
 ]) {
-  test(`on ${item.name} the toggle is the same circle, in the same place, in the list and the calendar`, async () => {
+  test(`on ${item.name} the toggle is the same circle, at the same height, in the list and the calendar`, async () => {
     const { app, settled } = await openHeads(item.width);
     const list = await settled();
     expectRound(list);
@@ -61,7 +61,12 @@ for (const item of [
     expectRound(cal);
     // (The calendar itself is named "Calendar" too.)
     expect(app.count("label:List")).toBe(1);
-    expect(near(cal["view-toggle"].x, list["view-toggle"].x)).toBe(true);
+    // On a phone it does not move between the two. On a desktop it keeps its height and its place
+    // in the row (second from the end, before Add), not its x: the list's head ends with its 760pt
+    // column of text, centred in the page, and the calendar's head ends with the grid, which
+    // shares the page with the day's list beside it. The two ends meet at one window width only,
+    // and under it the list's toggle lies over the day's list, outside the calendar altogether.
+    if (item.width <= 980) expect(near(cal["view-toggle"].x, list["view-toggle"].x)).toBe(true);
     expect(near(cal["view-toggle"].y, list["view-toggle"].y)).toBe(true);
     // A desktop's calendar head has Add beside it, round too, as the list's.
     expect(app.shows("id:todo-calendar-add")).toBe(item.width > 980);

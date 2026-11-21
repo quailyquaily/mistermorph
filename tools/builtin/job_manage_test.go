@@ -73,6 +73,7 @@ func TestJobManageGetUpdateDeleteByStableID(t *testing.T) {
 		t.Fatalf("ids/order after update = %+v", after)
 	}
 	before[0].Cron = "0 7 * * *"
+	before[0].Triggers[0].Cron = "0 7 * * *" // the job's schedule trigger, which cron mirrors
 	before[2].Content = "third, edited"
 	if !reflect.DeepEqual(after, before) {
 		t.Fatalf("update changed more than its fields:\n%#v\nwant\n%#v", after, before)

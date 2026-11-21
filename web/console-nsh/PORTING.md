@@ -79,6 +79,7 @@ nsh build                                     # bundler: unknown classes, text i
 scripts/test.sh                               # headless tests, the files several at a time (about 3 minutes)
 nsh test tests/x.test.tsx --web-host tests/noHost.js  # one file
 node --test lib/core/*.test.mjs               # the copied pure logic
+node --test components/todo/*.test.mjs        # the job calendar's grouping and folding rules
 node --test scripts/ui-components-inventory.test.mjs  # every component is in the gallery's inventory
 node --test scripts/android-manifest.test.mjs # what the APK's manifest adds
 scripts/android-host.sh test                  # the Android native part on the JDK

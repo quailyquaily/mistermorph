@@ -68,7 +68,7 @@ func TestCronLoopRunnerEnqueuesManualCronRequest(t *testing.T) {
 		Content: "Run manually.",
 	}
 
-	if err := r.enqueue(context.Background(), cronstore.DueTask{
+	if _, err := r.enqueue(context.Background(), cronstore.DueTask{
 		Task:           task,
 		ScheduledAtUTC: time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC),
 		Manual:         true,

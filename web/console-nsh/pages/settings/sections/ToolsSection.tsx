@@ -6,9 +6,8 @@ import { Image, Scroll, Text, View } from "nsh";
 import { isMobile } from "../../../lib/shell";
 import { Button as BaseButton } from "nsh/base";
 import { TOOL_ADVANCED_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
-import { WORKER_NAME_SETS, workerNameExamples } from "../../../lib/core/worker-identity.js";
-import { localeState } from "../../../lib/stores/index.js";
-import { Button, Icon } from "../../../components/ui";
+import { WORKER_NAME_SETS } from "../../../lib/core/worker-identity.js";
+import { Button, Icon, Tip } from "../../../components/ui";
 import { InlineNotice } from "../../../components/settings/DialogShell";
 import { GroupTitle, SettingRow, SettingToggleRow, SettingsCard } from "../../../components/settings-page/parts";
 import { SettingSelect } from "../../../components/settings/SettingFields";
@@ -17,19 +16,24 @@ import type { SettingsStore } from "../store";
 import { t } from "../i18n";
 
 // The channel tool matrix (`.settings-tool-matrix`): the table takes the card's width, the tool
-// names in the first column, a column per channel; 8pt by 6pt cells on hairlines. On phones the
-// columns keep a fixed width and the table scrolls sideways.
-const cell = () => `${isMobile() ? "w-16" : "min-w-0 flex-1"} items-center justify-center px-1.5 py-2`;
+// names in the first column, a column per channel, headed by its mark; 8pt by 6pt cells on hairlines. On phones the
+// columns keep a fixed width and the table scrolls sideways. The table clips (`overflow-hidden`):
+// nsh counts an icon's natural size as overflow, which would add room to scroll past the last
+// column and row (PORTING.md).
+const cell = () => `${isMobile() ? "w-11" : "min-w-0 flex-1"} items-center justify-center px-1.5 py-2`;
 
+/** A channel's column head: its mark alone; the name is its tooltip and what screen readers say. */
 function ChannelHeading(props: { channel: ToolChannel }) {
   return (
-    <View class={`${cell()} gap-1`}>
+    <View
+      class={cell()}
+      accessibilityLabel={props.channel.title}
+      tooltip={<Tip text={props.channel.title} />}
+      testID={`settings-tool-matrix-channel-${props.channel.id}`}
+    >
       <If when={props.channel.logo} else={<Icon name={props.channel.icon!} size={16} color="subtle" />}>
         <Image src={props.channel.logo!} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
       </If>
-      <Text class="text-xs font-medium text-subtle" style={{ numberOfLines: 1 }}>
-        {props.channel.title}
-      </Text>
     </View>
   );
 }
@@ -47,16 +51,11 @@ function MatrixFrame(props: { children?: JSX.Element }) {
 
 /**
  * The name set new spawn subagents and coders are named from: shared by both tools, so it sits
- * below every tool's own settings and saves with them. A few of the set's names, in the Console's
- * language, show what it is like.
+ * below every tool's own settings and saves with them.
  */
 function AgentNameSetSetting(props: { s: SettingsStore; disabled: boolean }) {
   const s = props.s;
   const options = () => WORKER_NAME_SETS.map((set) => ({ title: t(`settings_agent_name_set_${set}`), value: set }));
-  const examples = () =>
-    t("settings_agent_name_set_examples", {
-      names: workerNameExamples(s.agentNameSet(), localeState.lang).join(t("settings_agent_name_set_separator")),
-    });
   return (
     <View class="gap-2" testID="settings-agent-name-set">
       <GroupTitle text={t("settings_agent_name_set_group")} />
@@ -65,11 +64,6 @@ function AgentNameSetSetting(props: { s: SettingsStore; disabled: boolean }) {
           first
           title={t("settings_agent_name_set_title")}
           note={t("settings_agent_name_set_note")}
-          status={
-            <Text class="text-xs leading-[20.3px] text-subtle" testID="settings-agent-name-set-examples">
-              {examples()}
-            </Text>
-          }
         >
           <View class={isMobile() ? "self-stretch" : "w-[200px] shrink-0"}>
             <SettingSelect
@@ -146,11 +140,6 @@ export function ToolsSection(props: { s: SettingsStore }) {
                             />
                           </>
                         }
-                        control={
-                          item().automatic ? (
-                            <Text class="text-xs text-muted-foreground">{t("settings_tool_automatic")}</Text>
-                          ) : undefined
-                        }
                       />
                     )}
                   </Each>
@@ -169,7 +158,7 @@ export function ToolsSection(props: { s: SettingsStore }) {
               <Text class="text-xs leading-[17.4px] text-muted-foreground">{t("settings_tool_group_note_channels")}</Text>
             </View>
             <MatrixFrame>
-              <View class="border-t border-line-soft" testID="settings-tool-matrix">
+              <View class="overflow-hidden border-t border-line-soft" testID="settings-tool-matrix">
                 <View class="flex-row border-b border-line-soft">
                   <View class="w-44 px-1.5 py-2" />
                   <Each of={TOOL_CHANNELS} key={(channel) => channel.id}>

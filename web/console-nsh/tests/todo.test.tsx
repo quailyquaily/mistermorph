@@ -49,14 +49,45 @@ async function openTodo(overrides: Record<string, unknown> = {}, options: Record
   return opened;
 }
 
-test("the list shows Heartbeat and the items with their schedules; nothing is selected", async () => {
+test("the list shows Heartbeat and the items with their schedules, and no item is open", async () => {
   const { app } = await openTodo();
   await app.waitFor("id:todo-item-task-1");
   expect(app.texts()).toContain("Heartbeat");
   expect(app.texts()).toContain("Every 30 minutes");
   expect(app.texts()).toContain("Every Monday and Wednesday at 9:15 AM");
   expect(app.texts()).toContain("On Jan 2 at 12:30 PM");
-  expect(app.texts()).toContain("No TODO selected");
+  // The list is the page: an item opens in its place, so none is open and there is no way back.
+  expect(app.shows("id:todo-task-editor")).toBe(false);
+  expect(app.shows("id:todo-back")).toBe(false);
+});
+
+test("an item opens in the list's place, and the back arrow returns to the list", async () => {
+  const { app } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.shows("id:todo-index")).toBe(false);
+  await app.press("id:todo-back");
+  await app.waitFor("id:todo-item-task-2");
+  expect(app.shows("id:todo-task-editor")).toBe(false);
+});
+
+test("items that are switched off sit under their own heading, after the others", async () => {
+  const { app } = await openTodo({
+    "GET /proxy:/todo/tasks": {
+      body: tasksBody({
+        tasks: [
+          { id: "task-1", title: "Review", content: "x", cron: "15 9 * * 1,3", tz: "UTC+9", enabled: false },
+          { id: "task-2", title: "Report", content: "Write it", at: "2030-01-02 12:30", tz: "UTC" },
+        ],
+      }),
+    },
+  });
+  await app.waitFor("id:todo-item-task-1");
+  const texts = app.texts();
+  expect(texts.indexOf("Report")).toBeLessThan(texts.indexOf("OFF"));
+  expect(texts.indexOf("OFF")).toBeLessThan(texts.indexOf("Review"));
+  expect(app.shows("id:todo-index-off >> id:todo-item-task-1")).toBe(true);
+  expect(app.shows("id:todo-index-off >> id:todo-item-task-2")).toBe(false);
 });
 
 test("editing an item enables Save, and Save sends every item with the edit", async () => {
@@ -67,8 +98,6 @@ test("editing an item enables Save, and Save sends every item with the edit", as
   await app.clear("id:todo-title");
   await app.type("id:todo-title", "Weekly review");
   expect(app.enabled("id:todo-save")).toBe(true);
-  // The list shows the draft's title at once.
-  await app.waitFor("id:todo-item-task-1 >> text:Weekly review");
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   const puts = proxied(calls, "PUT", "/todo/tasks");
@@ -78,6 +107,18 @@ test("editing an item enables Save, and Save sends every item with the edit", as
     { id: "task-2", title: "Report", content: "Write it", at: "2030-01-02 12:30", tz: "UTC" },
   ]);
   expect(app.enabled("id:todo-save")).toBe(false);
+  // Back on the list, the item has its new name.
+  await app.press("id:todo-back");
+  await app.waitFor("id:todo-item-task-1 >> text:Weekly review");
+});
+
+test("the list shows an unsaved edit's title at once", async () => {
+  const { app } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.clear("id:todo-title");
+  await app.type("id:todo-title", "Weekly review");
+  await app.press("id:todo-back");
+  await app.waitFor("id:todo-item-task-1 >> text:Weekly review");
 });
 
 test("the editor shows when the item last ran and how it ended; saves never send it back", async () => {
@@ -95,8 +136,10 @@ test("the editor shows when the item last ran and how it ended; saves never send
   await app.press("id:todo-item-task-1");
   await app.waitFor("id:todo-last-run");
   await app.waitFor("text:/^Last run .+ · Failed$/");
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-3");
   await app.waitFor("text:/^Last run .+ · Done$/");
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-2");
   await app.waitFor("text:Not run yet");
   expect(app.shows("text:/· Failed$/")).toBe(false);
@@ -130,25 +173,25 @@ test("a failed save shows the error and keeps the edit to save again", async () 
 test("a failed load says so and the list offers to add the first item", async () => {
   const { app } = await openTodo({ "GET /proxy:/todo/tasks": { status: 500, body: { error: "agent offline" } } });
   await app.waitFor("agent offline");
-  await app.waitFor("No scheduled TODOs");
+  await app.waitFor("No jobs yet");
 });
 
 test("an empty list adds a new item that needs content before it can be saved", async () => {
   const { app, calls } = await openTodo({ "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) } });
-  await app.waitFor("No scheduled TODOs");
+  await app.waitFor("No jobs yet");
   await app.press("id:todo-empty-add");
   await app.waitFor("id:todo-task-editor");
-  expect(app.value("id:todo-title")).toBe("Unititled TODO");
+  expect(app.value("id:todo-title")).toBe("Untitled job");
   // Content is required, but its absence is not shouted at.
   expect(app.enabled("id:todo-save")).toBe(false);
-  expect(app.texts()).not.toContain("TODO content is required.");
+  expect(app.texts()).not.toContain("The job needs to say what to do.");
   await app.type("id:todo-content-source", "Water the plants");
   expect(app.enabled("id:todo-save")).toBe(true);
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   const body = proxied(calls, "PUT", "/todo/tasks")[0].json;
   expect(body.tasks.length).toBe(1);
-  expect(body.tasks[0]).toMatchObject({ title: "Unititled TODO", content: "Water the plants" });
+  expect(body.tasks[0]).toMatchObject({ title: "Untitled job", content: "Water the plants" });
   // A new item's ID is a job ID, as the agent makes them: job-<uuid v4>.
   expect(body.tasks[0].id).toMatch(JOB_ID);
   expect(body.tasks[0].at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
@@ -170,6 +213,7 @@ test("Duplicate copies the item below it under a new id, unsaved", async () => {
   expect([tasks[0].id, tasks[2].id]).toEqual(["task-1", "task-2"]);
   // The copy is a new job with an ID of its own; the items it sits between keep theirs.
   expect(tasks[1].id).toMatch(JOB_ID);
+  await app.press("id:todo-back");
   await app.waitFor(`id:todo-item-${tasks[1].id}`);
   expect(tasks[1]).toMatchObject({ title: "Review (copy)", content: "Original content", cron: "15 9 * * 1,3" });
 });
@@ -179,7 +223,7 @@ test("Delete asks first, then saves the list without the item", async () => {
   await app.press("id:todo-item-task-2");
   await app.press("id:todo-task-actions");
   await app.press("text:Delete");
-  await app.waitFor('Delete TODO "Report"? This takes effect immediately.');
+  await app.waitFor('Delete job "Report"? This takes effect immediately.');
   await app.press("id:dialog-action-cancel");
   await app.waitFor("id:todo-delete-dialog", { state: "gone" });
   expect(proxied(calls, "PUT", "/todo/tasks").length).toBe(0);
@@ -189,7 +233,9 @@ test("Delete asks first, then saves the list without the item", async () => {
   await app.waitFor("Deleted");
   await app.waitFor("id:todo-item-task-2", { state: "gone" });
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks.map((task: { id: string }) => task.id)).toEqual(["task-1"]);
-  expect(app.texts()).toContain("No TODO selected");
+  // The deleted item's page closes: the list is back, without it.
+  expect(app.shows("id:todo-item-task-1")).toBe(true);
+  expect(app.shows("id:todo-task-editor")).toBe(false);
 });
 
 test("a failed delete keeps the item", async () => {
@@ -199,6 +245,9 @@ test("a failed delete keeps the item", async () => {
   await app.press("text:Delete");
   await app.press("id:dialog-action-delete");
   await app.waitFor("locked");
+  // Its page stays open with the item, and the list still has it.
+  expect(app.value("id:todo-title")).toBe("Report");
+  await app.press("id:todo-back");
   expect(app.shows("id:todo-item-task-2")).toBe(true);
 });
 
@@ -215,10 +264,10 @@ test("Run manually runs a saved item once and confirms it; the topic opens once 
       created ? { body: { id: "_cron_task-1", title: "Review" } } : { status: 404, body: { error: "not found" } },
   });
   await app.press("id:todo-item-task-1");
-  await app.press("id:todo-task-actions");
-  // No topic yet: no entry to it.
-  expect(app.shows("text:Open topic")).toBe(false);
-  await app.press("text:Run manually");
+  await app.waitFor("id:todo-toolbar");
+  // No topic yet: the way to it is there but takes no press.
+  await expect(app.press("id:todo-open-topic")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
+  await app.press("id:todo-run");
   await app.waitFor("id:todo-run-dialog");
   await app.waitFor('"Review" will start soon; it may wait for a free slot first. Preparing its topic…');
   // While it looks, Open topic waits.
@@ -240,8 +289,7 @@ test("an unsaved edit is saved before the run, and a failed run says so with no 
   });
   await app.press("id:todo-item-task-1");
   await app.type("id:todo-title", "!");
-  await app.press("id:todo-task-actions");
-  await app.press("text:Run manually");
+  await app.press("id:todo-run");
   await app.waitFor("queue is full");
   expect(app.shows("id:todo-run-dialog")).toBe(false);
   const order = agentWrites(calls)
@@ -255,24 +303,28 @@ test("an invalid item is not run: the validation error shows and nothing is sent
   await app.press("id:todo-empty-add");
   await app.waitFor("id:todo-task-editor");
   // A new item has no content yet.
-  await app.press("id:todo-task-actions");
-  await app.press("text:Run manually");
-  await app.waitFor("TODO content is required.");
+  await app.press("id:todo-run");
+  await app.waitFor("The job needs to say what to do.");
   expect(agentWrites(calls).length).toBe(0);
 });
 
-test("an item whose topic exists offers Open topic right above Duplicate", async () => {
+test("an item whose topic exists opens it from its toolbar; the menu keeps the other actions", async () => {
   const { app, calls } = await openTodo({
     "GET /proxy:/topics/_cron_task-1": { body: { id: "_cron_task-1", title: "Review" } },
   });
   await app.press("id:todo-item-task-1");
   await app.waitUntil(() => calls.some((call) => call.uri === "/topics/_cron_task-1"));
+  // Start and the topic are the toolbar's own; the menu no longer repeats them.
   await app.press("id:todo-task-actions");
-  await app.waitFor("text:Open topic");
-  const texts = app.texts();
-  expect(texts.indexOf("Open topic") + 1).toBe(texts.indexOf("Duplicate"));
-  expect(texts.indexOf("Run manually") + 1).toBe(texts.indexOf("Open topic"));
-  await app.press("text:Open topic");
+  await app.waitFor("text:Duplicate");
+  expect(app.shows("text:Run manually")).toBe(false);
+  expect(app.shows("text:Open topic")).toBe(false);
+  await app.press("text:Duplicate");
+  await app.waitUntil(() => app.value("id:todo-title") === "Review (copy)");
+  await app.press("id:todo-back");
+  await app.press("id:todo-item-task-1");
+  await app.waitUntil(() => app.enabled("id:todo-open-topic"));
+  await app.press("id:todo-open-topic");
   await app.waitUntil(() => lastLocation(app).endsWith("/chat/_cron_task-1"));
   expect(agentWrites(calls).length).toBe(0);
 });
@@ -283,8 +335,7 @@ test("a topic that does not come offers a lookup-only retry; closing the dialog 
     "GET /proxy:/topics/_cron_task-2": { status: 500, body: { error: "topics unavailable" } },
   });
   await app.press("id:todo-item-task-2");
-  await app.press("id:todo-task-actions");
-  await app.press("text:Run manually");
+  await app.press("id:todo-run");
   await app.waitFor('"Report" will start soon; it may wait for a free slot first. Could not look up its topic: topics unavailable', { timeout: 4000 });
   const lookups = () => calls.filter((call) => call.uri === "/topics/_cron_task-2").length;
   const before = lookups();
@@ -308,15 +359,19 @@ test("running and waiting items say so, and a running item cannot be run again",
     },
   });
   await app.waitFor("id:todo-item-task-1");
-  expect(app.texts()).toContain("Running · Every 30 minutes");
-  expect(app.texts()).toContain("Running · Every Monday and Wednesday at 9:15 AM");
+  // A running item has the turning ring and no word for it; its state is in its name for screen
+  // readers. A waiting one says so.
+  expect(app.texts()).toContain("Every 30 minutes");
+  expect(app.texts().some((text) => /Running/.test(text))).toBe(false);
+  expect(app.shows("label:Review, Running")).toBe(true);
+  expect(app.shows("label:Heartbeat, Running")).toBe(true);
   expect(app.texts()).toContain("Waiting · On Jan 2 at 12:30 PM");
   await app.press("id:todo-item-task-1");
   await app.press("id:todo-task-actions");
-  await expect(app.press("text:Run manually")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
+  await expect(app.press("id:todo-run")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
 });
 
-/** A runtime whose TODO runs the test changes: `state.runs` and `state.finished` as /todo/runs lists them. */
+/** A runtime whose Job runs the test changes: `state.runs` and `state.finished` as /todo/runs lists them. */
 function liveRuns(initial: any[]) {
   const state = { runs: initial, finished: [] as any[] };
   return {
@@ -441,9 +496,11 @@ test("idle and waiting items and Heartbeat offer no Stop", async () => {
   await app.press("id:todo-item-task-1");
   await app.waitFor("id:todo-task-editor");
   expect(app.shows("id:todo-stop")).toBe(false);
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-2");
   await app.waitFor("text:Report");
   expect(app.shows("id:todo-stop")).toBe(false);
+  await app.press("id:todo-back");
   await app.press("id:todo-heartbeat-item");
   await app.waitFor("text:Inbox");
   expect(app.shows("id:todo-stop")).toBe(false);
@@ -592,8 +649,34 @@ test("disabling an item moves it to the end of the list", async () => {
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[0]).toMatchObject({ id: "task-1", enabled: false });
 });
 
-test("the calendar shows a month of runs; a day lists its items, and an item opens its editor", async () => {
-  const { app } = await openTodo();
+/** The calendar's own read: the recorded runs queued in the range it asks for (none, unless given). */
+function historyApi(items: Record<string, any>[] = []) {
+  return {
+    "GET /proxy:/todo/runs/history": (request: ApiRequest) => {
+      const query = new URLSearchParams((request.uri || "").split("?")[1] || "");
+      const from = Date.parse(query.get("from") || "");
+      const to = Date.parse(query.get("to") || "");
+      const inRange = items.filter((item) => Date.parse(item.queued_at) >= from && Date.parse(item.queued_at) < to);
+      return { body: { items: inRange, limit: Number(query.get("limit")) } };
+    },
+  };
+}
+
+function ranRun(run_id: string, job_id: string, status: string, queued_at: string, cause: Record<string, string> = {}, error = "") {
+  return {
+    run_id,
+    job_id,
+    status,
+    queued_at,
+    error,
+    cause: { kind: "schedule", trigger_id: "trg-schedule", from_job_id: "", origin_run_id: run_id, note: "", ...cause },
+  };
+}
+
+const calendarDay = (date: string) => `id:todo-calendar-day-${date}`;
+
+test("the calendar shows a month of what is planned; a day lists its runs, and a run opens its job", async () => {
+  const { app } = await openTodo(historyApi());
   await app.waitFor("id:todo-item-task-1");
   await app.press("id:todo-view-toggle");
   await app.waitFor("id:todo-calendar");
@@ -606,19 +689,33 @@ test("the calendar shows a month of runs; a day lists its items, and an item ope
   await app.waitUntil(() =>
     lastLocation(app).includes(`month=${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`),
   );
-  const { app: jan } = await openTodo({}, { location: `${LOCATION}?view=calendar&month=2030-01` });
+  // Today goes back to this month.
+  await app.press("id:todo-calendar-today");
+  await app.waitUntil(() => lastLocation(app).includes(`month=${month[1]}-${month[2]}`));
+  expect(app.count("label:/^Today, /")).toBe(1);
+
+  const { app: jan } = await openTodo(historyApi(), { location: `${LOCATION}?view=calendar&month=2030-01` });
   await jan.waitFor("January 2030");
-  await jan.waitFor("id:todo-calendar-day-2030-01-02 >> text:Report");
-  await jan.press("id:todo-calendar-day-2030-01-02");
+  // The one-time job is written in its day. The repeating one is a hollow mark there, and is
+  // named once, with its cadence, above the grid.
+  await jan.waitFor(`${calendarDay("2030-01-02")} >> text:Report`);
+  expect(jan.shows(`${calendarDay("2030-01-02")} >> text:Review`)).toBe(false);
+  expect(jan.count(`${calendarDay("2030-01-02")} >> id:todo-calendar-mark-off`)).toBe(1);
+  expect(jan.texts()).toContain("Review  Every Monday and Wednesday at 9:15 AM");
+  // The day's list, beside the grid, has both.
+  await jan.press(calendarDay("2030-01-02"));
   await jan.waitFor("id:todo-day-detail");
-  await jan.waitFor("Scheduled · 2");
+  await jan.waitFor("id:todo-day-detail >> text:Wed, Jan 2");
+  expect(jan.shows("id:todo-day-detail >> text:Review")).toBe(true);
+  expect(jan.shows("id:todo-day-detail >> text:Report")).toBe(true);
+  expect(jan.count("id:todo-day-detail >> text:By schedule")).toBe(2);
   await jan.press("id:todo-day-item-task-2");
   await jan.waitFor("id:todo-task-editor");
   expect(jan.value("id:todo-title")).toBe("Report");
   // Another day selects the day again.
-  await jan.press("id:todo-calendar-day-2030-01-03");
-  await jan.waitFor("Scheduled · 0");
-  await jan.waitFor("No TODOs scheduled for this day.");
+  await jan.press(calendarDay("2030-01-03"));
+  await jan.waitFor("id:todo-day-detail >> text:Thu, Jan 3");
+  await jan.waitFor("No jobs scheduled for this day.");
   // Back to the list.
   await jan.press("id:todo-view-toggle");
   await jan.waitFor("id:todo-index");
@@ -626,10 +723,121 @@ test("the calendar shows a month of runs; a day lists its items, and an item ope
 
 test("a month with nothing on it says so", async () => {
   const { app } = await openTodo(
-    { "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) } },
+    { "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) }, ...historyApi() },
     { location: `${LOCATION}?view=calendar&month=2030-01` },
   );
-  await app.waitFor("No TODOs this month");
+  await app.waitFor("No jobs this month");
+});
+
+// January 2020 is over: its days show what ran. Review has two schedules and a poke, and Report
+// runs after each Review (as GET /todo/tasks stores them: `triggers` and `uses`).
+const WIRED_TASKS = [
+  {
+    id: "task-1",
+    title: "Review",
+    content: "Review it",
+    cron: "0 9 * * *",
+    tz: "UTC",
+    triggers: [
+      { id: "trg-a", kind: "schedule", cron: "0 9 * * *", tz: "UTC" },
+      { id: "trg-b", kind: "schedule", cron: "0 18 * * 6", tz: "UTC" },
+      { id: "trg-p", kind: "poke" },
+    ],
+  },
+  { id: "task-2", title: "Report", content: "Write it", triggers: [], uses: [{ job_id: "task-1", mode: "each" }] },
+];
+const afterReview = (origin: string, note = "") => ({ kind: "job", trigger_id: "", from_job_id: "task-1", origin_run_id: origin, note });
+const RAN = [
+  ranRun("r1", "task-1", "done", "2020-01-07T09:00:00Z", { trigger_id: "trg-a" }),
+  ranRun("d1", "task-2", "done", "2020-01-07T09:01:00Z", afterReview("r1")),
+  ranRun("r3", "task-1", "failed", "2020-01-08T09:00:00Z", { trigger_id: "trg-a" }, "the model timed out"),
+  ranRun("d3", "task-2", "skipped", "2020-01-08T09:00:00Z", afterReview("r3", "input job task-1 failed")),
+  ranRun("r4", "task-1", "done", "2020-01-09T12:00:00Z", { kind: "poke", trigger_id: "trg-p" }),
+  ranRun("d4", "task-2", "done", "2020-01-09T12:01:00Z", afterReview("r4")),
+  ranRun("r2", "task-1", "done", "2020-01-11T18:00:00Z", { trigger_id: "trg-b" }),
+  ranRun("d2", "task-2", "done", "2020-01-11T18:01:00Z", afterReview("r2")),
+];
+
+test("a past month shows what ran, from the run history: the usual repeats as marks, the rest in words", async () => {
+  const marks = (app: any, date: string, kind: string) => app.count(`${calendarDay(date)} >> id:todo-calendar-mark-${kind}`);
+  const { app, calls } = await openTodo(
+    { "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: WIRED_TASKS }) }, ...historyApi(RAN) },
+    { location: `${LOCATION}?view=calendar&month=2020-01` },
+  );
+  await app.waitFor("January 2020");
+  // Both of Review's repeating schedules are in the strip, and Report after it.
+  await app.waitFor("Review  Every day at 9 AM · Every Saturday at 6 PM");
+  expect(app.texts()).toContain("Report  after Review");
+  // The month's days were asked for, a full page at a time.
+  const asked = proxied(calls, "GET", "/todo/runs/history");
+  expect(asked.length).toBe(1);
+  const query = new URLSearchParams(asked[0].uri!.split("?")[1]);
+  expect(query.get("limit")).toBe("500");
+  expect(query.get("from")).toMatch(/^2019-12-2[78]T/);
+  expect(query.get("to")).toMatch(/^2020-02-0[89]T/);
+
+  // The 7th: Review by its daily schedule and the Report after it, as usual: two marks, no words.
+  await app.waitUntil(() => marks(app, "2020-01-07", "on") === 2);
+  expect(app.shows(`${calendarDay("2020-01-07")} >> text:Review`)).toBe(false);
+  // The 11th, a Saturday: the run of the second schedule folds too.
+  expect(marks(app, "2020-01-11", "on")).toBe(2);
+  expect(app.shows(`${calendarDay("2020-01-11")} >> text:Review`)).toBe(false);
+  // The 8th: the failure and the skipped Report are written.
+  expect(marks(app, "2020-01-08", "on")).toBe(0);
+  expect(app.shows(`${calendarDay("2020-01-08")} >> text:Review`)).toBe(true);
+  expect(app.shows(`${calendarDay("2020-01-08")} >> text:Report`)).toBe(true);
+  // The 9th: a poke, and the Report it led to, are never folded.
+  expect(marks(app, "2020-01-09", "on")).toBe(0);
+  expect(app.shows(`${calendarDay("2020-01-09")} >> text:Review`)).toBe(true);
+  expect(app.shows(`${calendarDay("2020-01-09")} >> text:Report`)).toBe(true);
+  // A past day shows no plan: nothing ran on the 10th.
+  expect(marks(app, "2020-01-10", "on") + marks(app, "2020-01-10", "off")).toBe(0);
+  expect(app.shows(`${calendarDay("2020-01-10")} >> text:Review`)).toBe(false);
+
+  // The day's list says what happened, the Report under the Review that led to it.
+  await app.press(calendarDay("2020-01-08"));
+  await app.waitFor("id:todo-day-detail >> text:Wed, Jan 8");
+  expect(app.shows("id:todo-day-detail >> text:By schedule · failed: the model timed out")).toBe(true);
+  expect(app.shows("id:todo-day-detail >> text:Skipped: input job Review failed")).toBe(true);
+  expect(app.count("id:todo-day-detail >> id:todo-day-row-d1 >> text:Report")).toBe(1);
+  await app.press(calendarDay("2020-01-09"));
+  await app.waitFor("id:todo-day-detail >> text:By poke");
+  expect(app.shows("id:todo-day-detail >> text:After Review")).toBe(true);
+  await app.press("id:todo-day-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.value("id:todo-title")).toBe("Review");
+
+  // Another month asks for its own days.
+  await app.press("label:Previous month");
+  await app.waitFor("December 2019");
+  await app.waitUntil(() => proxied(calls, "GET", "/todo/runs/history").length === 2);
+  expect(new URLSearchParams(proxied(calls, "GET", "/todo/runs/history")[1].uri!.split("?")[1]).get("from")).toMatch(/^2019-11-(29|30)T/);
+});
+
+test("a run history that cannot be read says so, and the plan still shows", async () => {
+  const { app, calls } = await openTodo(
+    { "GET /proxy:/todo/runs/history": { status: 500, body: { error: "history is away" } } },
+    { location: `${LOCATION}?view=calendar&month=2030-01` },
+  );
+  await app.waitFor("id:todo-calendar-error");
+  expect(app.texts().some((text) => text.startsWith("Could not read what ran: "))).toBe(true);
+  await app.waitFor(`${calendarDay("2030-01-02")} >> text:Report`);
+  const before = proxied(calls, "GET", "/todo/runs/history").length;
+  await app.press("id:todo-calendar-retry");
+  await app.waitUntil(() => proxied(calls, "GET", "/todo/runs/history").length === before + 1);
+});
+
+test("the calendar reads the history again when a job starts running", async () => {
+  const live = liveRuns([]);
+  const { app, calls } = await openTodo({ ...live.api, ...historyApi() }, { location: `${LOCATION}?view=calendar&month=2030-01` });
+  await app.waitFor("January 2030");
+  const asked = () => proxied(calls, "GET", "/todo/runs/history").length;
+  await app.waitUntil(() => asked() >= 1);
+  await app.wait(300);
+  const before = asked();
+  live.state.runs = [RUN_A];
+  // The page polls its live runs every five seconds.
+  await app.waitUntil(() => asked() > before, { timeout: 9000 });
 });
 
 test("the workspace picker browses the agent's folders and fills in the chosen one", async () => {
@@ -769,40 +977,49 @@ test("on a phone the list and the editor take turns, with a back button and a fl
   await app.waitFor("id:todo-index");
   await app.press("id:todo-fab");
   await app.waitFor("id:todo-task-editor");
-  expect(app.value("id:todo-title")).toBe("Unititled TODO");
+  expect(app.value("id:todo-title")).toBe("Untitled job");
   expect(agentWrites(calls).length).toBe(0);
 });
 
-test("on a phone the calendar shows counts and the day's agenda", async () => {
-  const { app } = await openTodo({}, { width: 390, height: 844, location: `${LOCATION}?view=calendar&month=2030-01` });
-  await app.waitFor("January 2030");
-  await app.waitFor("id:todo-calendar-day-2030-01-02");
+test("on a phone the calendar's days are marks, and the chosen day's list is under the grid", async () => {
+  const { app } = await openTodo(historyApi(), { width: 390, height: 844, location: `${LOCATION}?view=calendar&month=2030-01` });
+  await app.waitFor("Jan 2030");
+  await app.waitFor(calendarDay("2030-01-02"));
   expect(app.shows("id:todo-calendar-add")).toBe(false);
-  await app.press("id:todo-calendar-day-2030-01-02");
+  // The repeating Review is the small mark, the one-time Report a full one; neither is written in the grid.
+  await app.waitUntil(() => app.count(`${calendarDay("2030-01-02")} >> id:todo-calendar-mark-off-small`) === 1);
+  expect(app.count(`${calendarDay("2030-01-02")} >> id:todo-calendar-mark-off`)).toBe(1);
+  expect(app.shows(`${calendarDay("2030-01-02")} >> text:Report`)).toBe(false);
+  await app.press(calendarDay("2030-01-02"));
   await app.waitFor("Selected day");
+  await app.waitFor("id:todo-calendar-agenda >> text:Wed, Jan 2");
+  expect(app.shows("id:todo-calendar-agenda >> text:Review")).toBe(true);
   await app.press("text:Report");
   await app.waitFor("id:todo-task-editor");
   // The task slides in over the calendar, which goes once the slide has ended.
   await app.waitFor("id:todo-calendar", { state: "gone" });
 });
 
-test("a day with more than three runs folds the rest behind +N more", async () => {
-  const daily = (id: string, title: string) => ({ id, title, content: "x", cron: "0 9 * * *", tz: "UTC" });
+test("a day writes five runs and counts the rest; its list has them all", async () => {
+  const once = (id: string, title: string, minute: number) => ({ id, title, content: "x", at: `2030-01-15 09:0${minute}`, tz: "UTC" });
+  const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta"];
   const { app } = await openTodo(
     {
-      "GET /proxy:/todo/tasks": {
-        body: tasksBody({ tasks: [daily("a", "Alpha"), daily("b", "Beta"), daily("c", "Gamma"), daily("d", "Delta")] }),
-      },
+      "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: names.map((title, index) => once(title.toLowerCase(), title, index)) }) },
+      ...historyApi(),
     },
     { location: `${LOCATION}?view=calendar&month=2030-01` },
   );
-  await app.waitFor("id:todo-calendar-day-2030-01-15 >> text:+1 more");
-  await app.press("id:todo-calendar-day-2030-01-15 >> text:+1 more");
-  await app.waitFor("text:2030-01-15");
-  await app.waitFor("Scheduled · 4");
-  await app.press("label:/Delta/ >> nth=1");
+  await app.waitFor(`${calendarDay("2030-01-15")} >> text:+2 more`);
+  expect(app.shows(`${calendarDay("2030-01-15")} >> text:Epsilon`)).toBe(true);
+  expect(app.shows(`${calendarDay("2030-01-15")} >> text:Zeta`)).toBe(false);
+  // The whole cell chooses the day; the day's list is complete.
+  await app.press(calendarDay("2030-01-15"));
+  await app.waitFor("id:todo-day-detail >> text:Tue, Jan 15");
+  expect(app.count("id:todo-day-detail >> id:todo-day-row-d0")).toBe(7);
+  await app.press("id:todo-day-item-eta");
   await app.waitFor("id:todo-task-editor");
-  expect(app.value("id:todo-title")).toBe("Delta");
+  expect(app.value("id:todo-title")).toBe("Eta");
 });
 
 test("notifying the console user asks for notification permission first", async () => {
@@ -948,6 +1165,7 @@ test("another item's content shows in the same field, and a mention goes into th
   const { app, calls } = await openTodo(CONTACTS);
   await app.press("id:todo-item-task-1");
   await app.type("id:todo-content-source", " today");
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-2");
   await app.waitUntil(() => app.value("id:todo-content-source") === "Write it");
   await app.press("id:markdown-editor-mention");
@@ -1083,7 +1301,7 @@ test("a save sends the revision the list was read at, and one the list has moved
   stale = true;
   await app.type("id:todo-title", " again");
   await app.press("id:todo-save");
-  await app.waitUntil(() => app.texts().some((text: string) => text.startsWith("The TODO list changed since this page loaded it")));
+  await app.waitUntil(() => app.texts().some((text: string) => text.startsWith("The list of jobs changed since this page loaded it")));
   expect(app.value("id:todo-title")).toBe("Weekly review! again");
   expect(app.enabled("id:todo-save")).toBe(true);
 });
@@ -1102,4 +1320,254 @@ test("a TODO list that could not be imported shows the agent's report of each re
   const report = "cron.yaml was not imported into agent.db (nothing was imported; fix or remove the records named here and the import runs again): record 2: task id is missing";
   const { app } = await openTodo({ "GET /proxy:/todo/tasks": { status: 409, body: { error: report } } });
   await app.waitFor(report);
+});
+
+/* ---------- triggers and the jobs a job uses ---------- */
+
+// A runtime that knows triggers lists them on every job (and the jobs a job uses, and its join rule).
+function linkedTasks() {
+  return [
+    { id: "report", title: "Morning report", content: "Summarize", cron: "0 9 * * *", tz: "UTC", triggers: [{ id: "trg-schedule", kind: "schedule", cron: "0 9 * * *", tz: "UTC" }] },
+    {
+      id: "digest",
+      title: "Team digest",
+      content: "Rewrite it",
+      triggers: [],
+      uses: [{ job_id: "report", mode: "each" }],
+    },
+    { id: "notes", title: "Release notes", content: "Draft", triggers: [{ id: "hook", kind: "poke" }] },
+  ];
+}
+
+function openLinked(overrides: Record<string, unknown> = {}) {
+  return openTodo({
+    "GET /proxy:/todo/tasks": {
+      body: tasksBody({ tasks: linkedTasks(), chat_options: [{ chat_id: "tg:-100", platform: "telegram", type: "group", name: "Family" }] }),
+    },
+    "PUT /proxy:/todo/tasks": (request: ApiRequest) => ({ body: { ...tasksBody(), tasks: request.json?.tasks } }),
+    ...overrides,
+  });
+}
+
+test("the list says what starts a job with no schedule, and its page offers no schedule controls", async () => {
+  const { app } = await openLinked();
+  await app.waitFor("id:todo-item-digest");
+  // The list says what starts each job: another job's new result, a poke, or a schedule and more.
+  expect(app.shows("id:todo-item-digest >> text:Whenever Morning report has a new result")).toBe(true);
+  expect(app.shows("id:todo-item-notes >> text:When its URL is poked")).toBe(true);
+  await app.press("id:todo-item-digest");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.shows("text:No schedule")).toBe(true);
+  expect(app.shows("id:todo-preview")).toBe(false);
+  expect(app.shows("id:todo-timezone")).toBe(false);
+});
+
+test("the poke switch adds and removes the job's poke trigger, and the save sends every trigger", async () => {
+  const { app, calls } = await openLinked();
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-triggers");
+  expect(app.shows("id:todo-trigger-poke-url")).toBe(false);
+  await app.press("id:todo-trigger-poke");
+  await app.waitFor("text:POST /poke/report");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  const sent = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
+  // The form's schedule keeps its trigger's id and the legacy fields stay in step with it.
+  expect(sent[0]).toMatchObject({ id: "report", cron: "0 9 * * *", tz: "UTC" });
+  expect(sent[0].triggers).toEqual([{ kind: "schedule", id: "trg-schedule", cron: "0 9 * * *", tz: "UTC" }, { kind: "poke" }]);
+  // The others are sent as they were: a job with no schedule has no at, cron or tz.
+  expect(sent[1]).toEqual({ id: "digest", title: "Team digest", content: "Rewrite it", triggers: [], uses: [{ job_id: "report", mode: "each" }] });
+  expect(sent[2].triggers).toEqual([{ kind: "poke", id: "hook" }]);
+});
+
+test("a message trigger is added from the agent's chats and removed again", async () => {
+  const { app, calls } = await openLinked();
+  await app.press("id:todo-item-notes");
+  await app.waitFor("id:todo-triggers");
+  await app.press("id:todo-trigger-message-add");
+  await app.press("text:Family");
+  await app.waitFor("text:When a message arrives in Family");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[2].triggers).toEqual([
+    { kind: "poke", id: "hook" },
+    { kind: "message", channel: "telegram", chat_id: "tg:-100" },
+  ]);
+  await app.press("id:todo-trigger-1-remove");
+  await app.waitFor("text:When a message arrives in Family", { state: "gone" });
+});
+
+test("a job's page lists what it uses and what uses it, and each name opens that job", async () => {
+  const { app } = await openLinked();
+  await app.press("id:todo-item-digest");
+  await app.waitFor("id:todo-uses");
+  expect(app.shows("id:todo-use-report >> text:Morning report")).toBe(true);
+  expect(app.shows("id:todo-use-report-mode >> text:Each new result")).toBe(true);
+  await app.press("label:Morning report");
+  await app.waitUntil(() => app.value("id:todo-title") === "Morning report");
+  expect(app.shows("id:todo-used-by-digest >> text:Team digest")).toBe(true);
+});
+
+test("a use's kind is changed and a use removed; a job that depends on this one is not offered", async () => {
+  const { app, calls } = await openLinked();
+  await app.press("id:todo-item-digest");
+  await app.waitFor("id:todo-uses");
+  await app.press("id:todo-use-report-mode");
+  await app.press("text:A fresh result");
+  await app.press("id:todo-use-add");
+  await app.press("text:Release notes");
+  await app.waitFor("id:todo-use-notes");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[1].uses).toEqual([
+    { job_id: "report", mode: "fresh" },
+    { job_id: "notes", mode: "latest" },
+  ]);
+  await app.press("id:todo-use-notes-remove");
+  await app.waitFor("id:todo-use-notes", { state: "gone" });
+  // Morning report is used by Team digest, so it cannot use Team digest in turn.
+  await app.press("id:todo-back");
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-uses");
+  // (Team digest is named once on the page, under "Used by"; the list of jobs to use adds no second.)
+  const before = app.count("text:Team digest");
+  await app.press("id:todo-use-add");
+  await app.waitFor("text:Release notes");
+  expect(app.count("text:Team digest")).toBe(before);
+});
+
+test("a runtime that knows no triggers gets the form as before, with nothing about triggers or uses", async () => {
+  const { app, calls } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.shows("id:todo-triggers")).toBe(false);
+  expect(app.shows("id:todo-uses")).toBe(false);
+  await app.press("id:todo-schedule-mode");
+  expect(app.shows("text:No schedule")).toBe(false);
+  expect(calls.length).toBeGreaterThan(0);
+});
+
+/* ---------- writing a job in words ---------- */
+
+test("a sentence in the list's composer goes to the agent, and a note leads to the topic where it writes the job", async () => {
+  const { app, calls } = await openTodo({
+    "POST /proxy:/tasks": { body: { id: "task-new", status: "queued", topic_id: "topic-9" } },
+  });
+  await app.waitFor("id:todo-compose");
+  expect(app.shows("id:todo-compose-note")).toBe(false);
+  await app.type("id:chat-composer-input", "every Monday at 8, summarize open issues");
+  await app.press("id:chat-composer-send");
+  await app.waitFor("id:todo-compose-note");
+  const posts = proxied(calls, "POST", "/tasks");
+  expect(posts.length).toBe(1);
+  // The page asks the agent; it does not parse the sentence itself.
+  expect(posts[0].json.task).toContain("every Monday at 8, summarize open issues");
+  expect(posts[0].json.task).toContain("job_manage");
+  expect(posts[0].json.trigger).toEqual({ source: "ui", event: "job_compose", ref: "web/console/todo" });
+  expect(app.value("id:chat-composer-input")).toBe("");
+  await app.press("id:todo-compose-topic");
+  await app.waitUntil(() => lastLocation(app).endsWith("/chat/topic-9"));
+});
+
+test("a request the agent does not take says why and keeps the sentence", async () => {
+  const { app } = await openTodo({ "POST /proxy:/tasks": { status: 500, body: { error: "busy" } } });
+  await app.waitFor("id:todo-compose");
+  await app.type("id:chat-composer-input", "water the plants on Sunday");
+  await app.press("id:chat-composer-send");
+  await app.waitFor("text:/Could not ask the agent: .*busy/");
+  expect(app.value("id:chat-composer-input")).toBe("water the plants on Sunday");
+  expect(app.shows("id:todo-compose-note")).toBe(false);
+});
+
+/* ---------- run history ---------- */
+
+const CAUSE = { trigger_id: "", from_job_id: "", origin_run_id: "r1", note: "" };
+const HISTORY = [
+  { run_id: "r3", job_id: "digest", status: "skipped", queued_at: "2030-01-02T09:01:00Z", finished_at: "2030-01-02T09:01:00Z", cause: { ...CAUSE, kind: "job", from_job_id: "report", note: "input job report failed" } },
+  { run_id: "r2", job_id: "report", status: "failed", queued_at: "2030-01-02T09:00:00Z", started_at: "2030-01-02T09:00:01Z", finished_at: "2030-01-02T09:05:00Z", error: "the model timed out", cause: { ...CAUSE, kind: "schedule" } },
+  { run_id: "r1", job_id: "report", status: "done", queued_at: "2030-01-01T17:42:00Z", started_at: "2030-01-01T17:42:00Z", finished_at: "2030-01-01T17:42:41Z", cause: { ...CAUSE, kind: "poke" } },
+];
+
+function runsApi(calls: string[] = []) {
+  return {
+    "GET /proxy:/todo/runs/history": (request: ApiRequest) => {
+      calls.push(request.uri || "");
+      const jobID = new URL(`http://x${request.uri}`).searchParams.get("job_id");
+      return { body: { items: jobID ? HISTORY.filter((run) => run.job_id === jobID) : HISTORY, limit: 50 } };
+    },
+  };
+}
+
+test("a job's page lists its runs with why each started and how a failed one ended, in place of the last-run line", async () => {
+  const asked: string[] = [];
+  const { app } = await openLinked(runsApi(asked));
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-runs");
+  expect(asked.some((uri) => uri.includes("job_id=report"))).toBe(true);
+  expect(app.shows("id:todo-run-row-r2 >> text:By schedule")).toBe(true);
+  expect(app.shows("id:todo-run-row-r2 >> text:Failed: the model timed out")).toBe(true);
+  expect(app.shows("id:todo-run-row-r1 >> text:By a poke")).toBe(true);
+  // A finished run's mark says so: only its duration is written.
+  expect(app.shows("id:todo-run-row-r1 >> text:41 s")).toBe(true);
+  expect(app.shows("id:todo-run-row-r1 >> text:Finished")).toBe(false);
+  expect(app.shows("id:todo-run-row-r3")).toBe(false);
+  expect(app.shows("id:todo-last-run")).toBe(false);
+});
+
+test("beside the list, Today names each run's job and cause, and a run opens its job", async () => {
+  const { app } = await openLinked(runsApi());
+  await app.waitFor("id:todo-today");
+  expect(app.shows("id:todo-today >> text:Today")).toBe(true);
+  expect(app.shows("id:todo-run-row-r3 >> text:Team digest")).toBe(true);
+  expect(app.shows("id:todo-run-row-r3 >> text:By Morning report · Skipped: input job report failed")).toBe(true);
+  await app.press("id:todo-run-row-r2");
+  await app.waitUntil(() => app.value("id:todo-title") === "Morning report");
+});
+
+test("a runtime without the run history shows no Today and keeps the last-run line", async () => {
+  const { app } = await openLinked();
+  await app.waitFor("id:todo-item-report");
+  expect(app.shows("id:todo-today")).toBe(false);
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-last-run");
+  expect(app.shows("id:todo-runs")).toBe(false);
+});
+
+/* ---------- the flow view ---------- */
+
+test("the list's flow button opens the jobs as a graph, and the back arrow returns to the list", async () => {
+  const { app } = await openLinked();
+  await app.waitFor("id:todo-item-report");
+  await app.press("id:todo-view-flow");
+  await app.waitFor("id:todo-flow-page");
+  await app.waitUntil(() => lastLocation(app).includes("view=flow"));
+  for (const title of ["Morning report", "Team digest", "Release notes"]) expect(app.shows(`text:${title}`)).toBe(true);
+  // The link says what Team digest waits for; its line says only the rest.
+  expect(app.shows("text:Whenever Morning report has a new result")).toBe(false);
+  await app.press("id:todo-flow-back");
+  await app.waitFor("id:todo-item-report");
+  expect(app.shows("id:todo-flow-page")).toBe(false);
+});
+
+test("the flow replays the latest chain of runs from the history, and says so when there is none", async () => {
+  const { app } = await openLinked(runsApi());
+  await app.press("id:todo-view-flow");
+  await app.waitFor("id:todo-flow-page");
+  await app.press("id:todo-flow-replay");
+  await app.waitFor("text:Back to now");
+  // The chain's last step: the digest, skipped because its input failed.
+  await app.waitFor("text:input job report failed");
+  await app.press("id:todo-flow-replay");
+  await app.waitFor("text:Replay the last run");
+
+  const empty = await openLinked({ "GET /proxy:/todo/runs/history": { body: { items: [], limit: 50 } } });
+  await empty.app.press("id:todo-view-flow");
+  await empty.app.press("id:todo-flow-replay");
+  await empty.app.waitFor("text:No run to replay yet.");
+});
+
+test("a runtime that knows no triggers offers no flow view", async () => {
+  const { app } = await openTodo();
+  await app.waitFor("id:todo-item-task-1");
+  expect(app.shows("id:todo-view-flow")).toBe(false);
 });

@@ -30,7 +30,8 @@ type TokenName = Parameters<typeof token>[0];
 /** The keyboard focus mark of each button (the console's Button draws none of its own). */
 export const TODO_JOB_FOCUS_RING = "group-focus-visible:border-blue-lighter";
 
-export type TodoJobButtonKind = "start" | "stop" | "view";
+/** `topic`: the job's topic, the mirror of View Job on the job's own page (TodoTaskEditor). */
+export type TodoJobButtonKind = "start" | "stop" | "view" | "topic";
 
 /** How one of the toolbar's buttons looks in a state (also read by tests and the gallery). */
 export interface TodoJobButtonLook {
@@ -58,10 +59,10 @@ export interface TodoJobButtonLook {
  * glyph on no fill, the hover fill under the pointer and the keyboard's focus.
  */
 export function todoJobButtonLook(kind: TodoJobButtonKind, state: { busy?: boolean; disabled?: boolean } = {}): TodoJobButtonLook {
-  if (kind === "view") {
+  if (kind === "view" || kind === "topic") {
     return {
       look: state.disabled ? "disabled" : "quiet",
-      glyph: "PhListChecks",
+      glyph: kind === "topic" ? "PhChat" : "PhListChecks",
       filled: false,
       box: "hover:bg-hover focus:bg-hover disabled:bg-transparent",
       press: "group-active:bg-press",
@@ -103,7 +104,7 @@ export function todoJobButtonLook(kind: TodoJobButtonKind, state: { busy?: boole
 type LayoutEvent = { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } };
 
 /** One of the toolbar's icon buttons: a navigation slot, its name read out and shown as its tooltip. */
-function TodoJobButton(props: {
+export function TodoJobButton(props: {
   kind: TodoJobButtonKind;
   label: string;
   busy?: boolean;

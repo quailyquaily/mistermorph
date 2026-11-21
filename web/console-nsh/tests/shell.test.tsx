@@ -167,27 +167,27 @@ test("the folded sidebar's switcher opens the same bubble", async () => {
 
 test("dragging the sidebar's edge folds it to its icons, and the choice is remembered", async () => {
   const { app } = await openConsole({ location: "/e/default/todo", api: { "GET /proxy:/tasks": { body: { items: [] } } } });
-  await app.waitFor("id:nav-todo >> text:TODO");
+  await app.waitFor("id:nav-todo >> text:Jobs");
   await app.drag("id:sidebar-edge", { x: -120, y: 0 });
-  await app.waitFor("id:nav-todo >> text:TODO", { state: "gone" });
+  await app.waitFor("id:nav-todo >> text:Jobs", { state: "gone" });
   const saved = app.host
     .calls()
     .filter((call) => call.name === "morph.kv.set" && (call.data as any)?.key === "mistermorph.sidebarCollapsed");
   expect((saved.at(-1)?.data as any)?.value).toBe("1");
   // A short drag back that stays nearer the folded width keeps it folded.
   await app.drag("id:sidebar-edge", { x: 30, y: 0 });
-  expect(app.shows("id:nav-todo >> text:TODO")).toBe(false);
+  expect(app.shows("id:nav-todo >> text:Jobs")).toBe(false);
   await app.drag("id:sidebar-edge", { x: 140, y: 0 });
-  await app.waitFor("id:nav-todo >> text:TODO");
+  await app.waitFor("id:nav-todo >> text:Jobs");
 });
 
 test("pressing the sidebar's edge toggles it", async () => {
   const { app } = await openConsole({ location: "/e/default/todo", api: { "GET /proxy:/tasks": { body: { items: [] } } } });
-  await app.waitFor("id:nav-todo >> text:TODO");
+  await app.waitFor("id:nav-todo >> text:Jobs");
   await app.press("id:sidebar-edge");
-  await app.waitFor("id:nav-todo >> text:TODO", { state: "gone" });
+  await app.waitFor("id:nav-todo >> text:Jobs", { state: "gone" });
   await app.press("id:sidebar-edge");
-  await app.waitFor("id:nav-todo >> text:TODO");
+  await app.waitFor("id:nav-todo >> text:Jobs");
 });
 
 test("a folded sidebar starts folded", async () => {
@@ -197,7 +197,7 @@ test("a folded sidebar starts folded", async () => {
     api: { "GET /proxy:/tasks": { body: { items: [] } } },
   });
   await app.waitFor("id:nav-todo");
-  expect(app.shows("id:nav-todo >> text:TODO")).toBe(false);
+  expect(app.shows("id:nav-todo >> text:Jobs")).toBe(false);
 });
 
 test("on a phone the bottom navigation opens More and the agents", async () => {

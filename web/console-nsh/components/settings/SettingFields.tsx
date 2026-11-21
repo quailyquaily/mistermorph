@@ -58,6 +58,20 @@ const PART_CLASS = "flex-row items-center gap-1.5 px-3 hover:bg-blue/6 active:bg
 // The popovers' continuous corners; an item's highlight is inset 4pt from the sides as from the top
 // and bottom (py-1), its corners nested by the hairline and the 4pt (12 - 5: 7pt), its text 12pt in.
 const MENU_POPUP = `min-w-40 max-h-80 ${POPOVER_CORNERS} border border-border bg-popover py-1 shadow-md`;
+/** The caret at the right of a list's trigger: it turns over while the list is open. */
+function MenuCaret(props: { open: boolean }) {
+  return (
+    <Icon
+      name="PhCaretDown"
+      size={12}
+      color="muted-foreground"
+      class={`transition duration-180 ${props.open ? "rotate-180" : ""}`}
+    />
+  );
+}
+
+/** The gap between a trigger and its list. */
+const MENU_GAP = 4;
 const MENU_ITEM = `mx-1 flex-row items-center justify-between gap-3 px-2 py-1.5 ${cornersClass(nestedRadius(RADIUS.popover, 1 + 4))} hover:bg-hover focus:bg-hover selected:bg-selection disabled:opacity-45`;
 
 /** The hairline between two parts of a box. */
@@ -175,6 +189,7 @@ export interface SettingMenuProps {
   selected?: string | number | null;
   /** "start" lines the list up with the trigger's left edge, "end" with its right edge. */
   align?: "start" | "end";
+  /** Desktops: the list is exactly as wide as the trigger (left out, at least as wide). */
   matchWidth?: boolean;
   /** What the list is of ("Level unit"). */
   label?: string;
@@ -183,8 +198,8 @@ export interface SettingMenuProps {
   disabled?: boolean;
   /** Controlled open state (optional). */
   open?: boolean;
-  /** What opens the list. */
-  trigger: JSX.Element;
+  /** What opens the list; as a function it is told whether the list is open (for `MenuCaret`). */
+  trigger: JSX.Element | ((open: () => boolean) => JSX.Element);
   class?: string;
   testID?: string;
   onSelect?: (item: SettingOption) => void;
@@ -206,8 +221,13 @@ export function SettingMenu(props: SettingMenuProps) {
   // Phones and touch screens: the list is the shared floating paper (`PopupList`); the base list
   // stays shut there (`open` held false) and only says when its trigger asks to open.
   const sheetOpen = signal(false);
+  // The trigger's width, for a list that matches it.
+  const triggerWidth = signal(0);
+  // Whether the list shows, popup or sheet: what the trigger's caret turns with.
+  const shown = signal(false);
   const setOpen = (open: boolean) => {
     sheetOpen.set(open);
+    shown.set(open);
     props.onOpenChange?.(open);
     if (!open) props.onClose?.();
   };
@@ -246,16 +266,22 @@ export function SettingMenu(props: SettingMenuProps) {
           if (open) setOpen(true);
           return;
         }
+        shown.set(open);
         props.onOpenChange?.(open);
         if (!open) props.onClose?.();
       }}
       class={`flex-row items-stretch ${props.class ?? ""}`}
-      popupClass={`${MENU_POPUP} ${props.matchWidth ? "" : ""}`}
+      onLayout={({ bounds }) => triggerWidth.set(bounds.size.width)}
+      offset={MENU_GAP}
+      popupClass={MENU_POPUP}
+      popupStyle={props.matchWidth && triggerWidth() > 0 ? { width: triggerWidth(), minWidth: 0 } : undefined}
       itemClass={MENU_ITEM}
-      trigger={props.trigger}
+      trigger={typeof props.trigger === "function" ? props.trigger(() => props.open ?? shown()) : props.trigger}
       renderItem={(entry) => (
         <View class="flex-1 flex-row items-center justify-between gap-3">
-          <Text class="text-sm text-foreground">{entry.title}</Text>
+          <Text class="min-w-0 shrink text-sm text-foreground" style={{ numberOfLines: 1 }}>
+            {entry.title}
+          </Text>
           <If when={props.items[entry.index]?.hint}>
             <Text class="font-mono text-xs text-muted-foreground">{props.items[entry.index]?.hint ?? ""}</Text>
           </If>
@@ -326,7 +352,7 @@ export function SettingSelect(props: SettingSelectProps) {
           testID={props.testID}
           onSelect={pick}
           class={boxClass({ disabled: props.disabled })}
-          trigger={
+          trigger={(open) => (
             <View class="flex-1 flex-row items-center gap-2 px-3 py-2">
               <Text
                 class={`flex-1 text-sm ${!current() && !props.value ? "text-placeholder" : "text-foreground"}`}
@@ -334,9 +360,9 @@ export function SettingSelect(props: SettingSelectProps) {
               >
                 {shownText() || placeholder()}
               </Text>
-              <Icon name="PhCaretDown" size={12} color="muted-foreground" />
+              <MenuCaret open={open()} />
             </View>
-          }
+          )}
         />
       }
     >
@@ -365,11 +391,11 @@ export function SettingSelect(props: SettingSelectProps) {
           disabled={props.disabled}
           testID={props.testID ? `${props.testID}-choices` : undefined}
           onSelect={pick}
-          trigger={
+          trigger={(open) => (
             <View class="items-center justify-center px-3 hover:bg-hover">
-              <Icon name="PhCaretDown" size={12} color="muted-foreground" />
+              <MenuCaret open={open()} />
             </View>
-          }
+          )}
         />
       </View>
     </If>
@@ -497,12 +523,12 @@ export function SettingQuantity(props: SettingQuantityProps) {
             unit.set(Number(item.value));
             send();
           }}
-          trigger={
+          trigger={(open) => (
             <View class="flex-row items-center gap-1.5 px-3 hover:bg-hover">
               <Text class="text-sm text-subtle">{unitTitle()}</Text>
-              <Icon name="PhCaretDown" size={12} color="muted-foreground" />
+              <MenuCaret open={open()} />
             </View>
-          }
+          )}
         />
       </View>
     </If>
@@ -1023,12 +1049,12 @@ export function SettingRows(props: SettingRowsProps) {
                           accessibilityLabel={`${prefix()}platform, ${platformItem(row()[column().key]).title}`}
                           disabled={props.disabled}
                           onSelect={(item) => updateCell(row()._id, column().key, item.value)}
-                          trigger={
+                          trigger={(open) => (
                             <View class="flex-row items-center gap-1.5 px-3 hover:bg-hover">
                               <Text class="text-sm text-foreground">{platformItem(row()[column().key]).title}</Text>
-                              <Icon name="PhCaretDown" size={12} color="muted-foreground" />
+                              <MenuCaret open={open()} />
                             </View>
-                          }
+                          )}
                         />
                       </If>
                     </>

@@ -999,17 +999,17 @@ func (r *consoleLocalRuntime) canRunCron() bool {
 	return r.awarenessCronRequests != nil
 }
 
-func (r *consoleLocalRuntime) runCron(ctx context.Context, task cronstore.Task) error {
+func (r *consoleLocalRuntime) runCron(ctx context.Context, run cronstore.RunRequest) (string, error) {
 	if r == nil {
-		return fmt.Errorf("cron trigger is unavailable")
+		return "", fmt.Errorf("cron trigger is unavailable")
 	}
 	r.awarenessMu.Lock()
 	cronRequests := r.awarenessCronRequests
 	r.awarenessMu.Unlock()
 	if cronRequests == nil {
-		return fmt.Errorf("cron trigger is unavailable")
+		return "", fmt.Errorf("cron trigger is unavailable")
 	}
-	return awarenessloop.TriggerCron(ctx, cronRequests, task)
+	return awarenessloop.StartCronRun(ctx, cronRequests, run)
 }
 
 const (
@@ -1663,7 +1663,14 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 			return resp, err
 		}
 	}
-	if !contextCompactionOnly && command != "/reset" && command != "/init" && command != "/update" && len(req.FileReferences) == 0 {
+	// A message added to a run in progress is handed to that run as text: nothing reads the jobs
+	// it references. Such a message is refused, rather than let the run take the links for data
+	// it was given; without a run in progress it starts a task, which reads them as it starts.
+	hasJobReferences := len(jobrefs.ExtractIDs(task)) > 0
+	if hasJobReferences && r.runControl != nil && r.runControl.Steerable("console", buildConsoleConversationKey(strings.TrimSpace(req.TopicID))) {
+		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest(consoleSteerJobReferenceRefusal)
+	}
+	if !hasJobReferences && !contextCompactionOnly && command != "/reset" && command != "/init" && command != "/update" && len(req.FileReferences) == 0 {
 		if result := r.trySteerConsoleRun(task, strings.TrimSpace(req.TopicID)); result.Found {
 			resp, err := r.submitSteerTask(
 				generation,
@@ -1695,6 +1702,20 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 		releaseGeneration = false
 	}
 	return resp, err
+}
+
+// consoleSteerJobReferenceRefusal answers a message with a job reference sent while a run is in
+// progress in its topic.
+const consoleSteerJobReferenceRefusal = "a message with a job reference ([label](job:<id>)) cannot be added to a run that is in progress: the job would not be read. Send it again when the run has ended, or stop the run first."
+
+// consoleJobReferenceRequester says who asks for the jobs a Console task references. A task that
+// an Agent Link message started carries text a remote agent wrote: it asks as no one, and may
+// reference no job, as a poke may not. Any other task asks as the audience of its run (nil).
+func consoleJobReferenceRequester(trigger daemonruntime.TaskTrigger) *jobrefs.Requester {
+	if strings.EqualFold(strings.TrimSpace(trigger.Source), "agentlink") {
+		return &jobrefs.Requester{}
+	}
+	return nil
 }
 
 func (r *consoleLocalRuntime) trySteerConsoleRun(task string, topicID string) runtimecontrol.SteerResult {
@@ -2828,7 +2849,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	// included. A run resumed after an approval keeps the ones it started with.
 	var jobReferences *jobrefs.Resolved
 	if strings.TrimSpace(job.ResumeApprovalID) == "" && !projectGuide {
-		jobReferences, err = bundle.taskRuntime.ResolveJobReferences(ctx, task, nil, selectedRoute.ClientConfig.ContextWindowTokens)
+		jobReferences, err = bundle.taskRuntime.ResolveJobReferences(ctx, task, consoleJobReferenceRequester(job.Trigger), selectedRoute.ClientConfig.ContextWindowTokens)
 		if err != nil {
 			return nil, nil, err
 		}

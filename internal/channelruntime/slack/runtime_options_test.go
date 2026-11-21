@@ -77,7 +77,7 @@ func TestNormalizeRunOptionsPreservesFields(t *testing.T) {
 		FileCacheDir:                  " ~/.cache/custom ",
 		Server: ServerOptions{
 			Listen:  " 127.0.0.1:8080 ",
-			CronRun: func(context.Context, cronstore.Task) error { return nil },
+			CronRun: func(context.Context, cronstore.RunRequest) (string, error) { return "", nil },
 		},
 		BaseURL:        " https://example.com/api ",
 		BusMaxInFlight: 4096,

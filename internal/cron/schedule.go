@@ -169,14 +169,44 @@ func (s fieldSet) matches(value int) bool {
 	return s.Values[value]
 }
 
+// IsDue reports whether one of the task's schedule triggers is due at now, and the time it was
+// due for. A task with a trigger list and no schedule trigger is never due.
 func IsDue(task Task, now time.Time) (bool, time.Time, error) {
-	loc, err := taskLocation(task.TZ)
+	_, due, at, err := dueTrigger(task, now, nil)
+	return due, at, err
+}
+
+// dueTrigger returns the task's first schedule trigger that is due at now and that skip does not
+// rule out, with the time it was due for.
+func dueTrigger(task Task, now time.Time, skip func(Trigger, time.Time) bool) (Trigger, bool, time.Time, error) {
+	if task.Triggers == nil {
+		if _, _, err := taskSchedule(task); err != nil {
+			return Trigger{}, false, time.Time{}, err
+		}
+	}
+	for _, trigger := range TriggersForTask(task) {
+		if trigger.Kind != TriggerSchedule {
+			continue
+		}
+		due, at, err := triggerDue(trigger, now)
+		if err != nil {
+			return Trigger{}, false, time.Time{}, err
+		}
+		if due && (skip == nil || !skip(trigger, at)) {
+			return trigger, true, at, nil
+		}
+	}
+	return Trigger{}, false, time.Time{}, nil
+}
+
+func triggerDue(trigger Trigger, now time.Time) (bool, time.Time, error) {
+	loc, err := taskLocation(trigger.TZ)
 	if err != nil {
 		return false, time.Time{}, err
 	}
-	atRaw, cronRaw, err := taskSchedule(task)
-	if err != nil {
-		return false, time.Time{}, err
+	atRaw, cronRaw := strings.TrimSpace(trigger.At), strings.TrimSpace(trigger.Cron)
+	if (atRaw == "") == (cronRaw == "") {
+		return false, time.Time{}, fmt.Errorf("task must use exactly one of at or cron")
 	}
 	if atRaw != "" {
 		at, err := time.ParseInLocation(TimestampLayout, atRaw, loc)
@@ -211,7 +241,7 @@ func ValidateFile(file File) error {
 		}
 		seen[id] = true
 	}
-	return nil
+	return validateUsesGraph(file.Tasks)
 }
 
 func ValidateTask(task Task) error {
@@ -229,20 +259,11 @@ func ValidateTask(task Task) error {
 	if _, err := todo.ExtractReferenceIDs(content); err != nil {
 		return err
 	}
-	loc, err := taskLocation(task.TZ)
-	if err != nil {
+	if err := validateTriggers(id, validationTriggers(task)); err != nil {
 		return err
 	}
-	atRaw, cronRaw, err := taskSchedule(task)
-	if err != nil {
-		return fmt.Errorf("task %s must use exactly one of at or cron", id)
-	}
-	if atRaw != "" {
-		if _, err := time.ParseInLocation(TimestampLayout, atRaw, loc); err != nil {
-			return fmt.Errorf("invalid at for task %s: %s", id, atRaw)
-		}
-	} else if _, err := ParseExpression(cronRaw); err != nil {
-		return fmt.Errorf("invalid cron for task %s: %w", id, err)
+	if err := validateUsesShape(task); err != nil {
+		return err
 	}
 	if err := validateBashEnvRefs(task.BashEnv); err != nil {
 		return fmt.Errorf("task %s: %w", id, err)

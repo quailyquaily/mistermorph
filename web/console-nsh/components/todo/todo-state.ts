@@ -68,6 +68,31 @@ export interface TodoTask {
   repeat_weekdays: number[];
   repeat_month_day: string;
   custom_cron: string;
+  /** What starts it, as the runtime lists it; undefined for a runtime that knows only the one schedule. */
+  triggers?: TodoTrigger[];
+  /** The jobs whose results it takes in, and how. */
+  uses?: TodoUse[];
+  /** With several inputs that start it: when all have a new result, or any one. */
+  join?: "all" | "any";
+  /** What the runtime says is wrong with the job as set up. */
+  warnings?: string[];
+}
+
+export interface TodoTrigger {
+  id: string;
+  kind: string;
+  at: string;
+  cron: string;
+  tz: string;
+  channel: string;
+  chat_id: string;
+}
+
+export type TodoUseMode = "latest" | "each" | "fresh";
+export interface TodoUse {
+  job_id: string;
+  mode: TodoUseMode;
+  max_age?: string;
 }
 
 export interface TodoRun {
@@ -394,9 +419,12 @@ export function createTodoState() {
   const canDuplicateSelectedTask = computed(
     () => Boolean(selectedTask()) && !heartbeatSelected() && !loading() && !saving(),
   );
-  const showIndexPane = computed(() => !isMobile() || !mobileEditorVisible());
-  const showEditorPane = computed(() => !isMobile() || mobileEditorVisible());
-  const mobileShowBack = computed(() => isMobile() && mobileEditorVisible());
+  // The list and an open item take turns: on a phone, and on a desktop too, where the list is a
+  // page of its own. Only the desktop calendar keeps the open item beside it.
+  const paged = () => isMobile() || !calendarView();
+  const showIndexPane = computed(() => !paged() || !mobileEditorVisible());
+  const showEditorPane = computed(() => !paged() || mobileEditorVisible());
+  const mobileShowBack = computed(() => paged() && mobileEditorVisible());
   const mobileBarTitle = computed(() =>
     mobileShowBack()
       ? heartbeatSelected()
@@ -488,7 +516,7 @@ export function createTodoState() {
   /* ---------- views and selection ---------- */
 
   effect(() => {
-    if (!isMobile()) {
+    if (!paged()) {
       untracked(() => mobileEditorVisible.set(false));
     }
   });
@@ -497,7 +525,7 @@ export function createTodoState() {
     mobileEditorVisible.set(false);
   }
 
-  function setTodoView(view: "list" | "calendar") {
+  function setTodoView(view: "list" | "calendar" | "flow") {
     mobileEditorVisible.set(false);
     const route = untracked(currentRoute);
     const query: Record<string, string> = { ...(route?.query || {}) };
@@ -508,6 +536,9 @@ export function createTodoState() {
       if (!/^\d{4}-\d{2}$/.test(trimText(query.month))) {
         query.month = `${now.getFullYear()}-${model.pad2(now.getMonth() + 1)}`;
       }
+    } else if (view === "flow") {
+      query.view = "flow";
+      delete query.month;
     } else {
       delete query.view;
       delete query.month;
@@ -763,7 +794,7 @@ export function createTodoState() {
       } else if (!untracked(selectedTaskDraft)) {
         openSelectedTaskDraft();
       }
-      if (untracked(isMobile)) {
+      if (untracked(paged)) {
         mobileEditorVisible.set(true);
       }
     });
@@ -790,7 +821,7 @@ export function createTodoState() {
   function selectHeartbeat() {
     batch(() => {
       if (untracked(heartbeatSelected)) {
-        if (untracked(isMobile)) {
+        if (untracked(paged)) {
           mobileEditorVisible.set(true);
         }
         return;
@@ -799,7 +830,7 @@ export function createTodoState() {
       selectedTaskKey.set(model.HEARTBEAT_ITEM_KEY);
       selectedTaskDraft.set(null);
       draftDirty.set(false);
-      if (untracked(isMobile)) {
+      if (untracked(paged)) {
         mobileEditorVisible.set(true);
       }
     });
@@ -995,6 +1026,262 @@ export function createTodoState() {
     editTask(task, (copy) => model.updateTaskField(copy, "workspace_dir", dir));
   }
 
+  /* ---------- the flow view ---------- */
+
+  // The jobs and the links between them, as a graph (TodoFlow). A change made there is one link of
+  // one job: it is saved at once, with the list, as a change on the job's page is with Save.
+  const flowView = () => trimText(currentRoute()?.query?.view).toLowerCase() === "flow";
+  const flowJobs = computed(() =>
+    tasks()
+      .filter((task) => trimText(task.id) !== "" && persistedTaskSignatures().has(task._key))
+      .map((task) => {
+        const shown = taskListDisplayTask(task) as TodoTask;
+        // The links say what a job waits for; its line says the rest: its schedule and other triggers.
+        const parts: string[] = [];
+        if (model.taskMode(shown) !== "none") parts.push(scheduleLabel(shown));
+        for (const trigger of model.extraTriggers(shown) as TodoTrigger[]) parts.push(triggerPhrase(trigger));
+        return {
+          id: task.id,
+          title: taskTitle(shown),
+          note: parts.join(t("todo_when_separator")),
+          enabled: shown.enabled !== false,
+          running: taskRun(task)?.state === TODO_RUN_RUNNING,
+          uses: (shown.uses ?? []).map((use) => ({ job_id: use.job_id, mode: use.mode })),
+          join: (shown.join === "any" ? "any" : "all") as "all" | "any",
+        };
+      }),
+  );
+  /** The chain of runs the flow replays, or null for the live state. */
+  const flowReplay = signal<{ job_id: string; status: "done" | "failed" | "skipped" | "canceled"; note: string }[] | null>(null);
+  const flowReplayLoading = signal(false);
+
+  function flowEdit(jobID: string, edit: Editor) {
+    const job = jobByID(jobID);
+    if (!job || untracked(saving) || untracked(loading)) return;
+    editTask(job, edit);
+    void saveTasks();
+  }
+
+  // The latest chain: the newest run that started others, with every run it led to, in order.
+  async function toggleFlowReplay() {
+    if (untracked(flowReplay)) {
+      flowReplay.set(null);
+      return;
+    }
+    const endpointRef = untracked(() => endpointState.selectedRef);
+    if (!endpointRef || untracked(flowReplayLoading)) return;
+    flowReplayLoading.set(true);
+    try {
+      const data = await runtimeApiFetchForEndpoint(endpointRef, "/todo/runs/history?limit=200");
+      const items = (Array.isArray(data?.items) ? data.items : []) as any[];
+      const ended = items.filter((run) => ["done", "failed", "skipped", "canceled"].includes(run?.status));
+      const byOrigin = new Map<string, any[]>();
+      for (const run of ended) {
+        const origin = trimText(run?.cause?.origin_run_id) || trimText(run?.run_id);
+        byOrigin.set(origin, [...(byOrigin.get(origin) || []), run]);
+      }
+      // Newest first, as the history lists them: the first chain of more than one run, else the newest run.
+      const chain = [...byOrigin.values()].find((runs) => runs.length > 1) || [...byOrigin.values()][0];
+      if (disposed) return;
+      if (!chain) {
+        notice.error(t("todo_flow_replay_none"));
+        return;
+      }
+      flowReplay.set(
+        [...chain]
+          .sort((left, right) => trimText(left.queued_at).localeCompare(trimText(right.queued_at)))
+          .map((run) => ({
+            job_id: trimText(run.job_id),
+            status: run.status,
+            note: trimText(run.status === "failed" ? run.error : run.cause?.note) || t(`todo_run_status_${run.status}`),
+          })),
+      );
+    } catch (e) {
+      notice.error(errorMessage(e) || t("msg_load_failed"));
+    } finally {
+      if (!disposed) flowReplayLoading.set(false);
+    }
+  }
+
+  function openJobFromFlow(jobID: string) {
+    const job = jobByID(jobID);
+    if (!job) return;
+    setTodoView("list");
+    selectTask(job);
+  }
+
+  const flow = {
+    jobs: flowJobs,
+    replay: flowReplay,
+    replayLoading: flowReplayLoading,
+    toggleReplay: toggleFlowReplay,
+    openJob: openJobFromFlow,
+    addUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.addUse(copy, usedJobID, "each")),
+    setUseMode: (jobID: string, usedJobID: string, mode: string) => flowEdit(jobID, (copy) => model.setUseMode(copy, usedJobID, mode)),
+    removeUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.removeUse(copy, usedJobID)),
+    setJoin: (jobID: string, join: string) => flowEdit(jobID, (copy) => model.setJoin(copy, join)),
+  };
+
+  /* ---------- writing a job in words ---------- */
+
+  // The list's composer: a sentence about what should happen and when goes to the agent, which
+  // writes the job with its own tool (job_manage). The page asks; it does not parse the sentence.
+  const composeText = signal("");
+  const composeSending = signal(false);
+  /** The topic the last request went to, until the job it asked for has arrived. */
+  const composeTopicID = signal("");
+  let composeReloads: ReturnType<typeof setTimeout>[] = [];
+  cleanup(() => composeReloads.forEach(clearTimeout));
+
+  async function composeJob() {
+    const text = trimText(untracked(composeText));
+    const endpointRef = untracked(() => endpointState.selectedRef);
+    if (!text || !endpointRef || untracked(composeSending)) {
+      return;
+    }
+    composeSending.set(true);
+    try {
+      const submitted = await runtimeApiFetchForEndpoint(endpointRef, "/tasks", {
+        method: "POST",
+        body: { task: t("todo_compose_request", { text }), trigger: { source: "ui", event: "job_compose", ref: "web/console/todo" } },
+      });
+      if (disposed) return;
+      const known = new Set(untracked(tasks).map((task) => trimText(task.id)));
+      batch(() => {
+        composeText.set("");
+        composeTopicID.set(trimText(submitted?.topic_id));
+      });
+      // The job arrives when the agent has written it: look again a few times, then leave it to the
+      // page's own refreshes. The note goes once a job the list did not have is there.
+      composeReloads.forEach(clearTimeout);
+      composeReloads = [4000, 10000, 20000, 40000].map((delay) =>
+        setTimeout(() => {
+          if (disposed || !untracked(composeTopicID)) return;
+          void load().then(() => {
+            if (untracked(tasks).some((task) => !known.has(trimText(task.id)))) composeTopicID.set("");
+          });
+        }, delay),
+      );
+    } catch (e) {
+      notice.error(t("todo_compose_failed", { error: errorMessage(e) || t("msg_load_failed") }));
+    } finally {
+      if (!disposed) composeSending.set(false);
+    }
+  }
+
+  function openComposeTopic() {
+    openTaskTopic(untracked(composeTopicID));
+  }
+
+  /* ---------- triggers and the jobs a job uses ---------- */
+
+  /** A chat's channel as a message trigger names it (the chat's platform; "agentlink" for a peer agent). */
+  function channelOf(option: { platform?: string }) {
+    return trimText(option?.platform).toLowerCase().replace(/[\s_-]+/g, "");
+  }
+
+  // The chats a message can start a job from: every chat the agent knows, but not the Console's own
+  // notifications (nobody writes there). The value is "channel chat_id".
+  const messageSourceItems = computed<TodoMenuItem[]>(() =>
+    (chatOptions() as { chat_id: string; platform: string }[])
+      .filter((option) => option.chat_id !== model.CONSOLE_NOTIFICATION_CHAT_ID && channelOf(option) !== "console" && channelOf(option) !== "")
+      .map((option) => {
+        const item = (model.chatMenuItems([option]) as TodoMenuItem[])[1];
+        return { ...item, id: `source-${option.chat_id}`, value: `${channelOf(option)} ${option.chat_id}` };
+      }),
+  );
+
+  function chatTitle(chatID: string): string {
+    const id = trimText(chatID);
+    const item = chatMenuItems().find((entry) => entry.value === id);
+    return item ? item.title : id;
+  }
+
+  /** A trigger besides the form's schedule, in words. */
+  function triggerPhrase(trigger: TodoTrigger): string {
+    if (trigger.kind === "message") return t("todo_trigger_message", { chat: chatTitle(trigger.chat_id) });
+    if (trigger.kind === "schedule") {
+      const text = model.schedulePreviewText(model.normalizeTask({ at: trigger.at, cron: trigger.cron, tz: trigger.tz })) as string;
+      return t("todo_trigger_schedule", { schedule: text });
+    }
+    return t("todo_trigger_poke");
+  }
+
+  /**
+   * When a job runs, in one line for the list: its schedule, then whatever else starts it (a poke,
+   * messages, the jobs whose every new result it waits for), or that only a person starts it.
+   */
+  function whenLabel(task: TodoTask | null | undefined): string {
+    if (!task) return "";
+    const parts: string[] = [];
+    if (model.taskMode(task) !== "none") parts.push(scheduleLabel(task));
+    for (const trigger of model.extraTriggers(task) as TodoTrigger[]) parts.push(triggerPhrase(trigger));
+    for (const use of task.uses ?? []) {
+      if (use.mode === "each") parts.push(t("todo_trigger_each", { job: jobTitle(use.job_id) }));
+    }
+    return parts.length > 0 ? parts.join(t("todo_when_separator")) : t("todo_schedule_none");
+  }
+
+  function jobByID(jobID: string): TodoTask | undefined {
+    const id = trimText(jobID);
+    return tasks().find((task) => trimText(task.id) === id);
+  }
+
+  function jobTitle(jobID: string): string {
+    const job = jobByID(jobID);
+    return job ? taskTitle(taskListDisplayTask(job) as TodoTask) : trimText(jobID);
+  }
+
+  /** Opens another job's page (a job named in this one's links). */
+  function openJob(jobID: string) {
+    const job = jobByID(jobID);
+    if (job) selectTask(job);
+  }
+
+  /** The jobs `task` depends on, directly or through others, by id. */
+  function upstreamOf(task: TodoTask): Set<string> {
+    const seen = new Set<string>();
+    const walk = (job: TodoTask | undefined) => {
+      for (const use of job?.uses ?? []) {
+        if (seen.has(use.job_id)) continue;
+        seen.add(use.job_id);
+        walk(jobByID(use.job_id));
+      }
+    };
+    walk(task);
+    return seen;
+  }
+
+  // The jobs `task` may start using: saved ones, not itself, not ones it uses already, and not ones
+  // that depend on it (that would be a loop, which the runtime refuses).
+  function usableJobItems(task: TodoTask): TodoMenuItem[] {
+    const own = trimText(task?.id);
+    const used = new Set((task?.uses ?? []).map((use) => use.job_id));
+    return tasks()
+      .filter((job) => {
+        const id = trimText(job.id);
+        return id !== "" && id !== own && !used.has(id) && persistedTaskSignatures().has(job._key) && !upstreamOf(job).has(own);
+      })
+      .map((job) => ({ id: `job-${job.id}`, title: taskTitle(job), value: job.id }));
+  }
+
+  /** The jobs that take in `task`'s result, each with how. */
+  function usedBy(task: TodoTask): { id: string; title: string; mode: TodoUseMode }[] {
+    const own = trimText(task?.id);
+    if (!own) return [];
+    const out: { id: string; title: string; mode: TodoUseMode }[] = [];
+    for (const job of tasks()) {
+      const use = (job.uses ?? []).find((entry) => entry.job_id === own);
+      if (use) out.push({ id: job.id, title: taskTitle(job), mode: use.mode });
+    }
+    return out;
+  }
+
+  const joinItems = computed<TodoMenuItem[]>(() => [
+    { id: "join-all", title: t("todo_join_all"), value: "all" },
+    { id: "join-any", title: t("todo_join_any"), value: "any" },
+  ]);
+
   /* ---------- field edits ---------- */
 
   const edits = {
@@ -1027,6 +1314,18 @@ export function createTodoState() {
     removeBashEnvRow: (task: TodoTask, index: number) => editTask(task, (copy) => model.removeBashEnvRow(copy, index)),
     bashEnvField: (task: TodoTask, index: number, field: "name" | "value", value: string) =>
       editTask(task, (copy) => model.updateBashEnvField(copy, index, field, value)),
+    poke: (task: TodoTask, on: boolean) => editTask(task, (copy) => model.setPokeTrigger(copy, on)),
+    removeExtraTrigger: (task: TodoTask, index: number) => editTask(task, (copy) => model.removeExtraTrigger(copy, index)),
+    /** `source`: a message source's value from messageSourceItems, "channel chat_id". */
+    addMessageSource: (task: TodoTask, source: string) => {
+      const at = source.indexOf(" ");
+      if (at <= 0) return;
+      editTask(task, (copy) => model.addMessageTrigger(copy, source.slice(0, at), source.slice(at + 1)));
+    },
+    addUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.addUse(copy, jobID)),
+    useMode: (task: TodoTask, jobID: string, mode: string) => editTask(task, (copy) => model.setUseMode(copy, jobID, mode)),
+    removeUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.removeUse(copy, jobID)),
+    join: (task: TodoTask, join: string) => editTask(task, (copy) => model.setJoin(copy, join)),
     chat: async (task: TodoTask, chatIDRaw: string) => {
       const chatID = trimText(chatIDRaw);
       if (chatID === model.CONSOLE_NOTIFICATION_CHAT_ID) {
@@ -1533,6 +1832,8 @@ export function createTodoState() {
     selectedRunStop,
     runningTaskKey,
     calendarView,
+    flowView,
+    flow,
     showIndexPane,
     showEditorPane,
     mobileShowBack,
@@ -1554,6 +1855,20 @@ export function createTodoState() {
     taskListDisplayTask,
     taskRun,
     heartbeatRun,
+    liveRuns: taskRuns,
+    triggerPhrase,
+    whenLabel,
+    composeText,
+    composeSending,
+    composeTopicID,
+    composeJob,
+    openComposeTopic,
+    messageSourceItems,
+    jobTitle,
+    openJob,
+    usableJobItems,
+    usedBy,
+    joinItems,
     runStateLabel,
     isArrived,
     // actions
