@@ -144,6 +144,7 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		AgentConfig:       opts.AgentLimits.ToConfig(),
 		EngineToolsConfig: &opts.EngineToolsConfig,
 		Logger:            logger,
+		JobRuns:           daemonStore,
 	})
 	if err != nil {
 		return err
