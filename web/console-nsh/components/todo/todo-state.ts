@@ -68,6 +68,31 @@ export interface TodoTask {
   repeat_weekdays: number[];
   repeat_month_day: string;
   custom_cron: string;
+  /** What starts it, as the runtime lists it; undefined for a runtime that knows only the one schedule. */
+  triggers?: TodoTrigger[];
+  /** The jobs whose results it takes in, and how. */
+  uses?: TodoUse[];
+  /** With several inputs that start it: when all have a new result, or any one. */
+  join?: "all" | "any";
+  /** What the runtime says is wrong with the job as set up. */
+  warnings?: string[];
+}
+
+export interface TodoTrigger {
+  id: string;
+  kind: string;
+  at: string;
+  cron: string;
+  tz: string;
+  channel: string;
+  chat_id: string;
+}
+
+export type TodoUseMode = "latest" | "each" | "fresh";
+export interface TodoUse {
+  job_id: string;
+  mode: TodoUseMode;
+  max_age?: string;
 }
 
 export interface TodoRun {
@@ -998,6 +1023,100 @@ export function createTodoState() {
     editTask(task, (copy) => model.updateTaskField(copy, "workspace_dir", dir));
   }
 
+  /* ---------- triggers and the jobs a job uses ---------- */
+
+  /** A chat's channel as a message trigger names it (the chat's platform; "agentlink" for a peer agent). */
+  function channelOf(option: { platform?: string }) {
+    return trimText(option?.platform).toLowerCase().replace(/[\s_-]+/g, "");
+  }
+
+  // The chats a message can start a job from: every chat the agent knows, but not the Console's own
+  // notifications (nobody writes there). The value is "channel chat_id".
+  const messageSourceItems = computed<TodoMenuItem[]>(() =>
+    (chatOptions() as { chat_id: string; platform: string }[])
+      .filter((option) => option.chat_id !== model.CONSOLE_NOTIFICATION_CHAT_ID && channelOf(option) !== "console" && channelOf(option) !== "")
+      .map((option) => {
+        const item = (model.chatMenuItems([option]) as TodoMenuItem[])[1];
+        return { ...item, id: `source-${option.chat_id}`, value: `${channelOf(option)} ${option.chat_id}` };
+      }),
+  );
+
+  function chatTitle(chatID: string): string {
+    const id = trimText(chatID);
+    const item = chatMenuItems().find((entry) => entry.value === id);
+    return item ? item.title : id;
+  }
+
+  /** A trigger besides the form's schedule, in words. */
+  function triggerPhrase(trigger: TodoTrigger): string {
+    if (trigger.kind === "message") return t("todo_trigger_message", { chat: chatTitle(trigger.chat_id) });
+    if (trigger.kind === "schedule") {
+      const text = model.schedulePreviewText(model.normalizeTask({ at: trigger.at, cron: trigger.cron, tz: trigger.tz })) as string;
+      return t("todo_trigger_schedule", { schedule: text });
+    }
+    return t("todo_trigger_poke");
+  }
+
+  function jobByID(jobID: string): TodoTask | undefined {
+    const id = trimText(jobID);
+    return tasks().find((task) => trimText(task.id) === id);
+  }
+
+  function jobTitle(jobID: string): string {
+    const job = jobByID(jobID);
+    return job ? taskTitle(taskListDisplayTask(job) as TodoTask) : trimText(jobID);
+  }
+
+  /** Opens another job's page (a job named in this one's links). */
+  function openJob(jobID: string) {
+    const job = jobByID(jobID);
+    if (job) selectTask(job);
+  }
+
+  /** The jobs `task` depends on, directly or through others, by id. */
+  function upstreamOf(task: TodoTask): Set<string> {
+    const seen = new Set<string>();
+    const walk = (job: TodoTask | undefined) => {
+      for (const use of job?.uses ?? []) {
+        if (seen.has(use.job_id)) continue;
+        seen.add(use.job_id);
+        walk(jobByID(use.job_id));
+      }
+    };
+    walk(task);
+    return seen;
+  }
+
+  // The jobs `task` may start using: saved ones, not itself, not ones it uses already, and not ones
+  // that depend on it (that would be a loop, which the runtime refuses).
+  function usableJobItems(task: TodoTask): TodoMenuItem[] {
+    const own = trimText(task?.id);
+    const used = new Set((task?.uses ?? []).map((use) => use.job_id));
+    return tasks()
+      .filter((job) => {
+        const id = trimText(job.id);
+        return id !== "" && id !== own && !used.has(id) && persistedTaskSignatures().has(job._key) && !upstreamOf(job).has(own);
+      })
+      .map((job) => ({ id: `job-${job.id}`, title: taskTitle(job), value: job.id }));
+  }
+
+  /** The jobs that take in `task`'s result, each with how. */
+  function usedBy(task: TodoTask): { id: string; title: string; mode: TodoUseMode }[] {
+    const own = trimText(task?.id);
+    if (!own) return [];
+    const out: { id: string; title: string; mode: TodoUseMode }[] = [];
+    for (const job of tasks()) {
+      const use = (job.uses ?? []).find((entry) => entry.job_id === own);
+      if (use) out.push({ id: job.id, title: taskTitle(job), mode: use.mode });
+    }
+    return out;
+  }
+
+  const joinItems = computed<TodoMenuItem[]>(() => [
+    { id: "join-all", title: t("todo_join_all"), value: "all" },
+    { id: "join-any", title: t("todo_join_any"), value: "any" },
+  ]);
+
   /* ---------- field edits ---------- */
 
   const edits = {
@@ -1030,6 +1149,18 @@ export function createTodoState() {
     removeBashEnvRow: (task: TodoTask, index: number) => editTask(task, (copy) => model.removeBashEnvRow(copy, index)),
     bashEnvField: (task: TodoTask, index: number, field: "name" | "value", value: string) =>
       editTask(task, (copy) => model.updateBashEnvField(copy, index, field, value)),
+    poke: (task: TodoTask, on: boolean) => editTask(task, (copy) => model.setPokeTrigger(copy, on)),
+    removeExtraTrigger: (task: TodoTask, index: number) => editTask(task, (copy) => model.removeExtraTrigger(copy, index)),
+    /** `source`: a message source's value from messageSourceItems, "channel chat_id". */
+    addMessageSource: (task: TodoTask, source: string) => {
+      const at = source.indexOf(" ");
+      if (at <= 0) return;
+      editTask(task, (copy) => model.addMessageTrigger(copy, source.slice(0, at), source.slice(at + 1)));
+    },
+    addUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.addUse(copy, jobID)),
+    useMode: (task: TodoTask, jobID: string, mode: string) => editTask(task, (copy) => model.setUseMode(copy, jobID, mode)),
+    removeUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.removeUse(copy, jobID)),
+    join: (task: TodoTask, join: string) => editTask(task, (copy) => model.setJoin(copy, join)),
     chat: async (task: TodoTask, chatIDRaw: string) => {
       const chatID = trimText(chatIDRaw);
       if (chatID === model.CONSOLE_NOTIFICATION_CHAT_ID) {
@@ -1557,6 +1688,13 @@ export function createTodoState() {
     taskListDisplayTask,
     taskRun,
     heartbeatRun,
+    triggerPhrase,
+    messageSourceItems,
+    jobTitle,
+    openJob,
+    usableJobItems,
+    usedBy,
+    joinItems,
     runStateLabel,
     isArrived,
     // actions

@@ -7,6 +7,7 @@
 // The form follows its own width as the Vue form's container queries do: the four pickers stand one
 // per row under 720pt, two from 720, four from 1120; the weekly controls put the time beside the
 // weekdays above 680; the weekday chips run 7 to a row, 4 in a narrow form or window, 2 on a phone.
+import type { JSX } from "nsh";
 import { signal, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch, TimeField } from "nsh/base";
 import { CALENDAR_DAY_CLASS, DateField } from "../shared/DateField";
@@ -171,7 +172,7 @@ function localeHourCycle(): "h12" | "h23" {
 }
 
 /** The head's switch: the track alone, as the Vue head draws it; its name is its tooltip. */
-function EnabledSwitch(props: { checked: boolean; disabled: boolean; onChange: (checked: boolean) => void }) {
+function EnabledSwitch(props: { checked: boolean; disabled: boolean; onChange: (checked: boolean) => void; label?: string; testID?: string }) {
   // ui.tsx's Toggle always draws its label beside the track; the head shows the track alone, with
   // Toggle's classes (styles/ui-kit.css .q-switch in the morph theme).
   return (
@@ -179,9 +180,9 @@ function EnabledSwitch(props: { checked: boolean; disabled: boolean; onChange: (
       checked={props.checked}
       disabled={props.disabled}
       onChange={({ checked }) => props.onChange(checked)}
-      accessibilityLabel={t("todo_field_enabled")}
-      tooltip={<Tip text={t("todo_field_enabled")} />}
-      testID="todo-enabled"
+      accessibilityLabel={props.label ?? t("todo_field_enabled")}
+      tooltip={props.label ? undefined : <Tip text={t("todo_field_enabled")} />}
+      testID={props.testID ?? "todo-enabled"}
       class="group flex-row items-center disabled:opacity-50"
       trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
       thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
@@ -192,6 +193,24 @@ function EnabledSwitch(props: { checked: boolean; disabled: boolean; onChange: (
         transitionTimingFunction: "cubic-bezier(0.3, 1.35, 0.5, 1)",
       }}
     />
+  );
+}
+
+/**
+ * A block of the job's sheet: its name in the margin (a small mono label, as a notebook's margin
+ * note) and what it holds beside it; on a narrow window the name sits above.
+ */
+function SheetBlock(props: { label: string; stacked: boolean; children?: JSX.Element }) {
+  return (
+    <View class={props.stacked ? "gap-1.5" : "flex-row gap-4"} accessibilityLabel={props.label} role="group">
+      <Text
+        class={`font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[1.1px] text-muted-foreground ${props.stacked ? "" : "w-16 pt-[14px]"}`}
+        role="header"
+      >
+        {props.label}
+      </Text>
+      <View class="min-w-0 flex-1">{props.children}</View>
+    </View>
   );
 }
 
@@ -239,23 +258,23 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
           },
     );
 
+  const scheduleModes = () =>
+    (model.scheduleModeItems() as { id: string; title: string; value: string }[]).filter((item) => item.value !== "none" || model.knowsTriggers(task()));
   const previewSegments = () => model.previewSegments(task()) as { type: string; text: string }[];
   const previewError = () => Boolean(model.schedulePreviewError(task()));
   const pickerStyle = () => ({ width: pickerWidth(formWidth(), pickerColumns()) });
 
-  return (
-    <TodoCard
-      panel={props.panel}
-      accessibilityLabel={t("todo_detail_title")}
-      testID="todo-task-editor"
-      lead={
+  const enabledSwitch = () => (
+    <>
         <EnabledSwitch
           checked={task().enabled !== false}
           disabled={busy()}
           onChange={(checked) => state.edits.enabled(task(), checked)}
         />
-      }
-      actions={
+    </>
+  );
+  const actions = () => (
+    <>
         <View class="flex-row items-center gap-1">
           {/* Only while the saved item runs: stops that one run, never the item or its schedule.
               Busy from the press until the run's end shows. */}
@@ -302,9 +321,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
             }
           />
         </View>
-      }
-    >
-      <View class="gap-4">
+    </>
+  );
+  const titleField = () => (
+    <>
         <TodoInput
           value={task().title}
           onChange={(value) => state.edits.title(task(), value)}
@@ -314,8 +334,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
           strong
           testID="todo-title"
         />
-
-        <View class="gap-3" onLayout={(event) => formWidth.set(event.bounds.size.width)}>
+    </>
+  );
+  const contentField = () => (
+    <>
           {/* A regular textarea with the mention and conversation toolbar: the content as written,
               no Markdown highlighting or preview. */}
           <AppMarkdownEditor
@@ -330,8 +352,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
             testID="todo-content"
             onChange={(value) => state.edits.field(task(), "content", value)}
           />
-
-          <View class="flex-row flex-wrap gap-3">
+    </>
+  );
+  const tzPicker = () => (
+    <>
             <View style={pickerStyle()}>
               <TodoSelect
                 label={t("todo_field_timezone")}
@@ -344,17 +368,25 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                 onChange={(value) => state.edits.timezone(task(), value)}
               />
             </View>
+    </>
+  );
+  const modePicker = () => (
+    <>
             <View style={pickerStyle()}>
               <TodoSelect
                 label={t("todo_field_schedule")}
-                items={model.scheduleModeItems()}
-                current={model.scheduleModeItems().find((item: { value: string }) => item.value === model.taskMode(task()))}
+                items={scheduleModes()}
+                current={scheduleModes().find((item: { value: string }) => item.value === model.taskMode(task()))}
                 placeholder={t("todo_field_schedule")}
                 disabled={busy()}
                 testID="todo-schedule-mode"
                 onChange={(value) => state.edits.scheduleMode(task(), value)}
               />
             </View>
+    </>
+  );
+  const llmPicker = () => (
+    <>
             <View style={pickerStyle()}>
               <TodoSelect
                 label={t("todo_field_llm_profile")}
@@ -368,6 +400,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                 onChange={(value) => state.edits.llmProfile(task(), value)}
               />
             </View>
+    </>
+  );
+  const chatPicker = () => (
+    <>
             <View style={pickerStyle()}>
               <TodoSelect
                 label={t("todo_field_chat")}
@@ -381,8 +417,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                 onChange={(value) => void state.edits.chat(task(), value)}
               />
             </View>
-          </View>
-
+    </>
+  );
+  const scheduleControls = () => (
+    <>
           <If
             when={model.taskMode(task()) === "once"}
             else={
@@ -486,7 +524,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
           >
             <RunAtField task={task()} disabled={busy()} onChange={(value) => state.edits.at(task(), value)} />
           </If>
-
+    </>
+  );
+  const preview = () => (
+    <>
           <View class={`gap-1.5 ${INSET_BOX} ${previewError() ? "border-danger/45 bg-danger/7" : ""}`} testID="todo-preview">
             <Text class={INSET_LABEL}>{t("todo_repeat_preview")}</Text>
             <Text class="text-sm leading-[21.7px] text-foreground">
@@ -504,7 +545,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               </Each>
             </Text>
           </View>
-
+    </>
+  );
+  const lastRun = () => (
+    <>
           <If when={model.taskLastRun(task(), formatTime)}>
             {(lastRun) => (
               <Text
@@ -515,7 +559,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               </Text>
             )}
           </If>
-
+    </>
+  );
+  const workspace = () => (
+    <>
           <View class="gap-[5px]">
             <TodoInput
               value={task().workspace_dir}
@@ -554,7 +601,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
             />
             <FieldNote>{t("todo_workspace_dir_hint")}</FieldNote>
           </View>
-
+    </>
+  );
+  const bashEnv = () => (
+    <>
           <View class={`gap-2.5 ${INSET_BOX}`}>
             <View class="gap-1">
               <Text class={INSET_LABEL}>{t("todo_field_bash_env")}</Text>
@@ -614,8 +664,244 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               <Icon name="PhPlus" size={16} color="subtle" />
             </TipButton>
           </View>
+    </>
+  );
+
+  // What else starts it besides the form's schedule: its poke URL, messages, further schedules.
+  const extras = () => model.extraTriggers(task()) as { id: string; kind: string; at: string; cron: string; tz: string; channel: string; chat_id: string }[];
+  const triggers = () => (
+    <View class="gap-2.5" testID="todo-triggers">
+      <View class="flex-row items-center gap-3">
+        <EnabledSwitch
+          checked={Boolean(model.hasPokeTrigger(task()))}
+          disabled={busy()}
+          label={t("todo_trigger_poke")}
+          testID="todo-trigger-poke"
+          onChange={(checked) => state.edits.poke(task(), checked)}
+        />
+        <View class="min-w-0 flex-1 gap-0.5">
+          <Text class="text-sm leading-[21px] text-foreground">{t("todo_trigger_poke")}</Text>
+          <If when={model.hasPokeTrigger(task())}>
+            <Text class="font-mono text-xs leading-[16.2px] text-muted-foreground" testID="todo-trigger-poke-url">
+              {`POST /poke/${task().id}`}
+            </Text>
+          </If>
         </View>
       </View>
-    </TodoCard>
+      <Each of={extras().map((item, index) => ({ item, index })).filter((entry) => entry.item.kind !== "poke")} key={(entry) => `${entry.index}:${entry.item.kind}:${entry.item.chat_id}:${entry.item.cron}:${entry.item.at}`}>
+        {(entry) => (
+          <View class="min-h-11 flex-row items-center gap-2 border-t border-line-soft/60 pt-2" testID={`todo-trigger-${entry().index}`}>
+            <Text class="min-w-0 flex-1 text-sm leading-[21px] text-foreground">{state.triggerPhrase(entry().item)}</Text>
+            <Button
+              variant="plain"
+              size="sm"
+              iconOnly
+              icon="PhX"
+              title={t("todo_trigger_remove")}
+              disabled={busy()}
+              testID={`todo-trigger-${entry().index}-remove`}
+              onPress={() => state.edits.removeExtraTrigger(task(), entry().index)}
+            />
+          </View>
+        )}
+      </Each>
+      <If when={state.messageSourceItems().length > 0}>
+        <View style={pickerStyle()}>
+          <TodoSelect
+            label={t("todo_trigger_message_add")}
+            items={state.messageSourceItems()}
+            current={null}
+            placeholder={t("todo_chat_placeholder")}
+            searchable
+            hideSelectedMedia
+            disabled={busy()}
+            testID="todo-trigger-message-add"
+            onChange={(value) => state.edits.addMessageSource(task(), value)}
+          />
+        </View>
+      </If>
+    </View>
+  );
+
+  // The jobs whose results this one takes in, each with how; and the jobs that take in this one's.
+  const useModeItems = () =>
+    (model.USE_MODES as string[]).map((mode) => ({ id: `use-${mode}`, title: t(`todo_use_mode_${mode}`), subtitle: t(`todo_use_mode_${mode}_note`), value: mode }));
+  const uses = () => (
+    <View class="gap-2.5" testID="todo-uses">
+      <Each of={task().uses ?? []} key={(use) => use.job_id}>
+        {(use) => (
+          <View class={narrowWindow() ? "gap-2" : "flex-row items-center gap-2"} testID={`todo-use-${use().job_id}`}>
+            <BaseButton
+              onPress={() => state.openJob(use().job_id)}
+              accessibilityLabel={state.jobTitle(use().job_id)}
+              class="min-h-11 min-w-0 flex-1 justify-center rounded-(--radius) px-1 hover:bg-hover-faint"
+            >
+              <Text class="text-sm leading-[21px] text-foreground" style={{ numberOfLines: 1 }}>
+                {state.jobTitle(use().job_id)}
+              </Text>
+            </BaseButton>
+            <View class={narrowWindow() ? "" : "w-64"}>
+              <TodoSelect
+                label={t("todo_use_mode")}
+                items={useModeItems()}
+                current={useModeItems().find((item) => item.value === use().mode)}
+                placeholder={t("todo_use_mode")}
+                disabled={busy()}
+                testID={`todo-use-${use().job_id}-mode`}
+                onChange={(value) => state.edits.useMode(task(), use().job_id, value)}
+              />
+            </View>
+            <Button
+              variant="plain"
+              size="sm"
+              iconOnly
+              icon="PhX"
+              title={t("todo_use_remove", { title: state.jobTitle(use().job_id) })}
+              disabled={busy()}
+              testID={`todo-use-${use().job_id}-remove`}
+              class={narrowWindow() ? "self-end" : ""}
+              onPress={() => state.edits.removeUse(task(), use().job_id)}
+            />
+          </View>
+        )}
+      </Each>
+      <If when={(task().uses ?? []).filter((use) => use.mode === "each").length > 1}>
+        <View style={pickerStyle()}>
+          <TodoSelect
+            label={t("todo_join")}
+            items={state.joinItems()}
+            current={state.joinItems().find((item) => item.value === (task().join || "all"))}
+            placeholder={t("todo_join")}
+            disabled={busy()}
+            testID="todo-join"
+            onChange={(value) => state.edits.join(task(), value)}
+          />
+        </View>
+      </If>
+      <Each of={task().warnings ?? []}>
+        {(warning) => <Text class="text-xs leading-[17.4px] text-warn-dark" role="alert">{warning()}</Text>}
+      </Each>
+      <If when={state.usableJobItems(task()).length > 0}>
+        <View style={pickerStyle()}>
+          <TodoSelect
+            label={t("todo_use_add")}
+            items={state.usableJobItems(task())}
+            current={null}
+            placeholder={t("todo_use_add_placeholder")}
+            searchable
+            disabled={busy()}
+            testID="todo-use-add"
+            onChange={(value) => state.edits.addUse(task(), value)}
+          />
+        </View>
+      </If>
+    </View>
+  );
+  const usedBy = () => (
+    <View testID="todo-used-by">
+      <Each of={state.usedBy(task())} key={(entry) => entry.id}>
+        {(entry) => (
+          <BaseButton
+            onPress={() => state.openJob(entry().id)}
+            accessibilityLabel={`${entry().title}: ${t(`todo_use_mode_${entry().mode}`)}`}
+            testID={`todo-used-by-${entry().id}`}
+            class="min-h-11 flex-row items-center gap-3 rounded-(--radius) px-1 hover:bg-hover-faint"
+          >
+            <Text class="min-w-0 flex-1 text-sm leading-[21px] text-foreground" style={{ numberOfLines: 1 }}>
+              {entry().title}
+            </Text>
+            <Text class="text-xs leading-[17.4px] text-muted-foreground">{t(`todo_use_mode_${entry().mode}`)}</Text>
+          </BaseButton>
+        )}
+      </Each>
+    </View>
+  );
+
+  // In the calendar's side column the job is a card, as before. As a page it is a sheet of labelled
+  // blocks: when it runs, what it does, whom it tells, what it uses, and its settings.
+  const stacked = () => narrowWindow();
+  return (
+    <If
+      when={props.panel}
+      else={
+        <View class="gap-7 pb-10" accessibilityLabel={t("todo_detail_title")} testID="todo-task-editor">
+          <View class="gap-2">
+            <View class={stacked() ? "gap-3" : "flex-row items-center gap-3"}>
+              <View class="min-w-0 flex-1">{titleField()}</View>
+              <View class={stacked() ? "self-end" : ""}>{actions()}</View>
+            </View>
+            {lastRun()}
+          </View>
+          <SheetBlock label={t("todo_block_when")} stacked={stacked()}>
+            <View class="gap-3" onLayout={(event) => formWidth.set(event.bounds.size.width)}>
+              <View class="flex-row flex-wrap gap-3">
+                {modePicker()}
+                <If when={model.taskMode(task()) !== "none"}>{tzPicker()}</If>
+              </View>
+              <If when={model.taskMode(task()) !== "none"}>
+                {scheduleControls()}
+                {preview()}
+              </If>
+              <If when={model.knowsTriggers(task())}>{triggers()}</If>
+            </View>
+          </SheetBlock>
+          <SheetBlock label={t("todo_block_do")} stacked={stacked()}>
+            {contentField()}
+          </SheetBlock>
+          <SheetBlock label={t("todo_block_tell")} stacked={stacked()}>
+            {chatPicker()}
+          </SheetBlock>
+          <If when={model.knowsTriggers(task())}>
+            <SheetBlock label={t("todo_block_uses")} stacked={stacked()}>
+              {uses()}
+            </SheetBlock>
+            <If when={state.usedBy(task()).length > 0}>
+              <SheetBlock label={t("todo_block_used_by")} stacked={stacked()}>
+                {usedBy()}
+              </SheetBlock>
+            </If>
+          </If>
+          <SheetBlock label={t("todo_block_set")} stacked={stacked()}>
+            <View class="gap-3">
+              <View class="min-h-11 flex-row items-center gap-3">
+                {enabledSwitch()}
+                <Text class="text-sm leading-[21px] text-foreground">{t("todo_field_enabled")}</Text>
+              </View>
+              {llmPicker()}
+              {workspace()}
+              {bashEnv()}
+            </View>
+          </SheetBlock>
+        </View>
+      }
+    >
+      <TodoCard
+        panel={props.panel}
+        accessibilityLabel={t("todo_detail_title")}
+        testID="todo-task-editor"
+        lead={enabledSwitch()}
+        actions={actions()}
+      >
+        <View class="gap-4">
+          {titleField()}
+          <View class="gap-3" onLayout={(event) => formWidth.set(event.bounds.size.width)}>
+            {contentField()}
+            <View class="flex-row flex-wrap gap-3">
+              {tzPicker()}
+              {modePicker()}
+              {llmPicker()}
+              {chatPicker()}
+            </View>
+            <If when={model.taskMode(task()) !== "none"}>
+              {scheduleControls()}
+              {preview()}
+            </If>
+            {lastRun()}
+            {workspace()}
+            {bashEnv()}
+          </View>
+        </View>
+      </TodoCard>
+    </If>
   );
 }

@@ -161,13 +161,15 @@ function browserUTCOffsetValue() {
   return formatUTCOffsetValue(timezoneOffsetMinutes(browserTimezone()));
 }
 
+// "none": a job with no schedule (it is started by hand, by a poke, by a message or by another job).
 function normalizeScheduleMode(value) {
-  return trimText(value).toLowerCase() === "recurring" ? "recurring" : "once";
+  const mode = trimText(value).toLowerCase();
+  return mode === "recurring" || mode === "none" ? mode : "once";
 }
 
 function taskMode(task) {
   const explicit = trimText(task?.mode).toLowerCase();
-  if (explicit === "once" || explicit === "recurring") {
+  if (explicit === "once" || explicit === "recurring" || explicit === "none") {
     return explicit;
   }
   return trimText(task?.cron) !== "" && trimText(task?.at) === "" ? "recurring" : "once";
@@ -442,10 +444,125 @@ function bashEnvValidationMessage(refs, t) {
   return "";
 }
 
+/* ---------- triggers and the jobs a job uses ---------- */
+
+const USE_MODES = ["latest", "each", "fresh"];
+
+// A job's triggers as the runtime lists them (`triggers`: schedule, poke, message). Undefined for a
+// runtime that does not know triggers: the job then has its one schedule and nothing else, and the
+// page offers none of this.
+function normalizeTriggers(list) {
+  if (!Array.isArray(list)) {
+    return undefined;
+  }
+  return list
+    .map((item) => ({
+      id: trimText(item?.id),
+      kind: trimText(item?.kind).toLowerCase(),
+      at: trimText(item?.at),
+      cron: trimText(item?.cron),
+      tz: trimText(item?.tz),
+      channel: trimText(item?.channel).toLowerCase(),
+      chat_id: trimText(item?.chat_id),
+    }))
+    .filter((item) => item.kind === "schedule" || item.kind === "poke" || item.kind === "message");
+}
+
+function normalizeUses(list) {
+  const seen = new Set();
+  const out = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const jobID = trimText(item?.job_id);
+    if (!jobID || seen.has(jobID)) {
+      continue;
+    }
+    seen.add(jobID);
+    const mode = trimText(item?.mode).toLowerCase();
+    out.push({ job_id: jobID, mode: USE_MODES.includes(mode) ? mode : "latest", max_age: trimText(item?.max_age) });
+  }
+  return out;
+}
+
+// The triggers besides the schedule the form edits (the first schedule trigger, which the legacy
+// at / cron / tz mirror): a poke, messages, and any further schedules.
+function extraTriggers(task) {
+  const list = Array.isArray(task?.triggers) ? task.triggers : [];
+  const first = list.findIndex((item) => item.kind === "schedule");
+  return list.filter((_, index) => index !== first);
+}
+
+function knowsTriggers(task) {
+  return Array.isArray(task?.triggers);
+}
+
+function hasPokeTrigger(task) {
+  return extraTriggers(task).some((item) => item.kind === "poke");
+}
+
+function setPokeTrigger(task, on) {
+  if (!knowsTriggers(task) || hasPokeTrigger(task) === Boolean(on)) {
+    return EDIT_NONE;
+  }
+  task.triggers = on ? [...task.triggers, { id: "", kind: "poke", at: "", cron: "", tz: "", channel: "", chat_id: "" }] : task.triggers.filter((item) => item.kind !== "poke");
+}
+
+function addMessageTrigger(task, channel, chatID) {
+  const where = { channel: trimText(channel).toLowerCase(), chat_id: trimText(chatID) };
+  if (!knowsTriggers(task) || !where.channel || !where.chat_id) {
+    return EDIT_NONE;
+  }
+  if (task.triggers.some((item) => item.kind === "message" && item.channel === where.channel && item.chat_id === where.chat_id)) {
+    return EDIT_NONE;
+  }
+  task.triggers = [...task.triggers, { id: "", kind: "message", at: "", cron: "", tz: "", ...where }];
+}
+
+// Removes one of the extra triggers, by its place among them.
+function removeExtraTrigger(task, index) {
+  const target = extraTriggers(task)[index];
+  if (!target) {
+    return EDIT_NONE;
+  }
+  task.triggers = task.triggers.filter((item) => item !== target);
+}
+
+function addUse(task, jobID, mode = "latest") {
+  const id = trimText(jobID);
+  if (!task || !id || id === trimText(task.id) || (task.uses || []).some((item) => item.job_id === id)) {
+    return EDIT_NONE;
+  }
+  task.uses = [...(task.uses || []), { job_id: id, mode: USE_MODES.includes(mode) ? mode : "latest", max_age: "" }];
+}
+
+function setUseMode(task, jobID, mode) {
+  const id = trimText(jobID);
+  if (!task || !USE_MODES.includes(mode) || !(task.uses || []).some((item) => item.job_id === id && item.mode !== mode)) {
+    return EDIT_NONE;
+  }
+  task.uses = task.uses.map((item) => (item.job_id === id ? { ...item, mode } : item));
+}
+
+function removeUse(task, jobID) {
+  const id = trimText(jobID);
+  if (!task || !(task.uses || []).some((item) => item.job_id === id)) {
+    return EDIT_NONE;
+  }
+  task.uses = task.uses.filter((item) => item.job_id !== id);
+}
+
+function setJoin(task, join) {
+  const next = join === "any" ? "any" : "all";
+  if (!task || task.join === next) {
+    return EDIT_NONE;
+  }
+  task.join = next;
+}
+
 function normalizeTask(item = {}, fallbackTitle = DEFAULT_TODO_TITLE) {
   const at = trimText(item.at);
   const cron = trimText(item.cron);
   const recurring = inferRecurringState(cron);
+  const triggers = normalizeTriggers(item.triggers);
   return {
     _key: nextTaskKey(),
     id: trimText(item.id),
@@ -463,7 +580,13 @@ function normalizeTask(item = {}, fallbackTitle = DEFAULT_TODO_TITLE) {
     // how that run ended ("done", "failed", or "" while it has no result).
     last_run_at: trimText(item.last_run_at),
     last_run_status: trimText(item.last_run_status).toLowerCase(),
-    mode: cron !== "" && at === "" ? "recurring" : "once",
+    triggers,
+    uses: normalizeUses(item.uses),
+    join: trimText(item.join).toLowerCase() === "any" ? "any" : "all",
+    // What the runtime says is wrong with the job as set up (shown, never sent back).
+    warnings: Array.isArray(item.warnings) ? item.warnings.map((text) => trimText(text)).filter(Boolean) : [],
+    // A job the runtime lists with no schedule has none; a new one starts as a one-time item.
+    mode: cron !== "" && at === "" ? "recurring" : at === "" && triggers ? "none" : "once",
     ...recurring,
   };
 }
@@ -562,6 +685,8 @@ function cloneTaskForDraft(task) {
   return {
     ...task,
     repeat_weekdays: Array.isArray(task.repeat_weekdays) ? [...task.repeat_weekdays] : [1],
+    triggers: Array.isArray(task.triggers) ? task.triggers.map((item) => ({ ...item })) : undefined,
+    uses: Array.isArray(task.uses) ? task.uses.map((item) => ({ ...item })) : [],
     bash_env: Array.isArray(task.bash_env)
       ? task.bash_env.map((item) => ({
           name: String(item?.name ?? ""),
@@ -670,12 +795,39 @@ function serializeTask(task, fallbackTitle = DEFAULT_TODO_TITLE) {
   }
   if (mode === "recurring") {
     out.cron = normalizeCron(task?.cron);
-  } else {
+  } else if (mode === "once") {
     out.at = trimText(task?.at).replace("T", " ");
   }
   const tz = trimText(task?.tz);
-  if (tz) {
+  if (tz && mode !== "none") {
     out.tz = tz;
+  }
+  // A runtime that knows triggers is sent them, with the jobs this one uses and its join rule: the
+  // form's schedule first (keeping its trigger's id), then the others as they are. The top-level
+  // at / cron / tz stay in step with that first schedule, as the runtime mirrors them.
+  if (knowsTriggers(task)) {
+    const stored = task.triggers.find((item) => item.kind === "schedule");
+    const schedule = { kind: "schedule" };
+    if (stored?.id) schedule.id = stored.id;
+    if (out.cron) schedule.cron = out.cron;
+    if (out.at) schedule.at = out.at;
+    if (out.tz) schedule.tz = out.tz;
+    const rest = extraTriggers(task).map((item) => {
+      const trigger = { kind: item.kind };
+      if (item.id) trigger.id = item.id;
+      for (const key of ["at", "cron", "tz", "channel", "chat_id"]) {
+        if (item[key]) trigger[key] = item[key];
+      }
+      return trigger;
+    });
+    out.triggers = mode === "none" ? rest : [schedule, ...rest];
+    const uses = normalizeUses(task.uses).map((item) => (item.max_age ? item : { job_id: item.job_id, mode: item.mode }));
+    if (uses.length > 0) {
+      out.uses = uses;
+    }
+    if (task.join === "any") {
+      out.join = "any";
+    }
   }
   const chatID = trimText(task?.chat_id);
   if (chatID) {
@@ -934,6 +1086,9 @@ function cronPreviewError(task) {
 
 function schedulePreviewError(task) {
   if (!task) {
+    return "";
+  }
+  if (taskMode(task) === "none") {
     return "";
   }
   if (taskMode(task) === "once") {
@@ -1437,6 +1592,9 @@ function customCronSchedulePreview(task) {
 }
 
 function naturalSchedulePreview(task) {
+  if (taskMode(task) === "none") {
+    return t("todo_schedule_none");
+  }
   if (taskMode(task) === "once") {
     const parts = parseAtPreviewParts(task?.at);
     return t("todo_preview_schedule_once", {
@@ -1521,6 +1679,9 @@ function taskValidationMessage(task) {
   }
   if (!trimText(task.content)) {
     return t("todo_validation_content_required");
+  }
+  if (taskMode(task) === "none") {
+    return bashEnvValidationMessage(task.bash_env, t);
   }
   if (taskMode(task) === "once") {
     if (!isValidAtValue(task.at)) {
@@ -1623,6 +1784,7 @@ function scheduleModeItems() {
   return [
     { id: "schedule-once", title: t("todo_mode_once"), value: "once" },
     { id: "schedule-recurring", title: t("todo_mode_recurring"), value: "recurring" },
+    { id: "schedule-none", title: t("todo_mode_none"), value: "none" },
   ];
 }
 
@@ -1715,6 +1877,17 @@ export {
   taskTopicKey,
   browserUTCOffsetValue,
   taskMode,
+  USE_MODES,
+  extraTriggers,
+  knowsTriggers,
+  hasPokeTrigger,
+  setPokeTrigger,
+  addMessageTrigger,
+  removeExtraTrigger,
+  addUse,
+  setUseMode,
+  removeUse,
+  setJoin,
   normalizeTask,
   normalizeChatOptions,
   normalizeLLMProfiles,

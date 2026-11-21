@@ -1159,3 +1159,126 @@ test("a TODO list that could not be imported shows the agent's report of each re
   const { app } = await openTodo({ "GET /proxy:/todo/tasks": { status: 409, body: { error: report } } });
   await app.waitFor(report);
 });
+
+/* ---------- triggers and the jobs a job uses ---------- */
+
+// A runtime that knows triggers lists them on every job (and the jobs a job uses, and its join rule).
+function linkedTasks() {
+  return [
+    { id: "report", title: "Morning report", content: "Summarize", cron: "0 9 * * *", tz: "UTC", triggers: [{ id: "trg-schedule", kind: "schedule", cron: "0 9 * * *", tz: "UTC" }] },
+    {
+      id: "digest",
+      title: "Team digest",
+      content: "Rewrite it",
+      triggers: [],
+      uses: [{ job_id: "report", mode: "each" }],
+    },
+    { id: "notes", title: "Release notes", content: "Draft", triggers: [{ id: "hook", kind: "poke" }] },
+  ];
+}
+
+function openLinked(overrides: Record<string, unknown> = {}) {
+  return openTodo({
+    "GET /proxy:/todo/tasks": {
+      body: tasksBody({ tasks: linkedTasks(), chat_options: [{ chat_id: "tg:-100", platform: "telegram", type: "group", name: "Family" }] }),
+    },
+    "PUT /proxy:/todo/tasks": (request: ApiRequest) => ({ body: { ...tasksBody(), tasks: request.json?.tasks } }),
+    ...overrides,
+  });
+}
+
+test("a job with no schedule says so in the list, and its page offers no schedule controls", async () => {
+  const { app } = await openLinked();
+  await app.waitFor("id:todo-item-digest");
+  expect(app.shows("id:todo-item-digest >> text:Only when started")).toBe(true);
+  await app.press("id:todo-item-digest");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.shows("text:No schedule")).toBe(true);
+  expect(app.shows("id:todo-preview")).toBe(false);
+  expect(app.shows("id:todo-timezone")).toBe(false);
+});
+
+test("the poke switch adds and removes the job's poke trigger, and the save sends every trigger", async () => {
+  const { app, calls } = await openLinked();
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-triggers");
+  expect(app.shows("id:todo-trigger-poke-url")).toBe(false);
+  await app.press("id:todo-trigger-poke");
+  await app.waitFor("text:POST /poke/report");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  const sent = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
+  // The form's schedule keeps its trigger's id and the legacy fields stay in step with it.
+  expect(sent[0]).toMatchObject({ id: "report", cron: "0 9 * * *", tz: "UTC" });
+  expect(sent[0].triggers).toEqual([{ kind: "schedule", id: "trg-schedule", cron: "0 9 * * *", tz: "UTC" }, { kind: "poke" }]);
+  // The others are sent as they were: a job with no schedule has no at, cron or tz.
+  expect(sent[1]).toEqual({ id: "digest", title: "Team digest", content: "Rewrite it", triggers: [], uses: [{ job_id: "report", mode: "each" }] });
+  expect(sent[2].triggers).toEqual([{ kind: "poke", id: "hook" }]);
+});
+
+test("a message trigger is added from the agent's chats and removed again", async () => {
+  const { app, calls } = await openLinked();
+  await app.press("id:todo-item-notes");
+  await app.waitFor("id:todo-triggers");
+  await app.press("id:todo-trigger-message-add");
+  await app.press("text:Family");
+  await app.waitFor("text:When a message arrives in Family");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[2].triggers).toEqual([
+    { kind: "poke", id: "hook" },
+    { kind: "message", channel: "telegram", chat_id: "tg:-100" },
+  ]);
+  await app.press("id:todo-trigger-1-remove");
+  await app.waitFor("text:When a message arrives in Family", { state: "gone" });
+});
+
+test("a job's page lists what it uses and what uses it, and each name opens that job", async () => {
+  const { app } = await openLinked();
+  await app.press("id:todo-item-digest");
+  await app.waitFor("id:todo-uses");
+  expect(app.shows("id:todo-use-report >> text:Morning report")).toBe(true);
+  expect(app.shows("id:todo-use-report-mode >> text:Each new result")).toBe(true);
+  await app.press("label:Morning report");
+  await app.waitUntil(() => app.value("id:todo-title") === "Morning report");
+  expect(app.shows("id:todo-used-by-digest >> text:Team digest")).toBe(true);
+});
+
+test("a use's kind is changed and a use removed; a job that depends on this one is not offered", async () => {
+  const { app, calls } = await openLinked();
+  await app.press("id:todo-item-digest");
+  await app.waitFor("id:todo-uses");
+  await app.press("id:todo-use-report-mode");
+  await app.press("text:A fresh result");
+  await app.press("id:todo-use-add");
+  await app.press("text:Release notes");
+  await app.waitFor("id:todo-use-notes");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[1].uses).toEqual([
+    { job_id: "report", mode: "fresh" },
+    { job_id: "notes", mode: "latest" },
+  ]);
+  await app.press("id:todo-use-notes-remove");
+  await app.waitFor("id:todo-use-notes", { state: "gone" });
+  // Morning report is used by Team digest, so it cannot use Team digest in turn.
+  await app.press("id:todo-back");
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-uses");
+  // (Team digest is named once on the page, under "Used by"; the list of jobs to use adds no second.)
+  const before = app.count("text:Team digest");
+  await app.press("id:todo-use-add");
+  await app.waitFor("text:Release notes");
+  expect(app.count("text:Team digest")).toBe(before);
+});
+
+test("a runtime that knows no triggers gets the form as before, with nothing about triggers or uses", async () => {
+  const { app, calls } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.shows("id:todo-triggers")).toBe(false);
+  expect(app.shows("id:todo-uses")).toBe(false);
+  await app.press("id:todo-schedule-mode");
+  expect(app.shows("text:No schedule")).toBe(false);
+  expect(calls.length).toBeGreaterThan(0);
+});

@@ -360,6 +360,7 @@ const FILES = {
     group: "todo",
     items: {
       TodoTaskEditor: L("live"),
+      SheetBlock: L("part", "TodoTaskEditor"),
       NormalizedField: L("part", "TodoTaskEditor"),
       WeekdayChip: L("part", "TodoTaskEditor"),
       RunAtField: L("part", "TodoTaskEditor"),
