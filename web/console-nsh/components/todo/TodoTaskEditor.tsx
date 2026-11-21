@@ -17,6 +17,8 @@ import { AppMarkdownEditor } from "../shared/MarkdownEditor";
 import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
 import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 import * as model from "./todo-model.js";
+import { TodoJobButton, TODO_JOB_BUTTON_GAP, TODO_JOB_BUTTON_HEIGHT, TODO_JOB_BUTTON_WIDTH, TODO_JOB_ICON_SIZE } from "../chat/TodoJobBar";
+import { BAR_INSET } from "../frame/mobileBar";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
 import { TodoSelect } from "./TodoSelect";
@@ -817,6 +819,78 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
     </View>
   );
 
+  // The job's toolbar, the one its topic has (TodoJobBar): Start or Stop, the way to the other page
+  // (here the topic), and the remaining actions as its last slot. Set into the page, so no shadow.
+  const sheetMenuItems = () => menuItems().filter((item) => item.id !== "run-manually" && item.id !== "open-topic");
+  const toolbar = () => (
+    <View
+      role="toolbar"
+      accessibilityLabel={t("chat_todo_job_toolbar")}
+      class="flex-row items-center rounded-full border-[0.5px] border-line bg-card"
+      style={{ padding: BAR_INSET, gap: TODO_JOB_BUTTON_GAP }}
+      testID="todo-toolbar"
+    >
+      <If
+        when={state.selectedRunStop()}
+        else={
+          <TodoJobButton
+            kind="start"
+            label={t("chat_todo_job_start")}
+            busy={taskStarting()}
+            disabled={!state.canRunSelectedTask()}
+            onPress={() => void state.runSelectedTaskNow()}
+            testID="todo-run"
+          />
+        }
+      >
+        {(stop) => (
+          <TodoJobButton
+            kind="stop"
+            label={stop().pending ? t("todo_action_stopping") : t("chat_todo_job_stop")}
+            busy={stop().pending}
+            onPress={() => void state.stopSelectedRun()}
+            testID="todo-stop"
+          />
+        )}
+      </If>
+      <TodoJobButton
+        kind="topic"
+        label={t("todo_action_open_topic")}
+        disabled={!state.selectedTaskTopicID()}
+        onPress={() => state.openTaskTopic(state.selectedTaskTopicID())}
+        testID="todo-open-topic"
+      />
+      <DropdownMenu
+        disabled={busy()}
+        items={sheetMenuItems()}
+        testID="todo-task-actions"
+        trigger={
+          <View
+            testID="todo-task-actions"
+            accessibilityLabel={t("todo_action_more")}
+            role="button"
+            tooltip={<Tip text={t("todo_action_more")} />}
+            class="items-center justify-center rounded-full hover:bg-hover"
+            style={{ width: TODO_JOB_BUTTON_WIDTH, height: TODO_JOB_BUTTON_HEIGHT, transitionProperty: "colors", transitionDuration: 160 }}
+          >
+            <Icon name="PhDotsThree" size={TODO_JOB_ICON_SIZE} color="muted-foreground" />
+          </View>
+        }
+      />
+    </View>
+  );
+  const saveButton = () => (
+    <Button
+      variant="primary"
+      size="xs"
+      label={t("action_save")}
+      disabled={!state.canSave()}
+      loading={state.saving()}
+      testID="todo-save"
+      onPress={() => void state.save()}
+    />
+  );
+
   // In the calendar's side column the job is a card, as before. As a page it is a sheet of labelled
   // blocks: when it runs, what it does, whom it tells, what it uses, and its settings.
   const stacked = () => narrowWindow();
@@ -828,7 +902,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
           <View class="gap-2">
             <View class={stacked() ? "gap-3" : "flex-row items-center gap-3"}>
               <View class="min-w-0 flex-1">{titleField()}</View>
-              <View class={stacked() ? "self-end" : ""}>{actions()}</View>
+              <View class={`flex-row items-center gap-2 ${stacked() ? "self-end" : ""}`}>
+                {toolbar()}
+                {saveButton()}
+              </View>
             </View>
             {lastRun()}
           </View>

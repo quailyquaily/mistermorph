@@ -264,10 +264,10 @@ test("Run manually runs a saved item once and confirms it; the topic opens once 
       created ? { body: { id: "_cron_task-1", title: "Review" } } : { status: 404, body: { error: "not found" } },
   });
   await app.press("id:todo-item-task-1");
-  await app.press("id:todo-task-actions");
-  // No topic yet: no entry to it.
-  expect(app.shows("text:Open topic")).toBe(false);
-  await app.press("text:Run manually");
+  await app.waitFor("id:todo-toolbar");
+  // No topic yet: the way to it is there but takes no press.
+  await expect(app.press("id:todo-open-topic")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
+  await app.press("id:todo-run");
   await app.waitFor("id:todo-run-dialog");
   await app.waitFor('"Review" will start soon; it may wait for a free slot first. Preparing its topic…');
   // While it looks, Open topic waits.
@@ -289,8 +289,7 @@ test("an unsaved edit is saved before the run, and a failed run says so with no 
   });
   await app.press("id:todo-item-task-1");
   await app.type("id:todo-title", "!");
-  await app.press("id:todo-task-actions");
-  await app.press("text:Run manually");
+  await app.press("id:todo-run");
   await app.waitFor("queue is full");
   expect(app.shows("id:todo-run-dialog")).toBe(false);
   const order = agentWrites(calls)
@@ -304,24 +303,28 @@ test("an invalid item is not run: the validation error shows and nothing is sent
   await app.press("id:todo-empty-add");
   await app.waitFor("id:todo-task-editor");
   // A new item has no content yet.
-  await app.press("id:todo-task-actions");
-  await app.press("text:Run manually");
+  await app.press("id:todo-run");
   await app.waitFor("TODO content is required.");
   expect(agentWrites(calls).length).toBe(0);
 });
 
-test("an item whose topic exists offers Open topic right above Duplicate", async () => {
+test("an item whose topic exists opens it from its toolbar; the menu keeps the other actions", async () => {
   const { app, calls } = await openTodo({
     "GET /proxy:/topics/_cron_task-1": { body: { id: "_cron_task-1", title: "Review" } },
   });
   await app.press("id:todo-item-task-1");
   await app.waitUntil(() => calls.some((call) => call.uri === "/topics/_cron_task-1"));
+  // Start and the topic are the toolbar's own; the menu no longer repeats them.
   await app.press("id:todo-task-actions");
-  await app.waitFor("text:Open topic");
-  const texts = app.texts();
-  expect(texts.indexOf("Open topic") + 1).toBe(texts.indexOf("Duplicate"));
-  expect(texts.indexOf("Run manually") + 1).toBe(texts.indexOf("Open topic"));
-  await app.press("text:Open topic");
+  await app.waitFor("text:Duplicate");
+  expect(app.shows("text:Run manually")).toBe(false);
+  expect(app.shows("text:Open topic")).toBe(false);
+  await app.press("text:Duplicate");
+  await app.waitUntil(() => app.value("id:todo-title") === "Review (copy)");
+  await app.press("id:todo-back");
+  await app.press("id:todo-item-task-1");
+  await app.waitUntil(() => app.enabled("id:todo-open-topic"));
+  await app.press("id:todo-open-topic");
   await app.waitUntil(() => lastLocation(app).endsWith("/chat/_cron_task-1"));
   expect(agentWrites(calls).length).toBe(0);
 });
@@ -332,8 +335,7 @@ test("a topic that does not come offers a lookup-only retry; closing the dialog 
     "GET /proxy:/topics/_cron_task-2": { status: 500, body: { error: "topics unavailable" } },
   });
   await app.press("id:todo-item-task-2");
-  await app.press("id:todo-task-actions");
-  await app.press("text:Run manually");
+  await app.press("id:todo-run");
   await app.waitFor('"Report" will start soon; it may wait for a free slot first. Could not look up its topic: topics unavailable', { timeout: 4000 });
   const lookups = () => calls.filter((call) => call.uri === "/topics/_cron_task-2").length;
   const before = lookups();
@@ -366,7 +368,7 @@ test("running and waiting items say so, and a running item cannot be run again",
   expect(app.texts()).toContain("Waiting · On Jan 2 at 12:30 PM");
   await app.press("id:todo-item-task-1");
   await app.press("id:todo-task-actions");
-  await expect(app.press("text:Run manually")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
+  await expect(app.press("id:todo-run")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
 });
 
 /** A runtime whose TODO runs the test changes: `state.runs` and `state.finished` as /todo/runs lists them. */
