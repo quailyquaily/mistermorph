@@ -5,7 +5,7 @@
 // shown are read out beside it.
 import { batch, mount, signal, Text, View } from "nsh";
 import { isMobile } from "../../lib/shell";
-import { TODO_INDEX_WIDTH, TodoIndex } from "../../components/todo/TodoIndex";
+import { TodoIndex } from "../../components/todo/TodoIndex";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import type { PartFrame } from "../../components/shared/partProbe";
 import type { TodoState, TodoTask } from "../../components/todo/todo-state";
@@ -51,7 +51,7 @@ function Page() {
         <If
           when={calendar()}
           else={
-            <View class={isMobile() ? "flex-1" : ""} style={isMobile() ? undefined : { width: TODO_INDEX_WIDTH }}>
+            <View class="flex-1">
               <TodoIndex state={state} mobile={isMobile()} onPartLayout={report} />
             </View>
           }

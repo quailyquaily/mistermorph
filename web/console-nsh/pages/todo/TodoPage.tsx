@@ -1,6 +1,6 @@
-// The TODO page (web/console/src/views/TodoView.js): scheduled and manual agent tasks. A list (or
-// the calendar) at the left, the selected item's editor at the right; on phones one at a time, with
-// a back button over the editor and the floating add button over the list.
+// The TODO page: scheduled and manual agent tasks. The list is a page of its own and an item opens
+// in its place, behind a back button, on a desktop as on a phone (where the list also has the
+// floating add button). Only the desktop calendar keeps the selected item beside it.
 import { effect, Scroll, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
@@ -12,7 +12,7 @@ import { createPaneStack } from "../../components/motion/PaneStack";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import { TodoHeartbeatEditor } from "../../components/todo/TodoHeartbeatEditor";
-import { ROW_TRANSITION, TODO_INDEX_WIDTH, TodoIndex } from "../../components/todo/TodoIndex";
+import { ROW_TRANSITION, TodoIndex } from "../../components/todo/TodoIndex";
 import { TodoCard } from "../../components/todo/TodoCard";
 import { gutterX, gutterY } from "../../components/frame/metrics";
 import { Entrance, FadeText, SCROLLBAR } from "../../components/motion";
@@ -111,8 +111,12 @@ function Placeholder(props: { state: TodoState; mobile?: boolean }) {
   );
 }
 
+/** The open item's column on a desktop page: wide enough for the form, no wider than a page of text. */
+export const DETAIL_MAX_WIDTH = 860;
+
 /** What the editor side shows, in the Vue template's order. */
-function EditorPane(props: { state: TodoState; mobile?: boolean }) {
+/** `page`: on a desktop, the open item as a page of its own (the list is behind its back arrow). */
+function EditorPane(props: { state: TodoState; mobile?: boolean; page?: boolean }) {
   const state = props.state;
   const mode = () => {
     if (!state.showEditorPane()) return "none";
@@ -127,7 +131,15 @@ function EditorPane(props: { state: TodoState; mobile?: boolean }) {
   // the rows sit the list's 16pt gutter from each (Contacts likewise); on phones 16 all round.
   const panel = () => !props.mobile && state.calendarView();
   const margin = () =>
-    props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8 };
+    props.mobile
+      ? { margin: 16, marginBottom: 96 }
+      : props.page
+        ? { marginVertical: gutterY(), marginHorizontal: gutterX(), width: "100%" as const, maxWidth: DETAIL_MAX_WIDTH, alignSelf: "center" as const }
+        : panel()
+          ? { margin: 8 }
+          : { marginTop: 8, marginRight: 8, marginBottom: 8 };
+  // Under a bar of its own: on a phone, and as a page on a desktop.
+  const barred = () => !!props.mobile || !!props.page;
   // What it shows: an item of the list or a day of the calendar (the entrance plays for a new one).
   const shown = () => `${mode()}:${state.selectedTaskKey() ?? ""}:${state.selectedCalendarDate() ?? ""}`;
   // Where it is scrolled, across visits of the page, for as long as it shows the same item.
@@ -143,11 +155,11 @@ function EditorPane(props: { state: TodoState; mobile?: boolean }) {
         class="flex-1"
         scrollbar={SCROLLBAR}
         contentClass="min-h-full"
-        style={props.mobile ? underBar() : undefined}
+        style={barred() ? underBar() : undefined}
         ref={memory.ref}
         onScroll={memory.onScroll}
       >
-        <If when={props.mobile}>
+        <If when={barred()}>
           <BarRoom />
         </If>
         <Entrance watch={shown()} class="flex-1" rise={4}>
@@ -196,8 +208,8 @@ export function TodoPage() {
   // An open task is not the navigation's page: the bottom navigation steps aside.
   markMobileDetail(() => state.mobileShowBack());
   effect(() => untracked(() => void state.start()));
-  // On phones the list (0) and a task (1) are levels of the page that slide (PaneStack); the task
-  // keeps its bar while it goes out.
+  // The list (0) and a task (1) are levels of the page. On phones they slide (PaneStack) and the
+  // task keeps its bar while it goes out; on a desktop they swap at once.
   const panes = createPaneStack(() => (isMobile() ? (state.showIndexPane() ? 0 : 1) : null));
   const barTitle = panes.held(1, () => state.mobileBarTitle());
 
@@ -224,80 +236,66 @@ export function TodoPage() {
   return (
     // The phone's bar belongs to the task (it slides with it), below.
     <Page title={t("todo_title")} hideBar scroll={false} testID="todo-page">
+      {/* The list and an open item take turns (a phone slides between them; a desktop swaps them).
+          Only the desktop calendar keeps the open item beside it. */}
       <If
-        when={isMobile()}
+        when={!isMobile() && state.calendarView()}
         else={
-          <If
-            when={state.calendarView()}
-            else={
-              // The list's column (310) and the editor beside it, with no gap: the editor's frame
-              // is the list column's right edge.
-              <View class="flex-1 flex-row">
-                <View style={{ width: TODO_INDEX_WIDTH }}>
-                  <TodoIndex state={state} />
-                </View>
-                <View class="flex-1">
-                  <EditorPane state={state} />
-                </View>
+          <View class="flex-1">
+            <If when={panes.shown(0, state.showIndexPane())}>
+              <View
+                class="flex-1"
+                style={panes.style(0)}
+                accessibilityElementsHidden={panes.hidden(0) || undefined}
+                importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
+              >
+                <If when={state.calendarView()} else={<TodoIndex state={state} mobile={isMobile()} />}>
+                  <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24" ref={calendarMemory.ref} onScroll={calendarMemory.onScroll}>
+                    <Calendar state={state} mobile />
+                    <MobileBarSpacer />
+                  </Scroll>
+                </If>
               </View>
-            }
-          >
-            {/* The calendar and its side column share the page's height, 1.45 : 0.55 (360 at least). */}
-            <View class="flex-1 flex-row gap-1">
-              <Scroll class="flex-[1.45]" scrollbar={SCROLLBAR} contentClass="min-h-full" ref={calendarMemory.ref} onScroll={calendarMemory.onScroll}>
-                <Calendar state={state} />
-                <MobileBarSpacer />
-              </Scroll>
-              <View class="min-w-90 flex-[0.55]">
-                <EditorPane state={state} />
+            </If>
+            <If when={panes.shown(1, !state.showIndexPane())}>
+              <View
+                class="flex-1"
+                style={panes.style(1)}
+                accessibilityElementsHidden={panes.hidden(1) || undefined}
+                importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
+              >
+                <PageBar
+                  glass
+                  leading={
+                    <View class="flex-1 flex-row items-center gap-2">
+                      <BackButton title={t("todo_nav_title")} testID="todo-back" onPress={state.showIndexView} />
+                      <PageTitle text={barTitle()} />
+                    </View>
+                  }
+                />
+                <EditorPane state={state} mobile={isMobile()} page={!isMobile()} />
               </View>
-            </View>
-          </If>
+            </If>
+            <If when={isMobile() && state.showIndexPane()}>
+              <Fab
+                label={t("todo_action_add")}
+                disabled={state.loading() || state.saving()}
+                testID="todo-fab"
+                onPress={state.addTask}
+              />
+            </If>
+          </View>
         }
       >
-        <View class="flex-1">
-          <If when={panes.shown(0, state.showIndexPane())}>
-            <View
-              class="flex-1"
-              style={panes.style(0)}
-              accessibilityElementsHidden={panes.hidden(0) || undefined}
-              importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
-            >
-              <If when={state.calendarView()} else={<TodoIndex state={state} mobile />}>
-                <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24" ref={calendarMemory.ref} onScroll={calendarMemory.onScroll}>
-                  <Calendar state={state} mobile />
-                  <MobileBarSpacer />
-                </Scroll>
-              </If>
-            </View>
-          </If>
-          <If when={panes.shown(1, !state.showIndexPane())}>
-            <View
-              class="flex-1"
-              style={panes.style(1)}
-              accessibilityElementsHidden={panes.hidden(1) || undefined}
-              importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}
-            >
-              <PageBar
-                glass
-                leading={
-                  <View class="flex-1 flex-row items-center gap-2">
-                    <BackButton title={t("todo_nav_title")} testID="todo-back" onPress={state.showIndexView} />
-                    <PageTitle text={barTitle()} />
-                  </View>
-                }
-              />
-              <EditorPane state={state} mobile />
-            </View>
-          </If>
-          <If when={state.showIndexPane()}>
-            <Fab
-              label={t("todo_action_add")}
-              disabled={state.loading() || state.saving()}
-              testID="todo-fab"
-              onPress={state.addTask}
-            />
-          </If>
+        {/* The calendar and its side column share the page's height, 1.45 : 0.55 (360 at least). */}
+        <View class="flex-1 flex-row gap-1">
+          <Scroll class="flex-[1.45]" scrollbar={SCROLLBAR} contentClass="min-h-full" ref={calendarMemory.ref} onScroll={calendarMemory.onScroll}>
+            <Calendar state={state} />
+            <MobileBarSpacer />
+          </Scroll>
+          <View class="min-w-90 flex-[0.55]">
+            <EditorPane state={state} />
+          </View>
         </View>
       </If>
 

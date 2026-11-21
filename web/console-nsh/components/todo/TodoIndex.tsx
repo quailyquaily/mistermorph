@@ -1,25 +1,25 @@
-// The TODO list (the Vue page's todo-index, views/TodoView.css + views/common.css's
-// workspace-sidebar-*): Heartbeat first, then the scheduled items, disabled ones last, each with its
-// run state and schedule. The list is configuration the user writes, a handful of items, so it is
-// an Each in a Scroll rather than a virtualized List.
+// The TODO list, written as a notebook page: Heartbeat first, then the items in their order, then
+// the ones that are switched off under their own heading. Each is a line on a hairline: its marker
+// in the left margin, its name, and when it runs. An item opens in the list's place (TodoPage), so
+// the list has no selection. It is configuration the user writes, a handful of items, so it is an
+// Each in a Scroll rather than a virtualized List.
 //
-// Craft carried over from the Vue list:
-// - one selection highlight per group that glides between items (createSlidingSelection, a FLIP on
-//   its transform); the items keep only their hover fill, which comes in after 60ms and goes at once
-//   so sweeping the pointer down the list does not flash every row;
+// Craft:
+// - an item's hover fill comes in after 60ms and goes at once, so sweeping the pointer down the
+//   list does not flash every row;
 // - an item that just arrived or changed holds a blue tint, then fades back (createArrivalTint);
-// - a running item's marker turns into the running ring (StatusMark);
+// - a running item's marker turns into the running ring (StatusMark), and no word repeats it;
 // - the head sits flush with the list at rest and draws its hairline only once something has
 //   scrolled under it; the list's hidden end fades (createScrollEdges);
-// - the items' markers are centred under the head's last button's icon (TODO_MARKER_SLOT below).
-import { createAnimatedValue, effect, reduceMotion, Scroll, Text, untracked, View } from "nsh";
+// - every marker lies on one edge of the margin and every name starts on one line (TODO_MARGIN).
+import { effect, Scroll, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { useScrollMemory } from "../../lib/scrollMemory";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
 import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../frame/glassBar";
-import { gutterX, gutterY, listTitleSize } from "../frame/metrics";
-import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR } from "../motion";
+import { gutterX, gutterY } from "../frame/metrics";
+import { createArrivalTint, createScrollEdges, SCROLLBAR } from "../motion";
 import { BAR_ICON_SIZE, CircleButton, Icon, StatusMark } from "../ui";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
@@ -32,16 +32,9 @@ export const TODO_INDEX_WIDTH = 310;
 /** `--workspace-head-height`: the index head, as tall as the page bar. */
 export const TODO_HEAD_HEIGHT = 57;
 
-// The head's last button (Add on a desktop, the calendar toggle on a phone, where Add floats over
-// the list) is a 38pt square with its icon in the middle, and each item's marker (a 7pt mark in the
-// middle of a 16pt slot at the row's end) is centred under that icon: the axis lies the same
-// distance in from the index's right edge. On a phone the head keeps the pages' phone gutter and
-// the rows, edge to edge, take their right padding from the axis (gutter and half a button, less
-// half the slot and the 1pt border). On a desktop the rows keep the list's 16pt gutter (as wide as
-// the topic and contact rows) and 10pt padding (the marks' axis 35pt in, their right edge 15.5pt
-// inside the row's, as a topic's), and the head's right padding puts the icon there (16pt): Add
-// ends where the rows do.
-// Centres, not edges: the mark is 7pt, the button 38.
+// The calendar's head (TodoCalendar) still lays its buttons out over the old 310pt index column,
+// from these: the 38pt round buttons, and the inset that put the last one's icon over the old
+// list's markers. They go when the calendar's head is rebuilt over the page's column.
 /** The head's buttons: the standard round icon button (CircleButton, 38pt) with a regular icon button's 16pt icon (BAR_ICON_SIZE). */
 export const TODO_HEAD_BUTTON = 38;
 /** The marker's slot at an item's end (RunMarker), the mark in its middle. */
@@ -62,23 +55,6 @@ export function todoHeadPaddingRight(mobile: boolean): number {
   return mobile ? gutterX() : todoMarkerAxisInset(false) - TODO_HEAD_BUTTON / 2;
 }
 
-/** An item's right padding, so its marker is centred on the axis. */
-export function todoRowPaddingRight(mobile: boolean): number {
-  return mobile ? todoMarkerAxisInset(true) - TODO_MARKER_SLOT / 2 - ROW_BORDER : DESKTOP_ROW_PADDING_RIGHT;
-}
-
-// The empty list's add row is a dashed box, not an edge-to-edge row: on a phone it keeps the pages'
-// phone gutter on both sides, as the head does (on a desktop the list's 16pt gutter, as the rows).
-/** The empty list's add row's side inset from the index's edges. */
-export function todoEmptyGutter(mobile: boolean): number {
-  return mobile ? gutterX() : DESKTOP_LIST_GUTTER_RIGHT;
-}
-
-/** The empty add row's right padding inside its gutter, so its icon stays centred on the axis. */
-export function todoEmptyPaddingRight(mobile: boolean): number {
-  return todoRowPaddingRight(mobile) - (mobile ? todoEmptyGutter(true) : 0);
-}
-
 // Hover: the row's soft fill (accent 6 %) fades in after a short pause and out at once.
 export const ROW_HOVER = { transitionDelay: 60 };
 export const ROW_TRANSITION = { transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease" } as const;
@@ -91,7 +67,7 @@ export function RunMarker(props: { run: TodoRun | null; enabled: boolean; probe?
   const state = () =>
     props.run ? (props.run.state === TODO_RUN_RUNNING ? "running" : "pending") : props.enabled ? "on" : "off";
   return (
-    <View class="items-center justify-center" style={{ width: TODO_MARKER_SLOT }} accessibilityElementsHidden {...props.probe}>
+    <View class="items-start justify-center" style={{ width: TODO_MARKER_SLOT }} accessibilityElementsHidden {...props.probe}>
       <StatusMark state={state()} size={7} corner={2} />
     </View>
   );
@@ -100,17 +76,25 @@ export function RunMarker(props: { run: TodoRun | null; enabled: boolean; probe?
 /** A part's layout probe (createPartProbe's `probe`), spread on the view. */
 type Probe = ReturnType<ReturnType<typeof createPartProbe>["probe"]>;
 
+/** The list's column on a desktop: a page of text, centred. */
+export const TODO_LIST_MAX_WIDTH = 760;
+/** The margin at each row's left, where its marker sits (a bullet in a notebook's margin). */
+export const TODO_MARGIN = 28;
+
+/**
+ * One job, as a line of a notebook page: its marker in the left margin, its name, and under it when
+ * it runs. The row says nothing its marker already shows (a running item has the turning ring and
+ * no "Running"): the state is in the row's accessibility label.
+ */
 function IndexItem(props: {
   title: string;
   meta: string;
   runLabel: string;
   run: TodoRun | null;
   enabled: boolean;
-  active: boolean;
   arrived?: boolean;
   mobile?: boolean;
   testID?: string;
-  onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
   onPress: () => void;
   /** Probes for the title column and the marker slot (TodoIndex's `onPartLayout`). */
   titleProbe?: Probe;
@@ -128,50 +112,42 @@ function IndexItem(props: {
   return (
     <BaseButton
       onPress={() => props.onPress()}
-      selected={props.active}
-      accessibilityLabel={props.title}
+      accessibilityLabel={props.run ? `${props.title}, ${props.runLabel}` : props.title}
       testID={props.testID}
-      onLayout={props.onLayout}
-      // The selected row's fill is the gliding highlight behind it; hovering it deepens that a
-      // shade (accent 10 % -> ~13 %), as the Vue list does.
-      class={`relative flex-row items-center gap-2.5 rounded-(--radius) border border-transparent ${
-        props.mobile ? "pb-[10.3px] pl-3 pt-[11px]" : "pb-[10.3px] pl-3.5 pt-3"
-      } ${props.active ? "hover:bg-hover-faint" : "hover:bg-hover-soft"}`}
-      style={{ ...ROW_TRANSITION, paddingRight: todoRowPaddingRight(!!props.mobile) }}
+      class="relative flex-row rounded-(--radius) hover:bg-hover-faint"
+      style={ROW_TRANSITION}
       hoverStyle={ROW_HOVER}
     >
       <View class="absolute inset-0 rounded-(--radius)" style={{ backgroundColor: tint.color, pointerEvents: "none" }} />
-      {/* nsh draws a line no shorter than its font (17.3pt here, where the Vue title's line is
-          16.1): 3pt between the lines and 10.3 below keep the row at the Vue row's 61.3pt. On mobile
-          the title is 15pt on a 17.3pt line. */}
-      <View class="flex-1 gap-[3px]" {...props.titleProbe}>
+      {/* The marker, centred on the name's first line (24pt, 10pt down). */}
+      <View class="mt-2.5 h-6 justify-center" style={{ width: TODO_MARGIN }}>
+        <RunMarker run={props.run} enabled={props.enabled} probe={props.markerProbe} />
+      </View>
+      <View class="flex-1 gap-px border-b border-line-soft/60 pb-[11px] pt-2.5" {...props.titleProbe}>
         <Text
-          class={`${listTitleSize(!!props.mobile)} font-normal ${props.mobile ? "leading-[17.3px]" : "leading-[16.1px]"} tracking-[-0.35px] text-foreground line-clamp-2`}
+          class={`text-base font-normal leading-[24px] tracking-[-0.2px] line-clamp-2 ${props.enabled ? "text-foreground" : "text-muted-foreground"}`}
         >
           {props.title}
         </Text>
-        <Text
-          class={`font-mono text-xs leading-[16.2px] line-clamp-2 ${props.active ? "text-subtle" : "text-muted-foreground"}`}
-        >
-          <If when={props.run}>
+        <Text class="text-[13px] leading-[20px] text-muted-foreground line-clamp-2">
+          {/* A waiting item says so (its orange mark alone is not a known sign); a running one has the ring. */}
+          <If when={props.run && props.run.state !== TODO_RUN_RUNNING}>
             <Text class="text-subtle">{`${props.runLabel} · `}</Text>
           </If>
           {props.meta}
         </Text>
       </View>
-      <RunMarker run={props.run} enabled={props.enabled} probe={props.markerProbe} />
     </BaseButton>
   );
 }
 
-/** A group heading (workspace-sidebar-divider): a small mono label, then a rule that fades out. */
-function Divider(props: { label: string; mobile?: boolean }) {
+/** A group heading in the page's margin style: a small mono label over the rows it names. */
+function Divider(props: { label: string }) {
   return (
-    <View class={`flex-row items-center gap-2.5 pb-1 pt-2.5 ${props.mobile ? "px-3.5" : "mx-4 px-3.5"}`} role="header">
+    <View class="pb-1.5 pt-6" style={{ paddingLeft: TODO_MARGIN }} role="header">
       <Text class="font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[1.32px] text-muted-foreground line-clamp-1">
         {props.label}
       </Text>
-      <View class="h-px flex-1 bg-linear-to-r from-line-soft to-transparent" />
     </View>
   );
 }
@@ -189,41 +165,59 @@ export function TodoIndex(props: {
   const state = props.state;
   const parts = createPartProbe(() => props.onPartLayout);
   const display = (task: TodoTask) => state.taskListDisplayTask(task) as TodoTask;
-  const heartbeatSelection = createSlidingSelection(() => (!props.mobile && state.heartbeatSelected() ? "heartbeat" : null));
-  const taskSelection = createSlidingSelection(() => (props.mobile ? null : state.selectedTaskKey() || null));
+  const on = (task: TodoTask) => display(task).enabled !== false;
+  // The list as written, then the items that are switched off, under their own heading.
+  const onTasks = () => state.orderedTasks().filter(on);
+  const offTasks = () => state.orderedTasks().filter((task) => !on(task));
   const edges = createScrollEdges({ start: false });
-  // Where the list is scrolled, across visits of the page.
   const memory = useScrollMemory({ column: 2, area: "index", ready: () => !props.state.tasksPending() });
+  // The page's column: the pages' gutter at each side, and on a desktop no wider than a page of text.
+  const column = () => ({ width: "100%" as const, maxWidth: props.mobile ? undefined : TODO_LIST_MAX_WIDTH, alignSelf: "center" as const });
+  const row = (task: () => TodoTask) => (
+    <IndexItem
+      title={state.taskTitle(display(task()))}
+      meta={state.scheduleLabel(display(task()))}
+      runLabel={state.runStateLabel(state.taskRun(task()))}
+      run={state.taskRun(task())}
+      enabled={on(task())}
+      arrived={state.isArrived(task())}
+      mobile={props.mobile}
+      testID={`todo-item-${task().id}`}
+      onPress={() => state.selectTask(task())}
+      titleProbe={parts.probe(() => `title-${task().id}`)}
+      markerProbe={parts.probe(() => `marker-${task().id}`)}
+    />
+  );
   return (
     <View class="flex-1" accessibilityLabel={t("todo_nav_title")} testID="todo-index" {...parts.probe(() => "index")}>
       <View
-        // Glass over the list, which runs on under it (components/frame/glassBar.tsx).
-        class={`flex-row items-center border-b ${edges.scrolled() ? "border-line-soft/50" : "border-transparent"} ${glassBarClass()}`}
+        class={`border-b ${edges.scrolled() ? "border-line-soft/50" : "border-transparent"} ${glassBarClass()}`}
         style={{
           ...glassBarStyle(),
           height: TODO_HEAD_HEIGHT,
-          paddingLeft: gutterX(),
-          paddingRight: todoHeadPaddingRight(!!props.mobile),
+          paddingHorizontal: gutterX(),
           transitionProperty: "colors",
           transitionDuration: 180,
         }}
       >
-        <Text
-          class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground line-clamp-1"
-          role="header"
-        >
-          {t("todo_title")}
-        </Text>
-        {/* Buttons sit at the top of their box (self-start); a wrapper centres them in the head. The
-            last one's icon is centred over the items' markers (above). */}
-        <View {...parts.probe(() => (props.mobile ? "head-action" : null))}>
-          <TodoViewToggle calendar={false} onPress={state.toggleTodoView} onPartLayout={props.onPartLayout} />
-        </View>
-        <If when={!props.mobile}>
-          <View {...parts.probe(() => "head-action")}>
-            <CircleButton icon="PhPlus" iconSize={BAR_ICON_SIZE} title={t("todo_action_add")} testID="todo-add" onPress={state.addTask} />
+        {/* The head keeps the list's column: the title starts where the names do, after the margin. */}
+        <View class="flex-1 flex-row items-center" style={{ ...column(), paddingLeft: TODO_MARGIN }}>
+          <Text
+            class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground line-clamp-1"
+            role="header"
+          >
+            {t("todo_title")}
+          </Text>
+          {/* Buttons sit at the top of their box (self-start); a wrapper centres them in the head. */}
+          <View {...parts.probe(() => (props.mobile ? "head-action" : null))}>
+            <TodoViewToggle calendar={false} onPress={state.toggleTodoView} onPartLayout={props.onPartLayout} />
           </View>
-        </If>
+          <If when={!props.mobile}>
+            <View {...parts.probe(() => "head-action")}>
+              <CircleButton icon="PhPlus" iconSize={BAR_ICON_SIZE} title={t("todo_action_add")} testID="todo-add" onPress={state.addTask} />
+            </View>
+          </If>
+        </View>
       </View>
 
       <Scroll
@@ -240,92 +234,69 @@ export function TodoIndex(props: {
         <BarRoom height={TODO_HEAD_HEIGHT} />
         <View
           onLayout={edges.onContentLayout}
-          class="gap-3.5"
-          // On phones the rows run edge to edge (Vue: list padding 16 0, their own 12 inside) and
-          // the list clears the floating add button.
-          style={{ paddingBottom: props.mobile ? 84 : gutterY() }}
+          style={{ paddingHorizontal: gutterX(), paddingTop: 8, paddingBottom: props.mobile ? 84 : gutterY() * 2 }}
         >
-          <If when={state.placeholderRows()}>
-            <View class={`gap-2 ${props.mobile ? "pt-4" : "px-4 pt-4"}`} accessibilityLabel={t("todo_heartbeat_loading")}>
-              <Each of={[0, 1, 2]}>{() => <View class="h-15 animate-pulse rounded-(--radius) bg-muted" />}</Each>
-            </View>
-          </If>
+          <View style={column()}>
+            <If when={state.placeholderRows()}>
+              <View class="gap-2 pt-2" accessibilityLabel={t("todo_heartbeat_loading")} style={{ paddingLeft: TODO_MARGIN }}>
+                <Each of={[0, 1, 2]}>{() => <View class="h-13 animate-pulse rounded-(--radius) bg-muted" />}</Each>
+              </View>
+            </If>
 
-          <View class={`relative ${props.mobile ? "pt-4" : "px-4 pt-4"}`}>
-            <heartbeatSelection.Highlight class="rounded-(--radius) bg-selection" />
             <IndexItem
               title={t("todo_heartbeat_title")}
               meta={state.heartbeatIndexMeta()}
               runLabel={state.runStateLabel(state.heartbeatRun())}
               run={state.heartbeatRun()}
               enabled={!state.heartbeatDisabled()}
-              active={!props.mobile && state.heartbeatSelected()}
               mobile={props.mobile}
               testID="todo-heartbeat-item"
-              onLayout={heartbeatSelection.track("heartbeat")}
               onPress={state.selectHeartbeat}
               titleProbe={parts.probe(() => "title-heartbeat")}
               markerProbe={parts.probe(() => "marker-heartbeat")}
             />
-          </View>
-
-          <View>
-            <If when={state.tasks().length > 0 || !state.tasksPending()}>
-              <Divider label={t("todo_index_scheduled")} mobile={props.mobile} />
-            </If>
 
             <If
               when={state.tasks().length > 0}
               else={
                 <If when={!state.loading()}>
-                  <View style={{ paddingHorizontal: todoEmptyGutter(!!props.mobile) }}>
-                    {/* The button takes no ref: this view, exactly as large, reports its frame. */}
+                  {/* The button takes no ref: this view, exactly as large, reports its frame. */}
+                  <View class="pt-3" style={{ paddingLeft: TODO_MARGIN }}>
                     <View {...parts.probe(() => "empty-add")}>
-                    <BaseButton
-                      onPress={state.addTask}
-                      accessibilityLabel={t("todo_action_add")}
-                      testID="todo-empty-add"
-                      class={`flex-row items-center gap-2.5 rounded-(--radius) border border-dashed border-line-soft hover:bg-hover-soft ${
-                        props.mobile ? "pl-3 py-[11px]" : "pb-[11px] pl-3.5 pt-3"
-                      }`}
-                      style={{ ...ROW_TRANSITION, paddingRight: todoEmptyPaddingRight(!!props.mobile) }}
-                      hoverStyle={ROW_HOVER}
-                    >
-                      <View class="flex-1 gap-1" {...parts.probe(() => "empty-text")}>
-                        <Text class="text-sm leading-[15.1px] tracking-[-0.35px] text-subtle">{t("todo_empty_list")}</Text>
-                        <Text class="text-xs leading-[16.8px] text-muted-foreground">{t("todo_empty_list_hint")}</Text>
-                      </View>
-                      <View class="items-center" style={{ width: TODO_MARKER_SLOT }} {...parts.probe(() => "empty-marker")}>
-                        <Icon name="PhPlus" size={14} color="muted-foreground" />
-                      </View>
-                    </BaseButton>
+                      <BaseButton
+                        onPress={state.addTask}
+                        accessibilityLabel={t("todo_action_add")}
+                        testID="todo-empty-add"
+                        class="flex-row items-center gap-2.5 rounded-(--radius) border border-dashed border-line-soft px-3.5 pb-[11px] pt-3 hover:bg-hover-soft"
+                        style={ROW_TRANSITION}
+                        hoverStyle={ROW_HOVER}
+                      >
+                        <View class="flex-1 gap-1" {...parts.probe(() => "empty-text")}>
+                          <Text class="text-sm leading-[15.1px] tracking-[-0.35px] text-subtle">{t("todo_empty_list")}</Text>
+                          <Text class="text-xs leading-[16.8px] text-muted-foreground">{t("todo_empty_list_hint")}</Text>
+                        </View>
+                        <View class="items-center" style={{ width: TODO_MARKER_SLOT }} {...parts.probe(() => "empty-marker")}>
+                          <Icon name="PhPlus" size={14} color="muted-foreground" />
+                        </View>
+                      </BaseButton>
                     </View>
                   </View>
                 </If>
               }
             >
-              <View class={`relative gap-0.5 ${props.mobile ? "" : "px-4"}`} role={props.mobile ? undefined : "list"}>
-                <taskSelection.Highlight class="rounded-(--radius) bg-selection" />
-                <Each of={state.orderedTasks()} key={(task) => task._key}>
-                  {(task) => (
-                    <IndexItem
-                      title={state.taskTitle(display(task()))}
-                      meta={state.scheduleLabel(display(task()))}
-                      runLabel={state.runStateLabel(state.taskRun(task()))}
-                      run={state.taskRun(task())}
-                      enabled={display(task()).enabled !== false}
-                      active={!props.mobile && task()._key === state.selectedTaskKey()}
-                      arrived={state.isArrived(task())}
-                      mobile={props.mobile}
-                      testID={`todo-item-${task().id}`}
-                      onLayout={taskSelection.track(task()._key)}
-                      onPress={() => state.selectTask(task())}
-                      titleProbe={parts.probe(() => `title-${task().id}`)}
-                      markerProbe={parts.probe(() => `marker-${task().id}`)}
-                    />
-                  )}
+              <View role="list">
+                <Each of={onTasks()} key={(task) => task._key}>
+                  {(task) => row(task)}
                 </Each>
               </View>
+              <If when={offTasks().length > 0}>
+                <Divider label={t("todo_index_off")} />
+                <View role="list" testID="todo-index-off">
+                  <Each of={offTasks()} key={(task) => task._key}>
+                    {(task) => row(task)}
+                  </Each>
+                </View>
+              </If>
             </If>
           </View>
         </View>

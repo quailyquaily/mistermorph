@@ -394,9 +394,12 @@ export function createTodoState() {
   const canDuplicateSelectedTask = computed(
     () => Boolean(selectedTask()) && !heartbeatSelected() && !loading() && !saving(),
   );
-  const showIndexPane = computed(() => !isMobile() || !mobileEditorVisible());
-  const showEditorPane = computed(() => !isMobile() || mobileEditorVisible());
-  const mobileShowBack = computed(() => isMobile() && mobileEditorVisible());
+  // The list and an open item take turns: on a phone, and on a desktop too, where the list is a
+  // page of its own. Only the desktop calendar keeps the open item beside it.
+  const paged = () => isMobile() || !calendarView();
+  const showIndexPane = computed(() => !paged() || !mobileEditorVisible());
+  const showEditorPane = computed(() => !paged() || mobileEditorVisible());
+  const mobileShowBack = computed(() => paged() && mobileEditorVisible());
   const mobileBarTitle = computed(() =>
     mobileShowBack()
       ? heartbeatSelected()
@@ -488,7 +491,7 @@ export function createTodoState() {
   /* ---------- views and selection ---------- */
 
   effect(() => {
-    if (!isMobile()) {
+    if (!paged()) {
       untracked(() => mobileEditorVisible.set(false));
     }
   });
@@ -763,7 +766,7 @@ export function createTodoState() {
       } else if (!untracked(selectedTaskDraft)) {
         openSelectedTaskDraft();
       }
-      if (untracked(isMobile)) {
+      if (untracked(paged)) {
         mobileEditorVisible.set(true);
       }
     });
@@ -790,7 +793,7 @@ export function createTodoState() {
   function selectHeartbeat() {
     batch(() => {
       if (untracked(heartbeatSelected)) {
-        if (untracked(isMobile)) {
+        if (untracked(paged)) {
           mobileEditorVisible.set(true);
         }
         return;
@@ -799,7 +802,7 @@ export function createTodoState() {
       selectedTaskKey.set(model.HEARTBEAT_ITEM_KEY);
       selectedTaskDraft.set(null);
       draftDirty.set(false);
-      if (untracked(isMobile)) {
+      if (untracked(paged)) {
         mobileEditorVisible.set(true);
       }
     });

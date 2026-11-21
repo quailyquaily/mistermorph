@@ -49,14 +49,45 @@ async function openTodo(overrides: Record<string, unknown> = {}, options: Record
   return opened;
 }
 
-test("the list shows Heartbeat and the items with their schedules; nothing is selected", async () => {
+test("the list shows Heartbeat and the items with their schedules, and no item is open", async () => {
   const { app } = await openTodo();
   await app.waitFor("id:todo-item-task-1");
   expect(app.texts()).toContain("Heartbeat");
   expect(app.texts()).toContain("Every 30 minutes");
   expect(app.texts()).toContain("Every Monday and Wednesday at 9:15 AM");
   expect(app.texts()).toContain("On Jan 2 at 12:30 PM");
-  expect(app.texts()).toContain("No TODO selected");
+  // The list is the page: an item opens in its place, so none is open and there is no way back.
+  expect(app.shows("id:todo-task-editor")).toBe(false);
+  expect(app.shows("id:todo-back")).toBe(false);
+});
+
+test("an item opens in the list's place, and the back arrow returns to the list", async () => {
+  const { app } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.shows("id:todo-index")).toBe(false);
+  await app.press("id:todo-back");
+  await app.waitFor("id:todo-item-task-2");
+  expect(app.shows("id:todo-task-editor")).toBe(false);
+});
+
+test("items that are switched off sit under their own heading, after the others", async () => {
+  const { app } = await openTodo({
+    "GET /proxy:/todo/tasks": {
+      body: tasksBody({
+        tasks: [
+          { id: "task-1", title: "Review", content: "x", cron: "15 9 * * 1,3", tz: "UTC+9", enabled: false },
+          { id: "task-2", title: "Report", content: "Write it", at: "2030-01-02 12:30", tz: "UTC" },
+        ],
+      }),
+    },
+  });
+  await app.waitFor("id:todo-item-task-1");
+  const texts = app.texts();
+  expect(texts.indexOf("Report")).toBeLessThan(texts.indexOf("OFF"));
+  expect(texts.indexOf("OFF")).toBeLessThan(texts.indexOf("Review"));
+  expect(app.shows("id:todo-index-off >> id:todo-item-task-1")).toBe(true);
+  expect(app.shows("id:todo-index-off >> id:todo-item-task-2")).toBe(false);
 });
 
 test("editing an item enables Save, and Save sends every item with the edit", async () => {
@@ -67,8 +98,6 @@ test("editing an item enables Save, and Save sends every item with the edit", as
   await app.clear("id:todo-title");
   await app.type("id:todo-title", "Weekly review");
   expect(app.enabled("id:todo-save")).toBe(true);
-  // The list shows the draft's title at once.
-  await app.waitFor("id:todo-item-task-1 >> text:Weekly review");
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   const puts = proxied(calls, "PUT", "/todo/tasks");
@@ -78,6 +107,18 @@ test("editing an item enables Save, and Save sends every item with the edit", as
     { id: "task-2", title: "Report", content: "Write it", at: "2030-01-02 12:30", tz: "UTC" },
   ]);
   expect(app.enabled("id:todo-save")).toBe(false);
+  // Back on the list, the item has its new name.
+  await app.press("id:todo-back");
+  await app.waitFor("id:todo-item-task-1 >> text:Weekly review");
+});
+
+test("the list shows an unsaved edit's title at once", async () => {
+  const { app } = await openTodo();
+  await app.press("id:todo-item-task-1");
+  await app.clear("id:todo-title");
+  await app.type("id:todo-title", "Weekly review");
+  await app.press("id:todo-back");
+  await app.waitFor("id:todo-item-task-1 >> text:Weekly review");
 });
 
 test("the editor shows when the item last ran and how it ended; saves never send it back", async () => {
@@ -95,8 +136,10 @@ test("the editor shows when the item last ran and how it ended; saves never send
   await app.press("id:todo-item-task-1");
   await app.waitFor("id:todo-last-run");
   await app.waitFor("text:/^Last run .+ · Failed$/");
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-3");
   await app.waitFor("text:/^Last run .+ · Done$/");
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-2");
   await app.waitFor("text:Not run yet");
   expect(app.shows("text:/· Failed$/")).toBe(false);
@@ -170,6 +213,7 @@ test("Duplicate copies the item below it under a new id, unsaved", async () => {
   expect([tasks[0].id, tasks[2].id]).toEqual(["task-1", "task-2"]);
   // The copy is a new job with an ID of its own; the items it sits between keep theirs.
   expect(tasks[1].id).toMatch(JOB_ID);
+  await app.press("id:todo-back");
   await app.waitFor(`id:todo-item-${tasks[1].id}`);
   expect(tasks[1]).toMatchObject({ title: "Review (copy)", content: "Original content", cron: "15 9 * * 1,3" });
 });
@@ -189,7 +233,9 @@ test("Delete asks first, then saves the list without the item", async () => {
   await app.waitFor("Deleted");
   await app.waitFor("id:todo-item-task-2", { state: "gone" });
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks.map((task: { id: string }) => task.id)).toEqual(["task-1"]);
-  expect(app.texts()).toContain("No TODO selected");
+  // The deleted item's page closes: the list is back, without it.
+  expect(app.shows("id:todo-item-task-1")).toBe(true);
+  expect(app.shows("id:todo-task-editor")).toBe(false);
 });
 
 test("a failed delete keeps the item", async () => {
@@ -199,6 +245,9 @@ test("a failed delete keeps the item", async () => {
   await app.press("text:Delete");
   await app.press("id:dialog-action-delete");
   await app.waitFor("locked");
+  // Its page stays open with the item, and the list still has it.
+  expect(app.value("id:todo-title")).toBe("Report");
+  await app.press("id:todo-back");
   expect(app.shows("id:todo-item-task-2")).toBe(true);
 });
 
@@ -308,8 +357,12 @@ test("running and waiting items say so, and a running item cannot be run again",
     },
   });
   await app.waitFor("id:todo-item-task-1");
-  expect(app.texts()).toContain("Running · Every 30 minutes");
-  expect(app.texts()).toContain("Running · Every Monday and Wednesday at 9:15 AM");
+  // A running item has the turning ring and no word for it; its state is in its name for screen
+  // readers. A waiting one says so.
+  expect(app.texts()).toContain("Every 30 minutes");
+  expect(app.texts().some((text) => /Running/.test(text))).toBe(false);
+  expect(app.shows("label:Review, Running")).toBe(true);
+  expect(app.shows("label:Heartbeat, Running")).toBe(true);
   expect(app.texts()).toContain("Waiting · On Jan 2 at 12:30 PM");
   await app.press("id:todo-item-task-1");
   await app.press("id:todo-task-actions");
@@ -441,9 +494,11 @@ test("idle and waiting items and Heartbeat offer no Stop", async () => {
   await app.press("id:todo-item-task-1");
   await app.waitFor("id:todo-task-editor");
   expect(app.shows("id:todo-stop")).toBe(false);
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-2");
   await app.waitFor("text:Report");
   expect(app.shows("id:todo-stop")).toBe(false);
+  await app.press("id:todo-back");
   await app.press("id:todo-heartbeat-item");
   await app.waitFor("text:Inbox");
   expect(app.shows("id:todo-stop")).toBe(false);
@@ -948,6 +1003,7 @@ test("another item's content shows in the same field, and a mention goes into th
   const { app, calls } = await openTodo(CONTACTS);
   await app.press("id:todo-item-task-1");
   await app.type("id:todo-content-source", " today");
+  await app.press("id:todo-back");
   await app.press("id:todo-item-task-2");
   await app.waitUntil(() => app.value("id:todo-content-source") === "Write it");
   await app.press("id:markdown-editor-mention");
