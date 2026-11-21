@@ -421,6 +421,7 @@ const FILES = {
     items: { ContextPage: L("page"), Swatch: L("part", "ContextPage"), CacheBadge: L("part", "ContextPage"), Ring: L("part", "ContextPage") },
   },
   "pages/login/LoginPage.tsx": { group: "pages", items: { LoginPage: L("page") } },
+  "pages/login/QrScanner.tsx": { group: "pages", items: { QrScanner: L("live") } },
   "pages/login/ServerDialog.tsx": { group: "pages", items: { ServerDialog: L("live") } },
   "pages/logs/LogsPage.tsx": { group: "pages", items: { LogsPage: L("page") } },
   "pages/memories/MemoriesPage.tsx": {

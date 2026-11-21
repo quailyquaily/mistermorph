@@ -15,6 +15,10 @@
 //   for a new document (ACTION_CREATE_DOCUMENT, which needs no storage permission), and the
 //   `<queries>` entry that lets the app see that picker (Android 11+ hides other apps from
 //   `resolveActivity` without one), so the app offers saving only where it can.
+// - the QR scanner (pages/login/QrScanner.tsx): the camera permission, asked at the first scan
+//   (nsh declares it itself from nsh.json's `webview.media`; added here when it did not). A
+//   permission implies its hardware is required, and a camera is not required to install the app:
+//   the server's address can be typed.
 // - the display name: the launcher and the system's app settings show "Morph" (LABEL), while nsh
 //   labels the app with nsh.json's name, which the desktop app and the web Console keep. It is a
 //   literal, not a string resource, so no locale's resources can name the app otherwise; a launcher
@@ -53,6 +57,12 @@ export function patchManifest(xml) {
       '<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    ' +
         '<uses-feature android:name="android.hardware.microphone" android:required="false" />\n    <application',
     );
+  }
+  if (!out.includes("android.permission.CAMERA")) {
+    out = out.replace(/<application\b/, '<uses-permission android:name="android.permission.CAMERA" />\n    <application');
+  }
+  if (!out.includes("android.hardware.camera")) {
+    out = out.replace(/<application\b/, '<uses-feature android:name="android.hardware.camera" android:required="false" />\n    <application');
   }
   if (!out.includes("android.permission.POST_NOTIFICATIONS")) {
     out = out.replace(/<application\b/, '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <application');

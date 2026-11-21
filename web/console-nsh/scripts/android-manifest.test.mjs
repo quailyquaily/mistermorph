@@ -47,6 +47,18 @@ test("adds cleartext HTTP, the microphone, the Application and the permission ac
   assert.equal(out.split(APPLICATION).length, 2);
 });
 
+test("adds the camera for the QR scanner, not required to install the app, whether or not nsh declared the permission", () => {
+  const declared = NSH_MANIFEST.replace(/<application\b/, '<uses-permission android:name="android.permission.CAMERA" />\n    <application');
+  for (const manifest of [NSH_MANIFEST, declared]) {
+    const out = patchManifest(manifest);
+    assert.equal(out.split('<uses-permission android:name="android.permission.CAMERA" />').length, 2);
+    assert.equal(out.split('<uses-feature android:name="android.hardware.camera" android:required="false" />').length, 2);
+    assert.ok(out.indexOf("android.permission.CAMERA") < out.indexOf("<application"));
+    assert.ok(out.indexOf("android.hardware.camera") < out.indexOf("<application"));
+    assert.equal(patchManifest(out), out);
+  }
+});
+
 test("adds the notification permission, its activities and the watcher's job", () => {
   const out = patchManifest(NSH_MANIFEST);
   assert.match(out, /<uses-permission android:name="android\.permission\.POST_NOTIFICATIONS" \/>/);

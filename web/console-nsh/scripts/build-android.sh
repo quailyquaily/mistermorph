@@ -149,7 +149,7 @@ rm -f "$built"
 if [[ "$format" == apk ]]; then
   manifest=$("$build_tools/aapt2" dump xmltree --file AndroidManifest.xml "$built")
   for wanted in usesCleartextTraffic android.permission.RECORD_AUDIO android.permission.POST_NOTIFICATIONS \
-    android.permission.ACCESS_NETWORK_STATE \
+    android.permission.ACCESS_NETWORK_STATE android.permission.CAMERA android.hardware.camera \
     com.mistermorph.console.MorphApplication com.mistermorph.console.VoicePermissionActivity \
     com.mistermorph.console.NotificationPermissionActivity com.mistermorph.console.NotificationOpenActivity \
     com.mistermorph.console.TaskNotifierJob com.mistermorph.console.SaveDocumentActivity \

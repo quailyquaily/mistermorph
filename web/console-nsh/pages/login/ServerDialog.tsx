@@ -1,11 +1,19 @@
 // The phone app's console server: where `morph console serve` runs. The phone app has no server of
 // its own (lib/mobileHost.ts), so the login page opens this dialog to enter or change the address.
 // Saving checks that a console answers there first.
-import { effect, signal, untracked, View } from "nsh";
+//
+// The address is typed, or read from a QR code: "Scan QR code" shows the camera in the field's
+// place (QrScanner.tsx) and puts what a code holds into the field, when it is a server address by
+// the typed address's rules. That is all a scan does: the address is a draft like a typed one, and
+// only Save checks, saves and goes on. A code that holds no address, a refused or missing camera
+// and a device without a scanner say so and leave the field as it was, to type in or scan again.
+import { effect, signal, Text, untracked, View } from "nsh";
 import { Button, Modal, TextField } from "../../components/ui";
 import { authState, configureApiBase, translate as t } from "../../lib/core/context.js";
 import { parseServer } from "../../lib/mobileHost";
 import { serverAddress, setServer } from "../../lib/platform";
+import { type ScanEvent, type ScanFailure, scannedServer } from "../../lib/qrScan";
+import { QrScanner } from "./QrScanner";
 
 /** How long a server may take to answer the check. */
 const CHECK_TIMEOUT_MS = 8000;
@@ -28,24 +36,81 @@ async function checkServer(address: string): Promise<string> {
   }
 }
 
+/** What a scan that gave no code says. */
+const SCAN_FAILURES: Record<ScanFailure, string> = {
+  unsupported: "login_scan_unsupported",
+  denied: "login_scan_denied",
+  no_camera: "login_scan_no_camera",
+  busy: "login_scan_busy",
+  interrupted: "login_scan_interrupted",
+  failed: "login_scan_failed",
+};
+
+/** The camera's box: tall enough to aim with, short enough for a small phone's sheet. */
+const CAMERA_HEIGHT = 240;
+
 export function ServerDialog(props: { open: boolean; onClose: () => void; onSaved: (address: string) => void }) {
   const address = signal(serverAddress());
   const err = signal("");
   const busy = signal(false);
+  // A scan runs: the camera is in the field's place.
+  const scanning = signal(false);
+  const cameraReady = signal(false);
+  // What the last scan came to, under the field until the address is edited or another scan starts.
+  const scanNote = signal<{ text: string; failed: boolean } | null>(null);
 
-  // Each opening starts from the saved address.
+  // Each opening starts from the saved address; closing ends a scan (and with it the camera).
   effect(() => {
-    if (props.open) {
-      untracked(() => {
-        address.set(serverAddress());
-        err.set("");
-        busy.set(false);
-      });
-    }
+    const open = props.open;
+    untracked(() => {
+      scanning.set(false);
+      cameraReady.set(false);
+      if (!open) return;
+      address.set(serverAddress());
+      err.set("");
+      busy.set(false);
+      scanNote.set(null);
+    });
   });
 
+  function startScan() {
+    if (busy() || scanning()) return;
+    scanNote.set(null);
+    cameraReady.set(false);
+    scanning.set(true);
+  }
+
+  function stopScan() {
+    scanning.set(false);
+    cameraReady.set(false);
+  }
+
+  // What the scanner says (lib/qrScan.ts): nothing more comes after a code or a failure.
+  function onScan(event: ScanEvent) {
+    if (!scanning()) return;
+    if (event.type === "ready") {
+      cameraReady.set(true);
+      return;
+    }
+    stopScan();
+    if (event.type === "error") {
+      scanNote.set({ text: t(SCAN_FAILURES[event.code] || SCAN_FAILURES.failed), failed: true });
+      return;
+    }
+    const scanned = scannedServer(event.text);
+    if (!scanned) {
+      // Not an address: the field keeps what it had.
+      scanNote.set({ text: t("login_scan_invalid"), failed: true });
+      return;
+    }
+    // A draft, as if typed: Save is the user's to press.
+    address.set(scanned);
+    err.set("");
+    scanNote.set({ text: t("login_scan_filled"), failed: false });
+  }
+
   async function save() {
-    if (busy()) return;
+    if (busy() || scanning()) return;
     const parsed = parseServer(address());
     if (!parsed) {
       err.set(t("login_server_invalid"));
@@ -86,38 +151,89 @@ export function ServerDialog(props: { open: boolean; onClose: () => void; onSave
       closeLabel={t("action_close")}
       testID="login-server-dialog"
       footer={
-        <>
-          <Button variant="outlined" label={t("action_cancel")} disabled={busy()} onPress={props.onClose} />
-          <Button
-            variant="primary"
-            label={t("action_save")}
-            loading={busy()}
-            disabled={busy() || address().trim() === ""}
-            testID="login-server-save"
-            onPress={() => void save()}
-          />
-        </>
+        <If
+          when={scanning()}
+          else={
+            <>
+              <Button variant="outlined" label={t("action_cancel")} disabled={busy()} onPress={props.onClose} />
+              <Button
+                variant="primary"
+                label={t("action_save")}
+                loading={busy()}
+                disabled={busy() || address().trim() === ""}
+                testID="login-server-save"
+                onPress={() => void save()}
+              />
+            </>
+          }
+        >
+          <Button variant="outlined" label={t("login_scan_stop")} testID="login-server-scan-stop" onPress={stopScan} />
+        </If>
       }
     >
-      <View class="gap-1">
-        <TextField
-          label={t("login_host")}
-          value={address()}
-          onChange={(value) => {
-            address.set(value);
-            err.set("");
-          }}
-          onSubmit={() => void save()}
-          placeholder={t("login_server_placeholder")}
-          keyboardType="url"
-          mono
-          autoFocus
-          clearable
-          disabled={busy()}
-          error={err()}
-          testID="login-server-input"
-        />
-      </View>
+      <If
+        when={scanning()}
+        else={
+          <View class="gap-3">
+            <TextField
+              label={t("login_server_address")}
+              value={address()}
+              onChange={(value) => {
+                address.set(value);
+                err.set("");
+                scanNote.set(null);
+              }}
+              onSubmit={() => void save()}
+              placeholder={t("login_server_placeholder")}
+              hint={t("login_server_hint")}
+              keyboardType="url"
+              mono
+              // After a scan the note under the field is what to read: the keyboard stays down.
+              autoFocus={!scanNote()}
+              clearable
+              disabled={busy()}
+              error={err()}
+              testID="login-server-input"
+            />
+            {/* What a scan came to is read out as it appears. */}
+            <View class="gap-2" android={{ accessibilityLiveRegion: "polite" }}>
+              <Button
+                variant="outlined"
+                block
+                label={t("login_scan_button")}
+                disabled={busy()}
+                testID="login-server-scan"
+                onPress={startScan}
+              />
+              <If
+                when={scanNote()}
+                else={
+                  <Text class="text-xs leading-[17.4px] text-muted-foreground" testID="login-server-scan-help">
+                    {t("login_scan_help")}
+                  </Text>
+                }
+              >
+                <Text
+                  role={scanNote()?.failed ? "alert" : undefined}
+                  class={`text-xs leading-[17.4px] ${scanNote()?.failed ? "text-danger" : "text-foreground"}`}
+                  testID={scanNote()?.failed ? "login-server-scan-error" : "login-server-scan-filled"}
+                >
+                  {scanNote()?.text}
+                </Text>
+              </If>
+            </View>
+          </View>
+        }
+      >
+        <View class="gap-3" android={{ accessibilityLiveRegion: "polite" }} testID="login-server-scanner">
+          <View class="overflow-hidden rounded-(--radius) border border-line-soft bg-[#111318]" style={{ height: CAMERA_HEIGHT }}>
+            <QrScanner onEvent={onScan} accessibilityLabel={t("login_scan_camera")} class="flex-1" testID="login-server-camera" />
+          </View>
+          <Text class="text-xs leading-[17.4px] text-muted-foreground" testID="login-server-scan-status">
+            {t(cameraReady() ? "login_scan_aim" : "login_scan_starting")}
+          </Text>
+        </View>
+      </If>
     </Modal>
   );
 }

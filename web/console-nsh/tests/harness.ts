@@ -93,6 +93,11 @@ export interface ConsoleOptions {
    * (tests/barRoomConsole.tsx, with `glass` tests/glassBarRoomConsole.tsx): read them with `barRooms(app)`.
    */
   barRooms?: boolean;
+  /**
+   * The console reports the login card's layout and stands in for the QR scanner's page
+   * (tests/loginProbeConsole.tsx): read and drive them with `loginProbe(app)`.
+   */
+  loginProbe?: boolean;
 }
 
 /** Where the phone app keeps the console server's address and its last location (lib/mobileHost.ts). */
@@ -193,7 +198,9 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
   const routes = { ...defaults(options), ...(options.api || {}) };
   // A bare "*" is a GET of any URL; each method needs its own catch-all.
   const network = Object.fromEntries(["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => [`${method} *`, answer]));
-  const entry = options.cacheFiles
+  const entry = options.loginProbe
+    ? "./loginProbeConsole.tsx"
+    : options.cacheFiles
     ? "./cacheFilesConsole.tsx"
     : options.slowSlides
     ? "./slowSlidesConsole.tsx"
@@ -206,7 +213,13 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         : options.glass
           ? "./glassConsole.tsx"
           : "../App.tsx";
-  const probe: Record<string, null> = options.scrollProbe ? { "morph.fixture.scroll": null, "morph.fixture.saved": null } : options.barRooms ? { "morph.fixture.room": null } : {};
+  const probe: Record<string, null> = options.loginProbe
+    ? { "morph.fixture.login": null, "morph.fixture.scans": null }
+    : options.scrollProbe
+      ? { "morph.fixture.scroll": null, "morph.fixture.saved": null }
+      : options.barRooms
+        ? { "morph.fixture.room": null }
+        : {};
   if (options.platform === "android") {
     const app = await open(entry, {
       width: options.width ?? 390,
@@ -221,7 +234,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         ...(options.kv || {}),
       },
       host:
-        options.host || options.scrollProbe || options.barRooms || options.keyboard
+        options.host || options.scrollProbe || options.barRooms || options.loginProbe || options.keyboard
           ? { handlers: { ...probe, ...(options.keyboard ? { "morph.keyboard.state": { physical: options.keyboard } } : {}), ...(options.host || {}) } }
           : null,
       clock: options.clock ? {} : null,
@@ -300,6 +313,50 @@ export function barRooms(app: App) {
     /** The last report since `mark()` that is at least `minWidth` wide, `null` when there is none. */
     last(minWidth = 1): BarRoomReport | null {
       return this.all().filter((frame) => frame.w >= minWidth).at(-1) ?? null;
+    },
+  };
+}
+
+export interface LoginFrame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** What the page of a QR scan may say (lib/qrScannerPage.js), or anything else it should not. */
+export type ScanSaid = { type: "ready" } | { type: "result"; text: unknown } | { type: "error"; code: string } | string;
+
+/** A console opened with `loginProbe`: the login card's frames, and the QR scans (tests/loginProbeConsole.tsx). */
+export function loginProbe(app: App) {
+  const posts = (name: string) => app.host.posts().filter((post) => post.name === name);
+  const frames = () => {
+    const all: Record<string, LoginFrame> = {};
+    for (const post of posts("morph.fixture.login")) {
+      const { part, ...frame } = post.data as LoginFrame & { part: string };
+      all[part] = frame;
+    }
+    return all;
+  };
+  return {
+    /** The card's parts as last laid out, each in its parent, once every one of `parts` reported. */
+    async frames(parts: string[]): Promise<Record<string, LoginFrame>> {
+      await app.waitUntil(() => parts.every((part) => Boolean(frames()[part])));
+      // Let a second layout pass (fonts) report too.
+      await app.wait(100);
+      return frames();
+    },
+    /** Speaks as the page of the newest scan (or of scan `scan`, from 0). */
+    async say(message: ScanSaid, scan?: number) {
+      await app.host.send("morph.fixture.scan.say", scan === undefined ? { message } : { message, scan });
+    },
+    /** Every scan so far: its state, what its page was told, and whether its web view was made. */
+    async scans(): Promise<{ state: "open" | "done" | "closed"; told: string[]; attached: boolean }[]> {
+      const before = posts("morph.fixture.scans").length;
+      await app.host.send("morph.fixture.scans");
+      await app.waitUntil(() => posts("morph.fixture.scans").length > before);
+      const all = posts("morph.fixture.scans");
+      return all[all.length - 1].data as never;
     },
   };
 }
