@@ -647,8 +647,34 @@ test("disabling an item moves it to the end of the list", async () => {
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[0]).toMatchObject({ id: "task-1", enabled: false });
 });
 
-test("the calendar shows a month of runs; a day lists its items, and an item opens its editor", async () => {
-  const { app } = await openTodo();
+/** The calendar's own read: the recorded runs queued in the range it asks for (none, unless given). */
+function historyApi(items: Record<string, any>[] = []) {
+  return {
+    "GET /proxy:/todo/runs/history": (request: ApiRequest) => {
+      const query = new URLSearchParams((request.uri || "").split("?")[1] || "");
+      const from = Date.parse(query.get("from") || "");
+      const to = Date.parse(query.get("to") || "");
+      const inRange = items.filter((item) => Date.parse(item.queued_at) >= from && Date.parse(item.queued_at) < to);
+      return { body: { items: inRange, limit: Number(query.get("limit")) } };
+    },
+  };
+}
+
+function ranRun(run_id: string, job_id: string, status: string, queued_at: string, cause: Record<string, string> = {}, error = "") {
+  return {
+    run_id,
+    job_id,
+    status,
+    queued_at,
+    error,
+    cause: { kind: "schedule", trigger_id: "trg-schedule", from_job_id: "", origin_run_id: run_id, note: "", ...cause },
+  };
+}
+
+const calendarDay = (date: string) => `id:todo-calendar-day-${date}`;
+
+test("the calendar shows a month of what is planned; a day lists its runs, and a run opens its job", async () => {
+  const { app } = await openTodo(historyApi());
   await app.waitFor("id:todo-item-task-1");
   await app.press("id:todo-view-toggle");
   await app.waitFor("id:todo-calendar");
@@ -661,18 +687,32 @@ test("the calendar shows a month of runs; a day lists its items, and an item ope
   await app.waitUntil(() =>
     lastLocation(app).includes(`month=${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`),
   );
-  const { app: jan } = await openTodo({}, { location: `${LOCATION}?view=calendar&month=2030-01` });
+  // Today goes back to this month.
+  await app.press("id:todo-calendar-today");
+  await app.waitUntil(() => lastLocation(app).includes(`month=${month[1]}-${month[2]}`));
+  expect(app.count("label:/^Today, /")).toBe(1);
+
+  const { app: jan } = await openTodo(historyApi(), { location: `${LOCATION}?view=calendar&month=2030-01` });
   await jan.waitFor("January 2030");
-  await jan.waitFor("id:todo-calendar-day-2030-01-02 >> text:Report");
-  await jan.press("id:todo-calendar-day-2030-01-02");
+  // The one-time job is written in its day. The repeating one is a hollow mark there, and is
+  // named once, with its cadence, above the grid.
+  await jan.waitFor(`${calendarDay("2030-01-02")} >> text:Report`);
+  expect(jan.shows(`${calendarDay("2030-01-02")} >> text:Review`)).toBe(false);
+  expect(jan.count(`${calendarDay("2030-01-02")} >> id:todo-calendar-mark-off`)).toBe(1);
+  expect(jan.texts()).toContain("Review  Every Monday and Wednesday at 9:15 AM");
+  // The day's list, beside the grid, has both.
+  await jan.press(calendarDay("2030-01-02"));
   await jan.waitFor("id:todo-day-detail");
-  await jan.waitFor("Scheduled · 2");
+  await jan.waitFor("id:todo-day-detail >> text:Wed, Jan 2");
+  expect(jan.shows("id:todo-day-detail >> text:Review")).toBe(true);
+  expect(jan.shows("id:todo-day-detail >> text:Report")).toBe(true);
+  expect(jan.count("id:todo-day-detail >> text:By schedule")).toBe(2);
   await jan.press("id:todo-day-item-task-2");
   await jan.waitFor("id:todo-task-editor");
   expect(jan.value("id:todo-title")).toBe("Report");
   // Another day selects the day again.
-  await jan.press("id:todo-calendar-day-2030-01-03");
-  await jan.waitFor("Scheduled · 0");
+  await jan.press(calendarDay("2030-01-03"));
+  await jan.waitFor("id:todo-day-detail >> text:Thu, Jan 3");
   await jan.waitFor("No TODOs scheduled for this day.");
   // Back to the list.
   await jan.press("id:todo-view-toggle");
@@ -681,10 +721,121 @@ test("the calendar shows a month of runs; a day lists its items, and an item ope
 
 test("a month with nothing on it says so", async () => {
   const { app } = await openTodo(
-    { "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) } },
+    { "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: [] }) }, ...historyApi() },
     { location: `${LOCATION}?view=calendar&month=2030-01` },
   );
   await app.waitFor("No TODOs this month");
+});
+
+// January 2020 is over: its days show what ran. Review has two schedules and a poke, and Report
+// runs after each Review (as GET /todo/tasks stores them: `triggers` and `uses`).
+const WIRED_TASKS = [
+  {
+    id: "task-1",
+    title: "Review",
+    content: "Review it",
+    cron: "0 9 * * *",
+    tz: "UTC",
+    triggers: [
+      { id: "trg-a", kind: "schedule", cron: "0 9 * * *", tz: "UTC" },
+      { id: "trg-b", kind: "schedule", cron: "0 18 * * 6", tz: "UTC" },
+      { id: "trg-p", kind: "poke" },
+    ],
+  },
+  { id: "task-2", title: "Report", content: "Write it", triggers: [], uses: [{ job_id: "task-1", mode: "each" }] },
+];
+const afterReview = (origin: string, note = "") => ({ kind: "job", trigger_id: "", from_job_id: "task-1", origin_run_id: origin, note });
+const RAN = [
+  ranRun("r1", "task-1", "done", "2020-01-07T09:00:00Z", { trigger_id: "trg-a" }),
+  ranRun("d1", "task-2", "done", "2020-01-07T09:01:00Z", afterReview("r1")),
+  ranRun("r3", "task-1", "failed", "2020-01-08T09:00:00Z", { trigger_id: "trg-a" }, "the model timed out"),
+  ranRun("d3", "task-2", "skipped", "2020-01-08T09:00:00Z", afterReview("r3", "input job task-1 failed")),
+  ranRun("r4", "task-1", "done", "2020-01-09T12:00:00Z", { kind: "poke", trigger_id: "trg-p" }),
+  ranRun("d4", "task-2", "done", "2020-01-09T12:01:00Z", afterReview("r4")),
+  ranRun("r2", "task-1", "done", "2020-01-11T18:00:00Z", { trigger_id: "trg-b" }),
+  ranRun("d2", "task-2", "done", "2020-01-11T18:01:00Z", afterReview("r2")),
+];
+
+test("a past month shows what ran, from the run history: the usual repeats as marks, the rest in words", async () => {
+  const marks = (app: any, date: string, kind: string) => app.count(`${calendarDay(date)} >> id:todo-calendar-mark-${kind}`);
+  const { app, calls } = await openTodo(
+    { "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: WIRED_TASKS }) }, ...historyApi(RAN) },
+    { location: `${LOCATION}?view=calendar&month=2020-01` },
+  );
+  await app.waitFor("January 2020");
+  // Both of Review's repeating schedules are in the strip, and Report after it.
+  await app.waitFor("Review  Every day at 9 AM · Every Saturday at 6 PM");
+  expect(app.texts()).toContain("Report  after Review");
+  // The month's days were asked for, a full page at a time.
+  const asked = proxied(calls, "GET", "/todo/runs/history");
+  expect(asked.length).toBe(1);
+  const query = new URLSearchParams(asked[0].uri!.split("?")[1]);
+  expect(query.get("limit")).toBe("500");
+  expect(query.get("from")).toMatch(/^2019-12-2[78]T/);
+  expect(query.get("to")).toMatch(/^2020-02-0[89]T/);
+
+  // The 7th: Review by its daily schedule and the Report after it, as usual: two marks, no words.
+  await app.waitUntil(() => marks(app, "2020-01-07", "on") === 2);
+  expect(app.shows(`${calendarDay("2020-01-07")} >> text:Review`)).toBe(false);
+  // The 11th, a Saturday: the run of the second schedule folds too.
+  expect(marks(app, "2020-01-11", "on")).toBe(2);
+  expect(app.shows(`${calendarDay("2020-01-11")} >> text:Review`)).toBe(false);
+  // The 8th: the failure and the skipped Report are written.
+  expect(marks(app, "2020-01-08", "on")).toBe(0);
+  expect(app.shows(`${calendarDay("2020-01-08")} >> text:Review`)).toBe(true);
+  expect(app.shows(`${calendarDay("2020-01-08")} >> text:Report`)).toBe(true);
+  // The 9th: a poke, and the Report it led to, are never folded.
+  expect(marks(app, "2020-01-09", "on")).toBe(0);
+  expect(app.shows(`${calendarDay("2020-01-09")} >> text:Review`)).toBe(true);
+  expect(app.shows(`${calendarDay("2020-01-09")} >> text:Report`)).toBe(true);
+  // A past day shows no plan: nothing ran on the 10th.
+  expect(marks(app, "2020-01-10", "on") + marks(app, "2020-01-10", "off")).toBe(0);
+  expect(app.shows(`${calendarDay("2020-01-10")} >> text:Review`)).toBe(false);
+
+  // The day's list says what happened, the Report under the Review that led to it.
+  await app.press(calendarDay("2020-01-08"));
+  await app.waitFor("id:todo-day-detail >> text:Wed, Jan 8");
+  expect(app.shows("id:todo-day-detail >> text:By schedule · failed: the model timed out")).toBe(true);
+  expect(app.shows("id:todo-day-detail >> text:Skipped: input job Review failed")).toBe(true);
+  expect(app.count("id:todo-day-detail >> id:todo-day-row-d1 >> text:Report")).toBe(1);
+  await app.press(calendarDay("2020-01-09"));
+  await app.waitFor("id:todo-day-detail >> text:By poke");
+  expect(app.shows("id:todo-day-detail >> text:After Review")).toBe(true);
+  await app.press("id:todo-day-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.value("id:todo-title")).toBe("Review");
+
+  // Another month asks for its own days.
+  await app.press("label:Previous month");
+  await app.waitFor("December 2019");
+  await app.waitUntil(() => proxied(calls, "GET", "/todo/runs/history").length === 2);
+  expect(new URLSearchParams(proxied(calls, "GET", "/todo/runs/history")[1].uri!.split("?")[1]).get("from")).toMatch(/^2019-11-(29|30)T/);
+});
+
+test("a run history that cannot be read says so, and the plan still shows", async () => {
+  const { app, calls } = await openTodo(
+    { "GET /proxy:/todo/runs/history": { status: 500, body: { error: "history is away" } } },
+    { location: `${LOCATION}?view=calendar&month=2030-01` },
+  );
+  await app.waitFor("id:todo-calendar-error");
+  expect(app.texts().some((text) => text.startsWith("Could not read what ran: "))).toBe(true);
+  await app.waitFor(`${calendarDay("2030-01-02")} >> text:Report`);
+  const before = proxied(calls, "GET", "/todo/runs/history").length;
+  await app.press("id:todo-calendar-retry");
+  await app.waitUntil(() => proxied(calls, "GET", "/todo/runs/history").length === before + 1);
+});
+
+test("the calendar reads the history again when a job starts running", async () => {
+  const live = liveRuns([]);
+  const { app, calls } = await openTodo({ ...live.api, ...historyApi() }, { location: `${LOCATION}?view=calendar&month=2030-01` });
+  await app.waitFor("January 2030");
+  const asked = () => proxied(calls, "GET", "/todo/runs/history").length;
+  await app.waitUntil(() => asked() >= 1);
+  await app.wait(300);
+  const before = asked();
+  live.state.runs = [RUN_A];
+  // The page polls its live runs every five seconds.
+  await app.waitUntil(() => asked() > before, { timeout: 9000 });
 });
 
 test("the workspace picker browses the agent's folders and fills in the chosen one", async () => {
@@ -828,36 +979,45 @@ test("on a phone the list and the editor take turns, with a back button and a fl
   expect(agentWrites(calls).length).toBe(0);
 });
 
-test("on a phone the calendar shows counts and the day's agenda", async () => {
-  const { app } = await openTodo({}, { width: 390, height: 844, location: `${LOCATION}?view=calendar&month=2030-01` });
-  await app.waitFor("January 2030");
-  await app.waitFor("id:todo-calendar-day-2030-01-02");
+test("on a phone the calendar's days are marks, and the chosen day's list is under the grid", async () => {
+  const { app } = await openTodo(historyApi(), { width: 390, height: 844, location: `${LOCATION}?view=calendar&month=2030-01` });
+  await app.waitFor("Jan 2030");
+  await app.waitFor(calendarDay("2030-01-02"));
   expect(app.shows("id:todo-calendar-add")).toBe(false);
-  await app.press("id:todo-calendar-day-2030-01-02");
+  // The repeating Review is the small mark, the one-time Report a full one; neither is written in the grid.
+  await app.waitUntil(() => app.count(`${calendarDay("2030-01-02")} >> id:todo-calendar-mark-off-small`) === 1);
+  expect(app.count(`${calendarDay("2030-01-02")} >> id:todo-calendar-mark-off`)).toBe(1);
+  expect(app.shows(`${calendarDay("2030-01-02")} >> text:Report`)).toBe(false);
+  await app.press(calendarDay("2030-01-02"));
   await app.waitFor("Selected day");
+  await app.waitFor("id:todo-calendar-agenda >> text:Wed, Jan 2");
+  expect(app.shows("id:todo-calendar-agenda >> text:Review")).toBe(true);
   await app.press("text:Report");
   await app.waitFor("id:todo-task-editor");
   // The task slides in over the calendar, which goes once the slide has ended.
   await app.waitFor("id:todo-calendar", { state: "gone" });
 });
 
-test("a day with more than three runs folds the rest behind +N more", async () => {
-  const daily = (id: string, title: string) => ({ id, title, content: "x", cron: "0 9 * * *", tz: "UTC" });
+test("a day writes five runs and counts the rest; its list has them all", async () => {
+  const once = (id: string, title: string, minute: number) => ({ id, title, content: "x", at: `2030-01-15 09:0${minute}`, tz: "UTC" });
+  const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta"];
   const { app } = await openTodo(
     {
-      "GET /proxy:/todo/tasks": {
-        body: tasksBody({ tasks: [daily("a", "Alpha"), daily("b", "Beta"), daily("c", "Gamma"), daily("d", "Delta")] }),
-      },
+      "GET /proxy:/todo/tasks": { body: tasksBody({ tasks: names.map((title, index) => once(title.toLowerCase(), title, index)) }) },
+      ...historyApi(),
     },
     { location: `${LOCATION}?view=calendar&month=2030-01` },
   );
-  await app.waitFor("id:todo-calendar-day-2030-01-15 >> text:+1 more");
-  await app.press("id:todo-calendar-day-2030-01-15 >> text:+1 more");
-  await app.waitFor("text:2030-01-15");
-  await app.waitFor("Scheduled · 4");
-  await app.press("label:/Delta/ >> nth=1");
+  await app.waitFor(`${calendarDay("2030-01-15")} >> text:+2 more`);
+  expect(app.shows(`${calendarDay("2030-01-15")} >> text:Epsilon`)).toBe(true);
+  expect(app.shows(`${calendarDay("2030-01-15")} >> text:Zeta`)).toBe(false);
+  // The whole cell chooses the day; the day's list is complete.
+  await app.press(calendarDay("2030-01-15"));
+  await app.waitFor("id:todo-day-detail >> text:Tue, Jan 15");
+  expect(app.count("id:todo-day-detail >> id:todo-day-row-d0")).toBe(7);
+  await app.press("id:todo-day-item-eta");
   await app.waitFor("id:todo-task-editor");
-  expect(app.value("id:todo-title")).toBe("Delta");
+  expect(app.value("id:todo-title")).toBe("Eta");
 });
 
 test("notifying the console user asks for notification permission first", async () => {

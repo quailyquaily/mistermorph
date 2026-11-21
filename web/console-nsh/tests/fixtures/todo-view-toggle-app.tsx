@@ -60,7 +60,7 @@ function Page() {
             mobile={isMobile()}
             tasks={[]}
             taskTitle={(task) => task.title}
-            scheduleLabel={() => ""}
+            fetch={async () => ({ items: [], tasks: [] })}
             onShowList={() => show(false)}
             onPartLayout={report}
           />
