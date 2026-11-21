@@ -65,7 +65,7 @@ function fixedUTCOffset(timezone) {
   return match[1] === "-" ? -offset : offset;
 }
 
-function wallClock(timezone) {
+export function wallClock(timezone) {
   const offset = fixedUTCOffset(timezone);
   if (offset !== null) {
     return (timestamp) => {
@@ -113,7 +113,7 @@ function wallClock(timezone) {
   };
 }
 
-function atMinute(raw) {
+export function atMinute(raw) {
   const match = text(raw).match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
   if (!match) {
     throw new Error("invalid at time");
