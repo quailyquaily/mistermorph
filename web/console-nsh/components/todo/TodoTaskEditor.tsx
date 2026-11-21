@@ -21,6 +21,7 @@ import { TodoJobButton, TODO_JOB_BUTTON_GAP, TODO_JOB_BUTTON_HEIGHT, TODO_JOB_BU
 import { BAR_INSET } from "../frame/mobileBar";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
+import { TodoRuns } from "./TodoRuns";
 import { TodoSelect } from "./TodoSelect";
 import type { TodoState, TodoTask } from "./todo-state";
 
@@ -894,6 +895,10 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
   // In the calendar's side column the job is a card, as before. As a page it is a sheet of labelled
   // blocks: when it runs, what it does, whom it tells, what it uses, and its settings.
   const stacked = () => narrowWindow();
+  // The runs beside the blocks where there is room for both, else after them.
+  const runsBeside = () => windowSize().width >= 1240;
+  // The run history is there: it replaces the single last-run line.
+  const runsShown = signal(false);
   return (
     <If
       when={props.panel}
@@ -907,48 +912,63 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                 {saveButton()}
               </View>
             </View>
-            {lastRun()}
+            <If when={!runsShown()}>{lastRun()}</If>
           </View>
-          <SheetBlock label={t("todo_block_when")} stacked={stacked()}>
-            <View class="gap-3" onLayout={(event) => formWidth.set(event.bounds.size.width)}>
-              <View class="flex-row flex-wrap gap-3">
-                {modePicker()}
-                <If when={model.taskMode(task()) !== "none"}>{tzPicker()}</If>
-              </View>
-              <If when={model.taskMode(task()) !== "none"}>
-                {scheduleControls()}
-                {preview()}
-              </If>
-              <If when={model.knowsTriggers(task())}>{triggers()}</If>
-            </View>
-          </SheetBlock>
-          <SheetBlock label={t("todo_block_do")} stacked={stacked()}>
-            {contentField()}
-          </SheetBlock>
-          <SheetBlock label={t("todo_block_tell")} stacked={stacked()}>
-            {chatPicker()}
-          </SheetBlock>
-          <If when={model.knowsTriggers(task())}>
-            <SheetBlock label={t("todo_block_uses")} stacked={stacked()}>
-              {uses()}
-            </SheetBlock>
-            <If when={state.usedBy(task()).length > 0}>
-              <SheetBlock label={t("todo_block_used_by")} stacked={stacked()}>
-                {usedBy()}
+          {/* The blocks, and on a wide window the job's runs beside them, level with the first. */}
+          <View class={runsBeside() ? "flex-row gap-10" : "gap-7"}>
+            <View class="min-w-0 flex-1 gap-7">
+              <SheetBlock label={t("todo_block_when")} stacked={stacked()}>
+                <View class="gap-3" onLayout={(event) => formWidth.set(event.bounds.size.width)}>
+                  <View class="flex-row flex-wrap gap-3">
+                    {modePicker()}
+                    <If when={model.taskMode(task()) !== "none"}>{tzPicker()}</If>
+                  </View>
+                  <If when={model.taskMode(task()) !== "none"}>
+                    {scheduleControls()}
+                    {preview()}
+                  </If>
+                  <If when={model.knowsTriggers(task())}>{triggers()}</If>
+                </View>
               </SheetBlock>
-            </If>
-          </If>
-          <SheetBlock label={t("todo_block_set")} stacked={stacked()}>
-            <View class="gap-3">
-              <View class="min-h-11 flex-row items-center gap-3">
-                {enabledSwitch()}
-                <Text class="text-sm leading-[21px] text-foreground">{t("todo_field_enabled")}</Text>
-              </View>
-              {llmPicker()}
-              {workspace()}
-              {bashEnv()}
+              <SheetBlock label={t("todo_block_do")} stacked={stacked()}>
+                {contentField()}
+              </SheetBlock>
+              <SheetBlock label={t("todo_block_tell")} stacked={stacked()}>
+                {chatPicker()}
+              </SheetBlock>
+              <If when={model.knowsTriggers(task())}>
+                <SheetBlock label={t("todo_block_uses")} stacked={stacked()}>
+                  {uses()}
+                </SheetBlock>
+                <If when={state.usedBy(task()).length > 0}>
+                  <SheetBlock label={t("todo_block_used_by")} stacked={stacked()}>
+                    {usedBy()}
+                  </SheetBlock>
+                </If>
+              </If>
+              <SheetBlock label={t("todo_block_set")} stacked={stacked()}>
+                <View class="gap-3">
+                  <View class="min-h-11 flex-row items-center gap-3">
+                    {enabledSwitch()}
+                    <Text class="text-sm leading-[21px] text-foreground">{t("todo_field_enabled")}</Text>
+                  </View>
+                  {llmPicker()}
+                  {workspace()}
+                  {bashEnv()}
+                </View>
+              </SheetBlock>
             </View>
-          </SheetBlock>
+            <If when={task().id && model.knowsTriggers(task())}>
+              <TodoRuns
+                jobID={task().id}
+                title={t("todo_runs_title")}
+                jobTitle={state.jobTitle}
+                watch={state.liveRuns}
+                onAvailable={(available) => runsShown.set(available)}
+                class={runsBeside() ? "w-[300px] pt-1" : ""}
+              />
+            </If>
+          </View>
         </View>
       }
     >

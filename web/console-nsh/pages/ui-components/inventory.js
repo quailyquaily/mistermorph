@@ -356,6 +356,7 @@ const FILES = {
     items: { RunMarker: D(), TodoIndex: L("live"), IndexItem: L("part", "TodoIndex"), Divider: L("part", "TodoIndex") },
   },
   "components/todo/TodoSelect.tsx": { group: "todo", items: { TodoSelect: C("TodoInput"), ItemMedia: C("TodoInput") } },
+  "components/todo/TodoRuns.tsx": { group: "todo", items: { TodoRuns: L("live") } },
   "components/todo/TodoTaskEditor.tsx": {
     group: "todo",
     items: {

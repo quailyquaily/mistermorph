@@ -1318,3 +1318,57 @@ test("a request the agent does not take says why and keeps the sentence", async 
   expect(app.value("id:chat-composer-input")).toBe("water the plants on Sunday");
   expect(app.shows("id:todo-compose-note")).toBe(false);
 });
+
+/* ---------- run history ---------- */
+
+const CAUSE = { trigger_id: "", from_job_id: "", origin_run_id: "r1", note: "" };
+const HISTORY = [
+  { run_id: "r3", job_id: "digest", status: "skipped", queued_at: "2030-01-02T09:01:00Z", finished_at: "2030-01-02T09:01:00Z", cause: { ...CAUSE, kind: "job", from_job_id: "report", note: "input job report failed" } },
+  { run_id: "r2", job_id: "report", status: "failed", queued_at: "2030-01-02T09:00:00Z", started_at: "2030-01-02T09:00:01Z", finished_at: "2030-01-02T09:05:00Z", error: "the model timed out", cause: { ...CAUSE, kind: "schedule" } },
+  { run_id: "r1", job_id: "report", status: "done", queued_at: "2030-01-01T17:42:00Z", started_at: "2030-01-01T17:42:00Z", finished_at: "2030-01-01T17:42:41Z", cause: { ...CAUSE, kind: "poke" } },
+];
+
+function historyApi(calls: string[] = []) {
+  return {
+    "GET /proxy:/todo/runs/history": (request: ApiRequest) => {
+      calls.push(request.uri || "");
+      const jobID = new URL(`http://x${request.uri}`).searchParams.get("job_id");
+      return { body: { items: jobID ? HISTORY.filter((run) => run.job_id === jobID) : HISTORY, limit: 50 } };
+    },
+  };
+}
+
+test("a job's page lists its runs with why each started and how a failed one ended, in place of the last-run line", async () => {
+  const asked: string[] = [];
+  const { app } = await openLinked(historyApi(asked));
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-runs");
+  expect(asked.some((uri) => uri.includes("job_id=report"))).toBe(true);
+  expect(app.shows("id:todo-run-row-r2 >> text:By schedule")).toBe(true);
+  expect(app.shows("id:todo-run-row-r2 >> text:Failed: the model timed out")).toBe(true);
+  expect(app.shows("id:todo-run-row-r1 >> text:By a poke")).toBe(true);
+  // A finished run's mark says so: only its duration is written.
+  expect(app.shows("id:todo-run-row-r1 >> text:41 s")).toBe(true);
+  expect(app.shows("id:todo-run-row-r1 >> text:Finished")).toBe(false);
+  expect(app.shows("id:todo-run-row-r3")).toBe(false);
+  expect(app.shows("id:todo-last-run")).toBe(false);
+});
+
+test("beside the list, Today names each run's job and cause, and a run opens its job", async () => {
+  const { app } = await openLinked(historyApi());
+  await app.waitFor("id:todo-today");
+  expect(app.shows("id:todo-today >> text:Today")).toBe(true);
+  expect(app.shows("id:todo-run-row-r3 >> text:Team digest")).toBe(true);
+  expect(app.shows("id:todo-run-row-r3 >> text:By Morning report · Skipped: input job report failed")).toBe(true);
+  await app.press("id:todo-run-row-r2");
+  await app.waitUntil(() => app.value("id:todo-title") === "Morning report");
+});
+
+test("a runtime without the run history shows no Today and keeps the last-run line", async () => {
+  const { app } = await openLinked();
+  await app.waitFor("id:todo-item-report");
+  expect(app.shows("id:todo-today")).toBe(false);
+  await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-last-run");
+  expect(app.shows("id:todo-runs")).toBe(false);
+});

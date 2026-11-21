@@ -12,6 +12,7 @@ import { createPaneStack } from "../../components/motion/PaneStack";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import { TodoHeartbeatEditor } from "../../components/todo/TodoHeartbeatEditor";
+import { TodoRuns } from "../../components/todo/TodoRuns";
 import { ROW_TRANSITION, TodoIndex } from "../../components/todo/TodoIndex";
 import { TodoCard } from "../../components/todo/TodoCard";
 import { gutterX, gutterY } from "../../components/frame/metrics";
@@ -111,8 +112,11 @@ function Placeholder(props: { state: TodoState; mobile?: boolean }) {
   );
 }
 
+/** Where Today starts beside the list: under the list's head, level with its composer. */
+const TODAY_TOP = 76;
+
 /** The open item's column on a desktop page: wide enough for the form, no wider than a page of text. */
-export const DETAIL_MAX_WIDTH = 860;
+export const DETAIL_MAX_WIDTH = 1180;
 
 /** What the editor side shows, in the Vue template's order. */
 /** `page`: on a desktop, the open item as a page of its own (the list is behind its back arrow). */
@@ -249,7 +253,22 @@ export function TodoPage() {
                 accessibilityElementsHidden={panes.hidden(0) || undefined}
                 importantForAccessibility={panes.hidden(0) ? "no-hide-descendants" : undefined}
               >
-                <If when={state.calendarView()} else={<TodoIndex state={state} mobile={isMobile()} />}>
+                <If
+                  when={state.calendarView()}
+                  else={
+                    <View class="flex-1 flex-row">
+                      <View class="min-w-0 flex-1">
+                        <TodoIndex state={state} mobile={isMobile()} />
+                      </View>
+                      {/* What ran today and why, beside the list where there is room. */}
+                      <If when={!isMobile() && windowSize().width >= 1180}>
+                        <Scroll class="w-[330px] border-l border-line-soft" scrollbar={SCROLLBAR} contentClass="px-4 pb-10" style={{ paddingTop: TODAY_TOP }}>
+                          <TodoRuns title={t("todo_runs_today")} jobTitle={state.jobTitle} watch={state.liveRuns} onOpenJob={state.openJob} testID="todo-today" />
+                        </Scroll>
+                      </If>
+                    </View>
+                  }
+                >
                   <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24" ref={calendarMemory.ref} onScroll={calendarMemory.onScroll}>
                     <Calendar state={state} mobile />
                     <MobileBarSpacer />

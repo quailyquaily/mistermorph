@@ -1754,6 +1754,7 @@ export function createTodoState() {
     taskListDisplayTask,
     taskRun,
     heartbeatRun,
+    liveRuns: taskRuns,
     triggerPhrase,
     whenLabel,
     composeText,
