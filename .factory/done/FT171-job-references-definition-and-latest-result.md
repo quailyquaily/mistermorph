@@ -64,3 +64,10 @@ Validation: Claude Code reviewed origin/master...5c560ee2 and ran the configured
 Residual risks: no independent browser visual check, real server/LLM end-to-end, desktop/Android, or per-channel runtime checks. Empty/Console scheduled destinations permit broad reads; existing job_manage audience controls are also broad, so the coder did not establish a new privilege boundary violation there. Heartbeat workflow write authorization was not fully traced. Output availability remains runtime-store dependent. Console topic-icon generation can precede reference rejection, although no referenced content reaches that icon request. Security-sensitive changed paths were inspected for authorization, secret exclusion, untrusted source framing, bounds and read-only behavior; the listed access questions remain. The CLI harness wrote background-command logs under its own temporary directory outside TMPDIR; factory-created repros and test homes used the run's TMPDIR. No shared temporary folders were deleted.
 
 Moved review/ → ready/. Owner should inspect the Agent Link access-boundary note before shipping.
+
+## factory · 2026-11-22 08:34
+Scheduled ship: ready/ → done/. Review head 5c560ee292f65c49d9bb235da4b1d00d5fb9bf41 still matched; no owner note followed its passing review.
+
+Merged into master at 67e79653bc42fd680535ed337fa0145b97e906b1. Origin master advanced during shipping; merged current origin/master cleanly and revalidated, final shipped base 406a51aa7647602d75722abf6bb25a0000a930e7. Atomic base/tag push succeeded: v0.3.126. No linked issues or PRs to close. Branch retained (ship clean not configured).
+
+Claude Code validation on final shipped base: configured gofmt/vet/go test gate passed (168 packages with tests, 20 without); nsh check passed; required parallel Console scripts/test.sh passed (159 files, 0 failed, plus all three node checks). No installs or fixes. No new visual, real LLM/server end-to-end, desktop or Android checks. Prior P2/P3 review notes remain in the thread; origin changes were tested but not independently reviewed in this ship run.
