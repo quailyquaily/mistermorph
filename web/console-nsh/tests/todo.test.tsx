@@ -1362,39 +1362,40 @@ test("the list says what starts a job with no schedule, and its page offers no s
   expect(app.shows("id:todo-timezone")).toBe(false);
 });
 
-test("the poke switch adds and removes the job's poke trigger, and the save sends every trigger", async () => {
-  const { app, calls } = await openLinked();
+test("the page offers no poke or message trigger to add; one a job already has is shown, kept by a save and can be removed", async () => {
+  const { app, calls } = await openLinked({
+    "GET /proxy:/todo/tasks": {
+      body: tasksBody({
+        tasks: linkedTasks().map((task) =>
+          task.id === "notes" ? { ...task, triggers: [...task.triggers, { id: "chat", kind: "message", channel: "telegram", chat_id: "tg:-100" }] } : task,
+        ),
+        chat_options: [{ chat_id: "tg:-100", platform: "telegram", type: "group", name: "Family" }],
+      }),
+    },
+  });
+  // A job with a schedule only: nothing about pokes or messages.
   await app.press("id:todo-item-report");
+  await app.waitFor("id:todo-task-editor");
+  for (const id of ["todo-triggers", "todo-trigger-poke", "todo-trigger-message-add"]) expect(app.count(`id:${id}`)).toBe(0);
+  expect(app.texts()).not.toContain("When its URL is poked");
+  expect(app.texts()).not.toContain("Message from");
+  // A job that has such triggers (set through the agent or the API) lists them.
+  await app.press("id:todo-back");
+  await app.press("id:todo-item-notes");
   await app.waitFor("id:todo-triggers");
-  expect(app.shows("id:todo-trigger-poke-url")).toBe(false);
-  await app.press("id:todo-trigger-poke");
-  await app.waitFor("text:POST /poke/report");
+  expect(app.shows("id:todo-trigger-0 >> text:When its URL is poked")).toBe(true);
+  expect(app.shows("id:todo-trigger-1 >> text:When a message arrives in Family")).toBe(true);
+  for (const id of ["todo-trigger-poke", "todo-trigger-message-add"]) expect(app.count(`id:${id}`)).toBe(0);
+  await app.press("id:todo-trigger-1-remove");
+  await app.waitFor("text:When a message arrives in Family", { state: "gone" });
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   const sent = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
-  // The form's schedule keeps its trigger's id and the legacy fields stay in step with it.
-  expect(sent[0]).toMatchObject({ id: "report", cron: "0 9 * * *", tz: "UTC" });
-  expect(sent[0].triggers).toEqual([{ kind: "schedule", id: "trg-schedule", cron: "0 9 * * *", tz: "UTC" }, { kind: "poke" }]);
-  // The others are sent as they were: a job with no schedule has no at, cron or tz.
-  expect(sent[1]).toEqual({ id: "digest", title: "Team digest", content: "Rewrite it", triggers: [], uses: [{ job_id: "report" }] });
+  // The poke trigger is sent as it was; the others are untouched.
   expect(sent[2].triggers).toEqual([{ kind: "poke", id: "hook" }]);
-});
-
-test("a message trigger is added from the agent's chats and removed again", async () => {
-  const { app, calls } = await openLinked();
-  await app.press("id:todo-item-notes");
-  await app.waitFor("id:todo-triggers");
-  await app.press("id:todo-trigger-message-add");
-  await app.press("text:Family");
-  await app.waitFor("text:When a message arrives in Family");
-  await app.press("id:todo-save");
-  await app.waitFor("Saved");
-  expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[2].triggers).toEqual([
-    { kind: "poke", id: "hook" },
-    { kind: "message", channel: "telegram", chat_id: "tg:-100" },
-  ]);
-  await app.press("id:todo-trigger-1-remove");
-  await app.waitFor("text:When a message arrives in Family", { state: "gone" });
+  expect(sent[0]).toMatchObject({ id: "report", cron: "0 9 * * *", tz: "UTC" });
+  expect(sent[0].triggers).toEqual([{ kind: "schedule", id: "trg-schedule", cron: "0 9 * * *", tz: "UTC" }]);
+  expect(sent[1]).toEqual({ id: "digest", title: "Team digest", content: "Rewrite it", triggers: [], uses: [{ job_id: "report" }] });
 });
 
 test("a job's page lists what it uses and what uses it, and each name opens that job", async () => {

@@ -1172,22 +1172,6 @@ export function createTodoState() {
 
   /* ---------- triggers and the jobs a job uses ---------- */
 
-  /** A chat's channel as a message trigger names it (the chat's platform; "agentlink" for a peer agent). */
-  function channelOf(option: { platform?: string }) {
-    return trimText(option?.platform).toLowerCase().replace(/[\s_-]+/g, "");
-  }
-
-  // The chats a message can start a job from: every chat the agent knows, but not the Console's own
-  // notifications (nobody writes there). The value is "channel chat_id".
-  const messageSourceItems = computed<TodoMenuItem[]>(() =>
-    (chatOptions() as { chat_id: string; platform: string }[])
-      .filter((option) => option.chat_id !== model.CONSOLE_NOTIFICATION_CHAT_ID && channelOf(option) !== "console" && channelOf(option) !== "")
-      .map((option) => {
-        const item = (model.chatMenuItems([option]) as TodoMenuItem[])[1];
-        return { ...item, id: `source-${option.chat_id}`, value: `${channelOf(option)} ${option.chat_id}` };
-      }),
-  );
-
   function chatTitle(chatID: string): string {
     const id = trimText(chatID);
     const item = chatMenuItems().find((entry) => entry.value === id);
@@ -1311,14 +1295,7 @@ export function createTodoState() {
     removeBashEnvRow: (task: TodoTask, index: number) => editTask(task, (copy) => model.removeBashEnvRow(copy, index)),
     bashEnvField: (task: TodoTask, index: number, field: "name" | "value", value: string) =>
       editTask(task, (copy) => model.updateBashEnvField(copy, index, field, value)),
-    poke: (task: TodoTask, on: boolean) => editTask(task, (copy) => model.setPokeTrigger(copy, on)),
     removeExtraTrigger: (task: TodoTask, index: number) => editTask(task, (copy) => model.removeExtraTrigger(copy, index)),
-    /** `source`: a message source's value from messageSourceItems, "channel chat_id". */
-    addMessageSource: (task: TodoTask, source: string) => {
-      const at = source.indexOf(" ");
-      if (at <= 0) return;
-      editTask(task, (copy) => model.addMessageTrigger(copy, source.slice(0, at), source.slice(at + 1)));
-    },
     addUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.addUse(copy, jobID)),
     removeUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.removeUse(copy, jobID)),
     join: (task: TodoTask, join: string) => editTask(task, (copy) => model.setJoin(copy, join)),
@@ -1859,7 +1836,6 @@ export function createTodoState() {
     composeTopicID,
     composeJob,
     openComposeTopic,
-    messageSourceItems,
     jobTitle,
     openJob,
     usableJobItems,

@@ -670,30 +670,15 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
     </>
   );
 
-  // What else starts it besides the form's schedule: its poke URL, messages, further schedules.
+  // What else starts it besides the form's schedule, as the job already has it (a poke URL or a chat's
+  // messages set through the agent or the API, further schedules). They are listed and can be
+  // removed; none is added here: a poke or a message names a job with [label](job:<id>) instead.
   const extras = () => model.extraTriggers(task()) as { id: string; kind: string; at: string; cron: string; tz: string; channel: string; chat_id: string }[];
   const triggers = () => (
     <View class="gap-2.5" testID="todo-triggers">
-      <View class="flex-row items-center gap-3">
-        <EnabledSwitch
-          checked={Boolean(model.hasPokeTrigger(task()))}
-          disabled={busy()}
-          label={t("todo_trigger_poke")}
-          testID="todo-trigger-poke"
-          onChange={(checked) => state.edits.poke(task(), checked)}
-        />
-        <View class="min-w-0 flex-1 gap-0.5">
-          <Text class="text-sm leading-[21px] text-foreground">{t("todo_trigger_poke")}</Text>
-          <If when={model.hasPokeTrigger(task())}>
-            <Text class="font-mono text-xs leading-[16.2px] text-muted-foreground" testID="todo-trigger-poke-url">
-              {`POST /poke/${task().id}`}
-            </Text>
-          </If>
-        </View>
-      </View>
-      <Each of={extras().map((item, index) => ({ item, index })).filter((entry) => entry.item.kind !== "poke")} key={(entry) => `${entry.index}:${entry.item.kind}:${entry.item.chat_id}:${entry.item.cron}:${entry.item.at}`}>
+      <Each of={extras().map((item, index) => ({ item, index }))} key={(entry) => `${entry.index}:${entry.item.kind}:${entry.item.chat_id}:${entry.item.cron}:${entry.item.at}`}>
         {(entry) => (
-          <View class="min-h-11 flex-row items-center gap-2 border-t border-line-soft/60 pt-2" testID={`todo-trigger-${entry().index}`}>
+          <View class="min-h-11 flex-row items-center gap-2" testID={`todo-trigger-${entry().index}`}>
             <Text class="min-w-0 flex-1 text-sm leading-[21px] text-foreground">{state.triggerPhrase(entry().item)}</Text>
             <Button
               variant="plain"
@@ -708,21 +693,6 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
           </View>
         )}
       </Each>
-      <If when={state.messageSourceItems().length > 0}>
-        <View style={pickerStyle()}>
-          <TodoSelect
-            label={t("todo_trigger_message_add")}
-            items={state.messageSourceItems()}
-            current={null}
-            placeholder={t("todo_chat_placeholder")}
-            searchable
-            hideSelectedMedia
-            disabled={busy()}
-            testID="todo-trigger-message-add"
-            onChange={(value) => state.edits.addMessageSource(task(), value)}
-          />
-        </View>
-      </If>
     </View>
   );
 
@@ -915,7 +885,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                     {scheduleControls()}
                     {preview()}
                   </If>
-                  <If when={model.knowsTriggers(task())}>{triggers()}</If>
+                  <If when={model.knowsTriggers(task()) && extras().length > 0}>{triggers()}</If>
                 </View>
               </SheetBlock>
               <SheetBlock label={t("todo_block_do")} stacked={stacked()}>

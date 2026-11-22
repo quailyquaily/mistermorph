@@ -96,7 +96,7 @@ A job can be started in more than one way. Its triggers are a list, and any one 
 - **Poke**: `POST /poke/<job id>` with the runtime's bearer token starts a job that has a poke trigger. The request body reaches the run as quoted data, never as instructions. A job that is switched off, or already queued or running, answers `409`.
 - **Message**: a message in a named chat starts the job. This fires for Telegram, Slack and Agent Link chats, at most once a minute per trigger; the message reaches the run as quoted data. The conversation itself is handled as usual, so a message the agent would otherwise ignore can still start the job. Other channels store the trigger but do not fire it yet.
 
-A job with no trigger runs only when someone starts it. In the Console these are edited on the job's page under **When**, and the list's line under each job names what starts it.
+A job with no trigger runs only when someone starts it. In the Console the schedule is edited on the job's page under **When**, and the list's line under each job names what starts it. The Console does not add poke or message triggers: set them through the agent (`job_manage`) or `PUT /todo/tasks`. A job that has one shows it under **When**, where it can be removed. To only bring a job's definition and latest result into a poke or a message, without starting that job, name it there with a [job reference](#job-references).
 
 ### Jobs that use other jobs
 

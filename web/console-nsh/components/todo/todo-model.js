@@ -492,28 +492,6 @@ function knowsTriggers(task) {
   return Array.isArray(task?.triggers);
 }
 
-function hasPokeTrigger(task) {
-  return extraTriggers(task).some((item) => item.kind === "poke");
-}
-
-function setPokeTrigger(task, on) {
-  if (!knowsTriggers(task) || hasPokeTrigger(task) === Boolean(on)) {
-    return EDIT_NONE;
-  }
-  task.triggers = on ? [...task.triggers, { id: "", kind: "poke", at: "", cron: "", tz: "", channel: "", chat_id: "" }] : task.triggers.filter((item) => item.kind !== "poke");
-}
-
-function addMessageTrigger(task, channel, chatID) {
-  const where = { channel: trimText(channel).toLowerCase(), chat_id: trimText(chatID) };
-  if (!knowsTriggers(task) || !where.channel || !where.chat_id) {
-    return EDIT_NONE;
-  }
-  if (task.triggers.some((item) => item.kind === "message" && item.channel === where.channel && item.chat_id === where.chat_id)) {
-    return EDIT_NONE;
-  }
-  task.triggers = [...task.triggers, { id: "", kind: "message", at: "", cron: "", tz: "", ...where }];
-}
-
 // Removes one of the extra triggers, by its place among them.
 function removeExtraTrigger(task, index) {
   const target = extraTriggers(task)[index];
@@ -1868,9 +1846,6 @@ export {
   taskMode,
   extraTriggers,
   knowsTriggers,
-  hasPokeTrigger,
-  setPokeTrigger,
-  addMessageTrigger,
   removeExtraTrigger,
   addUse,
   removeUse,
