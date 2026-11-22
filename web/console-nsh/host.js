@@ -23,7 +23,7 @@ function readStore(storage) {
 // The page's own colours under the app, per theme: what the page's markup gives it before the app
 // draws (scripts/build-web.sh writes the same values), so a switch leaves the page as a reload would.
 export const PAGE_COLORS = {
-  light: { background: "#eeeef6", color: "#17182b" },
+  light: { background: "#eaf0f6", color: "#17182b" },
   dark: { background: "#0f0f0f", color: "#f3f3f6" },
 };
 

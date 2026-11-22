@@ -52,8 +52,8 @@ test("the two palettes have the same tokens and differ", () => {
     "#9fc6ff",
     "#f4e97a",
   ]);
-  // Primary stays Dusk in the light palette.
-  expect(vars.light.primary.toLowerCase()).toBe("#4e527c");
+  // Primary is the navy blue in the light palette.
+  expect(vars.light.primary.toLowerCase()).toBe("#39587b");
 });
 
 test("text and status colours keep their contrast on both palettes", () => {
@@ -106,7 +106,7 @@ test("Settings switches to dark and back at once, and keeps the choice", async (
 
 test("the browser's theme-color follows the theme shown: at the start and at each switch, with no reload", async () => {
   // The page's markup (scripts/build-web.sh) sets these two before the app draws; they are the bars' own.
-  expect([bars("light"), bars("dark")]).toEqual(["#eeeef6", "#141416"]);
+  expect([bars("light"), bars("dark")]).toEqual(["#eaf0f6", "#141416"]);
   const { app } = await openConsole(SETTINGS);
   await app.waitFor("id:settings-appearance");
   expect(chrome(app)).toEqual([bars("light")]);
@@ -143,7 +143,7 @@ test("the page under the app takes the theme's colours on a switch: the ones it 
     // As the DOM does: appending a node that is there already moves it to the end.
     head: { appendChild: (node: any) => void (head.splice(0, head.length, ...head.filter((other) => other !== node), node)) },
   };
-  head.push({ tag: "style", attrs: {}, textContent: "html, body { background: #eeeef6; color: #17182b; }" });
+  head.push({ tag: "style", attrs: {}, textContent: "html, body { background: #eaf0f6; color: #17182b; }" });
   setPageColors("dark", doc as any);
   expect(made).toHaveLength(1);
   expect(head[head.length - 1].textContent).toBe("html, body { background: #0f0f0f; color: #f3f3f6; }");
@@ -151,12 +151,12 @@ test("the page under the app takes the theme's colours on a switch: the ones it 
   head.push({ tag: "style", attrs: {}, textContent: "html { background: red; }" });
   setPageColors("light", doc as any);
   expect(made).toHaveLength(1);
-  expect(head[head.length - 1].textContent).toBe("html, body { background: #eeeef6; color: #17182b; }");
+  expect(head[head.length - 1].textContent).toBe("html, body { background: #eaf0f6; color: #17182b; }");
   expect(head).toHaveLength(3);
   // An unknown theme changes nothing.
   setPageColors("sepia", doc as any);
   setPageColors(undefined as any, doc as any);
-  expect(head[head.length - 1].textContent).toBe("html, body { background: #eeeef6; color: #17182b; }");
+  expect(head[head.length - 1].textContent).toBe("html, body { background: #eaf0f6; color: #17182b; }");
 });
 
 test("the web page's theme-color meta is rewritten in place, made when missing, and takes only a colour", () => {
@@ -173,15 +173,15 @@ test("the web page's theme-color meta is rewritten in place, made when missing, 
       head: { appendChild: (node: any) => void (found = node) },
     };
   };
-  const existing = { name: "theme-color", content: "#eeeef6" };
+  const existing = { name: "theme-color", content: "#eaf0f6" };
   setThemeColor("#141416", page(existing) as any);
   expect(existing.content).toBe("#141416");
   expect(made).toEqual([]);
   // Anything that is not a colour leaves the page as it is.
   for (const bad of ["", "red; background: url(x)", "javascript:alert(1)", undefined]) setThemeColor(bad as any, page(existing) as any);
   expect(existing.content).toBe("#141416");
-  setThemeColor("#EEEEF6", page(null) as any);
-  expect(made).toEqual([{ name: "theme-color", content: "#EEEEF6" }]);
+  setThemeColor("#EAF0F6", page(null) as any);
+  expect(made).toEqual([{ name: "theme-color", content: "#EAF0F6" }]);
 });
 
 test("a stored dark choice opens the console dark, and anything else light", async () => {

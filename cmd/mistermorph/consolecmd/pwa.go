@@ -26,8 +26,8 @@ import (
 const (
 	// The morph theme's page background (--q-bg-light), which the page bar shows through: the
 	// installed app's title bar and launch splash match the page. The console has no dark theme.
-	pwaThemeColor      = "#eeeef6"
-	pwaBackgroundColor = "#eeeef6"
+	pwaThemeColor      = "#eaf0f6"
+	pwaBackgroundColor = "#eaf0f6"
 	pwaDescription     = "Chat with your Mister Morph agent."
 	pwaDefaultName     = "Mister Morph"
 	// Maskable icons keep the avatar inside the safe zone, the inner 80% circle.

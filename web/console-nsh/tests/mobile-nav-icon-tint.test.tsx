@@ -30,7 +30,7 @@ async function expectSelected(app: App, selected: Slot | null) {
 
 test("the selected glyph's primary is the primary buttons' own colour in both themes, not the accent", () => {
   const vars = (theme as { cssVars: Record<string, Record<string, string>> }).cssVars;
-  const primary: Record<string, string> = { light: "#4e527c", dark: "#5d6296" };
+  const primary: Record<string, string> = { light: "#39587b", dark: "#436a95" };
   for (const scheme of ["light", "dark"]) {
     expect(vars[scheme].primary.toLowerCase()).toBe(primary[scheme]);
     expect(vars[scheme].primary.toLowerCase()).not.toBe(vars[scheme].blue.toLowerCase());
