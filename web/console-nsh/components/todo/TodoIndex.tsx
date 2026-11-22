@@ -12,7 +12,7 @@
 // - the head sits flush with the list at rest and draws its hairline only once something has
 //   scrolled under it; the list's hidden end fades (createScrollEdges);
 // - every marker lies on one edge of the margin and every name starts on one line (TODO_MARGIN).
-import { effect, Scroll, Text, untracked, View } from "nsh";
+import { effect, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { useScrollMemory } from "../../lib/scrollMemory";
@@ -24,7 +24,7 @@ import { BAR_ICON_SIZE, CircleButton, Icon, StatusMark } from "../ui";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
 import { ChatComposer } from "../chat/ChatComposer";
-import { TodoViewToggle } from "./TodoViewToggle";
+import { TodoViewRule, todoViewRuleColor, todoViewSagCenter, TodoViewTabs } from "./TodoViewTabs";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -171,6 +171,9 @@ export function TodoIndex(props: {
   const onTasks = () => state.orderedTasks().filter(on);
   const offTasks = () => state.orderedTasks().filter((task) => !on(task));
   const edges = createScrollEdges({ start: false });
+  const headWidth = signal(0);
+  // The flow has something to draw: the runtime knows which job uses which.
+  const flow = () => state.tasks().some((task) => Array.isArray(task.triggers));
   const memory = useScrollMemory({ column: 2, area: "index", ready: () => !props.state.tasksPending() });
   // The page's column: the pages' gutter at each side, and on a desktop no wider than a page of text.
   const column = () => ({ width: "100%" as const, maxWidth: props.mobile ? undefined : TODO_LIST_MAX_WIDTH, alignSelf: "center" as const });
@@ -192,18 +195,16 @@ export function TodoIndex(props: {
   return (
     <View class="flex-1" accessibilityLabel={t("todo_nav_title")} testID="todo-index" {...parts.probe(() => "index")}>
       <View
-        class={`border-b ${edges.scrolled() ? "border-line-soft/50" : "border-transparent"} ${glassBarClass()}`}
-        style={{
-          ...glassBarStyle(),
-          height: TODO_HEAD_HEIGHT,
-          paddingHorizontal: gutterX(),
-          transitionProperty: "colors",
-          transitionDuration: 180,
-        }}
+        // Its bottom hairline is drawn (TodoViewRule): shown once rows have gone under the head,
+        // and dipping under the current view's tab. The head draws over the list for the dip.
+        class={`relative z-10 border-b border-transparent ${glassBarClass()}`}
+        style={{ ...glassBarStyle(), height: TODO_HEAD_HEIGHT, paddingHorizontal: gutterX() }}
+        onLayout={(event) => headWidth.set(event.bounds.size.width)}
       >
-        {/* The head keeps the list's column, and its title starts at the column's edge, as every
-            page's title starts at the gutter: it is not set in by the list's margin. */}
-        <View class="flex-1 flex-row items-center" style={column()}>
+        {/* The head spans the pane, as the calendar's and the flow's do: the title at the pane's
+            left gutter, the views' tabs at its right one (beside the Today column where there is
+            one), so both keep their place whichever view shows. */}
+        <View class="flex-1 flex-row items-center">
           <Text
             class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground line-clamp-1"
             role="header"
@@ -211,20 +212,20 @@ export function TodoIndex(props: {
           >
             {t("todo_title")}
           </Text>
-          {/* Buttons sit at the top of their box (self-start); a wrapper centres them in the head. */}
-          {/* The flow of jobs into each other: only where the runtime knows which job uses which. */}
-          <If when={state.tasks().some((task) => Array.isArray(task.triggers))}>
-            <CircleButton icon="PhGitFork" iconSize={BAR_ICON_SIZE} title={t("todo_view_flow")} testID="todo-view-flow" onPress={() => state.setTodoView("flow")} />
-          </If>
-          <View {...parts.probe(() => (props.mobile ? "head-action" : null))}>
-            <TodoViewToggle calendar={false} onPress={state.toggleTodoView} onPartLayout={props.onPartLayout} />
-          </View>
-          <If when={!props.mobile}>
-            <View {...parts.probe(() => "head-action")}>
-              <CircleButton icon="PhPlus" iconSize={BAR_ICON_SIZE} title={t("todo_action_add")} testID="todo-add" onPress={state.addTask} />
-            </View>
-          </If>
+          {/* The page's views, as tabs (the flow only where the runtime knows which job uses
+              which). Add is in the composer on a desktop, a floating button on a phone. */}
+          <TodoViewTabs
+            value="list"
+            flow={flow()}
+            mobile={props.mobile}
+            onChange={(view) => state.setTodoView(view)}
+            onPartLayout={props.onPartLayout}
+          />
         </View>
+        <TodoViewRule
+          center={() => todoViewSagCenter("list", flow(), !!props.mobile, headWidth(), gutterX())}
+          color={edges.scrolled() ? todoViewRuleColor("line-faint") : undefined}
+        />
       </View>
 
       <Scroll
@@ -246,7 +247,8 @@ export function TodoIndex(props: {
           <View style={column()}>
             {/* A job written in words: the chat's composer, as in a conversation. The agent writes the
                 job from the sentence; a note under it leads to the topic where it does. */}
-            <View class="gap-2 pb-3 pt-1" style={{ paddingLeft: TODO_MARGIN }} testID="todo-compose">
+            {/* It spans the column, from the markers' edge: it is not one of the list's rows. */}
+            <View class="gap-2 pb-3 pt-1" testID="todo-compose">
               <ChatComposer
                 landing
                 value={state.composeText()}
@@ -255,8 +257,17 @@ export function TodoIndex(props: {
                 sendLabel={t("todo_compose_send")}
                 sending={state.composeSending()}
                 sendDisabled={state.composeSending() || state.composeText().trim() === ""}
+                // A job is written in words alone: no workspace or file to add, so no add button.
                 attachDisabled
+                attachHidden
                 onSubmit={() => void state.composeJob()}
+                // A desktop: the other way to make a job, an empty form, is the toolbar's last
+                // button, a primary circle the size of Send (a phone has the floating Add).
+                actionsEnd={
+                  <If when={!props.mobile}>
+                    <CircleButton variant="primary" icon="PhPlus" iconSize={BAR_ICON_SIZE} title={t("todo_action_add")} disabled={state.loading()} testID="todo-add" onPress={state.addTask} />
+                  </If>
+                }
               />
               <If when={state.composeTopicID()}>
                 <View class="flex-row flex-wrap items-baseline gap-x-2 px-3" testID="todo-compose-note">

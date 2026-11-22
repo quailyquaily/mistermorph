@@ -17,8 +17,9 @@ import { AppMarkdownEditor } from "../shared/MarkdownEditor";
 import { Button, BusyBeam, busyLook, DropdownMenu, Icon, MENU_POPUP_STYLE, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
 import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 import * as model from "./todo-model.js";
-import { TodoJobButton, TODO_JOB_BUTTON_GAP, TODO_JOB_BUTTON_HEIGHT, TODO_JOB_BUTTON_WIDTH, TODO_JOB_ICON_SIZE } from "../chat/TodoJobBar";
-import { BAR_INSET } from "../frame/mobileBar";
+import { TodoJobButton, TODO_JOB_COMPACT_INSET, TODO_JOB_COMPACT_SIZE, TODO_JOB_NAV_SIZE } from "../chat/TodoJobBar";
+import { BAR_INSET, GlassCapsule } from "../frame/mobileBar";
+import { isMobile } from "../../lib/shell";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
 import { TodoRuns } from "./TodoRuns";
@@ -31,6 +32,7 @@ const t = translate as (key: string, vars?: Record<string, unknown> | null) => s
 // 94 %, 4pt corners, 11/12/12 padding; their labels are 14pt semibold blue.
 const INSET_BOX = "rounded-[4px] border border-line-soft/75 bg-paper-dense px-3 pb-3 pt-[11px]";
 const INSET_LABEL = "text-sm font-semibold leading-[18.9px] text-blue";
+
 
 /**
  * A field whose shown value the model may normalize: rebuilt when the page asks (repeatInputRevision),
@@ -217,6 +219,138 @@ function SheetBlock(props: { label: string; stacked: boolean; children?: JSX.Ele
   );
 }
 
+/** A phone: the job's toolbar floats at the page's foot, where the bottom navigation does, not in the bar. */
+export function todoToolbarAtFoot(): boolean {
+  return isMobile();
+}
+
+/**
+ * The open job's runs stand in a column of their own beside its page, as the list's Today column
+ * stands beside the list (a window with room for it, a saved job, a runtime that keeps runs);
+ * else they follow the form.
+ */
+export function todoRunsBeside(state: TodoState): boolean {
+  const task = state.selectedTask();
+  return state.sideRoom() && Boolean(task?.id) && Boolean(model.knowsTriggers(task));
+}
+
+/** A job's actions as the editor's menu draws them. */
+function jobMenuItems(state: TodoState): MenuEntry[] {
+  return state.taskActionMenuItems().map((item) =>
+    item.divider
+      ? { id: item.id, separator: true }
+      : {
+          id: item.id,
+          label: item.title,
+          danger: item.danger,
+          disabled: item.disabled,
+          onSelect: item.action,
+        },
+  );
+}
+
+/** The open job's enabled switch: the track alone, named by its tooltip. In the job page's bar. */
+export function TodoEnabledSwitch(props: { state: TodoState }) {
+  const state = props.state;
+  return (
+    <If when={state.selectedTask()}>
+      {(task) => (
+        <EnabledSwitch checked={task().enabled !== false} disabled={state.locked()} onChange={(checked) => state.edits.enabled(task(), checked)} />
+      )}
+    </If>
+  );
+}
+
+/**
+ * The open job's toolbar, the one its topic has (TodoJobBar): Start or Stop, the way to the other
+ * page (here the topic), and the remaining actions as its last slot. `compact`: set into the page's
+ * bar, as tall as the bar's back button, with no shadow. Else it floats at a phone page's foot: the
+ * bottom navigation's capsule (GlassCapsule), at the topic toolbar's size.
+ */
+export function TodoJobToolbar(props: { state: TodoState; compact?: boolean }) {
+  const state = props.state;
+  const size = () => (props.compact ? TODO_JOB_COMPACT_SIZE : TODO_JOB_NAV_SIZE);
+  const inset = () => (props.compact ? TODO_JOB_COMPACT_INSET : BAR_INSET);
+  const starting = () => state.runningTaskKey() === state.selectedTask()?._key;
+  const items = () => jobMenuItems(state).filter((item) => item.id !== "run-manually" && item.id !== "open-topic");
+  const buttons = () => (
+    <>
+      <If
+        when={state.selectedRunStop()}
+        else={
+          <TodoJobButton
+            kind="start"
+            label={t("chat_todo_job_start")}
+            busy={starting()}
+            disabled={!state.canRunSelectedTask()}
+            onPress={() => void state.runSelectedTaskNow()}
+            size={size()}
+            testID="todo-run"
+          />
+        }
+      >
+        {(stop) => (
+          <TodoJobButton
+            kind="stop"
+            label={stop().pending ? t("todo_action_stopping") : t("chat_todo_job_stop")}
+            busy={stop().pending}
+            onPress={() => void state.stopSelectedRun()}
+            size={size()}
+            testID="todo-stop"
+          />
+        )}
+      </If>
+      <TodoJobButton
+        kind="topic"
+        label={t("todo_action_open_topic")}
+        disabled={!state.selectedTaskTopicID()}
+        onPress={() => state.openTaskTopic(state.selectedTaskTopicID())}
+        size={size()}
+        testID="todo-open-topic"
+      />
+      <DropdownMenu
+        disabled={state.locked()}
+        items={items()}
+        testID="todo-task-actions"
+        trigger={
+          <View
+            testID="todo-task-actions"
+            accessibilityLabel={t("todo_action_more")}
+            role="button"
+            tooltip={<Tip text={t("todo_action_more")} />}
+            class="items-center justify-center rounded-full hover:bg-hover"
+            style={{ width: size().width, height: size().height, transitionProperty: "colors", transitionDuration: 160 }}
+          >
+            <Icon name="PhDotsThree" size={size().icon} color="muted-foreground" />
+          </View>
+        }
+      />
+    </>
+  );
+  return (
+    <If
+      when={props.compact}
+      else={
+        <GlassCapsule testID="todo-toolbar" role="toolbar" accessibilityLabel={t("chat_todo_job_toolbar")}>
+          <View class="flex-row items-center" style={{ gap: inset() }}>
+            {buttons()}
+          </View>
+        </GlassCapsule>
+      }
+    >
+      <View
+        role="toolbar"
+        accessibilityLabel={t("chat_todo_job_toolbar")}
+        class="flex-row items-center rounded-full border-[0.5px] border-line bg-card"
+        style={{ padding: inset(), gap: inset() }}
+        testID="todo-toolbar"
+      >
+        {buttons()}
+      </View>
+    </If>
+  );
+}
+
 /** A picker's width in a form `width` wide with `columns` to a row and 12pt between them. */
 function pickerWidth(width: number, columns: number): number | `${number}%` {
   if (width <= 0) return "100%";
@@ -226,7 +360,8 @@ function pickerWidth(width: number, columns: number): number | `${number}%` {
 export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
   const state = props.state;
   const task = () => state.selectedTask() as TodoTask;
-  const busy = () => state.saving() || state.loading();
+  // The form takes no edits while the list loads; the page's own saves leave it open.
+  const busy = () => state.locked();
   const taskStarting = () => state.runningTaskKey() === task()._key;
   const kind = () => model.repeatKind(task()) as string;
   const formWidth = signal(0);
@@ -248,18 +383,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
     return rows;
   };
 
-  const menuItems = (): MenuEntry[] =>
-    state.taskActionMenuItems().map((item) =>
-      item.divider
-        ? { id: item.id, separator: true }
-        : {
-            id: item.id,
-            label: item.title,
-            danger: item.danger,
-            disabled: item.disabled,
-            onSelect: item.action,
-          },
-    );
+  const menuItems = () => jobMenuItems(state);
 
   const scheduleModes = () =>
     (model.scheduleModeItems() as { id: string; title: string; value: string }[]).filter((item) => item.value !== "none" || model.knowsTriggers(task()));
@@ -295,15 +419,6 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               />
             )}
           </If>
-          <Button
-            variant="primary"
-            size="xs"
-            label={t("action_save")}
-            disabled={!state.canSave()}
-            loading={state.saving()}
-            testID="todo-save"
-            onPress={() => void state.save()}
-          />
           <DropdownMenu
             disabled={busy()}
             items={menuItems()}
@@ -388,9 +503,9 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
             </View>
     </>
   );
-  const llmPicker = () => (
+  const llmPicker = (fill?: boolean) => (
     <>
-            <View style={pickerStyle()}>
+            <View class={fill ? "min-w-0 flex-1" : ""} style={fill ? undefined : pickerStyle()}>
               <TodoSelect
                 label={t("todo_field_llm_profile")}
                 items={state.llmProfileMenuItems()}
@@ -531,18 +646,16 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
   );
   const preview = () => (
     <>
-          <View class={`gap-1.5 ${INSET_BOX} ${previewError() ? "border-danger/45 bg-danger/7" : ""}`} testID="todo-preview">
-            <Text class={INSET_LABEL}>{t("todo_repeat_preview")}</Text>
-            <Text class="text-sm leading-[21.7px] text-foreground">
+          {/* The schedule said in words: a line under the controls it reads back, not a surface of
+              its own (no frame, no heading; its place says what it is, and its name is read out).
+              One cue for the words that come from the form: they are in the text colour, the rest
+              is quiet. An invalid schedule is the same line in the danger colour. */}
+          <View class="pl-[13.8px] pr-1" accessibilityLabel={t("todo_repeat_preview")} testID="todo-preview">
+            <Text class={`text-sm leading-[21.7px] ${previewError() ? "text-danger" : "text-muted-foreground"}`} role={previewError() ? "alert" : undefined}>
               <Each of={previewSegments()}>
                 {(part) => (
                   <If when={part().type === "mark"} else={<Text>{part().text}</Text>}>
-                    {/* The marked words sit on a faint tint. The Vue mark also has 4pt of side
-                        padding and 3pt corners, which inline text cannot take in nsh; spaces to
-                        fake the padding would end up in the sentence ("9 AM , run"). */}
-                    <Text class={`font-semibold ${previewError() ? "bg-danger/9 text-danger" : "bg-blue/9 text-blue"}`}>
-                      {part().text}
-                    </Text>
+                    <Text class={previewError() ? "text-danger" : "text-foreground"}>{part().text}</Text>
                   </If>
                 )}
               </Each>
@@ -602,7 +715,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                 </View>
               }
             />
-            <FieldNote>{t("todo_workspace_dir_hint")}</FieldNote>
+
           </View>
     </>
   );
@@ -700,7 +813,6 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
   // jobs that take in this one's. There is one way to use a job, so nothing to choose per job.
   const uses = () => (
     <View class="gap-2.5" testID="todo-uses">
-      <Text class="text-xs leading-[17.4px] text-muted-foreground" testID="todo-uses-note">{t("todo_uses_note")}</Text>
       <Each of={task().uses ?? []} key={(use) => use.job_id}>
         {(use) => (
           <View class="flex-row items-center gap-2" testID={`todo-use-${use().job_id}`}>
@@ -760,7 +872,6 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
   );
   const usedBy = () => (
     <View testID="todo-used-by">
-      <Text class="px-1 text-xs leading-[17.4px] text-muted-foreground" testID="todo-used-by-note">{t("todo_used_by_note")}</Text>
       <Each of={state.usedBy(task())} key={(entry) => entry.id}>
         {(entry) => (
           <BaseButton
@@ -778,103 +889,24 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
     </View>
   );
 
-  // The job's toolbar, the one its topic has (TodoJobBar): Start or Stop, the way to the other page
-  // (here the topic), and the remaining actions as its last slot. Set into the page, so no shadow.
-  const sheetMenuItems = () => menuItems().filter((item) => item.id !== "run-manually" && item.id !== "open-topic");
-  const toolbar = () => (
-    <View
-      role="toolbar"
-      accessibilityLabel={t("chat_todo_job_toolbar")}
-      class="flex-row items-center rounded-full border-[0.5px] border-line bg-card"
-      style={{ padding: BAR_INSET, gap: TODO_JOB_BUTTON_GAP }}
-      testID="todo-toolbar"
-    >
-      <If
-        when={state.selectedRunStop()}
-        else={
-          <TodoJobButton
-            kind="start"
-            label={t("chat_todo_job_start")}
-            busy={taskStarting()}
-            disabled={!state.canRunSelectedTask()}
-            onPress={() => void state.runSelectedTaskNow()}
-            testID="todo-run"
-          />
-        }
-      >
-        {(stop) => (
-          <TodoJobButton
-            kind="stop"
-            label={stop().pending ? t("todo_action_stopping") : t("chat_todo_job_stop")}
-            busy={stop().pending}
-            onPress={() => void state.stopSelectedRun()}
-            testID="todo-stop"
-          />
-        )}
-      </If>
-      <TodoJobButton
-        kind="topic"
-        label={t("todo_action_open_topic")}
-        disabled={!state.selectedTaskTopicID()}
-        onPress={() => state.openTaskTopic(state.selectedTaskTopicID())}
-        testID="todo-open-topic"
-      />
-      <DropdownMenu
-        disabled={busy()}
-        items={sheetMenuItems()}
-        testID="todo-task-actions"
-        trigger={
-          <View
-            testID="todo-task-actions"
-            accessibilityLabel={t("todo_action_more")}
-            role="button"
-            tooltip={<Tip text={t("todo_action_more")} />}
-            class="items-center justify-center rounded-full hover:bg-hover"
-            style={{ width: TODO_JOB_BUTTON_WIDTH, height: TODO_JOB_BUTTON_HEIGHT, transitionProperty: "colors", transitionDuration: 160 }}
-          >
-            <Icon name="PhDotsThree" size={TODO_JOB_ICON_SIZE} color="muted-foreground" />
-          </View>
-        }
-      />
-    </View>
-  );
-  const saveButton = () => (
-    <Button
-      variant="primary"
-      size="xs"
-      label={t("action_save")}
-      disabled={!state.canSave()}
-      loading={state.saving()}
-      testID="todo-save"
-      onPress={() => void state.save()}
-    />
-  );
-
   // In the calendar's side column the job is a card, as before. As a page it is a sheet of labelled
   // blocks: when it runs, what it does, whom it tells, what it uses, and its settings.
   const stacked = () => narrowWindow();
-  // The runs beside the blocks where there is room for both, else after them.
-  const runsBeside = () => windowSize().width >= 1240;
-  // The run history is there: it replaces the single last-run line.
-  const runsShown = signal(false);
+  // The run history is there (in the page's own column, or after the blocks): it replaces the
+  // single last-run line.
+  const runsShown = () => state.jobRunsAvailable() && Boolean(task().id) && Boolean(model.knowsTriggers(task()));
   return (
     <If
       when={props.panel}
       else={
-        <View class="gap-7 pb-10" accessibilityLabel={t("todo_detail_title")} testID="todo-task-editor">
+        <View class="pb-10" accessibilityLabel={t("todo_detail_title")} testID="todo-task-editor">
+          {/* The title and the blocks; the job's runs follow them where the page has no column for them. */}
+          <View class="gap-7">
+            <View class="min-w-0 gap-7">
           <View class="gap-2">
-            <View class={stacked() ? "gap-3" : "flex-row items-center gap-3"}>
-              <View class="min-w-0 flex-1">{titleField()}</View>
-              <View class={`flex-row items-center gap-2 ${stacked() ? "self-end" : ""}`}>
-                {toolbar()}
-                {saveButton()}
-              </View>
-            </View>
+            {titleField()}
             <If when={!runsShown()}>{lastRun()}</If>
           </View>
-          {/* The blocks, and on a wide window the job's runs beside them, level with the first. */}
-          <View class={runsBeside() ? "flex-row gap-10" : "gap-7"}>
-            <View class="min-w-0 flex-1 gap-7">
               <SheetBlock label={t("todo_block_when")} stacked={stacked()}>
                 <View class="gap-3" onLayout={(event) => formWidth.set(event.bounds.size.width)}>
                   <View class="flex-row flex-wrap gap-3">
@@ -906,24 +938,32 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               </If>
               <SheetBlock label={t("todo_block_set")} stacked={stacked()}>
                 <View class="gap-3">
-                  <View class="min-h-11 flex-row items-center gap-3">
-                    {enabledSwitch()}
-                    <Text class="text-sm leading-[21px] text-foreground">{t("todo_field_enabled")}</Text>
-                  </View>
-                  {llmPicker()}
-                  {workspace()}
+                  {/* The model and the directory share a row where there is room for both. */}
+                  <If
+                    when={!stacked()}
+                    else={
+                      <>
+                        {llmPicker()}
+                        {workspace()}
+                      </>
+                    }
+                  >
+                    <View class="flex-row items-start gap-3">
+                      {llmPicker(true)}
+                      <View class="min-w-0 flex-1">{workspace()}</View>
+                    </View>
+                  </If>
                   {bashEnv()}
                 </View>
               </SheetBlock>
             </View>
-            <If when={task().id && model.knowsTriggers(task())}>
+            <If when={task().id && model.knowsTriggers(task()) && !todoRunsBeside(state)}>
               <TodoRuns
                 jobID={task().id}
                 title={t("todo_runs_title")}
                 jobTitle={state.jobTitle}
                 watch={state.liveRuns}
-                onAvailable={(available) => runsShown.set(available)}
-                class={runsBeside() ? "w-[300px] pt-1" : ""}
+                onAvailable={(available) => state.jobRunsAvailable.set(available)}
               />
             </If>
           </View>

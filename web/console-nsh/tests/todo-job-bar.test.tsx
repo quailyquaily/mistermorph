@@ -9,6 +9,10 @@
 // tests/chat-todo-job.test.tsx drives the same bar through the real page and the runtime's answers.
 import { expect, open, test } from "nsh/test";
 import {
+  TODO_JOB_COMPACT_HEIGHT,
+  TODO_JOB_COMPACT_INSET,
+  TODO_JOB_COMPACT_SIZE,
+  TODO_JOB_NAV_SIZE,
   TODO_JOB_BUTTON_GAP,
   TODO_JOB_BUTTON_HEIGHT,
   TODO_JOB_BUTTON_WIDTH,
@@ -170,13 +174,17 @@ for (const platform of ["linux", "android"] as const) {
 for (const width of [1400, 390, 320]) {
   test(`${width}pt: the capsule's padding is the same above, below, beside and between the buttons`, async () => {
     const { app, report } = await openBar({ width, platform: width < 768 ? "android" : "linux" });
+    // A phone's capsule is the navigation's; a desktop's is the compact one of the job's page (38pt).
+    const phone = width < 768;
+    const size = phone ? TODO_JOB_NAV_SIZE : TODO_JOB_COMPACT_SIZE;
+    const inset = phone ? BAR_INSET : TODO_JOB_COMPACT_INSET;
     for (const state of ["idle", "running", "stopping", "gone"]) {
       await app.press(`id:set-${state}`);
       await app.waitUntil(() => report().state === state);
       const { capsule, row, toggle, view } = report().frames;
       for (const button of [toggle, view]) {
-        near(button.h, TODO_JOB_BUTTON_HEIGHT);
-        near(button.w, TODO_JOB_BUTTON_WIDTH);
+        near(button.h, size.height);
+        near(button.w, size.width);
         near(button.y, view.y);
       }
       const top = row.y + toggle.y;
@@ -186,18 +194,18 @@ for (const width of [1400, 390, 320]) {
       const gap = view.x - (toggle.x + toggle.w);
       // The capsule's padding inside its 0.5pt hairline all round, and the same between the
       // buttons (headless layout snaps the 4.5pt to whole points: 4 on one side, 5 on the other).
-      for (const inset of [top, bottom, left, right]) near(inset, BAR_INSET + HAIRLINE);
+      for (const side of [top, bottom, left, right]) near(side, inset + HAIRLINE);
       near(top + bottom, left + right);
-      near(gap, BAR_INSET);
-      // As tall as the navigation's capsule: its slots, padding and hairline.
-      near(capsule.h, MOBILE_NAV_HEIGHT + 2 * HAIRLINE);
-      // Each glyph 24pt, centred in its button.
+      near(gap, inset);
+      // A phone's is as tall as the navigation's capsule: its slots, padding and hairline.
+      near(capsule.h, phone ? MOBILE_NAV_HEIGHT + 2 * HAIRLINE : TODO_JOB_COMPACT_HEIGHT);
+      // Each glyph centred in its button (24pt on a phone, 16pt on a desktop).
       for (const [icon, button] of [
         [report().frames["toggle-icon"], toggle],
         [report().frames["view-icon"], view],
       ]) {
-        near(icon.w, TODO_JOB_ICON_SIZE);
-        near(icon.h, TODO_JOB_ICON_SIZE);
+        near(icon.w, size.icon);
+        near(icon.h, size.icon);
         near(icon.x, (button.w - icon.w) / 2);
         near(icon.y, (button.h - icon.h) / 2);
       }

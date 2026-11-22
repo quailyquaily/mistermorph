@@ -121,8 +121,10 @@ test("while a job runs, a pulse runs along its links and no others", async () =>
 test("link mode marks the jobs that may use a job, never one that would close a loop or uses it already", async () => {
   const app = await openFlow();
   await app.press("id:stop");
-  // The link button is the selected job's.
-  expect(app.count("id:todo-flow-link-from-brief")).toBe(0);
+  // Every job has its port (shown under the pointer, and on the selected job): a drag from it
+  // draws a link, a press starts link mode.
+  expect(app.count("id:todo-flow-link-from-brief")).toBe(1);
+  expect(app.count("id:todo-flow-drag-off")).toBe(1);
   await app.press("id:todo-flow-job-brief");
   expect(app.count("label:Let another job use Weekly brief")).toBe(1);
   expect(app.count("id:todo-flow-hint")).toBe(0);

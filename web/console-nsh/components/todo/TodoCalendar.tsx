@@ -15,7 +15,7 @@
 // Days: a run belongs to the day its moment falls on in the browser's time zone, whatever zone its
 // schedule was written in (calendar-runs.js has the rule and the clock; the grid's days and
 // "today" are the same zone's).
-import { cleanup, computed, effect, signal, Text, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, effect, signal, Text, untracked, View, type ViewRef, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { currentLocale, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
@@ -40,7 +40,7 @@ import {
 } from "./calendar-runs.js";
 import { TODO_HEAD_HEIGHT } from "./TodoIndex";
 import { type CalendarDayItem, type CalendarDayView, TodoDayList } from "./TodoDayList";
-import { TodoViewToggle } from "./TodoViewToggle";
+import { type TodoView, TodoViewRule, todoViewSagCenter, TodoViewTabs } from "./TodoViewTabs";
 import { createTodoHistory, type HistoryFetch } from "./todo-history";
 import * as model from "./todo-model.js";
 import type { CalendarSelection, TodoTask } from "./todo-state";
@@ -127,6 +127,8 @@ interface Row {
   state: string;
   cause: { kind: string; triggerId: string; fromJobId: string; note: string; waiting: boolean };
   error: string;
+  /** How long a run took, in milliseconds (0: not known, or not a run). */
+  took?: number;
   repeating: boolean;
   parentKey: string;
 }
@@ -160,7 +162,10 @@ export interface TodoCalendarProps {
   onAddTask?: () => void;
   onSelectDate?: (selection: CalendarSelection) => void;
   onSelectTask?: (task: TodoTask) => void;
-  onShowList?: () => void;
+  /** Another of the page's views is asked for (the head's tabs). */
+  onView?: (view: TodoView) => void;
+  /** The flow view has something to show: its tab is there. */
+  flow?: boolean;
   /** The chosen day in full, each time it changes: a desktop page draws it beside the grid (TodoDayList). */
   onDay?: (day: CalendarDayView) => void;
   /** Hears where parts lie on the page (tests): `view-toggle` and `view-toggle-icon` (the list
@@ -277,8 +282,9 @@ export function TodoCalendar(props: TodoCalendarProps) {
   ];
   const monthTitle = () =>
     formatDate(activeMonth(), currentLocale(), { year: "numeric", month: props.mobile ? "short" : "long" });
+  // The locale's clock, as the list's Today column and a job's runs write a time.
   const timeText = (time: number) =>
-    formatDate(new Date(time), currentLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timezone });
+    formatDate(new Date(time), currentLocale(), { hour: "2-digit", minute: "2-digit", timeZone: timezone });
   const jobTitle = (jobId: string) => {
     const task = taskByID().get(jobId);
     return task ? props.taskTitle(task) : t("todo_calendar_job_gone");
@@ -321,6 +327,11 @@ export function TodoCalendar(props: TodoCalendarProps) {
     if (row.state === "canceled") words.push(t("todo_calendar_canceled"));
     // A waiting run says so: its orange mark alone is not a known sign (as in the list).
     if (row.state === "queued") words.push(t("todo_run_state_queued"));
+    // One finished run says how long it took, as the list's Today does.
+    if (row.state === "done" && row.count === 1 && row.took) {
+      const seconds = Math.round(row.took / 1000);
+      words.push(seconds < 90 ? t("todo_run_seconds", { count: seconds }) : t("todo_run_minutes", { count: Math.round(seconds / 60) }));
+    }
     return words.join(" · ");
   }
 
@@ -582,6 +593,8 @@ export function TodoCalendar(props: TodoCalendarProps) {
 
   // Where the grid's text starts: a cell's inset, which the head, the strip and the weekdays share.
   const INSET = 8;
+  const headWidth = signal(0);
+  const headProbe = parts.probe(() => "head") as { ref?: (value: ViewRef) => void; onLayout?: () => void };
 
   return (
     <View
@@ -594,19 +607,31 @@ export function TodoCalendar(props: TodoCalendarProps) {
           adds). The toggle and Add end the row as they end the list's, the same circles at the
           same height. */}
       <View
-        class="flex-row items-center border-b border-transparent"
+        // It draws over the grid: its hairline dips under the current view's tab (TodoViewRule).
+        class="relative z-10 flex-row items-center border-b border-transparent"
+        onLayout={(event) => {
+          headWidth.set(event.bounds.size.width);
+          headProbe.onLayout?.();
+        }}
+        ref={headProbe.ref}
         style={{
           height: TODO_HEAD_HEIGHT,
-          paddingLeft: gutterX() + (props.mobile ? 0 : INSET),
+          // The title starts at the pane's gutter, as the list's and the flow's do.
+          paddingLeft: gutterX(),
+          // The row ends at the pane's gutter, as the list's head does: the views' tabs keep their place.
           paddingRight: gutterX(),
         }}
-        {...parts.probe(() => "head")}
       >
-        <Text class="text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground" role="header" style={{ numberOfLines: 1 }}>
-          {t("todo_title")}
-        </Text>
+        {/* A phone's head has room for the month or the page's name, not both beside the month's
+            buttons and the views' tabs: the month is its title there (the navigation names the page). */}
+        <If when={!props.mobile}>
+          <Text class="mr-3 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground" role="header" style={{ numberOfLines: 1 }}>
+            {t("todo_title")}
+          </Text>
+        </If>
         <Text
-          class="ml-3 min-w-0 flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-muted-foreground"
+          class={`min-w-0 flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] ${props.mobile ? "text-foreground" : "text-muted-foreground"}`}
+          role={props.mobile ? "header" : undefined}
           style={{ numberOfLines: 1 }}
           testID="todo-calendar-month"
         >
@@ -617,10 +642,14 @@ export function TodoCalendar(props: TodoCalendarProps) {
         </View>
         <CircleButton icon="PhCaretLeft" iconSize={14} title={t("todo_calendar_previous")} onPress={() => setMonth(-1)} />
         <CircleButton icon="PhCaretRight" iconSize={14} title={t("todo_calendar_next")} onPress={() => setMonth(1)} />
-        <TodoViewToggle calendar onPress={() => props.onShowList?.()} onPartLayout={props.onPartLayout} />
         <If when={!props.mobile}>
           <CircleButton icon="PhPlus" iconSize={BAR_ICON_SIZE} title={t("todo_action_add")} testID="todo-calendar-add" onPress={() => props.onAddTask?.()} />
         </If>
+        {/* The views' tabs end the row, where they end the list's head. */}
+        <View class="ml-1">
+          <TodoViewTabs value="calendar" flow={props.flow} mobile={props.mobile} onChange={(view) => props.onView?.(view)} onPartLayout={props.onPartLayout} />
+        </View>
+        <TodoViewRule center={() => todoViewSagCenter("calendar", !!props.flow, !!props.mobile, headWidth(), gutterX())} />
       </View>
 
       <View style={{ paddingHorizontal: props.mobile ? 12 : gutterX(), paddingBottom: props.mobile ? 0 : gutterY() }} class={props.mobile ? "" : "grow"}>

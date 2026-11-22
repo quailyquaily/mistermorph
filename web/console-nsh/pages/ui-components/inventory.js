@@ -376,9 +376,12 @@ const FILES = {
       RunAtField: L("part", "TodoTaskEditor"),
       RepeatTimeField: L("part", "TodoTaskEditor"),
       EnabledSwitch: L("part", "TodoTaskEditor"),
+      TodoEnabledSwitch: L("part", "TodoTaskEditor"),
+      TodoJobToolbar: L("part", "TodoTaskEditor"),
     },
   },
-  "components/todo/TodoViewToggle.tsx": { group: "todo", items: { TodoViewToggle: D() } },
+  "components/todo/RunSpine.tsx": { group: "todo", items: { RunSpine: L("part", "TodoRuns") } },
+  "components/todo/TodoViewTabs.tsx": { group: "todo", items: { TodoViewTabs: D(), TodoViewRule: L("part", "TodoViewTabs") } },
 
   "pages/audit/AuditPage.tsx": { group: "pages", items: { AuditPage: L("page") } },
   "pages/chat/ActivityDetailPanel.tsx": { group: "chat", items: { ActivityDetailPanel: D(), CloseButton: C("ActivityDetailPanel") } },

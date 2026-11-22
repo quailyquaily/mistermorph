@@ -8,11 +8,12 @@
 // it finished, the error colour when it failed, hollow when it was stopped or skipped), so a
 // finished run has no "Finished"; words are kept for what a mark cannot say (why it failed, what it
 // was skipped for).
-import { effect, signal, Text, untracked, View } from "nsh";
+import { computed, effect, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { currentLocale, endpointState, runtimeApiFetchForEndpoint, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
-import { StatusMark, type StatusState } from "../ui";
+import { type StatusState } from "../ui";
+import { RunSpine, runSpineRoom } from "./RunSpine";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -78,6 +79,47 @@ export function runOutcomeText(run: TodoHistoryRun): string {
   return "";
 }
 
+/** A run as a row: `depth` 0 on the list's line, one more under each run that started it; `from` the depth of the row above. */
+export interface TodoRunRow {
+  run: TodoHistoryRun;
+  depth: number;
+  from: number;
+}
+
+/**
+ * The runs as rows, newest first, with a run another run started set under that run (the oldest
+ * of them first, as the chain went). The parent is the run of the job that started it, in the same
+ * chain, queued no later; a run whose parent is not in the list stays on the list's line.
+ */
+export function runRows(runs: readonly TodoHistoryRun[], nest: boolean): TodoRunRow[] {
+  const flat = (list: { run: TodoHistoryRun; depth: number }[]) =>
+    list.map((row, index) => ({ ...row, from: index > 0 ? list[index - 1].depth : row.depth }));
+  if (!nest) return flat(runs.map((run) => ({ run, depth: 0 })));
+  const originOf = (run: TodoHistoryRun) => run.cause?.origin_run_id || run.run_id;
+  const children = new Map<string, TodoHistoryRun[]>();
+  const child = new Set<string>();
+  for (const run of runs) {
+    if (run.cause?.kind !== "job" || !run.cause.from_job_id) continue;
+    let parent: TodoHistoryRun | null = null;
+    for (const other of runs) {
+      if (other === run || other.job_id !== run.cause.from_job_id || originOf(other) !== originOf(run) || other.queued_at > run.queued_at) continue;
+      if (!parent || other.queued_at > parent.queued_at) parent = other;
+    }
+    if (!parent) continue;
+    children.set(parent.run_id, [...(children.get(parent.run_id) || []), run]);
+    child.add(run.run_id);
+  }
+  const out: { run: TodoHistoryRun; depth: number }[] = [];
+  const put = (run: TodoHistoryRun, depth: number) => {
+    out.push({ run, depth });
+    const under = [...(children.get(run.run_id) || [])].sort((left, right) => left.queued_at.localeCompare(right.queued_at));
+    // A chain that loops back (which the runtime refuses) is not followed for ever.
+    if (depth < 8) under.forEach((next) => put(next, depth + 1));
+  };
+  runs.filter((run) => !child.has(run.run_id)).forEach((run) => put(run, 0));
+  return flat(out);
+}
+
 function startOfToday(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -109,6 +151,8 @@ export function TodoRuns(props: {
   // null until the first answer; false for a runtime without the history.
   const available = signal<boolean | null>(null);
   const today = () => !props.jobID;
+  // Today's runs are every job's: a run another started is set under it. A job's own runs are one line.
+  const rows = computed(() => runRows(runs(), today()));
   let request = 0;
 
   effect(() => {
@@ -148,22 +192,21 @@ export function TodoRuns(props: {
           else={<Text class="px-1.5 text-[13px] leading-[20px] text-muted-foreground">{t(today() ? "todo_runs_none_today" : "todo_last_run_never")}</Text>}
         >
           <View role="list">
-            <Each of={runs()} key={(run) => run.run_id}>
-              {(run) => (
+            <Each of={rows()} key={(row) => row.run.run_id}>
+              {(row) => {
+                const run = () => row().run;
+                return (
                 <BaseButton
                   onPress={() => props.onOpenJob?.(run().job_id)}
                   disabled={!props.onOpenJob || !today()}
                   accessibilityLabel={`${timeText(run().queued_at, today())}, ${today() ? `${props.jobTitle(run().job_id)}, ` : ""}${runCauseText(run().cause, props.jobTitle)}, ${t(`todo_run_status_${run().status}`)}`}
                   testID={`todo-run-row-${run().run_id}`}
-                  class="flex-row gap-2.5 rounded-(--radius) px-1.5 hover:bg-hover-faint disabled:hover:bg-transparent"
+                  // Drawn from the right (its parts are written time first, as they are read out):
+                  // the spine with the run's mark at the left edge (RunSpine, which swings out to
+                  // a chained run), then what ran, the time at the right.
+                  class="relative flex-row-reverse gap-2.5 rounded-(--radius) px-1.5 hover:bg-hover-faint disabled:hover:bg-transparent"
                 >
-                  <Text class="w-[74px] pt-2 font-mono text-xs leading-[16.2px] text-muted-foreground">{timeText(run().queued_at, today())}</Text>
-                  {/* The spine: a hairline through every row, the run's mark on it. */}
-                  <View class="w-[9px] items-center">
-                    <View class="h-3 w-px bg-line" />
-                    <StatusMark state={runMarkState(run().status)} size={7} corner={2} />
-                    <View class="w-px flex-1 bg-line" />
-                  </View>
+                  <Text class="shrink-0 pt-2 text-right font-mono text-xs leading-[16.2px] text-muted-foreground">{timeText(run().queued_at, today())}</Text>
                   <View class="min-w-0 flex-1 gap-0.5 pb-[9px] pt-[7px]">
                     <Text class="text-sm leading-[18px] text-foreground">
                       {today() ? props.jobTitle(run().job_id) : runCauseText(run().cause, props.jobTitle)}
@@ -174,8 +217,12 @@ export function TodoRuns(props: {
                         .join(t("todo_when_separator"))}
                     </Text>
                   </View>
+                  {/* The spine's room; the spine itself lies over the row's left edge. */}
+                  <View accessibilityElementsHidden style={{ width: runSpineRoom(row().depth) }} />
+                  <RunSpine depth={row().depth} from={row().from} tone={runMarkState(run().status)} left={6} />
                 </BaseButton>
-              )}
+                );
+              }}
             </Each>
           </View>
         </If>

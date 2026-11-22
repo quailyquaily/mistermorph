@@ -73,27 +73,25 @@ test("today shows both, and its running job is written, never folded", async () 
   await app.waitFor("text:sel=2026-11-23");
   expect(listed(app, "Today")).toEqual([
     "Today",
-    "Mon, Nov 23",
-    "00:00",
+    "12:00 AM",
     "Sweep ×19",
-    "Every 30 minutes · until 09:00",
-    "06:00",
+    "Every 30 minutes · until 09:00 AM",
+    "06:00 AM",
     "Backup",
     "By schedule",
-    "09:00",
+    "09:00 AM",
     "Morning report",
     "By schedule",
-    "",
     "Team digest",
     "As soon as Morning report finishes",
-    "NOW 09:02",
-    "09:30",
+    "NOW 09:02 AM",
+    "09:30 AM",
     "Sweep ×29",
-    "Every 30 minutes · until 23:30",
+    "Every 30 minutes · until 11:30 PM",
   ]);
   expect(app.count("id:todo-day-now")).toBe(1);
   // The running report is named as running for a screen reader; on screen its ring says it.
-  expect(app.count("label:09:00, Morning report, By schedule, Running")).toBe(1);
+  expect(app.count("label:09:00 AM, Morning report, By schedule, Running")).toBe(1);
   expect(app.texts().includes("Running")).toBe(false);
 });
 
@@ -148,19 +146,19 @@ test("the chosen day lists every run in full, a chained run under the run that s
   await app.waitFor("text:Tue, Nov 17");
   expect(listed(app, "Tue, Nov 17")).toEqual([
     "Tue, Nov 17",
-    "06:00",
+    "06:00 AM",
     "Backup",
     "By schedule",
-    "09:00",
+    "09:00 AM",
     "Morning report",
     "By schedule",
-    "09:01",
+    "09:01 AM",
     "Team digest",
     "After Morning report",
-    "14:10",
+    "02:10 PM",
     "Morning report",
     "Started by hand",
-    "14:11",
+    "02:11 PM",
     "Team digest",
     "After Morning report",
   ]);
@@ -175,27 +173,26 @@ test("the chosen day lists every run in full, a chained run under the run that s
   // A frequent job is one entry with its count, its cadence and its range.
   await app.press(day(20));
   await app.waitFor("text:Fri, Nov 20");
-  expect(listed(app, "Fri, Nov 20")).toEqual(["Fri, Nov 20", "00:00", "Sweep ×48", "Every 30 minutes · until 23:30"]);
+  expect(listed(app, "Fri, Nov 20")).toEqual(["Fri, Nov 20", "12:00 AM", "Sweep ×48", "Every 30 minutes · until 11:30 PM"]);
 
   // A planned day: the digest has no minute of its own, it follows the report.
   await app.press(day(24));
   await app.waitFor("text:Tue, Nov 24");
   expect(listed(app, "Tue, Nov 24")).toEqual([
     "Tue, Nov 24",
-    "00:00",
+    "12:00 AM",
     "Sweep ×48",
-    "Every 30 minutes · until 23:30",
-    "06:00",
+    "Every 30 minutes · until 11:30 PM",
+    "06:00 AM",
     "Backup",
     "By schedule",
-    "09:00",
+    "09:00 AM",
     "Morning report",
     "By schedule",
-    "",
     "Team digest",
     "After Morning report",
   ]);
-  expect(app.count("label:09:00, Morning report, By schedule, planned")).toBe(1);
+  expect(app.count("label:09:00 AM, Morning report, By schedule, planned")).toBe(1);
 
   // A day nothing ran on says so.
   await app.press(day(18));
@@ -208,13 +205,13 @@ test("a failure is written where it happened, and the skipped dependent says whi
   await app.waitFor("text:Thu, Nov 19");
   expect(listed(app, "Thu, Nov 19")).toEqual([
     "Thu, Nov 19",
-    "06:00",
+    "06:00 AM",
     "Backup",
     "By schedule",
-    "09:00",
+    "09:00 AM",
     "Morning report",
     "By schedule · failed: the model timed out",
-    "09:00",
+    "09:00 AM",
     "Team digest",
     // The runtime's note names the job by its ID; the list names it.
     "Skipped: input job Morning report failed",
@@ -243,7 +240,7 @@ test("the history is read again when a live run changes; a failed read says so, 
   await app.waitFor("id:todo-calendar-error", { state: "gone" });
   // The new run, waiting, is written in today's cell.
   await app.waitFor(`${day(23)} >> text:Release notes`);
-  expect(app.count("label:09:01, Release notes, Started by hand · Waiting")).toBe(1);
+  expect(app.count("label:09:01 AM, Release notes, Started by hand · Waiting")).toBe(1);
 });
 
 test("another month asks for its own days and shows as loading until its answer comes; an older answer is not taken for it", async () => {
@@ -276,13 +273,13 @@ test("another month asks for its own days and shows as loading until its answer 
 
 test("as the clock moves, a planned run that came due is looked for in the history", async () => {
   const app = await openCalendar();
-  expect(app.texts()).toContain("NOW 09:02");
+  expect(app.texts()).toContain("NOW 09:02 AM");
   await app.press("id:fx-later");
   // 09:30 has passed: the history is read again (nothing recorded it here), and the plan starts at 10:00.
   await app.waitFor("text:history=2");
-  await app.waitFor("NOW 09:31");
+  await app.waitFor("NOW 09:31 AM");
   const today = listed(app, "Today");
-  expect(today.slice(today.indexOf("NOW 09:31"))).toEqual(["NOW 09:31", "10:00", "Sweep ×28", "Every 30 minutes · until 23:30"]);
+  expect(today.slice(today.indexOf("NOW 09:31 AM"))).toEqual(["NOW 09:31 AM", "10:00 AM", "Sweep ×28", "Every 30 minutes · until 11:30 PM"]);
   expect(app.shows("id:todo-calendar-loading")).toBe(false);
 });
 
@@ -292,7 +289,7 @@ const within = (inner: Frame, outer: Frame) =>
 
 test("on a desktop the marks stay on the day number's line, above the cell's text", async () => {
   const app = await openCalendar();
-  await app.waitUntil(() => Boolean(frames(app)["lines-2026-11-23"] && frames(app)["marks-2026-11-24"] && frames(app)["view-toggle"]));
+  await app.waitUntil(() => Boolean(frames(app)["lines-2026-11-23"] && frames(app)["marks-2026-11-24"] && frames(app)["view-tab-calendar"]));
   const all = frames(app);
   for (const date of ["2026-11-17", "2026-11-19", "2026-11-23", "2026-11-24"]) {
     const cell = all[`day-${date}`];
@@ -319,8 +316,8 @@ test("on a desktop the marks stay on the day number's line, above the cell's tex
   expect(Math.abs(all["day-2026-11-17"].w - all["day-2026-11-19"].w) <= 1).toBe(true);
   // The head: the list's 57pt row, the toggle a 38pt circle in its middle.
   expect(all.head.h).toBe(57);
-  expect(all["view-toggle"].w).toBe(38);
-  expect(Math.abs(all["view-toggle"].y + 19 - 28.5) <= 0.5).toBe(true);
+  expect(all["view-tab-calendar"].w).toBe(38);
+  expect(Math.abs(all["view-tab-calendar"].y + 19 - 28.5) <= 0.5).toBe(true);
   expect(app.shows("id:todo-calendar-add")).toBe(true);
 });
 

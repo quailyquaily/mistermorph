@@ -13,6 +13,7 @@ import { signal, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { StatusMark, type StatusState } from "../ui";
+import { RunSpine, runSpineRoom } from "./RunSpine";
 import { ROW_HOVER, ROW_TRANSITION } from "./TodoIndex";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -74,7 +75,7 @@ function DayMark(props: { tone: StatusState }) {
   return <StatusMark state={props.tone} size={7} corner={2} />;
 }
 
-/** How far a chained run is set in under the run that started it. */
+/** How far a chained run is set in under the run that started it (a phone's rows; the rail's is the spine's). */
 const INSET = 18;
 
 export function TodoDayList(props: {
@@ -99,6 +100,13 @@ export function TodoDayList(props: {
     </View>
   );
 
+  /** The depth of the run above a row on the rail (its own for the first: the line comes straight in). */
+  const depthAbove = (item: CalendarDayItem) => {
+    const runs = items().filter((entry) => !entry.now);
+    const at = runs.findIndex((entry) => entry.key === item.key);
+    return at > 0 ? runs[at - 1].depth : item.depth;
+  };
+
   const RailRow = (rowProps: { item: () => CalendarDayItem }) => {
     const item = rowProps.item;
     return (
@@ -106,25 +114,26 @@ export function TodoDayList(props: {
         onPress={() => open(item())}
         accessibilityLabel={item().label}
         testID={`todo-day-item-${item().jobId}`}
-        class={`flex-row rounded-(--radius-control) ${item().open ? "hover:bg-hover-faint" : ""}`}
+        // A row of the list's Today column (TodoRuns): the same spine and mark at the left edge
+        // (RunSpine, which swings out to a chained run), what ran, and the time at the right
+        // (drawn from the right; written time first).
+        class={`relative flex-row-reverse gap-2.5 rounded-(--radius) px-1.5 ${item().open ? "hover:bg-hover-faint" : ""}`}
         style={ROW_TRANSITION}
         hoverStyle={ROW_HOVER}
       >
-        <Text class="w-11 py-2 pl-1.5 font-mono text-xs leading-[16.2px] text-muted-foreground" style={{ numberOfLines: 1 }}>
+        <Text class="shrink-0 pt-2 text-right font-mono text-xs leading-[16.2px] text-muted-foreground" style={{ numberOfLines: 1 }}>
           {item().time}
         </Text>
-        {/* The rail: a hairline through the day, the run's mark on the title's line. */}
-        <View class="ml-2.5 w-[9px] items-center" accessibilityElementsHidden>
-          <View class="h-3 w-px bg-line" />
-          <DayMark tone={item().tone} />
-          <View class="w-px flex-1 bg-line" />
-        </View>
-        <View class="flex-1 gap-0.5 pb-[9px] pr-1.5 pt-[7px]" style={{ paddingLeft: 10 + item().depth * INSET }}>
+        <View class="min-w-0 flex-1 gap-0.5 pb-[9px] pt-[7px]">
           <Text class={`text-sm leading-[18px] ${titleClass(item())}`}>{item().title}</Text>
           <If when={item().cause}>
             <Text class={`text-xs leading-[16.2px] ${causeClass(item())}`}>{item().cause}</Text>
           </If>
         </View>
+        {/* The rail's room; the spine itself lies over the row's left edge. A finished run's mark
+            is the list's (`done`); the grid keeps its own. */}
+        <View accessibilityElementsHidden style={{ width: runSpineRoom(item().depth) }} />
+        <RunSpine depth={item().depth} from={depthAbove(item())} tone={item().tone === "on" ? "done" : item().tone} left={6} />
       </BaseButton>
     );
   };
@@ -154,7 +163,7 @@ export function TodoDayList(props: {
   };
 
   return (
-    <View class={props.mobile ? "gap-1.5" : "gap-2.5"} accessibilityLabel={t("todo_calendar_agenda")} testID={props.testID ?? "todo-day-detail"}>
+    <View class={props.mobile ? "gap-1.5" : "gap-2"} accessibilityLabel={t("todo_calendar_agenda")} testID={props.testID ?? "todo-day-detail"}>
       <View class={`flex-row items-baseline gap-2.5 ${props.mobile ? "" : "px-1.5"}`}>
         <Text
           role="header"
@@ -163,7 +172,8 @@ export function TodoDayList(props: {
         >
           {props.day?.title ?? ""}
         </Text>
-        <If when={props.day?.meta}>
+        {/* Beside the grid the chosen day is marked in it: only a phone's list names the date. */}
+        <If when={props.mobile && props.day?.meta}>
           <Text class="font-mono text-xs leading-[16.2px] text-muted-foreground">{props.day?.meta ?? ""}</Text>
         </If>
       </View>

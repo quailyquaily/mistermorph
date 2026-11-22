@@ -122,7 +122,7 @@ function release(last: boolean) {
 }
 
 // The parts the tests measure: the head, and a few days' cells.
-const MEASURED = /^(head|view-toggle|view-toggle-icon|(day|number|marks|lines)-2026-11-(17|19|23|24))$/;
+const MEASURED = /^(head|view-tab-calendar|view-tab-calendar-icon|(day|number|marks|lines)-2026-11-(17|19|23|24))$/;
 
 function Control(props: { id: string; onPress: () => void }) {
   return (

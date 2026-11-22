@@ -1052,7 +1052,7 @@ export function SelectField(props: {
             <Text class={`flex-1 ${props.size === "xs" ? "text-xs" : "text-sm"} ${current() ? "text-foreground" : "text-placeholder"} line-clamp-1`}>
               {current()?.label ?? props.placeholder ?? ""}
             </Text>
-            <Icon name="PhCaretDown" size={14} color="muted-foreground" class="opacity-50" />
+            <Icon name="PhCaretDown" size={14} color="muted-foreground" class={`opacity-50 transition duration-180 ${open() || sheetOpen() ? "rotate-180" : ""}`} />
           </View>
         }
       />

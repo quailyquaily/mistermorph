@@ -271,6 +271,8 @@ export function buildCalendar({ jobs, runs, occurrences, now, timezone }) {
       time,
       date: dateKey(displayClock(time)),
       error: text(raw?.error),
+      // How long it ran, in milliseconds; 0 while it has no end.
+      took: Math.max(0, Date.parse(text(raw?.finished_at)) - Date.parse(text(raw?.started_at))) || 0,
       kind: text(raw?.cause?.kind),
       triggerId: text(raw?.cause?.trigger_id),
       fromJobId: text(raw?.cause?.from_job_id),
@@ -321,6 +323,7 @@ export function buildCalendar({ jobs, runs, occurrences, now, timezone }) {
       state: record.state,
       cause: { kind: record.kind, triggerId: record.triggerId, fromJobId: record.fromJobId, note: record.note, waiting: false },
       error: record.error,
+      took: record.took,
       runId: record.runId,
       repeating: repeats(record),
       parentKey,

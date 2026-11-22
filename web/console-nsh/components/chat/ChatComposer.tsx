@@ -91,6 +91,10 @@ export interface ChatComposerProps {
   stopMode?: boolean;
   attachActive?: boolean;
   attachDisabled?: boolean;
+  /** This composer never takes a workspace or a file (the Jobs list's): it has no add button at all. */
+  attachHidden?: boolean;
+  /** One more button of the composer's toolbar, after Send (the Jobs list's Add): a 38pt circle as Send is. */
+  actionsEnd?: JSX.Element;
   addLabel?: string;
   attachLabel?: string;
   uploadLabel?: string;
@@ -706,7 +710,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {selectedProfile()?.title || props.llmProfileLabel || ""}
         </Text>
       </If>
-      <Icon name="PhCaretDown" size={11} color="muted-foreground" />
+      <Icon name="PhCaretDown" size={11} color="muted-foreground" class={`transition duration-180 ${profileSheetOpen() ? "rotate-180" : ""}`} />
     </View>
   );
 
@@ -851,6 +855,7 @@ export function ChatComposer(props: ChatComposerProps) {
             </If>
             {/* Voice and Send take turns in one place, the row's end (VoiceOrSend). */}
             <VoiceOrSend />
+            {props.actionsEnd}
     </View>
   );
 
@@ -1004,7 +1009,12 @@ export function ChatComposer(props: ChatComposerProps) {
             placeholder on one line (ComposerFieldSlot.tsx). */}
         <View class={composerRowClass(multiRow())}>
           <ComposerMeasure text={value()} actionsWidth={actionsWidth()} onMeasure={(next) => measures.set(next)} />
-          <If when={!multiRow()}>{addControl()}</If>
+          <If when={!multiRow() && !props.attachHidden}>{addControl()}</If>
+          {/* Without the add button the text keeps clear of the pill's round end (28pt in, as a
+              list's names stand from its markers). */}
+          <If when={!multiRow() && props.attachHidden}>
+            <View class="w-2" accessibilityElementsHidden />
+          </If>
           <ComposerFieldSlot
             rows={layout().rows}
             placeholder={props.placeholder}
@@ -1052,7 +1062,10 @@ export function ChatComposer(props: ChatComposerProps) {
           <If when={!multiRow()}>{actions()}</If>
           <If when={multiRow()}>
             <View class="flex-row items-center justify-between">
-              {addControl()}
+              {/* Without an add button the actions keep their side. */}
+              <If when={!props.attachHidden} else={<View />}>
+                {addControl()}
+              </If>
               {actions()}
             </View>
           </If>

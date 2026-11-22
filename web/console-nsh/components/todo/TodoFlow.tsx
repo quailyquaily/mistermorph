@@ -3,8 +3,17 @@
 // list and the calendar. It holds view state only (the selection, link mode, the open picker, how
 // far a replay has travelled); every change to the data goes out through a callback.
 //
-// The picture is laid out by flow-layout.ts (pure, once per change of the jobs): never dragged,
-// nothing saved. On a phone the picture is the same, left to right with narrower jobs, and nothing can be edited.
+// The picture is laid out by flow-layout.ts (pure, once per change of the jobs): a job is never
+// moved by hand, nothing of the picture is saved.
+//
+// A link is drawn as in a diagram editor: every job has a port in the middle of its right edge
+// (it shows under the pointer, and on the selected job), and dragging from it to another job makes
+// that job use this one. While the pointer travels, a line follows it from the port, the jobs that
+// may take the link are outlined and the one under the pointer is lit; letting go anywhere else
+// makes nothing. A press on the port, without a drag, is the older way: it starts link mode, and
+// the next job pressed takes the link (the keyboard's way too). nsh has no DOM drag and drop, so
+// the port is a `PanResponder`; nothing is mounted or unmounted while it holds the gesture (that
+// ends a gesture in nsh), so the line's canvas and the hint are there from the start. On a phone the picture is the same, left to right with narrower jobs, and nothing can be edited.
 //
 // How it is drawn (nsh has no SVG):
 // - a job is a view at its place in the layout; when the layout changes it takes its new place at
@@ -29,7 +38,7 @@
 // - opacity and transform are all that animate; reduced motion zeroes every duration (no entrance,
 //   no glide, no draw-in, no pulse: a replay shows where the chain ended at once).
 import type { AnimatedNode, AnimatedValue, JSX, ViewRef } from "nsh";
-import { batch, Canvas, cleanup, computed, createAnimatedValue, Easing, effect, Path2D, reduceMotion, Scroll, signal, Text, token, untracked, View } from "nsh";
+import { batch, Canvas, cleanup, computed, createAnimatedValue, Easing, effect, PanResponder, Path2D, reduceMotion, Scroll, signal, Text, token, untracked, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import { gutterX, gutterY } from "../frame/metrics";
 import { FadeText, SCROLLBAR } from "../motion";
@@ -123,6 +132,8 @@ const LINK_FADE_MS = 240;
 const PENDING_PICKER_MS = 4000;
 /** The room round the picture inside the canvas: a border light's halo, the link button on a job's edge. */
 const INSET = 14;
+/** How far a press on a port moves before it is a drag, in points. */
+const LINK_DRAG_SLOP = 4;
 /** Under the last row: its join rule. */
 const FOOT = 28;
 
@@ -144,6 +155,10 @@ interface JobLook {
   linking: boolean;
   /** May be chosen as the job that uses the linking one. */
   target: boolean;
+  /** A link is being dragged over it, and it may take it. */
+  over: boolean;
+  /** Its port may start a drag now. */
+  canDrag: boolean;
   /** Takes presses: to select it, or as a target. */
   pressable: boolean;
   mark: StatusState;
@@ -184,9 +199,21 @@ function FlowJobBox(props: {
   onOpen: () => void;
   onLink: () => void;
   onJoin: () => void;
+  /** A drag from its port: where the pointer is on the page as it starts, moves and is let go; `cancel` when the system takes it. */
+  onLinkDrag: (phase: "start" | "move" | "drop" | "cancel", page?: { x: number; y: number }) => void;
 }) {
   const still = untracked(reduceMotion);
   const id = untracked(() => props.node().id);
+  // The port's drag: taken once a press on it has moved a few points, so a click stays a press.
+  const pan = PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) => untracked(() => props.look().canDrag) && Math.hypot(gesture.dx, gesture.dy) >= LINK_DRAG_SLOP,
+    onPanResponderGrant: (event) => props.onLinkDrag("start", { x: event.pageX, y: event.pageY }),
+    onPanResponderMove: (event) => props.onLinkDrag("move", { x: event.pageX, y: event.pageY }),
+    onPanResponderRelease: (event) => props.onLinkDrag("drop", { x: event.pageX, y: event.pageY }),
+    onPanResponderTerminate: () => props.onLinkDrag("cancel"),
+    // The picture's scroll views do not take a link away mid-drag.
+    onPanResponderTerminationRequest: () => false,
+  }).panHandlers;
   // The entrance: 0 below and clear, 1 in place.
   const enter = createAnimatedValue(still ? 1 : 0);
   if (!still) void enter.timing(1, { duration: RISE_MS, delay: untracked(props.enterDelay), easing: Easing.ease });
@@ -259,7 +286,7 @@ function FlowJobBox(props: {
   const danger = () => String(token("danger"));
   const border = () => {
     const look = props.look();
-    if (look.target) return blue();
+    if (look.over || look.target) return blue();
     if (look.reached) return withAlpha(look.failed ? danger() : blue(), 0.7);
     if (look.selected || look.linking) return withAlpha(blue(), 0.7);
     return String(token("line-soft"));
@@ -269,7 +296,8 @@ function FlowJobBox(props: {
   const fade = () => motionMs(MOTION_NORMAL);
   return (
     <View
-      class="absolute"
+      // `group`: its port shows while the pointer is over the job.
+      class="group absolute"
       style={{
         left: props.node().x,
         top: props.node().y,
@@ -305,7 +333,7 @@ function FlowJobBox(props: {
             height: height(),
             // Room for the open button while it shows.
             paddingRight: props.look().canOpen ? 40 : 12,
-            backgroundColor: String(token(props.look().selected ? "dialog" : "card")),
+            backgroundColor: String(token(props.look().selected || props.look().over ? "dialog" : "card")),
             borderColor: border(),
             transitionProperty: "colors",
             transitionDuration: fade(),
@@ -352,19 +380,27 @@ function FlowJobBox(props: {
           </View>
         </If>
         <If when={props.look().canLink}>
-          {/* Where its links leave: the middle of its right edge. */}
-          <TipButton
-            onPress={() => props.onLink()}
-            accessibilityLabel={props.look().linking ? t("todo_flow_link_cancel") : t("todo_flow_link_add", { job: props.look().job.title })}
-            selected={props.look().linking}
-            tooltip={<Tip text={props.look().linking ? t("todo_flow_link_cancel") : t("todo_flow_link_add", { job: props.look().job.title })} />}
-            hitSlop={5}
-            testID={`todo-flow-link-from-${id}`}
-            class={`absolute size-[22px] items-center justify-center rounded-full border border-blue ${props.look().linking ? "bg-blue" : "bg-card hover:bg-dialog"}`}
+          {/* The port, where its links leave: the middle of its right edge. It is on every job
+              that can start a link, shown under the pointer and on the selected job; a drag from
+              it draws the link, a press starts link mode. */}
+          <View
+            {...pan}
+            class={`absolute transition-opacity duration-150 ${props.look().selected || props.look().linking ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
             style={{ left: width() - 11, top: (height() - 22) / 2 }}
+            testID={`todo-flow-port-${id}`}
           >
-            <Icon name="PhPlus" size={10} color={props.look().linking ? "on-accent" : "blue"} />
-          </TipButton>
+            <TipButton
+              onPress={() => props.onLink()}
+              accessibilityLabel={props.look().linking ? t("todo_flow_link_cancel") : t("todo_flow_link_add", { job: props.look().job.title })}
+              selected={props.look().linking}
+              tooltip={<Tip text={props.look().linking ? t("todo_flow_link_cancel") : t("todo_flow_link_add", { job: props.look().job.title })} />}
+              hitSlop={5}
+              testID={`todo-flow-link-from-${id}`}
+              class={`size-[22px] items-center justify-center rounded-full border border-blue ${props.look().linking ? "bg-blue" : "bg-card hover:bg-dialog"}`}
+            >
+              <Icon name="PhPlus" size={10} color={props.look().linking ? "on-accent" : "blue"} />
+            </TipButton>
+          </View>
         </If>
         <If when={props.look().join}>
           <View class="flex-row" style={{ marginTop: 5, marginLeft: 6 }}>
@@ -580,6 +616,10 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
   const sel = signal<string | null>(null);
   /** The job a new link is being drawn from. */
   const linking = signal<string | null>(null);
+  /** A link being dragged from a job's port: the job, the valid job under the pointer, and the pointer in the picture. */
+  const dragFrom = signal<string | null>(null);
+  const dragOver = signal<string | null>(null);
+  const dragPoint = signal<{ x: number; y: number } | null>(null);
   /** The link whose picker is open, and the one to open once it is there (a link just asked for). */
   const pop = signal<string | null>(null);
   const pendingPop = signal<string | null>(null);
@@ -786,6 +826,10 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
     const looks = new Map<string, JobLook>();
     const chain = run();
     const from = linking();
+    // A dragged link marks its targets as link mode does, by restyling only.
+    const dragged = dragFrom();
+    const source = from ?? dragged;
+    const hovered = dragOver();
     const selected = sel();
     const at = step();
     // When the first pulse arrives at each job.
@@ -801,7 +845,7 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       const status = chain?.status.get(job.id);
       const reached = !!chain && status !== undefined && node.col <= at;
       const failed = reached && status === "failed";
-      const target = !!from && canUse(graph(), from, job.id);
+      const target = !!source && canUse(graph(), source, job.id);
       const arrives = arrive.get(job.id);
       // In a replay the pulse into a job leaves as its step begins; the job follows as it arrives.
       const now = reached && node.col === at && arrives !== undefined;
@@ -817,18 +861,21 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       const isSelected = job.id === selected;
       looks.set(job.id, {
         job,
-        faded: from ? !(target || job.id === from) : chain ? !reached : !onLine(job.id),
+        faded: source ? !(target || job.id === source) : chain ? !reached : !onLine(job.id),
         wait: now ? Math.round(arrives as number) : 0,
         selected: isSelected,
         linking: job.id === from,
         target,
+        over: !!dragged && target && job.id === hovered,
+        canDrag: editable() && !busy() && !from && !pop(),
         pressable: from ? target : true,
         mark,
         note,
         failed,
         reached,
         lit,
-        canLink: editable() && !busy() && (job.id === from || (isSelected && !from)) && !pop(),
+        // Every job has its port (shown under the pointer); in link mode only the job it started from.
+        canLink: editable() && !busy() && (!from || job.id === from) && !pop(),
         canOpen: isSelected && !from,
         join: node.joined && !chain,
         joinEdits: editable() && !busy() && !from,
@@ -879,6 +926,8 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       selected: false,
       linking: false,
       target: false,
+      over: false,
+      canDrag: false,
       pressable: false,
       mark: "on",
       note: "",
@@ -929,6 +978,83 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       } else if (pop() === link.key) pop.set(null);
     });
 
+  /* a link dragged from a port */
+  // The picture's place on the page, measured as a drag starts (the picture does not scroll under a held port).
+  let layer: ViewRef | undefined;
+  let layerOrigin: { x: number; y: number } | null = null;
+  let dragRun = 0;
+  const endDrag = () =>
+    batch(() => {
+      dragRun += 1;
+      layerOrigin = null;
+      dragFrom.set(null);
+      dragOver.set(null);
+      dragPoint.set(null);
+    });
+  /** The job at a point of the picture that may use `from`, if any (a job's box, with a little room round it). */
+  const targetAt = (from: string, point: { x: number; y: number }) => {
+    const ROOM = 6;
+    const node = layout().nodes.find(
+      (item) => point.x >= item.x - ROOM && point.x <= item.x + item.w + ROOM && point.y >= item.y - ROOM && point.y <= item.y + item.h + ROOM,
+    );
+    return node && canUse(graph(), from, node.id) ? node.id : null;
+  };
+  const follow = (page: { x: number; y: number }) => {
+    const from = untracked(dragFrom);
+    if (!from || !layerOrigin) return;
+    const point = { x: page.x - layerOrigin.x, y: page.y - layerOrigin.y };
+    batch(() => {
+      dragPoint.set(point);
+      dragOver.set(targetAt(from, point));
+    });
+  };
+  const linkDrag = (id: string, phase: "start" | "move" | "drop" | "cancel", page?: { x: number; y: number }) => {
+    if (phase === "start") {
+      if (!untracked(editable) || untracked(busy) || untracked(linking)) return;
+      const run = ++dragRun;
+      layerOrigin = null;
+      batch(() => {
+        dragFrom.set(id);
+        dragOver.set(null);
+        dragPoint.set(null);
+      });
+      void layer
+        ?.measure()
+        .then((frame) => {
+          if (run !== dragRun || !frame) return;
+          layerOrigin = { x: frame.pagePosition.x, y: frame.pagePosition.y };
+          if (page) follow(page);
+        })
+        .catch((error) => console.warn("todo flow: could not place the picture for a dragged link", error));
+      return;
+    }
+    if (untracked(dragFrom) !== id) return;
+    if (phase === "move" && page) return follow(page);
+    if (phase === "drop") {
+      if (page) follow(page);
+      const to = untracked(dragOver);
+      endDrag();
+      // The job that takes the link is selected, so its line shows in ink. No picker opens: the
+      // link was put where it was meant, and its picker would only offer to remove it.
+      if (to && !untracked(busy)) {
+        batch(() => {
+          sel.set(to);
+          pop.set(null);
+          pendingPop.set(null);
+        });
+        props.onAddUse?.(to, id);
+      }
+      return;
+    }
+    endDrag();
+  };
+  // A job that went, or a picture that takes no edits any more, ends a drag.
+  effect(() => {
+    const from = dragFrom();
+    if (!from) return;
+    if (!jobById().has(from) || !editable() || busy()) untracked(endDrag);
+  });
+
   /* the page */
   const viewport = signal({ width: 0, height: 0 });
   const padX = () => (mobile() ? gutterX() : Math.max(gutterX(), 24));
@@ -966,7 +1092,13 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
           >
             {/* Clipped: an icon in a scroller counts its file's size, not its drawn size, as overflow (PORTING.md). */}
             <View class="overflow-hidden" style={{ width: canvasWidth(), height: canvasHeight() }} testID="todo-flow-canvas" {...parts.probe(() => "canvas")}>
-              <View class="absolute" style={{ left: INSET, top: INSET, width: layout().width, height: layout().height + FOOT }}>
+              <View
+                class="absolute"
+                style={{ left: INSET, top: INSET, width: layout().width, height: layout().height + FOOT }}
+                ref={(view: ViewRef) => {
+                  layer = view;
+                }}
+              >
                 <If when={!settling()}>
                   <Each of={layout().links} key={(link) => link.key}>
                     {(link) => (
@@ -992,9 +1124,35 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
                       onOpen={() => props.onOpenJob?.(node().id)}
                       onLink={() => pressLink(node().id)}
                       onJoin={() => props.onSetJoin?.(node().id, jobById().get(node().id)?.join === "any" ? "all" : "any")}
+                      onLinkDrag={(phase, page) => linkDrag(node().id, phase, page)}
                     />
                   )}
                 </Each>
+                {/* The link being dragged: a line from its job's port to the pointer, over the jobs.
+                    Always there (a view added mid-gesture ends the gesture); it draws only while a link is dragged. */}
+                <Canvas
+                  accessibilityElementsHidden
+                  class="absolute inset-0"
+                  style={{ pointerEvents: "none" }}
+                  testID={`todo-flow-drag-${dragFrom() ? (dragOver() ? "over" : "on") : "off"}`}
+                  draw={(cx) => {
+                    const from = dragFrom();
+                    const to = dragPoint();
+                    const node = from ? layout().nodes.find((item) => item.id === from) : undefined;
+                    if (!node || !to) return;
+                    const start = { x: node.x + node.w, y: node.y + node.h / 2 };
+                    // Leaves the port sideways and arrives sideways, as the links do.
+                    const reach = Math.max(24, Math.abs(to.x - start.x) / 2);
+                    cx.lineWidth = 1.5;
+                    cx.lineCap = "round";
+                    cx.strokeStyle = String(token("blue"));
+                    if (!dragOver()) cx.setLineDash([4, 4]);
+                    cx.beginPath();
+                    cx.moveTo(start.x, start.y);
+                    cx.bezierCurveTo(start.x + reach, start.y, to.x - reach, to.y, to.x, to.y);
+                    cx.stroke();
+                  }}
+                />
                 <If when={!settling()}>
                   <Each of={layout().links} key={(link) => link.key}>
                     {(link) => (

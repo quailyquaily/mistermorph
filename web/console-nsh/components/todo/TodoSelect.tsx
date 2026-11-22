@@ -50,6 +50,9 @@ export function TodoSelect(props: {
   // Phones and touch screens: the list is the shared floating paper (`PopupList`); the base list
   // stays shut there (`open` held false) and only says when its trigger asks to open.
   const sheetOpen = signal(false);
+  // Whether the list shows, popup or sheet: what the trigger's caret turns with.
+  const listOpen = signal(false);
+  const shown = () => !props.disabled && (popupSheets() ? sheetOpen() : listOpen());
   return (
     <>
     <PopupList
@@ -71,7 +74,11 @@ export function TodoSelect(props: {
     <Select
       open={popupSheets() ? false : undefined}
       onOpenChange={({ open }) => {
-        if (open && untracked(popupSheets)) sheetOpen.set(true);
+        if (untracked(popupSheets)) {
+          if (open) sheetOpen.set(true);
+          return;
+        }
+        listOpen.set(open);
       }}
       items={props.items.map((item) => ({ value: item.value, title: item.title }))}
       value={props.current?.value ?? null}
@@ -117,7 +124,7 @@ export function TodoSelect(props: {
             text={props.current?.title ?? props.placeholder ?? ""}
             class={`flex-1 text-sm ${props.current ? "text-foreground" : "text-placeholder"}`}
           />
-          <Icon name="PhCaretDown" size={14} color="muted-foreground" class="opacity-50" />
+          <Icon name="PhCaretDown" size={14} color="muted-foreground" class={`opacity-50 transition duration-180 ${shown() ? "rotate-180" : ""}`} />
         </View>
       }
     />

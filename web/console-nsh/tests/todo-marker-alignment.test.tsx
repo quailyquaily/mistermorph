@@ -47,7 +47,7 @@ for (const item of CASES) {
   test(`on ${item.name} the TODO markers share one edge of the margin and the names one line`, async () => {
     const { app, frames } = await openIndex(item.width, "list");
     expect(await app.shows("id:todo-add")).toBe(item.add);
-    expect(await app.shows("id:todo-view-toggle")).toBe(true);
+    expect(await app.shows("id:todo-view-calendar")).toBe(true);
     const all = frames();
     const col = column(all);
     for (const id of ITEM_IDS) {
@@ -66,12 +66,17 @@ for (const item of CASES) {
     // (within a point: the gutter is a fraction of the width on some sizes).
     expect(Math.abs(col.left - index.x - (right(index) - col.right))).toBeLessThan(1.5);
     if (item.add) expect(col.right - col.left).toBeLessThan(MAX_WIDTH + 0.5);
-    // The head keeps the column: its last button, a whole 38pt circle, ends where the rows end.
+    // The head spans the pane, whatever the column's width: its last button (the last of the
+    // views' tabs, a whole 38pt circle) ends at the pane's right gutter and its title starts at
+    // the left one. On a phone the column is the pane, so they are the column's edges too.
     const action = all["head-action"];
     expect(near(action.w, 38)).toBe(true);
-    expect(near(right(action), col.right)).toBe(true);
-    // The head's title starts at the column's edge, where the markers are: no margin before it.
-    expect(near(all["head-title"].x, col.left)).toBe(true);
+    const gutter = all["head-title"].x - index.x;
+    // (within a point and a half: the gutter is a fraction of the width on some sizes).
+    expect(Math.abs(right(index) - right(action) - gutter)).toBeLessThan(1.5);
+    expect(gutter).toBeGreaterThanOrEqual(12);
+    expect(gutter).toBeLessThanOrEqual(28);
+    if (!item.add) expect(near(all["head-title"].x, col.left)).toBe(true);
     // On a phone that edge is the pages' gutter (gutterX: 12pt, 14pt on a wide one), where every
     // other page's title starts.
     if (!item.add) expect(near(all["head-title"].x - index.x, item.width <= 620 ? 12 : 14)).toBe(true);

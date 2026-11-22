@@ -2,7 +2,7 @@
 // One instance per page (createTodoState runs in the page's body, so its effects and timers go with
 // the page). Tasks are replaced, never mutated: an edit copies the task, applies the model's editing
 // function to the copy, and stores it as the draft (or in the list).
-import { batch, cleanup, computed, effect, signal, untracked } from "nsh";
+import { batch, cleanup, computed, effect, signal, untracked, windowSize } from "nsh";
 import {
   endpointState,
   runtimeApiFetch,
@@ -45,6 +45,9 @@ import * as model from "./todo-model.js";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 const trimText = model.trimText as (value: unknown) => string;
+
+/** The narrowest window whose list and calendar keep a side column of runs. */
+export const TODO_SIDE_MIN_WIDTH = 1180;
 
 /** A TODO item as the page edits it (normalizeTask's shape). */
 export interface TodoTask {
@@ -216,6 +219,14 @@ export function createTodoState() {
   // How the list's first load went: "" until it answered, then ok or failed.
   const loaded = signal<"" | "ok" | "failed">("");
   const saving = signal(false);
+  // The save under way is the page's own (changes are saved as they are made): the form stays open
+  // to edits while it runs.
+  const quietSaving = signal(false);
+  /** The open job's run history is shown (its Runs): the form drops its single last-run line. */
+  const jobRunsAvailable = signal(false);
+  /** The save under way, for what must follow it (a run, a delete). */
+  let saveInFlight: Promise<boolean> | null = null;
+  let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   const tasks = signal<TodoTask[]>([]);
   // A task added to the list flashes where it lands; loads and agent switches do not.
   const taskArrivals = createArrivalTracker({ edge: "any" });
@@ -381,6 +392,8 @@ export function createTodoState() {
       heartbeatWorkflows().every((item) => trimText(item.title) !== ""),
   );
   const canSave = computed(() => (heartbeatSelected() ? canSaveHeartbeat() : canSaveTasks()));
+  /** The list takes no edits now: it loads, or a save the person asked for runs. */
+  const locked = computed(() => loading() || (saving() && !quietSaving()));
 
   function taskRun(task: TodoTask | null | undefined) {
     const id = trimText(task?.id);
@@ -395,8 +408,7 @@ export function createTodoState() {
     () =>
       Boolean(selectedStoredTask()) &&
       !heartbeatSelected() &&
-      !loading() &&
-      !saving() &&
+      !locked() &&
       !runningTaskKey() &&
       !runDialogOpen() &&
       trimText(selectedStoredTask()?.id) !== "" &&
@@ -415,11 +427,16 @@ export function createTodoState() {
     return { run, pending: run.stopping || stops().has(run.runID) };
   });
   const canDuplicateSelectedTask = computed(
-    () => Boolean(selectedTask()) && !heartbeatSelected() && !loading() && !saving(),
+    () => Boolean(selectedTask()) && !heartbeatSelected() && !locked(),
   );
   // The list and an open item take turns: on a phone, and on a desktop too, where the list is a
   // page of its own. Only the desktop calendar keeps the open item beside it.
-  const paged = () => isMobile() || !calendarView();
+  // The calendar keeps its side column (the day's runs, an open job) only where the list shows
+  // its own (Today's runs): a desktop window with room for one. Narrower, the calendar is the page
+  // and a job opens in its place.
+  const sideRoom = () => !isMobile() && windowSize().width >= TODO_SIDE_MIN_WIDTH;
+  const calendarSplit = () => sideRoom() && calendarView();
+  const paged = () => !calendarSplit();
   const showIndexPane = computed(() => !paged() || !mobileEditorVisible());
   const showEditorPane = computed(() => !paged() || mobileEditorVisible());
   const mobileShowBack = computed(() => paged() && mobileEditorVisible());
@@ -448,6 +465,9 @@ export function createTodoState() {
     selectedTaskTopicKey() && taskTopic().key === selectedTaskTopicKey() ? taskTopic().topicID : "",
   );
 
+  /** The runtime knows which job uses which: the flow has something to draw. */
+  const flowAvailable = computed(() => tasks().some((task) => Array.isArray(task.triggers)));
+
   const taskActionMenuItems = computed<TaskActionItem[]>(() => [
     {
       id: "run-manually",
@@ -474,13 +494,13 @@ export function createTodoState() {
     {
       id: "move-up",
       title: t("todo_action_move_up"),
-      disabled: saving() || loading() || !selectedCanMoveUp(),
+      disabled: locked() || !selectedCanMoveUp(),
       action: () => moveSelectedTask(-1),
     },
     {
       id: "move-down",
       title: t("todo_action_move_down"),
-      disabled: saving() || loading() || !selectedCanMoveDown(),
+      disabled: locked() || !selectedCanMoveDown(),
       action: () => moveSelectedTask(1),
     },
     { id: "delete-divider", divider: true },
@@ -488,7 +508,7 @@ export function createTodoState() {
       id: "delete",
       title: t("action_delete"),
       danger: true,
-      disabled: saving() || loading(),
+      disabled: locked(),
       action: confirmDeleteSelectedTask,
     },
   ]);
@@ -937,6 +957,8 @@ export function createTodoState() {
   }
 
   async function deleteSelectedTask() {
+    // The page's own save ends first; the delete goes after it, with the list's new revision.
+    if (untracked(quietSaving) && saveInFlight) await saveInFlight;
     if (untracked(saving)) {
       return;
     }
@@ -1004,7 +1026,7 @@ export function createTodoState() {
   /* ---------- workspace ---------- */
 
   function openWorkspacePicker() {
-    if (!untracked(selectedTask) || untracked(saving) || untracked(loading)) {
+    if (!untracked(selectedTask) || untracked(locked)) {
       return;
     }
     workspacePickerOpen.set(true);
@@ -1049,56 +1071,11 @@ export function createTodoState() {
         };
       }),
   );
-  /** The chain of runs the flow replays, or null for the live state. */
-  const flowReplay = signal<{ job_id: string; status: "done" | "failed" | "skipped" | "canceled"; note: string }[] | null>(null);
-  const flowReplayLoading = signal(false);
-
   function flowEdit(jobID: string, edit: Editor) {
     const job = jobByID(jobID);
     if (!job || untracked(saving) || untracked(loading)) return;
     editTask(job, edit);
     void saveTasks();
-  }
-
-  // The latest chain: the newest run that started others, with every run it led to, in order.
-  async function toggleFlowReplay() {
-    if (untracked(flowReplay)) {
-      flowReplay.set(null);
-      return;
-    }
-    const endpointRef = untracked(() => endpointState.selectedRef);
-    if (!endpointRef || untracked(flowReplayLoading)) return;
-    flowReplayLoading.set(true);
-    try {
-      const data = await runtimeApiFetchForEndpoint(endpointRef, "/todo/runs/history?limit=200");
-      const items = (Array.isArray(data?.items) ? data.items : []) as any[];
-      const ended = items.filter((run) => ["done", "failed", "skipped", "canceled"].includes(run?.status));
-      const byOrigin = new Map<string, any[]>();
-      for (const run of ended) {
-        const origin = trimText(run?.cause?.origin_run_id) || trimText(run?.run_id);
-        byOrigin.set(origin, [...(byOrigin.get(origin) || []), run]);
-      }
-      // Newest first, as the history lists them: the first chain of more than one run, else the newest run.
-      const chain = [...byOrigin.values()].find((runs) => runs.length > 1) || [...byOrigin.values()][0];
-      if (disposed) return;
-      if (!chain) {
-        notice.error(t("todo_flow_replay_none"));
-        return;
-      }
-      flowReplay.set(
-        [...chain]
-          .sort((left, right) => trimText(left.queued_at).localeCompare(trimText(right.queued_at)))
-          .map((run) => ({
-            job_id: trimText(run.job_id),
-            status: run.status,
-            note: trimText(run.status === "failed" ? run.error : run.cause?.note) || t(`todo_run_status_${run.status}`),
-          })),
-      );
-    } catch (e) {
-      notice.error(errorMessage(e) || t("msg_load_failed"));
-    } finally {
-      if (!disposed) flowReplayLoading.set(false);
-    }
   }
 
   function openJobFromFlow(jobID: string) {
@@ -1110,9 +1087,6 @@ export function createTodoState() {
 
   const flow = {
     jobs: flowJobs,
-    replay: flowReplay,
-    replayLoading: flowReplayLoading,
-    toggleReplay: toggleFlowReplay,
     openJob: openJobFromFlow,
     addUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.addUse(copy, usedJobID)),
     removeUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.removeUse(copy, usedJobID)),
@@ -1273,7 +1247,7 @@ export function createTodoState() {
     scheduleMode: (task: TodoTask, mode: string) => editTask(task, (copy) => model.updateScheduleMode(copy, mode)),
     at: (task: TodoTask, value: string) => editTask(task, (copy) => model.updateAtInput(copy, value)),
     repeatKind: (task: TodoTask, kind: string) => {
-      if (untracked(saving) || untracked(loading)) {
+      if (untracked(locked)) {
         return;
       }
       editTask(task, (copy) => model.updateRepeatKind(copy, kind));
@@ -1525,10 +1499,73 @@ export function createTodoState() {
     }
   }
 
-  async function saveTasks() {
-    if (untracked(loading) || untracked(saving) || !untracked(taskHasLocalChanges)) {
-      return false;
+  /* ---------- saving as the form changes ---------- */
+
+  // A job has no Save: a change is saved once the form has been still for a moment. A form that is
+  // not valid yet (a date half typed, no content) is not sent, and says nothing; it is saved with
+  // the edit that makes it valid. (Heartbeat keeps its own Save.)
+  const AUTOSAVE_DELAY = 600;
+
+  function scheduleAutosave(delay = AUTOSAVE_DELAY) {
+    if (disposed) return;
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      autosaveTimer = null;
+      void autosave();
+    }, delay);
+  }
+
+  function autosaveReady() {
+    return (
+      untracked(taskHasLocalChanges) &&
+      !untracked(selectedSaveValidationMessage) &&
+      // The open job as the form has it, the others as the list does.
+      !untracked(tasks).some((task) => Boolean(model.taskValidationMessage(untracked(() => taskListDisplayTask(task)))))
+    );
+  }
+
+  async function autosave() {
+    if (disposed || !untracked(taskHasLocalChanges)) return;
+    if (untracked(loading) || untracked(saving)) {
+      scheduleAutosave(250);
+      return;
     }
+    if (!autosaveReady()) return;
+    await saveTasks({ quiet: true });
+  }
+
+  /**
+   * Where the list's changes stand: `saved` (none to send), `pending` (waiting for the form to be
+   * still), `saving`, or `invalid` (not sent until the form is valid). The page marks it, unseen,
+   * so a test waits for a save instead of for time to pass.
+   */
+  const saveState = computed<"saved" | "pending" | "saving" | "invalid">(() => {
+    if (saving()) return "saving";
+    if (!taskHasLocalChanges()) return "saved";
+    const invalid = Boolean(selectedSaveValidationMessage()) || tasks().some((task) => Boolean(model.taskValidationMessage(taskListDisplayTask(task))));
+    return invalid ? "invalid" : "pending";
+  });
+
+  effect(() => {
+    // Every edit of the list or of the open job, whichever control made it.
+    tasks();
+    selectedTaskDraft();
+    if (taskHasLocalChanges()) untracked(() => scheduleAutosave());
+  });
+
+  function saveTasks(options: { quiet?: boolean } = {}): Promise<boolean> {
+    if (untracked(loading) || untracked(saving) || !untracked(taskHasLocalChanges)) {
+      return Promise.resolve(false);
+    }
+    const run = sendTasks(Boolean(options.quiet));
+    saveInFlight = run;
+    void run.finally(() => {
+      if (saveInFlight === run) saveInFlight = null;
+    });
+    return run;
+  }
+
+  async function sendTasks(quiet: boolean) {
     const selectedMessage = untracked(selectedSaveValidationMessage);
     if (selectedMessage) {
       notice.error(selectedMessage);
@@ -1548,7 +1585,11 @@ export function createTodoState() {
       tasks.set(nextTasks);
       repeatInputRevision.update((n) => n + 1);
       saving.set(true);
+      quietSaving.set(quiet);
     });
+    // What was sent: an edit made while the agent answers (a quiet save leaves the form open) is
+    // kept, and saved next.
+    const sentDraft = untracked(selectedTaskDraft);
     try {
       const data = await runtimeApiFetch("/todo/tasks", {
         method: "PUT",
@@ -1557,20 +1598,26 @@ export function createTodoState() {
       void keepSavedTasks();
       if (disposed) return false;
       applyRevision(data);
+      const editedSince = untracked(selectedTaskDraft) !== sentDraft || untracked(tasks) !== nextTasks;
       batch(() => {
         applyOptions(data);
         persistedTaskSignatures.set(signatures(nextTasks));
-        tasksDirty.set(false);
-        selectedTaskDraft.set(model.cloneTaskForDraft(untracked(selectedStoredTask)) as TodoTask | null);
-        draftDirty.set(false);
+        if (!editedSince) {
+          tasksDirty.set(false);
+          selectedTaskDraft.set(model.cloneTaskForDraft(untracked(selectedStoredTask)) as TodoTask | null);
+          draftDirty.set(false);
+        }
       });
-      notice.success(t("msg_save_success"));
+      if (!quiet) notice.success(t("msg_save_success"));
       return true;
     } catch (e) {
       notice.error(saveErrorMessage(e, t("msg_save_failed")));
       return false;
     } finally {
-      saving.set(false);
+      batch(() => {
+        saving.set(false);
+        quietSaving.set(false);
+      });
     }
   }
 
@@ -1602,7 +1649,9 @@ export function createTodoState() {
     }
     runningTaskKey.set(key);
     try {
-      if (untracked(selectedTaskHasLocalChanges) && !(await saveTasks())) {
+      // The page's own save ends first; what it left unsaved is saved before the run.
+      if (saveInFlight) await saveInFlight;
+      if (untracked(selectedTaskHasLocalChanges) && !(await saveTasks({ quiet: true }))) {
         return;
       }
       const stored = untracked(selectedStoredTask);
@@ -1774,6 +1823,12 @@ export function createTodoState() {
       clearInterval(timer);
       if (stopPollTimer) clearTimeout(stopPollTimer);
       stopPollTimer = null;
+      // A change still waiting for its save is sent as the page goes.
+      if (autosaveTimer) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+        if (autosaveReady() && !untracked(loading) && !untracked(saving)) void saveTasks({ quiet: true });
+      }
       disposed = true;
       taskTopicLookupSeq += 1;
       cancelRunDialogLookup();
@@ -1784,6 +1839,11 @@ export function createTodoState() {
     // state
     loading,
     saving,
+    locked,
+    sideRoom,
+    jobRunsAvailable,
+    saveState,
+    calendarSplit,
     tasks,
     orderedTasks,
     selectedTask,
@@ -1854,6 +1914,7 @@ export function createTodoState() {
     showIndexView,
     setTodoView,
     toggleTodoView,
+    flowAvailable,
     duplicateSelectedTask,
     moveSelectedTask,
     confirmDeleteSelectedTask,

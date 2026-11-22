@@ -33,7 +33,7 @@ import { FieldNote, TodoInput } from "../../../components/todo/TodoFields";
 import { TodoFlow, type FlowJob, type FlowRunStep } from "../../../components/todo/TodoFlow";
 import { RunMarker } from "../../../components/todo/TodoIndex";
 import { TodoSelect } from "../../../components/todo/TodoSelect";
-import { TodoViewToggle } from "../../../components/todo/TodoViewToggle";
+import { type TodoView, TodoViewTabs } from "../../../components/todo/TodoViewTabs";
 import { Badge, Button, DropdownMenu, Muted } from "../../../components/ui";
 import { StoreSkillDetail } from "../../skills/StoreSkillDetail";
 import { act, acts, Col, type DemoMap, FIXED_ISO, LONG_TEXT, LONG_WORD, Row, t, useFlag, useText, V } from "../demo";
@@ -553,12 +553,12 @@ export const KNOWLEDGE_DEMOS: DemoMap = {
     ),
   },
   TodoFlow: { render: () => <TodoFlowDemo />, wide: true },
-  TodoViewToggle: {
+  TodoViewTabs: {
     render: () => {
-      const calendar = useFlag(false);
+      const view = signal<TodoView>("list");
       return (
-        <V s={calendar.on() ? "on" : "off"} row>
-          <TodoViewToggle calendar={calendar.on()} onPress={calendar.toggle} />
+        <V l={view()} row>
+          <TodoViewTabs value={view()} flow onChange={(next) => view.set(next)} />
         </V>
       );
     },
