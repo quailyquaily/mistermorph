@@ -39,7 +39,7 @@ func TestTodoTasksRouteWarnsAboutAJoinThatNeverStarts(t *testing.T) {
 	body := `{"tasks":[
 		{"id":"a","content":"a","triggers":[]},
 		{"id":"b","content":"b","triggers":[]},
-		{"id":"d","content":"d","triggers":[],"join":"all","uses":[{"job_id":"a","mode":"each"},{"job_id":"b","mode":"each"}],
+		{"id":"d","content":"d","triggers":[],"join":"all","uses":[{"job_id":"a"},{"job_id":"b"}],
 		 "warnings":["a client's own text"]}
 	]}`
 	rec := do(http.MethodPut, "/todo/tasks", body)
@@ -64,8 +64,8 @@ func TestTodoTasksRouteWarnsAboutAJoinThatNeverStarts(t *testing.T) {
 	// With join any, or a common upstream job, the warning is gone.
 	fixed := `{"tasks":[
 		{"id":"a","content":"a","triggers":[]},
-		{"id":"b","content":"b","triggers":[],"uses":[{"job_id":"a","mode":"each"}]},
-		{"id":"d","content":"d","triggers":[],"uses":[{"job_id":"a","mode":"each"},{"job_id":"b","mode":"each"}]}
+		{"id":"b","content":"b","triggers":[],"uses":[{"job_id":"a"}]},
+		{"id":"d","content":"d","triggers":[],"uses":[{"job_id":"a"},{"job_id":"b"}]}
 	]}`
 	if rec := do(http.MethodPut, "/todo/tasks", fixed); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"warnings"`) {
 		t.Fatalf("PUT fixed = %d %s", rec.Code, rec.Body.String())

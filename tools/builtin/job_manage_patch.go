@@ -339,19 +339,19 @@ func parseJobManageTriggerIDs(raw any) ([]string, error) {
 	return ids, nil
 }
 
-// parseJobManageUses reads uses as the job stores it. Modes, ages and the jobs named are checked
+// parseJobManageUses reads uses as the job stores it. The jobs named are checked
 // when the job is saved.
 func parseJobManageUses(raw any) ([]cronstore.Use, error) {
 	if typed, ok := raw.([]cronstore.Use); ok {
 		return append([]cronstore.Use{}, typed...), nil
 	}
-	items, err := jobManageObjects("uses", raw, `{"job_id": ..., "mode": ...}`, "job_id", "mode", "max_age")
+	items, err := jobManageObjects("uses", raw, `{"job_id": ...}`, "job_id")
 	if err != nil {
 		return nil, err
 	}
 	uses := make([]cronstore.Use, 0, len(items))
 	for _, item := range items {
-		uses = append(uses, cronstore.Use{JobID: item["job_id"], Mode: item["mode"], MaxAge: item["max_age"]})
+		uses = append(uses, cronstore.Use{JobID: item["job_id"]})
 	}
 	return uses, nil
 }

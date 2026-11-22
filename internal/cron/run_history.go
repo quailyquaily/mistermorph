@@ -306,8 +306,7 @@ var OnceRetryDelays = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Mi
 // OnceRetry is where a one-time schedule stands after failed runs.
 type OnceRetry struct {
 	// Failures is how many runs the schedule started, at or after its time, that failed or were
-	// skipped (an input it needed fresh did not finish). A run dropped for a full queue is not
-	// one.
+	// skipped. A run dropped for a full queue is not one.
 	Failures int
 	// LastFailedAt is when the last of them ended.
 	LastFailedAt time.Time

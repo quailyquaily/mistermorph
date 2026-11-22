@@ -19,7 +19,7 @@ func TestTodoTasksRouteTriggersAndLegacyFields(t *testing.T) {
 			{"kind":"schedule","at":"2030-01-01 10:00"},
 			{"id":"hook","kind":"poke"},
 			{"kind":"message","channel":"telegram","chat_id":"tg:-1"}]},
-		{"id":"report","content":"Report","triggers":[],"uses":[{"job_id":"fetch","mode":"each"}],"join":"any"},
+		{"id":"report","content":"Report","triggers":[],"uses":[{"job_id":"fetch"}],"join":"any"},
 		{"id":"old","content":"Old client","cron":"*/5 * * * *"}]}`)
 	if code != http.StatusOK || len(saved.Tasks) != 3 {
 		t.Fatalf("PUT = %d %s", code, body)
@@ -37,10 +37,10 @@ func TestTodoTasksRouteTriggersAndLegacyFields(t *testing.T) {
 		t.Fatalf("fetch triggers = %+v", fetch.Triggers)
 	}
 	if report.At != "" || report.Cron != "" || report.Triggers == nil || len(report.Triggers) != 0 || report.Join != cronstore.JoinAny ||
-		len(report.Uses) != 1 || report.Uses[0] != (cronstore.Use{JobID: "fetch", Mode: cronstore.UseEach}) {
+		len(report.Uses) != 1 || report.Uses[0] != (cronstore.Use{JobID: "fetch"}) {
 		t.Fatalf("report = %+v", report)
 	}
-	if !strings.Contains(body, `"id":"report","title":"Unititled TODO","content":"Report","triggers":[],"uses":[{"job_id":"fetch","mode":"each"}],"join":"any"`) {
+	if !strings.Contains(body, `"id":"report","title":"Unititled TODO","content":"Report","triggers":[],"uses":[{"job_id":"fetch"}],"join":"any"`) {
 		t.Fatalf("report JSON not as documented: %s", body)
 	}
 	wantOld := []cronstore.Trigger{{ID: cronstore.LegacyScheduleTriggerID, Kind: cronstore.TriggerSchedule, Cron: "*/5 * * * *"}}
@@ -77,23 +77,22 @@ func TestTodoTasksRouteTriggersAndLegacyFields(t *testing.T) {
 
 // A save that does not validate is a 400 whose body says what is wrong, and changes nothing.
 func TestTodoTasksRouteRefusesInvalidTriggersAndUses(t *testing.T) {
-	seed := `{"id":"a","content":"A","cron":"0 9 * * *"},{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a","mode":"each"}]}`
+	seed := `{"id":"a","content":"A","cron":"0 9 * * *"},{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a"}]}`
 	cases := []struct {
 		name  string
 		tasks string
 		want  string
 	}{
-		{"unknown job", `{"id":"a","content":"A","triggers":[],"uses":[{"job_id":"ghost","mode":"each"}]}`, "task a uses unknown job: ghost"},
-		{"itself", `{"id":"a","content":"A","triggers":[],"uses":[{"job_id":"a","mode":"each"}]}`, "task a cannot use itself"},
-		{"a loop", `{"id":"a","content":"A","triggers":[],"uses":[{"job_id":"b","mode":"each"}]},{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a","mode":"latest"}]}`,
+		{"unknown job", `{"id":"a","content":"A","triggers":[],"uses":[{"job_id":"ghost"}]}`, "task a uses unknown job: ghost"},
+		{"itself", `{"id":"a","content":"A","triggers":[],"uses":[{"job_id":"a"}]}`, "task a cannot use itself"},
+		{"a loop", `{"id":"a","content":"A","triggers":[],"uses":[{"job_id":"b"}]},{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a"}]}`,
 			"jobs use each other in a loop: a -> b -> a"},
-		{"twice", `{"id":"a","content":"A","cron":"0 9 * * *"},{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a","mode":"each"},{"job_id":"a","mode":"fresh"}]}`,
+		{"twice", `{"id":"a","content":"A","cron":"0 9 * * *"},{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a"},{"job_id":"a"}]}`,
 			"task b uses job a more than once"},
-		{"unknown mode", `{"id":"a","content":"A","cron":"0 9 * * *"},{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a","mode":"always"}]}`, `unknown use mode "always"`},
 		{"unknown join", `{"id":"a","content":"A","triggers":[],"join":"some"}`, `unknown join "some"`},
 		{"unknown kind", `{"id":"a","content":"A","triggers":[{"kind":"webhook"}]}`, `unknown trigger kind "webhook"`},
 		{"deleting a job once nothing uses it", `{"id":"b","content":"B","triggers":[]}`, ""},
-		{"deleting a job another still uses", `{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a","mode":"each"}]}`,
+		{"deleting a job another still uses", `{"id":"b","content":"B","triggers":[],"uses":[{"job_id":"a"}]}`,
 			"a is used by b; remove it from their uses first"},
 	}
 	for _, tc := range cases {
@@ -123,7 +122,7 @@ func TestTodoTasksRouteRefusesInvalidTriggersAndUses(t *testing.T) {
 		var jobs, uses []string
 		for _, id := range []string{"j1", "j2", "j3", "j4", "j5", "j6", "j7", "j8", "j9"} {
 			jobs = append(jobs, `{"id":"`+id+`","content":"x","triggers":[]}`)
-			uses = append(uses, `{"job_id":"`+id+`","mode":"latest"}`)
+			uses = append(uses, `{"job_id":"`+id+`"}`)
 		}
 		jobs = append(jobs, `{"id":"all","content":"x","triggers":[],"uses":[`+strings.Join(uses, ",")+`]}`)
 		code, _, body := todoJobsCall(t, mux, http.MethodPut, `{"tasks":[`+strings.Join(jobs, ",")+`]}`)

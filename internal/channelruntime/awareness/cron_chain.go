@@ -10,10 +10,10 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
 
-// chain follows a finished run of a stored job to the jobs that use it with mode "each".
+// chain follows a finished run of a stored job to the jobs that use it.
 //
 // A run that ended done queues each of them, as a run caused by this job, in the same chain (the
-// same origin run). A job that joins "all" of several "each" inputs waits until every one of them
+// same origin run). A job that joins "all" of several inputs waits until every one of them
 // has a done run in the chain, and is then queued once; one that joins "any" is queued by each.
 // A run that failed or was canceled starts nothing: a skipped run is recorded for each job that
 // uses it, saying which input did not finish, and for the jobs down the chain from those.
@@ -32,7 +32,7 @@ func (r *cronLoopRunner) chain(ctx context.Context, item cronstore.DueTask, stat
 		r.warn("cron_chain_error", "task_id", id, "error", err.Error())
 		return
 	}
-	dependents := cronstore.EachDependents(tasks, id)
+	dependents := cronstore.Dependents(tasks, id)
 	if len(dependents) == 0 {
 		return
 	}
@@ -71,7 +71,7 @@ func (r *cronLoopRunner) chainStart(ctx context.Context, tasks []cronstore.Task,
 		r.recordSkip(id, link, "not started: the job is switched off")
 		next := chainLink{from: id, origin: link.origin, depth: link.depth + 1}
 		seen := map[string]bool{id: true}
-		for _, dependent := range cronstore.EachDependents(tasks, id) {
+		for _, dependent := range cronstore.Dependents(tasks, id) {
 			r.chainSkip(tasks, dependent, next, fmt.Sprintf("input job %s was skipped", id), seen)
 		}
 		return
@@ -80,7 +80,7 @@ func (r *cronLoopRunner) chainStart(ctx context.Context, tasks []cronstore.Task,
 		r.recordSkip(id, link, fmt.Sprintf("not started: the chain would be more than %d jobs deep", cronstore.MaxChainDepth))
 		return
 	}
-	if inputs := cronstore.EachInputs(task); len(inputs) > 1 && cronstore.JoinForTask(task) == cronstore.JoinAll {
+	if inputs := cronstore.Inputs(task); len(inputs) > 1 && cronstore.JoinForTask(task) == cronstore.JoinAll {
 		runs, err := r.store.ChainRuns(context.Background(), link.origin)
 		if err != nil {
 			r.warn("cron_chain_error", "task_id", id, "error", err.Error())
@@ -134,7 +134,7 @@ func (r *cronLoopRunner) chainSkip(tasks []cronstore.Task, task cronstore.Task, 
 	seen[id] = true
 	r.recordSkip(id, link, note)
 	next := chainLink{from: id, origin: link.origin, depth: link.depth + 1}
-	for _, dependent := range cronstore.EachDependents(tasks, id) {
+	for _, dependent := range cronstore.Dependents(tasks, id) {
 		r.chainSkip(tasks, dependent, next, fmt.Sprintf("input job %s was skipped", id), seen)
 	}
 }

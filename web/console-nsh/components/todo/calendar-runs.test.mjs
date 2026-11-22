@@ -21,7 +21,7 @@ const at = (value) => new Date(value);
 // Morning report repeats on weekdays, Team digest runs after each of its runs, Release notes is
 // started by hand only, and Sweep runs every half hour.
 const REPORT = jobWiring({ id: "report", cron: "0 9 * * 1-5", tz: "UTC" });
-const DIGEST = jobWiring({ id: "digest" }, { uses: [{ job_id: "report", mode: "each" }], triggers: [] });
+const DIGEST = jobWiring({ id: "digest" }, { uses: [{ job_id: "report" }], triggers: [] });
 const NOTES = jobWiring({ id: "notes" }, { triggers: [{ id: "trg-poke", kind: "poke" }] });
 const SWEEP = jobWiring({ id: "sweep", cron: "*/30 * * * *", tz: "UTC" });
 const JOBS = [REPORT, DIGEST, NOTES, SWEEP];
@@ -58,9 +58,9 @@ test("stored triggers are used, the page's own schedule standing for the first s
       { id: "trg-b", kind: "schedule", cron: "0 18 * * 6", tz: "UTC" },
     ],
     uses: [
-      { job_id: "report", mode: "each" },
-      { job_id: "notes", mode: "latest" },
-      { job_id: "x", mode: "each" },
+      { job_id: "report" },
+      { job_id: "report" },
+      { job_id: "x" },
     ],
   };
   // The page edited the first schedule to 10:00 and has not saved yet.
@@ -69,7 +69,7 @@ test("stored triggers are used, the page's own schedule standing for the first s
     job.triggers.map((trigger) => `${trigger.id}:${trigger.kind}:${trigger.cron}`),
     ["trg-poke:poke:", "trg-a:schedule:0 10 * * *", "trg-b:schedule:0 18 * * 6"],
   );
-  // Only "each" starts the job; a job does not use itself.
+  // A used job is listed once; a job does not use itself.
   assert.deepEqual(job.uses, ["report"]);
   // A task that carries its own triggers is taken as written.
   const own = jobWiring({ id: "y", cron: "0 10 * * *", triggers: [{ id: "trg-c", kind: "schedule", cron: "5 5 * * *" }] }, stored);
@@ -271,7 +271,7 @@ test("a frequent job collapses to one row with a count and its range, per outcom
 });
 
 test("the runs chained off a collapsed row collapse under it", () => {
-  const each = jobWiring({ id: "each" }, { uses: [{ job_id: "sweep", mode: "each" }] });
+  const each = jobWiring({ id: "each" }, { uses: [{ job_id: "sweep" }] });
   const days = calendar([], { jobs: [SWEEP, each] });
   assert.deepEqual(titles(rowsOf(days, "2026-11-24")), ["sweep x48 planned", "  each x48 planned"]);
 });
@@ -317,10 +317,10 @@ test("a chained run is listed under the run that started it, on the same day", (
 });
 
 test("a job reached by two paths of one chain is planned once", () => {
-  const b = jobWiring({ id: "b" }, { uses: [{ job_id: "report", mode: "each" }] });
-  const c = jobWiring({ id: "c" }, { uses: [{ job_id: "report", mode: "each" }] });
-  const d = jobWiring({ id: "d" }, { uses: [{ job_id: "b", mode: "each" }, { job_id: "c", mode: "each" }] });
-  const loop = jobWiring({ id: "loop" }, { uses: [{ job_id: "d", mode: "each" }, { job_id: "loop", mode: "each" }] });
+  const b = jobWiring({ id: "b" }, { uses: [{ job_id: "report" }] });
+  const c = jobWiring({ id: "c" }, { uses: [{ job_id: "report" }] });
+  const d = jobWiring({ id: "d" }, { uses: [{ job_id: "b" }, { job_id: "c" }] });
+  const loop = jobWiring({ id: "loop" }, { uses: [{ job_id: "d" }, { job_id: "loop" }] });
   const days = calendar([], { jobs: [REPORT, b, c, d, loop] });
   assert.deepEqual(titles(rowsOf(days, "2026-11-24")), ["report planned", "  b planned", "    d planned", "      loop planned", "  c planned"]);
 });

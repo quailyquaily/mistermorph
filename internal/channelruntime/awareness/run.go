@@ -931,7 +931,7 @@ func awarenessJobReferences(ctx context.Context, opts awarenessTaskOptions, task
 
 // jobInputs lists the jobs the run's job uses, for the run to be given as references the text need
 // not hold. An input that has a done run in this run's chain of jobs (the run that started this
-// one, or the one made for a fresh result) is named with that run's record, so its output is the
+// one) is named with that run's record, so its output is the
 // one given; any other input gets its latest, as a reference does.
 func jobInputs(ctx context.Context, opts awarenessTaskOptions) []jobrefs.Use {
 	if opts.Job == nil || len(opts.Job.Uses) == 0 {
@@ -953,7 +953,7 @@ func jobInputs(ctx context.Context, opts awarenessTaskOptions) []jobrefs.Use {
 	uses := make([]jobrefs.Use, 0, len(opts.Job.Uses))
 	for _, use := range opts.Job.Uses {
 		id := strings.TrimSpace(use.JobID)
-		uses = append(uses, jobrefs.Use{JobID: id, Mode: strings.TrimSpace(use.Mode), RunRecordID: chainRecords[id]})
+		uses = append(uses, jobrefs.Use{JobID: id, RunRecordID: chainRecords[id]})
 	}
 	return uses
 }

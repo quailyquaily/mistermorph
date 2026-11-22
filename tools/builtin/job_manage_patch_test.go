@@ -455,12 +455,12 @@ func TestJobManageTriggersUsesAndJoin(t *testing.T) {
 		t.Fatalf("stored = %+v", stored)
 	}
 
-	// uses and join, with mode and max_age; get reads them back.
-	updated = d.mustCall(`{"action":"update","id":"job-out","uses":[{"job_id":"job-in","mode":"fresh","max_age":"30m"},{"job_id":"job-other"}],"join":"any"}`)
+	// uses and join; get reads them back.
+	updated = d.mustCall(`{"action":"update","id":"job-out","uses":[{"job_id":"job-in"},{"job_id":"job-other"}],"join":"any"}`)
 	job := updated["task"].(map[string]any)
 	wantUses := []any{
-		map[string]any{"job_id": "job-in", "mode": "fresh", "max_age": "30m"},
-		map[string]any{"job_id": "job-other", "mode": "latest"},
+		map[string]any{"job_id": "job-in"},
+		map[string]any{"job_id": "job-other"},
 	}
 	if !reflect.DeepEqual(job["uses"], wantUses) || job["join"] != "any" || !reflect.DeepEqual(updated["fields"], []any{"join", "uses"}) && !reflect.DeepEqual(updated["fields"], []any{"uses", "join"}) {
 		t.Fatalf("update = %v", updated)
@@ -487,10 +487,10 @@ func TestJobManageTriggersUsesAndJoin(t *testing.T) {
 	}
 
 	// An add may carry them.
-	added := d.mustCall(`{"action":"add_recurring","content":"digest","cron":"0 10 * * *","add_triggers":[{"kind":"poke"}],"uses":[{"job_id":"job-in","mode":"each"}],"join":"all"}`)
+	added := d.mustCall(`{"action":"add_recurring","content":"digest","cron":"0 10 * * *","add_triggers":[{"kind":"poke"}],"uses":[{"job_id":"job-in"}],"join":"all"}`)
 	job = added["task"].(map[string]any)
 	if triggers := triggersOf(added); len(triggers) != 2 || triggers[0]["kind"] != "schedule" || triggers[1]["kind"] != "poke" ||
-		!reflect.DeepEqual(job["uses"], []any{map[string]any{"job_id": "job-in", "mode": "each"}}) || job["join"] != "all" || job["cron"] != "0 10 * * *" {
+		!reflect.DeepEqual(job["uses"], []any{map[string]any{"job_id": "job-in"}}) || job["join"] != "all" || job["cron"] != "0 10 * * *" {
 		t.Fatalf("add = %v", added)
 	}
 	// The job that is used shows no bash_env value anywhere.
@@ -511,7 +511,7 @@ func TestJobManageRejectsInvalidTriggersAndUses(t *testing.T) {
 	for _, task := range []cronstore.Task{
 		{ID: "job-a", Cron: "0 8 * * *", Content: "a"},
 		{ID: "job-b", Cron: "0 8 * * *", Content: "b", Triggers: []cronstore.Trigger{{ID: "trg-s", Kind: cronstore.TriggerSchedule, Cron: "0 8 * * *"}, {ID: "trg-p", Kind: cronstore.TriggerPoke}},
-			Uses: []cronstore.Use{{JobID: "job-a", Mode: cronstore.UseEach}}},
+			Uses: []cronstore.Use{{JobID: "job-a"}}},
 	} {
 		if err := store.Write(cronstore.File{Tasks: append(mustTasks(t, store), task)}); err != nil {
 			t.Fatal(err)
@@ -525,11 +525,9 @@ func TestJobManageRejectsInvalidTriggersAndUses(t *testing.T) {
 	}{
 		{"unknown used job", `{"action":"update","id":"job-b","uses":[{"job_id":"job-ghost"}]}`, "task job-b uses unknown job: job-ghost"},
 		{"a job using itself", `{"action":"update","id":"job-b","uses":[{"job_id":"job-b"}]}`, "task job-b cannot use itself"},
-		{"a loop", `{"action":"update","id":"job-a","uses":[{"job_id":"job-b","mode":"each"}]}`, "jobs use each other in a loop: job-a -> job-b -> job-a"},
-		{"unknown mode", `{"action":"update","id":"job-b","uses":[{"job_id":"job-a","mode":"sometimes"}]}`, `unknown use mode "sometimes"`},
-		{"bad max_age", `{"action":"update","id":"job-b","uses":[{"job_id":"job-a","mode":"fresh","max_age":"soon"}]}`, `invalid max_age "soon" for job job-a`},
-		{"max_age out of range", `{"action":"update","id":"job-b","uses":[{"job_id":"job-a","mode":"fresh","max_age":"10s"}]}`, "out of range"},
-		{"max_age on another mode", `{"action":"update","id":"job-b","uses":[{"job_id":"job-a","mode":"each","max_age":"1h"}]}`, "max_age for job job-a needs mode fresh"},
+		{"a loop", `{"action":"update","id":"job-a","uses":[{"job_id":"job-b"}]}`, "jobs use each other in a loop: job-a -> job-b -> job-a"},
+		{"a mode, which uses no longer have", `{"action":"update","id":"job-b","uses":[{"job_id":"job-a","mode":"latest"}]}`, `uses[0] has an unknown field "mode"`},
+		{"a max_age, which uses no longer have", `{"action":"update","id":"job-b","uses":[{"job_id":"job-a","max_age":"1h"}]}`, `uses[0] has an unknown field "max_age"`},
 		{"unknown join", `{"action":"update","id":"job-b","join":"most"}`, `unknown join "most"`},
 		{"unknown trigger kind", `{"action":"update","id":"job-b","add_triggers":[{"kind":"webhook"}]}`, `unknown trigger kind "webhook"`},
 		{"a second poke trigger", `{"action":"update","id":"job-b","add_triggers":[{"kind":"poke"}]}`, "more than one poke trigger"},

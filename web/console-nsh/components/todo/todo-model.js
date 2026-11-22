@@ -446,8 +446,6 @@ function bashEnvValidationMessage(refs, t) {
 
 /* ---------- triggers and the jobs a job uses ---------- */
 
-const USE_MODES = ["latest", "each", "fresh"];
-
 // A job's triggers as the runtime lists them (`triggers`: schedule, poke, message). Undefined for a
 // runtime that does not know triggers: the job then has its one schedule and nothing else, and the
 // page offers none of this.
@@ -477,8 +475,7 @@ function normalizeUses(list) {
       continue;
     }
     seen.add(jobID);
-    const mode = trimText(item?.mode).toLowerCase();
-    out.push({ job_id: jobID, mode: USE_MODES.includes(mode) ? mode : "latest", max_age: trimText(item?.max_age) });
+    out.push({ job_id: jobID });
   }
   return out;
 }
@@ -526,21 +523,12 @@ function removeExtraTrigger(task, index) {
   task.triggers = task.triggers.filter((item) => item !== target);
 }
 
-function addUse(task, jobID, mode = "latest") {
+function addUse(task, jobID) {
   const id = trimText(jobID);
   if (!task || !id || id === trimText(task.id) || (task.uses || []).some((item) => item.job_id === id)) {
     return EDIT_NONE;
   }
-  task.uses = [...(task.uses || []), { job_id: id, mode: USE_MODES.includes(mode) ? mode : "latest", max_age: "" }];
-}
-
-function setUseMode(task, jobID, mode) {
-  const id = trimText(jobID);
-  if (!task || !USE_MODES.includes(mode) || !(task.uses || []).some((item) => item.job_id === id && item.mode !== mode)) {
-    return EDIT_NONE;
-  }
-  // max_age belongs to a fresh use only (the runtime refuses it on the others).
-  task.uses = task.uses.map((item) => (item.job_id === id ? { ...item, mode, max_age: mode === "fresh" ? item.max_age : "" } : item));
+  task.uses = [...(task.uses || []), { job_id: id }];
 }
 
 function removeUse(task, jobID) {
@@ -822,7 +810,7 @@ function serializeTask(task, fallbackTitle = DEFAULT_TODO_TITLE) {
       return trigger;
     });
     out.triggers = mode === "none" ? rest : [schedule, ...rest];
-    const uses = normalizeUses(task.uses).map((item) => (item.max_age && item.mode === "fresh" ? item : { job_id: item.job_id, mode: item.mode }));
+    const uses = normalizeUses(task.uses);
     if (uses.length > 0) {
       out.uses = uses;
     }
@@ -1878,7 +1866,6 @@ export {
   taskTopicKey,
   browserUTCOffsetValue,
   taskMode,
-  USE_MODES,
   extraTriggers,
   knowsTriggers,
   hasPokeTrigger,
@@ -1886,7 +1873,6 @@ export {
   addMessageTrigger,
   removeExtraTrigger,
   addUse,
-  setUseMode,
   removeUse,
   setJoin,
   normalizeTask,

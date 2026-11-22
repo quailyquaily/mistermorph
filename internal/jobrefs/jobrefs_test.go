@@ -696,50 +696,43 @@ func TestResolveUses(t *testing.T) {
 		records   []taskdomain.TaskInfo
 		uses      []Use
 		wantIDs   []string
-		wantMode  string
 		wantOut   string
 		wantChain bool
 		wantNote  []string
 	}{
 		{
-			name: "latest, not linked", text: "Summarize the input.", records: []taskdomain.TaskInfo{newer, older},
-			uses:    []Use{{JobID: "job-in", Mode: cronstore.UseLatest}},
-			wantIDs: []string{"job-in"}, wantMode: "latest", wantOut: "newer output",
+			name: "not linked", text: "Summarize the input.", records: []taskdomain.TaskInfo{newer, older},
+			uses:    []Use{{JobID: "job-in"}},
+			wantIDs: []string{"job-in"}, wantOut: "newer output",
 			wantNote: []string{"output of the job's latest run", "2026-11-21T10:01:00Z"},
 		},
 		{
 			name: "linked and used is given once", text: "Summarize [the input](job:job-in) and [other](job:job-other).", records: []taskdomain.TaskInfo{newer},
-			uses:    []Use{{JobID: "job-in", Mode: cronstore.UseLatest}, {JobID: "job-in", Mode: cronstore.UseEach}},
-			wantIDs: []string{"job-in", "job-other"}, wantMode: "latest", wantOut: "newer output",
+			uses:    []Use{{JobID: "job-in"}, {JobID: "job-in"}},
+			wantIDs: []string{"job-in", "job-other"}, wantOut: "newer output",
 		},
 		{
-			name: "each, the chain's run rather than the latest", text: "x", records: []taskdomain.TaskInfo{newer, older},
-			uses:    []Use{{JobID: "job-in", Mode: cronstore.UseEach, RunRecordID: older.ID}},
-			wantIDs: []string{"job-in"}, wantMode: "each", wantOut: "older output", wantChain: true,
+			name: "the chain's run rather than the latest", text: "x", records: []taskdomain.TaskInfo{newer, older},
+			uses:    []Use{{JobID: "job-in", RunRecordID: older.ID}},
+			wantIDs: []string{"job-in"}, wantOut: "older output", wantChain: true,
 			wantNote: []string{"the run of this job that led to this run", "2026-11-21T08:01:00Z", "not the job's latest run"},
 		},
 		{
-			name: "fresh, the chain's run is the latest", text: "x", records: []taskdomain.TaskInfo{newer, older},
-			uses:    []Use{{JobID: "job-in", Mode: cronstore.UseFresh, RunRecordID: newer.ID}},
-			wantIDs: []string{"job-in"}, wantMode: "fresh", wantOut: "newer output", wantChain: true,
-			wantNote: []string{"the run of this job that led to this run", "2026-11-21T10:01:00Z"},
-		},
-		{
-			name: "each, the chain's record is gone: the latest, said plainly", text: "x", records: []taskdomain.TaskInfo{failed, newer},
-			uses:    []Use{{JobID: "job-in", Mode: cronstore.UseEach, RunRecordID: "cron:gone"}},
-			wantIDs: []string{"job-in"}, wantMode: "each", wantOut: "newer output",
+			name: "the chain's record is gone: the latest, said plainly", text: "x", records: []taskdomain.TaskInfo{failed, newer},
+			uses:    []Use{{JobID: "job-in", RunRecordID: "cron:gone"}},
+			wantIDs: []string{"job-in"}, wantOut: "newer output",
 			wantNote: []string{"left no usable output record", "EARLIER run", "2026-11-21T10:01:00Z"},
 		},
 		{
-			name: "each, the chain's run failed: the latest finished output", text: "x", records: []taskdomain.TaskInfo{failed, newer},
-			uses:    []Use{{JobID: "job-in", Mode: cronstore.UseEach, RunRecordID: failed.ID}},
-			wantIDs: []string{"job-in"}, wantMode: "each", wantOut: "newer output",
+			name: "the chain's run failed: the latest finished output", text: "x", records: []taskdomain.TaskInfo{failed, newer},
+			uses:    []Use{{JobID: "job-in", RunRecordID: failed.ID}},
+			wantIDs: []string{"job-in"}, wantOut: "newer output",
 			wantNote: []string{"left no usable output record", "EARLIER run"},
 		},
 		{
-			name: "each without a chain run is the latest", text: "x", records: []taskdomain.TaskInfo{newer},
-			uses:    []Use{{JobID: "job-in", Mode: cronstore.UseEach}},
-			wantIDs: []string{"job-in"}, wantMode: "each", wantOut: "newer output",
+			name: "without a chain run is the latest", text: "x", records: []taskdomain.TaskInfo{newer},
+			uses:    []Use{{JobID: "job-in"}},
+			wantIDs: []string{"job-in"}, wantOut: "newer output",
 			wantNote: []string{"output of the job's latest run"},
 		},
 	}
@@ -756,7 +749,7 @@ func TestResolveUses(t *testing.T) {
 				t.Fatalf("jobs = %v, want %v", ids, tc.wantIDs)
 			}
 			job := resolved.Jobs[0]
-			if job.UsedAs != tc.wantMode || job.Result.Text != tc.wantOut || job.Result.FromThisChain != tc.wantChain || job.Instructions != "Collect the numbers." {
+			if !job.Input || job.Result.Text != tc.wantOut || job.Result.FromThisChain != tc.wantChain || job.Instructions != "Collect the numbers." {
 				t.Fatalf("job = %+v", job)
 			}
 			for _, want := range tc.wantNote {
@@ -765,10 +758,10 @@ func TestResolveUses(t *testing.T) {
 				}
 			}
 			note := resolved.ContextNote()
-			if strings.Contains(note, "s3cr3t") || strings.Contains(note, "TOKEN") || !strings.Contains(note, `"used_as": "`+tc.wantMode+`"`) {
+			if strings.Contains(note, "s3cr3t") || strings.Contains(note, "TOKEN") || !strings.Contains(note, `"input": true`) {
 				t.Fatalf("note:\n%s", note)
 			}
-			if len(resolved.Jobs) > 1 && resolved.Jobs[1].UsedAs != "" {
+			if len(resolved.Jobs) > 1 && resolved.Jobs[1].Input {
 				t.Fatalf("a linked job that is not used says it is: %+v", resolved.Jobs[1])
 			}
 		})
@@ -778,7 +771,7 @@ func TestResolveUses(t *testing.T) {
 		group := cronstore.Task{ID: "job-group", Content: "x", ChatID: "tg:-100"}
 		for _, id := range []string{"job-private", "job-missing"} {
 			opts := options(store, &fakeRuns{})
-			opts.Uses = []Use{{JobID: id, Mode: cronstore.UseLatest}}
+			opts.Uses = []Use{{JobID: id}}
 			_, err := Resolve(context.Background(), "No link here.", ScheduledBy(group), opts)
 			if !errors.Is(err, ErrUnavailable) || strings.Contains(err.Error(), "PAYROLL") {
 				t.Fatalf("%s: err = %v", id, err)
@@ -788,7 +781,7 @@ func TestResolveUses(t *testing.T) {
 
 	t.Run("the limits cover used jobs", func(t *testing.T) {
 		opts := options(store, &fakeRuns{records: []taskdomain.TaskInfo{newer}})
-		opts.Uses = []Use{{JobID: "job-in", Mode: cronstore.UseLatest}}
+		opts.Uses = []Use{{JobID: "job-in"}}
 		opts.Limits = Limits{Instructions: 7, Output: 5, Total: 100}
 		job := mustResolve(t, "x", ScheduledBy(asker), opts).Jobs[0]
 		if !job.InstructionsTruncated || !job.Result.Truncated || !strings.HasPrefix(job.Result.Text, "newer\n[... truncated") {

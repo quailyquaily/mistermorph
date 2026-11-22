@@ -30,7 +30,7 @@ export interface JobRunRecord {
 export interface StoredJob {
   id: string;
   triggers?: { id?: string; kind: string; at?: string; cron?: string; tz?: string; channel?: string; chat_id?: string }[];
-  uses?: { job_id: string; mode?: string }[];
+  uses?: { job_id: string }[];
 }
 
 export interface HistoryRange {

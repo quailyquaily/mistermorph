@@ -66,7 +66,6 @@ export function probeTodoFlow(layout: PartLayoutListener | null, events: ((event
 }
 const parts = createPartProbe(() => probeListener ?? undefined);
 
-export type FlowUseMode = "latest" | "each" | "fresh";
 export interface FlowJob {
   id: string;
   title: string;
@@ -74,7 +73,7 @@ export interface FlowJob {
   note: string;
   enabled: boolean;
   running: boolean;
-  uses: { job_id: string; mode: FlowUseMode }[];
+  uses: { job_id: string }[];
   join: "all" | "any";
 }
 /** One job's part in a finished chain of runs, in the order they happened. */
@@ -93,7 +92,6 @@ export interface TodoFlowProps {
   busy?: boolean;
   onOpenJob?: (id: string) => void;
   onAddUse?: (jobId: string, usedJobId: string) => void;
-  onSetUseMode?: (jobId: string, usedJobId: string, mode: FlowUseMode) => void;
   onRemoveUse?: (jobId: string, usedJobId: string) => void;
   onSetJoin?: (jobId: string, join: "all" | "any") => void;
 }
@@ -172,12 +170,6 @@ interface LinkLook {
   /** Its picker opens. */
   edits: boolean;
 }
-
-const LINK_NAME: Record<FlowUseMode, string> = {
-  each: "todo_flow_link_each",
-  latest: "todo_flow_link_latest",
-  fresh: "todo_flow_link_fresh",
-};
 
 /* ---------- a job ---------- */
 
@@ -407,9 +399,6 @@ function FlowJobBox(props: {
 
 /* ---------- a link ---------- */
 
-/** Dashes by kind: solid each new result, dashed a fresh one, dotted the latest. */
-const DASH: Record<FlowUseMode, number[]> = { each: [], fresh: [5, 4], latest: [0.1, 4] };
-
 function FlowLinkLine(props: {
   link: () => FlowLink;
   look: () => LinkLook;
@@ -462,8 +451,8 @@ function FlowLinkLine(props: {
   return (
     <Canvas
       accessibilityElementsHidden
-      // What a test can read of a drawing: the link's kind, its tone, and whether a pulse runs on it.
-      testID={`todo-flow-line-${key}.${props.link().mode}.${props.look().tone}.${pulseKey()}`}
+      // What a test can read of a drawing: its tone, and whether a pulse runs on it.
+      testID={`todo-flow-line-${key}.${props.look().tone}.${pulseKey()}`}
       {...parts.probe(() => `line-${key}`)}
       class="absolute"
       style={{
@@ -494,7 +483,6 @@ function FlowLinkLine(props: {
         cx.clip();
         cx.lineWidth = 1;
         cx.strokeStyle = from === to ? to : tint.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
-        cx.setLineDash(DASH[link.mode]);
         cx.stroke(path);
         cx.restore();
         const pulse = look.pulse;
@@ -527,24 +515,12 @@ function FlowLinkPicker(props: {
   busy: () => boolean;
   open: () => boolean;
   onOpenChange: (open: boolean) => void;
-  onMode: (mode: FlowUseMode) => void;
   onRemove: () => void;
 }) {
   const key = untracked(() => props.link().key);
-  const kind = (mode: FlowUseMode, label: string, hint: string): MenuEntry => ({
-    id: mode,
-    label: t(label),
-    description: t(hint),
-    checked: props.link().mode === mode,
-    onSelect: () => props.onMode(mode),
-  });
-  const items = (): MenuEntry[] => [
-    kind("each", "todo_flow_mode_each", "todo_flow_mode_each_hint"),
-    kind("latest", "todo_flow_mode_latest", "todo_flow_mode_latest_hint"),
-    kind("fresh", "todo_flow_mode_fresh", "todo_flow_mode_fresh_hint"),
-    { id: "separator", separator: true },
-    { id: "remove", label: t("todo_flow_remove"), danger: true, onSelect: () => props.onRemove() },
-  ];
+  // A link is one thing (each finished run of the used job starts the other), so all there is to
+  // do with it is to remove it.
+  const items = (): MenuEntry[] => [{ id: "remove", label: t("todo_flow_remove"), danger: true, onSelect: () => props.onRemove() }];
   const frame = () => ({ left: props.link().hit.x, top: props.link().hit.y, width: props.link().hit.w, height: props.link().hit.h });
   return (
     <If
@@ -782,7 +758,7 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
 
   /* live: a pulse loops along the `each` links of a running job */
   const liveTravels = (link: FlowLink) => {
-    if (props.replay || linking() || settling() || link.mode !== "each" || motionMs(LIVE_PERIOD_MS) === 0) return false;
+    if (props.replay || linking() || settling() || motionMs(LIVE_PERIOD_MS) === 0) return false;
     const from = jobById().get(link.from);
     return !!from && from.running && from.enabled;
   };
@@ -873,7 +849,7 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
     for (const link of layout().links) {
       const from = jobById().get(link.from);
       const to = jobById().get(link.to);
-      const name = t(LINK_NAME[link.mode], { job: to?.title ?? link.to, used: from?.title ?? link.from });
+      const name = t("todo_flow_link", { job: to?.title ?? link.to, used: from?.title ?? link.from });
       if (chain) {
         const inRun = chain.status.has(link.from) && chain.status.has(link.to) && (column().get(link.to) ?? 0) <= at;
         const travels = replayTravels(link.from, link.to);
@@ -1033,9 +1009,6 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
                         busy={busy}
                         open={() => pop() === link().key}
                         onOpenChange={(open) => openPicker(link(), open)}
-                        onMode={(mode) => {
-                          if (mode !== link().mode) props.onSetUseMode?.(link().to, link().from, mode);
-                        }}
                         onRemove={() => props.onRemoveUse?.(link().to, link().from)}
                       />
                     )}

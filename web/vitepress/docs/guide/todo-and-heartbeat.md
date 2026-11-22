@@ -97,24 +97,20 @@ A job with no trigger runs only when someone starts it. In the Console these are
 
 ### Jobs that use other jobs
 
-A job can take in another job's result. Each use has a kind:
+A job can depend on another job: every time the other job finishes, this job runs and is given that run's result. There is nothing to choose per job; listing a job under **Uses** always means this.
 
-| Kind | What it does |
-| --- | --- |
-| `latest` | Reads the other job's latest finished result. Never starts anything. |
-| `each` | Runs this job every time the other job finishes, with that result. |
-| `fresh` | When this job starts, runs the other job first if its result is older than `max_age` (default one hour), then uses the new result. |
+To only read another job's definition and latest result, without being started by it, use a [job reference](#job-references) in the job's text instead.
 
 The result arrives the way a [job reference](#job-references) does: as delimited source data with the same access rules, so a job listed in `uses` needs no link in its text.
 
 Rules:
 
-- With several `each` inputs, `join: all` (the default) runs the job once when every input has finished in the same chain; `join: any` runs it for each. A job whose `each` inputs share no common upstream job can never start under `all`; the runtime lists that as a warning on the job.
+- With several used jobs, `join: all` (the default) runs the job once when every input has finished in the same chain; `join: any` runs it for each. A job whose inputs share no common upstream job can never start under `all`; the runtime lists that as a warning on the job.
 - When an input fails or is stopped, the jobs after it are recorded as skipped, with the input named.
 - A chain stops after five jobs. A job cannot use itself, and a loop is refused when saved, naming the jobs in it.
 - A job that others use cannot be deleted until their uses are removed.
 
-The Console shows these links on the job's page (**Uses** and **Used by**) and as a graph in the **Flow** view, where a link can be added, changed or removed and the latest chain of runs replayed.
+The Console shows these links on the job's page (**Uses** and **Used by**) and as a graph in the **Flow** view, where a link can be added or removed and the latest chain of runs replayed.
 
 ### Run history
 

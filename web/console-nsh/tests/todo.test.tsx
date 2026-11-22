@@ -744,7 +744,7 @@ const WIRED_TASKS = [
       { id: "trg-p", kind: "poke" },
     ],
   },
-  { id: "task-2", title: "Report", content: "Write it", triggers: [], uses: [{ job_id: "task-1", mode: "each" }] },
+  { id: "task-2", title: "Report", content: "Write it", triggers: [], uses: [{ job_id: "task-1" }] },
 ];
 const afterReview = (origin: string, note = "") => ({ kind: "job", trigger_id: "", from_job_id: "task-1", origin_run_id: origin, note });
 const RAN = [
@@ -1333,7 +1333,7 @@ function linkedTasks() {
       title: "Team digest",
       content: "Rewrite it",
       triggers: [],
-      uses: [{ job_id: "report", mode: "each" }],
+      uses: [{ job_id: "report" }],
     },
     { id: "notes", title: "Release notes", content: "Draft", triggers: [{ id: "hook", kind: "poke" }] },
   ];
@@ -1352,8 +1352,8 @@ function openLinked(overrides: Record<string, unknown> = {}) {
 test("the list says what starts a job with no schedule, and its page offers no schedule controls", async () => {
   const { app } = await openLinked();
   await app.waitFor("id:todo-item-digest");
-  // The list says what starts each job: another job's new result, a poke, or a schedule and more.
-  expect(app.shows("id:todo-item-digest >> text:Whenever Morning report has a new result")).toBe(true);
+  // The list says what starts each job: another job finishing, a poke, or a schedule and more.
+  expect(app.shows("id:todo-item-digest >> text:Each time Morning report finishes")).toBe(true);
   expect(app.shows("id:todo-item-notes >> text:When its URL is poked")).toBe(true);
   await app.press("id:todo-item-digest");
   await app.waitFor("id:todo-task-editor");
@@ -1376,7 +1376,7 @@ test("the poke switch adds and removes the job's poke trigger, and the save send
   expect(sent[0]).toMatchObject({ id: "report", cron: "0 9 * * *", tz: "UTC" });
   expect(sent[0].triggers).toEqual([{ kind: "schedule", id: "trg-schedule", cron: "0 9 * * *", tz: "UTC" }, { kind: "poke" }]);
   // The others are sent as they were: a job with no schedule has no at, cron or tz.
-  expect(sent[1]).toEqual({ id: "digest", title: "Team digest", content: "Rewrite it", triggers: [], uses: [{ job_id: "report", mode: "each" }] });
+  expect(sent[1]).toEqual({ id: "digest", title: "Team digest", content: "Rewrite it", triggers: [], uses: [{ job_id: "report" }] });
   expect(sent[2].triggers).toEqual([{ kind: "poke", id: "hook" }]);
 });
 
@@ -1402,26 +1402,27 @@ test("a job's page lists what it uses and what uses it, and each name opens that
   await app.press("id:todo-item-digest");
   await app.waitFor("id:todo-uses");
   expect(app.shows("id:todo-use-report >> text:Morning report")).toBe(true);
-  expect(app.shows("id:todo-use-report-mode >> text:Each new result")).toBe(true);
+  // One behaviour, said once: nothing to choose per job.
+  expect(app.shows("id:todo-uses >> text:Runs this job automatically every time one of these jobs finishes, with that run's result.")).toBe(true);
+  expect(app.count("id:todo-use-report-mode")).toBe(0);
   await app.press("label:Morning report");
   await app.waitUntil(() => app.value("id:todo-title") === "Morning report");
   expect(app.shows("id:todo-used-by-digest >> text:Team digest")).toBe(true);
+  expect(app.shows("id:todo-used-by >> text:Every time this job finishes, these jobs run automatically with its result.")).toBe(true);
 });
 
-test("a use's kind is changed and a use removed; a job that depends on this one is not offered", async () => {
+test("a use is added and removed; a job that depends on this one is not offered", async () => {
   const { app, calls } = await openLinked();
   await app.press("id:todo-item-digest");
   await app.waitFor("id:todo-uses");
-  await app.press("id:todo-use-report-mode");
-  await app.press("text:A fresh result");
   await app.press("id:todo-use-add");
   await app.press("text:Release notes");
   await app.waitFor("id:todo-use-notes");
   await app.press("id:todo-save");
   await app.waitFor("Saved");
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[1].uses).toEqual([
-    { job_id: "report", mode: "fresh" },
-    { job_id: "notes", mode: "latest" },
+    { job_id: "report" },
+    { job_id: "notes" },
   ]);
   await app.press("id:todo-use-notes-remove");
   await app.waitFor("id:todo-use-notes", { state: "gone" });
@@ -1543,7 +1544,7 @@ test("the list's flow button opens the jobs as a graph, and the back arrow retur
   await app.waitUntil(() => lastLocation(app).includes("view=flow"));
   for (const title of ["Morning report", "Team digest", "Release notes"]) expect(app.shows(`text:${title}`)).toBe(true);
   // The link says what Team digest waits for; its line says only the rest.
-  expect(app.shows("text:Whenever Morning report has a new result")).toBe(false);
+  expect(app.shows("text:Each time Morning report finishes")).toBe(false);
   await app.press("id:todo-flow-back");
   await app.waitFor("id:todo-item-report");
   expect(app.shows("id:todo-flow-page")).toBe(false);

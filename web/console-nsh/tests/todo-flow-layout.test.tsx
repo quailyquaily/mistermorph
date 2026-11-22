@@ -15,12 +15,11 @@ import {
   type FlowBox,
   type FlowLayout,
   type FlowLayoutJob,
-  type FlowLinkMode,
 } from "../components/todo/flow-layout";
 
-const job = (id: string, ...uses: (string | [string, FlowLinkMode])[]): FlowLayoutJob => ({
+const job = (id: string, ...uses: string[]): FlowLayoutJob => ({
   id,
-  uses: uses.map((use) => (typeof use === "string" ? { job_id: use, mode: "each" as const } : { job_id: use[0], mode: use[1] })),
+  uses: uses.map((use) => ({ job_id: use })),
 });
 
 /** The prototype's jobs. */
@@ -29,8 +28,8 @@ const PROTOTYPE = [
   job("digest", "report"),
   job("risk", "report"),
   job("brief", "digest", "risk"),
-  job("peer", ["report", "latest"]),
-  job("notes", ["report", "fresh"]),
+  job("peer", "report"),
+  job("notes", "report"),
   job("triage"),
   job("heartbeat"),
   job("backup"),
@@ -155,7 +154,7 @@ test("a job's links leave on one trunk and arrive at ports of their own", () => 
 
 test("a link that skips a column goes round the jobs in between", () => {
   // c uses a and b; a>c skips b's column, where b, d and e stand.
-  const jobs = [job("a"), job("b", "a"), job("d", "a"), job("e", "a"), job("c", "b", ["a", "latest"]), job("f", "e", ["a", "fresh"])];
+  const jobs = [job("a"), job("b", "a"), job("d", "a"), job("e", "a"), job("c", "b", "a"), job("f", "e", "a")];
   const layout = layoutFlow(jobs);
   expect(nodeOf(layout, "c").col).toBe(2);
   checkSound(layout);
@@ -184,7 +183,7 @@ test("a long skip over several full columns still touches no job", () => {
   for (let c = 1; c <= 4; c++) {
     for (let r = 0; r < 4; r++) jobs.push(job(`n${c}${r}`, c === 1 ? "root" : `n${c - 1}${r}`));
   }
-  jobs.push(job("end", "n40", ["root", "fresh"], ["n11", "latest"], ["n22", "each"]));
+  jobs.push(job("end", "n40", "root", "n11", "n22"));
   const layout = layoutFlow(jobs);
   expect(nodeOf(layout, "end").col).toBe(5);
   checkSound(layout);
@@ -222,8 +221,8 @@ test("loops and links to jobs that are gone are left out, and the loop guard kno
   const jobs = [job("a", "c", "gone", "a"), job("b", "a", "a"), job("c", "b"), job("d")];
   const graph = flowGraph(jobs);
   // In the jobs' order: a uses c, b uses a (once), and c using b would close the loop.
-  expect(graph.uses.get("a")).toEqual([{ from: "c", mode: "each" }]);
-  expect(graph.uses.get("b")).toEqual([{ from: "a", mode: "each" }]);
+  expect(graph.uses.get("a")).toEqual([{ from: "c" }]);
+  expect(graph.uses.get("b")).toEqual([{ from: "a" }]);
   expect(graph.uses.get("c")).toEqual([]);
   expect([...upstreamOf(graph, "b")].sort()).toEqual(["a", "c"]);
   expect([...downstreamOf(graph, "c")].sort()).toEqual(["a", "b"]);
@@ -239,9 +238,7 @@ test("loops and links to jobs that are gone are left out, and the loop guard kno
 
 test("only a moved job or route changes the signature", () => {
   const before = layoutFlow(PROTOTYPE);
-  const kind = layoutFlow(PROTOTYPE.map((item) => (item.id === "peer" ? job("peer", ["report", "each"]) : item)));
-  expect(kind.signature).toBe(before.signature);
-  expect(linkOf(kind, "report>peer").mode).toBe("each");
+  expect(layoutFlow(PROTOTYPE.map((item) => ({ ...item, uses: [...item.uses] }))).signature).toBe(before.signature);
   const linked = layoutFlow(PROTOTYPE.map((item) => (item.id === "triage" ? job("triage", "brief") : item)));
   expect(linked.signature).not.toBe(before.signature);
   expect(nodeOf(linked, "triage").col).toBe(3);
@@ -272,7 +269,6 @@ function randomJobs(count: number, links: number, seed: number): FlowLayoutJob[]
     return state / 4294967296;
   };
   const jobs: FlowLayoutJob[] = Array.from({ length: count }, (_, i) => ({ id: `j${i}`, uses: [] }));
-  const modes: FlowLinkMode[] = ["each", "each", "latest", "fresh"];
   let made = 0;
   let guard = 0;
   while (made < links && guard++ < 10000) {
@@ -281,7 +277,9 @@ function randomJobs(count: number, links: number, seed: number): FlowLayoutJob[]
     const back = next() < 0.75 ? 1 + Math.floor(next() * 6) : 1 + Math.floor(next() * to);
     const from = Math.max(0, to - back);
     if (jobs[to].uses.some((use) => use.job_id === `j${from}`)) continue;
-    jobs[to].uses.push({ job_id: `j${from}`, mode: modes[Math.floor(next() * modes.length)] });
+    jobs[to].uses.push({ job_id: `j${from}` });
+    // One more draw per link, so the graphs stay the ones these tests always measured.
+    next();
     made++;
   }
   return jobs;

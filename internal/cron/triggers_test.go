@@ -175,7 +175,7 @@ func TestTriggerListIsAuthoritativeAndMirrored(t *testing.T) {
 func TestLegacyWriteKeepsWhatItCannotSee(t *testing.T) {
 	full := []Task{
 		{ID: "src", Content: "x", Triggers: []Trigger{}},
-		{ID: "a", Content: "x", Join: JoinAny, Uses: []Use{{JobID: "src", Mode: UseEach}}, Triggers: []Trigger{
+		{ID: "a", Content: "x", Join: JoinAny, Uses: []Use{{JobID: "src"}}, Triggers: []Trigger{
 			{ID: "p", Kind: TriggerPoke},
 			{ID: "s1", Kind: TriggerSchedule, Cron: "0 9 * * *", TZ: "UTC"},
 			{ID: "s2", Kind: TriggerSchedule, Cron: "0 18 * * *"},
@@ -263,7 +263,7 @@ func TestLegacyWriteKeepsWhatItCannotSee(t *testing.T) {
 			if first, _ := TriggerOfKind(got, TriggerSchedule); got.At != first.At || got.Cron != first.Cron || got.TZ != first.TZ {
 				t.Fatalf("legacy fields %q %q %q do not mirror %+v", got.At, got.Cron, got.TZ, first)
 			}
-			if got.Join != JoinAny || !reflect.DeepEqual(got.Uses, []Use{{JobID: "src", Mode: UseEach}}) {
+			if got.Join != JoinAny || !reflect.DeepEqual(got.Uses, []Use{{JobID: "src"}}) {
 				t.Fatalf("uses = %+v join = %q", got.Uses, got.Join)
 			}
 			// A job no schedule starts survives the legacy client's save of the list.
@@ -341,12 +341,12 @@ func TestSaveValidatesTriggersUsesAndJoin(t *testing.T) {
 	job := func(id string, uses ...Use) Task {
 		return Task{ID: id, Content: "x", Triggers: []Trigger{}, Uses: uses}
 	}
-	each := func(id string) Use { return Use{JobID: id, Mode: UseEach} }
+	each := func(id string) Use { return Use{JobID: id} }
 	var nine []Use
 	var nineJobs []Task
 	for i := 0; i < MaxUses+1; i++ {
 		id := fmt.Sprintf("in%d", i)
-		nine = append(nine, Use{JobID: id, Mode: UseLatest})
+		nine = append(nine, Use{JobID: id})
 		nineJobs = append(nineJobs, job(id))
 	}
 	cases := []struct {
@@ -354,23 +354,16 @@ func TestSaveValidatesTriggersUsesAndJoin(t *testing.T) {
 		tasks   []Task
 		wantErr string // "" for a list that saves
 	}{
-		{"a chain and a diamond save", []Task{job("a"), job("b", each("a")), job("c", each("a")), job("d", each("b"), Use{JobID: "c", Mode: UseFresh})}, ""},
+		{"a chain and a diamond save", []Task{job("a"), job("b", each("a")), job("c", each("a")), job("d", each("b"), each("c"))}, ""},
 		{"eight uses save", append(append([]Task{}, nineJobs[:MaxUses]...), job("a", nine[:MaxUses]...)), ""},
 		{"unknown job", []Task{job("a", each("ghost"))}, "task a uses unknown job: ghost"},
 		{"a job using itself", []Task{job("a", each("a"))}, "task a cannot use itself"},
 		{"a loop of two", []Task{job("a", each("b")), job("b", each("a"))}, "jobs use each other in a loop: a -> b -> a"},
 		{"a loop of three, entered from outside", []Task{job("x", each("a")), job("a", each("b")), job("b", each("c")), job("c", each("a"))},
 			"jobs use each other in a loop: a -> b -> c -> a"},
-		{"the same job twice", []Task{job("a"), job("b", each("a"), Use{JobID: "a", Mode: UseLatest})}, "task b uses job a more than once"},
+		{"the same job twice", []Task{job("a"), job("b", each("a"), each("a"))}, "task b uses job a more than once"},
 		{"more than eight uses", append(append([]Task{}, nineJobs...), job("a", nine...)), "task a uses 9 jobs; the limit is 8"},
-		{"unknown mode", []Task{job("a"), job("b", Use{JobID: "a", Mode: "sometimes"})}, `unknown use mode "sometimes"`},
-		{"a use without a job", []Task{job("b", Use{Mode: UseEach})}, "a use needs a job_id"},
-		{"a fresh use with a max age saves", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "90m"})}, ""},
-		{"a fresh use at the bounds saves", []Task{job("a"), job("c"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "1m"}, Use{JobID: "c", Mode: UseFresh, MaxAge: "720h"})}, ""},
-		{"a max age that is not a duration", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "1 day"})}, `invalid max_age "1 day" for job a`},
-		{"a max age below the bound", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "30s"})}, "max_age 30s for job a is out of range"},
-		{"a max age above the bound", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseFresh, MaxAge: "721h"})}, "max_age 721h for job a is out of range"},
-		{"a max age on another mode", []Task{job("a"), job("b", Use{JobID: "a", Mode: UseEach, MaxAge: "1h"})}, "max_age for job a needs mode fresh"},
+		{"a use without a job", []Task{job("b", Use{})}, "a use needs a job_id"},
 		{"unknown join", []Task{{ID: "a", Content: "x", Triggers: []Trigger{}, Join: "most"}}, `unknown join "most"`},
 		{"unknown trigger kind", []Task{{ID: "a", Content: "x", Triggers: []Trigger{{Kind: "webhook"}}}}, `unknown trigger kind "webhook"`},
 		{"a schedule trigger without a time", []Task{{ID: "a", Content: "x", Triggers: []Trigger{{Kind: TriggerSchedule}}}}, "task a must use exactly one of at or cron"},
@@ -410,8 +403,8 @@ func TestDeleteRefusedWhileUsed(t *testing.T) {
 		store := newTriggerStore(t)
 		mustWrite(t, store,
 			Task{ID: "src", Content: "x", Cron: "0 9 * * *"},
-			Task{ID: "b", Content: "x", Triggers: []Trigger{}, Uses: []Use{{JobID: "src", Mode: UseEach}}},
-			Task{ID: "c", Content: "x", Triggers: []Trigger{}, Uses: []Use{{JobID: "src", Mode: UseLatest}}},
+			Task{ID: "b", Content: "x", Triggers: []Trigger{}, Uses: []Use{{JobID: "src"}}},
+			Task{ID: "c", Content: "x", Triggers: []Trigger{}, Uses: []Use{{JobID: "src"}}},
 			Task{ID: "free", Content: "x", Cron: "0 9 * * *"},
 		)
 		return store
@@ -470,7 +463,7 @@ func TestConsumeOnceTrigger(t *testing.T) {
 		{"a legacy one-time job is deleted", []Task{{ID: "a", Content: "x", At: "2030-01-01 10:00"}}, LegacyScheduleTriggerID, true, "", 0},
 		{"a job with another trigger stays", []Task{{ID: "a", Content: "x", Triggers: []Trigger{once, {ID: "p", Kind: TriggerPoke}}}}, "once", false, "a", 1},
 		{"a job another uses stays", []Task{{ID: "a", Content: "x", Triggers: []Trigger{once}},
-			{ID: "b", Content: "x", Triggers: []Trigger{}, Uses: []Use{{JobID: "a", Mode: UseEach}}}}, "once", false, "a,b", 0},
+			{ID: "b", Content: "x", Triggers: []Trigger{}, Uses: []Use{{JobID: "a"}}}}, "once", false, "a,b", 0},
 		{"a recurring trigger is not retired", []Task{{ID: "a", Content: "x", Cron: "* * * * *"}}, LegacyScheduleTriggerID, false, "a", 1},
 		{"an unknown trigger changes nothing", []Task{{ID: "a", Content: "x", Triggers: []Trigger{once}}}, "gone", false, "a", 1},
 	}
@@ -509,10 +502,10 @@ func TestTaskJSONShape(t *testing.T) {
 		{"a task nothing starts shows an empty list", Task{ID: "a", Content: "x", Triggers: []Trigger{}},
 			`{"id":"a","content":"x","triggers":[]}`},
 		{"every kind, uses and join", Task{ID: "a", Content: "x", Join: JoinAny,
-			Uses: []Use{{JobID: "b", Mode: UseEach}},
+			Uses: []Use{{JobID: "b"}},
 			Triggers: []Trigger{{ID: "p", Kind: TriggerPoke}, {ID: "m", Kind: TriggerMessage, Channel: "telegram", ChatID: "tg:-1"},
 				{ID: "s", Kind: TriggerSchedule, At: "2030-01-01 10:00"}}},
-			`{"id":"a","content":"x","triggers":[{"id":"p","kind":"poke"},{"id":"m","kind":"message","channel":"telegram","chat_id":"tg:-1"},{"id":"s","kind":"schedule","at":"2030-01-01 10:00"}],"uses":[{"job_id":"b","mode":"each"}],"join":"any"}`},
+			`{"id":"a","content":"x","triggers":[{"id":"p","kind":"poke"},{"id":"m","kind":"message","channel":"telegram","chat_id":"tg:-1"},{"id":"s","kind":"schedule","at":"2030-01-01 10:00"}],"uses":[{"job_id":"b"}],"join":"any"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -533,26 +526,5 @@ func TestTaskJSONShape(t *testing.T) {
 	var legacy Task
 	if err := json.Unmarshal([]byte(`{"id":"a","cron":"* * * * *","content":"x"}`), &legacy); err != nil || legacy.Triggers != nil {
 		t.Fatalf("legacy = %+v, %v", legacy, err)
-	}
-}
-
-func TestFreshMaxAge(t *testing.T) {
-	cases := []struct {
-		raw  string
-		want time.Duration
-	}{
-		{"", DefaultFreshMaxAge},
-		{"15m", 15 * time.Minute},
-		{" 24h ", 24 * time.Hour},
-		{"nonsense", DefaultFreshMaxAge},
-		{"1s", DefaultFreshMaxAge},
-	}
-	for _, tc := range cases {
-		if got := FreshMaxAge(Use{JobID: "a", Mode: UseFresh, MaxAge: tc.raw}); got != tc.want {
-			t.Fatalf("FreshMaxAge(%q) = %s, want %s", tc.raw, got, tc.want)
-		}
-	}
-	if DefaultFreshMaxAge != time.Hour {
-		t.Fatalf("default max age = %s", DefaultFreshMaxAge)
 	}
 }

@@ -7,27 +7,27 @@
 // parts' frames and what the view did on the way (`events:`) are read out beside them.
 import { batch, mount, signal, Text, View } from "nsh";
 import { isMobile } from "../../lib/shell";
-import { probeTodoFlow, TodoFlow, type FlowJob, type FlowRunStep, type FlowUseMode } from "../../components/todo/TodoFlow";
+import { probeTodoFlow, TodoFlow, type FlowJob, type FlowRunStep } from "../../components/todo/TodoFlow";
 import type { PartFrame } from "../../components/shared/partProbe";
 
-const job = (id: string, title: string, note: string, uses: [string, FlowUseMode][] = [], more: Partial<FlowJob> = {}): FlowJob => ({
+const job = (id: string, title: string, note: string, uses: string[] = [], more: Partial<FlowJob> = {}): FlowJob => ({
   id,
   title,
   note,
   enabled: true,
   running: false,
-  uses: uses.map(([job_id, mode]) => ({ job_id, mode })),
+  uses: uses.map((job_id) => ({ job_id })),
   join: "all",
   ...more,
 });
 
 const PROTO: FlowJob[] = [
   job("report", "Morning report", "Weekdays 09:00 or when poked", [], { running: true }),
-  job("digest", "Team digest", "Tells Slack #team", [["report", "each"]]),
-  job("risk", "Risk summary", "Tells Console User", [["report", "each"]]),
-  job("brief", "Weekly brief", "Tells Slack #leads", [["digest", "each"], ["risk", "each"]]),
-  job("peer", "Answer build questions", "When Lucy asks over Agent Link", [["report", "latest"]]),
-  job("notes", "Draft release notes", "Only when you start it", [["report", "fresh"]]),
+  job("digest", "Team digest", "Tells Slack #team", ["report"]),
+  job("risk", "Risk summary", "Tells Console User", ["report"]),
+  job("brief", "Weekly brief", "Tells Slack #leads", ["digest", "risk"]),
+  job("peer", "Answer build questions", "When Lucy asks over Agent Link", ["report"]),
+  job("notes", "Draft release notes", "Only when you start it", ["report"]),
   job("triage", "Triage family requests", "When Family group writes on Telegram"),
   job("heartbeat", "Heartbeat", "Every 30 minutes"),
   job("backup", "Check the backups", "Every day at 02:00", [], { enabled: false }),
@@ -44,9 +44,9 @@ const LAST_RUN: FlowRunStep[] = [
 /** c uses b and, past b's column, a. */
 const SKIP: FlowJob[] = [
   job("a", "Alpha", "Every hour", [], { running: true }),
-  job("b", "Beta", "After Alpha", [["a", "each"]]),
-  job("d", "Delta", "After Alpha", [["a", "each"]]),
-  job("c", "Gamma", "After Beta", [["b", "each"], ["a", "each"]]),
+  job("b", "Beta", "After Alpha", ["a"]),
+  job("d", "Delta", "After Alpha", ["a"]),
+  job("c", "Gamma", "After Beta", ["b", "a"]),
 ];
 
 /** Forty jobs and sixty links, the same every time. */
@@ -57,14 +57,15 @@ function forty(): FlowJob[] {
     return state / 4294967296;
   };
   const jobs = Array.from({ length: 40 }, (_, i) => job(`j${i}`, `Job number ${i}`, i % 3 ? "Every day at 09:00" : "When poked", [], { enabled: i % 9 !== 8, running: i === 0 }));
-  const modes: FlowUseMode[] = ["each", "each", "latest", "fresh"];
   let made = 0;
   while (made < 60) {
     const to = 1 + Math.floor(next() * 39);
     const back = next() < 0.75 ? 1 + Math.floor(next() * 6) : 1 + Math.floor(next() * to);
     const from = Math.max(0, to - back);
     if (jobs[to].uses.some((use) => use.job_id === `j${from}`)) continue;
-    jobs[to].uses.push({ job_id: `j${from}`, mode: modes[Math.floor(next() * modes.length)] });
+    jobs[to].uses.push({ job_id: `j${from}` });
+    // One more draw per link, so the graph stays the one the tests measured.
+    next();
     made++;
   }
   return jobs;
@@ -142,7 +143,7 @@ function Page() {
         <Text class="text-xs">{`set:${set()} replay:${replay() ? "on" : "off"}`}</Text>
       </View>
       <Text class="text-[6px]" style={{ numberOfLines: 1 }}>{`calls:${JSON.stringify(calls())}`}</Text>
-      <Text class="text-[6px]" style={{ numberOfLines: 1 }}>{`uses:${jobs().map((item) => `${item.id}<${item.uses.map((use) => `${use.job_id}:${use.mode}`).join("+")}/${item.join}`).join(" ")}`}</Text>
+      <Text class="text-[6px]" style={{ numberOfLines: 1 }}>{`uses:${jobs().map((item) => `${item.id}<${item.uses.map((use) => `${use.job_id}`).join("+")}/${item.join}`).join(" ")}`}</Text>
       <Text class="text-[6px]" style={{ numberOfLines: 1 }}>{`events:${JSON.stringify(events())}`}</Text>
       <Text class="text-[6px]" style={{ numberOfLines: 1 }}>{`frames:${JSON.stringify(frames())}`}</Text>
       {/* A fresh view for each set, so every part reports its frame anew. */}
@@ -156,11 +157,7 @@ function Page() {
             onOpenJob={(id) => call("open", id)}
             onAddUse={(id, used) => {
               call("add", id, used);
-              change(id, (item) => ({ ...item, uses: [...item.uses, { job_id: used, mode: "each" }] }));
-            }}
-            onSetUseMode={(id, used, mode) => {
-              call("mode", id, used, mode);
-              change(id, (item) => ({ ...item, uses: item.uses.map((use) => (use.job_id === used ? { ...use, mode } : use)) }));
+              change(id, (item) => ({ ...item, uses: [...item.uses, { job_id: used }] }));
             }}
             onRemoveUse={(id, used) => {
               call("remove", id, used);

@@ -46,7 +46,7 @@ type Task struct {
 	// At, Cron and TZ are its schedule, as they always were. In JSON a stored job always shows the
 	// list ("triggers": [] when empty); only a task that has none (nil) leaves the key out.
 	Triggers []Trigger `yaml:"triggers,omitempty" json:"triggers,omitzero"`
-	// Uses are the jobs this one depends on, and Join how several "each" inputs combine: JoinAll
+	// Uses are the jobs this one depends on, and Join how several of them combine: JoinAll
 	// (the default, also "") or JoinAny.
 	Uses []Use  `yaml:"uses,omitempty" json:"uses,omitempty"`
 	Join string `yaml:"join,omitempty" json:"join,omitempty"`

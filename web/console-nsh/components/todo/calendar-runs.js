@@ -3,7 +3,7 @@
 //
 // - Past: what ran, from the run history (GET /todo/runs/history), whatever started it.
 // - Future: what is planned, every schedule trigger of every enabled job, and after each planned
-//   run the jobs that use its job ("each").
+//   run the jobs that use its job.
 // - Today: both; a run that is waiting or running is never folded or collapsed.
 //
 // One rule for days: a run belongs to the day its moment falls on in the display time zone (the
@@ -54,7 +54,7 @@ function normalizeTrigger(raw) {
 
 /**
  * A job as the calendar needs it: `{ id, enabled, triggers, uses }`, `uses` being the IDs of the
- * jobs whose every finished run starts this one (mode "each"; the other modes start nothing).
+ * jobs whose every finished run starts this one.
  *
  * `task` is the page's item and `stored` the same job as GET /todo/tasks answered it. The triggers
  * are the task's own when it carries them, else the stored ones, else (a legacy answer) the one
@@ -87,7 +87,7 @@ export function jobWiring(task, stored) {
   const uses = [];
   for (const use of usesSource) {
     const from = text(use?.job_id);
-    if (from && from !== id && text(use?.mode) === "each" && !uses.includes(from)) {
+    if (from && from !== id && !uses.includes(from)) {
       uses.push(from);
     }
   }

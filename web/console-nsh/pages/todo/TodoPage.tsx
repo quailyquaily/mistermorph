@@ -261,7 +261,6 @@ export function TodoPage() {
                 busy={state.saving() || state.loading()}
                 onOpenJob={state.flow.openJob}
                 onAddUse={state.flow.addUse}
-                onSetUseMode={state.flow.setUseMode}
                 onRemoveUse={state.flow.removeUse}
                 onSetJoin={state.flow.setJoin}
               />

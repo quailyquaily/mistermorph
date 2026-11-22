@@ -30,7 +30,7 @@ import { ModelLedger } from "../../../components/observe/ModelLedger";
 import { AuditBadge, ObserveSection, Segmented } from "../../../components/observe/parts";
 import { TodoCard } from "../../../components/todo/TodoCard";
 import { FieldNote, TodoInput } from "../../../components/todo/TodoFields";
-import { TodoFlow, type FlowJob, type FlowRunStep, type FlowUseMode } from "../../../components/todo/TodoFlow";
+import { TodoFlow, type FlowJob, type FlowRunStep } from "../../../components/todo/TodoFlow";
 import { RunMarker } from "../../../components/todo/TodoIndex";
 import { TodoSelect } from "../../../components/todo/TodoSelect";
 import { TodoViewToggle } from "../../../components/todo/TodoViewToggle";
@@ -179,22 +179,22 @@ function SegmentedDemo() {
 // chain in which the third failed.
 function TodoFlowDemo() {
   const name = (n: number) => t("uig_fixture_option", { n });
-  const flowJob = (n: number, uses: [number, FlowUseMode][], more: Partial<FlowJob> = {}): FlowJob => ({
+  const flowJob = (n: number, uses: number[], more: Partial<FlowJob> = {}): FlowJob => ({
     id: `job-${n}`,
     title: n === 4 ? `${name(n)} ${LONG_TEXT}` : name(n),
     note: t("uig_fixture_title"),
     enabled: true,
     running: false,
-    uses: uses.map(([used, mode]) => ({ job_id: `job-${used}`, mode })),
+    uses: uses.map((used) => ({ job_id: `job-${used}` })),
     join: "all",
     ...more,
   });
   const jobs = signal<FlowJob[]>([
     flowJob(1, [], { running: true }),
-    flowJob(2, [[1, "each"]]),
-    flowJob(3, [[1, "each"]]),
-    flowJob(4, [[2, "each"], [3, "each"]]),
-    flowJob(5, [[2, "fresh"], [1, "latest"]], { enabled: false }),
+    flowJob(2, [1]),
+    flowJob(3, [1]),
+    flowJob(4, [2, 3]),
+    flowJob(5, [2, 1], { enabled: false }),
     flowJob(6, []),
   ]);
   const chain = (): FlowRunStep[] => [
@@ -215,11 +215,7 @@ function TodoFlowDemo() {
       onOpenJob={acts("onOpenJob")}
       onAddUse={(id, used) => {
         act("onAddUse", `${id} ${used}`);
-        change(id, (job) => ({ ...job, uses: [...job.uses, { job_id: used, mode: "each" }] }));
-      }}
-      onSetUseMode={(id, used, mode) => {
-        act("onSetUseMode", `${id} ${used} ${mode}`);
-        change(id, (job) => ({ ...job, uses: job.uses.map((use) => (use.job_id === used ? { ...use, mode } : use)) }));
+        change(id, (job) => ({ ...job, uses: [...job.uses, { job_id: used }] }));
       }}
       onRemoveUse={(id, used) => {
         act("onRemoveUse", `${id} ${used}`);

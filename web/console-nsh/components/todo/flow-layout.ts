@@ -22,12 +22,10 @@
 // On a phone the same rule runs top to bottom (`FLOW_PHONE`): columns become rows, and the links
 // leave and arrive under the jobs' markers, a rail down the left of each job.
 
-export type FlowLinkMode = "latest" | "each" | "fresh";
-
 /** What the layout reads of a job. */
 export interface FlowLayoutJob {
   id: string;
-  uses: { job_id: string; mode: FlowLinkMode }[];
+  uses: { job_id: string }[];
 }
 
 export interface FlowMetrics {
@@ -121,7 +119,7 @@ export interface FlowNode extends FlowBox {
   id: string;
   /** Its column (row on a phone): one after the last job it uses. */
   col: number;
-  /** More than one of its inputs is `each`: its join rule shows. */
+  /** It uses more than one job: its join rule shows. */
   joined: boolean;
 }
 
@@ -131,7 +129,6 @@ export interface FlowLink {
   /** The job whose result is used, and the job that uses it. */
   from: string;
   to: string;
-  mode: FlowLinkMode;
   /** The corners of its route on the canvas, from the used job's edge to the job's edge. */
   points: [number, number][];
   /** Its box on the canvas (the route and `pad` around it), and the route as SVG path data in it. */
@@ -159,7 +156,7 @@ export interface FlowLayout {
 export interface FlowGraph {
   ids: string[];
   /** A job's inputs that count: of jobs that exist, one per job, never itself, never a loop. */
-  uses: Map<string, { from: string; mode: FlowLinkMode }[]>;
+  uses: Map<string, { from: string }[]>;
   /** The jobs that use a job. */
   users: Map<string, string[]>;
 }
@@ -172,7 +169,7 @@ export interface FlowGraph {
 export function flowGraph(jobs: readonly FlowLayoutJob[]): FlowGraph {
   const ids = jobs.map((job) => job.id);
   const known = new Set(ids);
-  const uses = new Map<string, { from: string; mode: FlowLinkMode }[]>();
+  const uses = new Map<string, { from: string }[]>();
   const users = new Map<string, string[]>();
   for (const id of ids) {
     uses.set(id, []);
@@ -198,7 +195,7 @@ export function flowGraph(jobs: readonly FlowLayoutJob[]): FlowGraph {
       if (!known.has(use.job_id) || use.job_id === job.id) continue;
       if (mine.some((kept) => kept.from === use.job_id)) continue;
       if (dependsOn(use.job_id, job.id)) continue;
-      mine.push({ from: use.job_id, mode: use.mode });
+      mine.push({ from: use.job_id });
       users.get(use.job_id)?.push(job.id);
     }
   }
@@ -389,7 +386,7 @@ export function layoutFlow(jobs: readonly FlowLayoutJob[], metrics: FlowMetrics 
     if (seen.has(id)) continue;
     seen.add(id);
     const inputs = graph.uses.get(id) ?? [];
-    add(id, true, id, depth.get(id) ?? 0, inputs.filter((use) => use.mode === "each").length > 1);
+    add(id, true, id, depth.get(id) ?? 0, inputs.length > 1);
   }
   for (let c = 0; c < columns.length; c++) columns[c] = columns[c] ?? [];
   const connect = (up: Item, down: Item) => {
@@ -555,7 +552,7 @@ export function layoutFlow(jobs: readonly FlowLayoutJob[], metrics: FlowMetrics 
       const hit: FlowBox = m.vertical
         ? { x: ex - thick / 2, y: ey - 6 - m.hitLength, w: thick, h: m.hitLength }
         : { x: ex - 6 - m.hitLength, y: ey - thick / 2, w: m.hitLength, h: thick };
-      links.push({ key, from: use.from, to, mode: use.mode, points, box, d: traced.d, length: traced.length, hit });
+      links.push({ key, from: use.from, to, points, box, d: traced.d, length: traced.length, hit });
     }
   }
 

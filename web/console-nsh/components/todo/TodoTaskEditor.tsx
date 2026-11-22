@@ -726,14 +726,14 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
     </View>
   );
 
-  // The jobs whose results this one takes in, each with how; and the jobs that take in this one's.
-  const useModeItems = () =>
-    (model.USE_MODES as string[]).map((mode) => ({ id: `use-${mode}`, title: t(`todo_use_mode_${mode}`), subtitle: t(`todo_use_mode_${mode}_note`), value: mode }));
+  // The jobs whose results this one takes in (each finished run of one starts this job), and the
+  // jobs that take in this one's. There is one way to use a job, so nothing to choose per job.
   const uses = () => (
     <View class="gap-2.5" testID="todo-uses">
+      <Text class="text-xs leading-[17.4px] text-muted-foreground" testID="todo-uses-note">{t("todo_uses_note")}</Text>
       <Each of={task().uses ?? []} key={(use) => use.job_id}>
         {(use) => (
-          <View class={narrowWindow() ? "gap-2" : "flex-row items-center gap-2"} testID={`todo-use-${use().job_id}`}>
+          <View class="flex-row items-center gap-2" testID={`todo-use-${use().job_id}`}>
             <BaseButton
               onPress={() => state.openJob(use().job_id)}
               accessibilityLabel={state.jobTitle(use().job_id)}
@@ -743,17 +743,6 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
                 {state.jobTitle(use().job_id)}
               </Text>
             </BaseButton>
-            <View class={narrowWindow() ? "" : "w-64"}>
-              <TodoSelect
-                label={t("todo_use_mode")}
-                items={useModeItems()}
-                current={useModeItems().find((item) => item.value === use().mode)}
-                placeholder={t("todo_use_mode")}
-                disabled={busy()}
-                testID={`todo-use-${use().job_id}-mode`}
-                onChange={(value) => state.edits.useMode(task(), use().job_id, value)}
-              />
-            </View>
             <Button
               variant="plain"
               size="sm"
@@ -762,13 +751,12 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               title={t("todo_use_remove", { title: state.jobTitle(use().job_id) })}
               disabled={busy()}
               testID={`todo-use-${use().job_id}-remove`}
-              class={narrowWindow() ? "self-end" : ""}
               onPress={() => state.edits.removeUse(task(), use().job_id)}
             />
           </View>
         )}
       </Each>
-      <If when={(task().uses ?? []).filter((use) => use.mode === "each").length > 1}>
+      <If when={(task().uses ?? []).length > 1}>
         <View style={pickerStyle()}>
           <TodoSelect
             label={t("todo_join")}
@@ -802,18 +790,18 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
   );
   const usedBy = () => (
     <View testID="todo-used-by">
+      <Text class="px-1 text-xs leading-[17.4px] text-muted-foreground" testID="todo-used-by-note">{t("todo_used_by_note")}</Text>
       <Each of={state.usedBy(task())} key={(entry) => entry.id}>
         {(entry) => (
           <BaseButton
             onPress={() => state.openJob(entry().id)}
-            accessibilityLabel={`${entry().title}: ${t(`todo_use_mode_${entry().mode}`)}`}
+            accessibilityLabel={entry().title}
             testID={`todo-used-by-${entry().id}`}
             class="min-h-11 flex-row items-center gap-3 rounded-(--radius) px-1 hover:bg-hover-faint"
           >
             <Text class="min-w-0 flex-1 text-sm leading-[21px] text-foreground" style={{ numberOfLines: 1 }}>
               {entry().title}
             </Text>
-            <Text class="text-xs leading-[17.4px] text-muted-foreground">{t(`todo_use_mode_${entry().mode}`)}</Text>
           </BaseButton>
         )}
       </Each>

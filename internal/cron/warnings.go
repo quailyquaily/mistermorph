@@ -10,7 +10,7 @@ import (
 // Warnings returns, by job ID, short plain-text notes on jobs that are stored as written but
 // will not do what they say. They are worked out when the list is read and never stored:
 //
-//   - a job that joins "all" of several "each" inputs which no single run leads to: it waits for
+//   - a job that joins "all" of several inputs which no single run leads to: it waits for
 //     all of them in one chain of jobs, and never starts;
 //   - a one-time schedule whose runs failed until no try was left (see OnceRetryDelays).
 func (s *Store) Warnings(ctx context.Context, tasks []Task) map[string][]string {
@@ -43,10 +43,10 @@ func (s *Store) Warnings(ctx context.Context, tasks []Task) map[string][]string 
 	return out
 }
 
-// JoinWarnings returns, by job ID, the warning of each job that joins "all" of several "each"
+// JoinWarnings returns, by job ID, the warning of each job that joins "all" of several
 // inputs that share no common upstream job. Such a job starts when every input has a done run in
-// one chain of jobs, the chain one run started; a run of job R leads to the jobs that use R with
-// mode "each", to the jobs R needs fresh, and on from those. When no job leads to all the
+// one chain of jobs, the chain one run started; a run of job R leads to the jobs that use R,
+// and on from those. When no job leads to all the
 // inputs (an input leads to itself), no chain can hold them all and the job never starts.
 func JoinWarnings(tasks []Task) map[string][]string {
 	out := map[string][]string{}
@@ -56,12 +56,7 @@ func JoinWarnings(tasks []Task) map[string][]string {
 		id := strings.TrimSpace(task.ID)
 		for _, use := range task.Uses {
 			used := strings.TrimSpace(use.JobID)
-			switch use.Mode {
-			case UseEach:
-				leadsFrom[used] = append(leadsFrom[used], id)
-			case UseFresh:
-				leadsFrom[id] = append(leadsFrom[id], used)
-			}
+			leadsFrom[used] = append(leadsFrom[used], id)
 		}
 	}
 	reach := map[string]map[string]bool{}
@@ -85,7 +80,7 @@ func JoinWarnings(tasks []Task) map[string][]string {
 		return seen
 	}
 	for _, task := range tasks {
-		inputs := EachInputs(task)
+		inputs := Inputs(task)
 		if len(inputs) < 2 || JoinForTask(task) != JoinAll {
 			continue
 		}
@@ -103,7 +98,7 @@ func JoinWarnings(tasks []Task) map[string][]string {
 		}
 		if !common {
 			id := strings.TrimSpace(task.ID)
-			out[id] = append(out[id], fmt.Sprintf("This job never starts: join is \"all\", but no single run leads to all of its \"each\" inputs (%s). Set join to \"any\", or make the inputs follow one common job.",
+			out[id] = append(out[id], fmt.Sprintf("This job never starts: join is \"all\", but no single run leads to all of the jobs it uses (%s). Set join to \"any\", or make the inputs follow one common job.",
 				strings.Join(inputs, ", ")))
 		}
 	}

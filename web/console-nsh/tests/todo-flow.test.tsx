@@ -5,12 +5,12 @@
 // where the layout says, none over another. The layout itself: tests/todo-flow-layout.test.tsx.
 //
 // A headless run draws nothing: what a line looks like is in its test id
-// (`todo-flow-line-<used>><job>.<kind>.<tone>.<pulse>`), fading is the views' opacity, and where
+// (`todo-flow-line-<used>><job>.<tone>.<pulse>`), fading is the views' opacity, and where
 // things lie is their measured frames. A step ends only once the app is quiet, so what happens on
 // the way (a replay's steps, the links going out while jobs glide) is read from the view's events.
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
-import { FLOW_DESKTOP, FLOW_PHONE, layoutFlow, type FlowBox, type FlowLayoutJob, type FlowLinkMode } from "../components/todo/flow-layout";
+import { FLOW_DESKTOP, FLOW_PHONE, layoutFlow, type FlowBox, type FlowLayoutJob } from "../components/todo/flow-layout";
 
 type Frame = { x: number; y: number; w: number; h: number };
 
@@ -37,7 +37,7 @@ const jobsOf = (app: App): (FlowLayoutJob & { join: string })[] =>
     .map((item) => {
       const [id, rest] = item.split("<");
       const [uses, join] = rest.split("/");
-      return { id, join, uses: uses ? uses.split("+").map((use) => ({ job_id: use.split(":")[0], mode: use.split(":")[1] as FlowLinkMode })) : [] };
+      return { id, join, uses: uses ? uses.split("+").map((use) => ({ job_id: use })) : [] };
     });
 /** How visible a job is: its own opacity times every view's around it. */
 const shown = (app: App, id: string) => Math.round((app.viewStyle(`id:todo-flow-node-${id}`)?.effectiveOpacity ?? -1) * 100) / 100;
@@ -56,10 +56,10 @@ test("a job selected keeps everything up and down its line in ink and fades the 
   // Up the line: Morning report; down it: Weekly brief. Risk summary feeds the brief but is on neither.
   expect(fadedJobs(app)).toEqual(["backup", "heartbeat", "notes", "peer", "risk", "triage"]);
   expect(shown(app, "risk")).toBe(0.32);
-  expect(app.count("id:todo-flow-line-report>digest.each.ink.none")).toBe(1);
-  expect(app.count("id:todo-flow-line-digest>brief.each.ink.none")).toBe(1);
-  expect(lineOpacity(app, "todo-flow-line-report>digest.each.ink.none")).toBe(1);
-  for (const id of ["todo-flow-line-report>risk.each.rest.none", "todo-flow-line-risk>brief.each.rest.none", "todo-flow-line-report>peer.latest.rest.none", "todo-flow-line-report>notes.fresh.rest.none"]) {
+  expect(app.count("id:todo-flow-line-report>digest.ink.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-digest>brief.ink.none")).toBe(1);
+  expect(lineOpacity(app, "todo-flow-line-report>digest.ink.none")).toBe(1);
+  for (const id of ["todo-flow-line-report>risk.rest.none", "todo-flow-line-risk>brief.rest.none", "todo-flow-line-report>peer.rest.none", "todo-flow-line-report>notes.rest.none"]) {
     expect(app.count(`id:${id}`)).toBe(1);
     expect(lineOpacity(app, id)).toBe(0.25);
   }
@@ -97,25 +97,25 @@ test("jobs and links are named for screen readers, and a mark's state is not rep
   expect(app.count("label:Morning report, running, Weekdays 09:00 or when poked")).toBe(1);
   expect(app.count("label:Check the backups, off, Every day at 02:00")).toBe(1);
   expect(app.count("label:Team digest, Tells Slack #team")).toBe(1);
-  expect(app.count("label:Team digest uses Morning report: each new result")).toBe(1);
-  expect(app.count("label:Answer build questions uses Morning report: its latest result")).toBe(1);
-  expect(app.count("label:Draft release notes uses Morning report: a fresh result")).toBe(1);
-  expect(app.count("label:Weekly brief runs when all are new")).toBe(1);
+  expect(app.count("label:Team digest runs each time Morning report finishes, with that result")).toBe(1);
+  expect(app.count("label:Answer build questions runs each time Morning report finishes, with that result")).toBe(1);
+  expect(app.count("label:Draft release notes runs each time Morning report finishes, with that result")).toBe(1);
+  expect(app.count("label:Weekly brief runs when all have finished")).toBe(1);
   // The ring and the hollow mark say running and off: no word beside them.
   for (const word of ["running", "Running", "off", "Off"]) expect(app.texts()).not.toContain(word);
 });
 
-test("while a job runs, a pulse runs along its links for each new result and no others", async () => {
+test("while a job runs, a pulse runs along its links and no others", async () => {
   const app = await openFlow();
-  expect(app.count("id:todo-flow-line-report>digest.each.rest.live")).toBe(1);
-  expect(app.count("id:todo-flow-line-report>risk.each.rest.live")).toBe(1);
-  // Not along a latest or a fresh link, nor from a job that is not running.
-  expect(app.count("id:todo-flow-line-report>peer.latest.rest.none")).toBe(1);
-  expect(app.count("id:todo-flow-line-report>notes.fresh.rest.none")).toBe(1);
-  expect(app.count("id:todo-flow-line-digest>brief.each.rest.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>digest.rest.live")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>risk.rest.live")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>peer.rest.live")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>notes.rest.live")).toBe(1);
+  // Not from a job that is not running.
+  expect(app.count("id:todo-flow-line-digest>brief.rest.none")).toBe(1);
   await app.press("id:stop");
-  expect(app.count("id:todo-flow-line-report>digest.each.rest.none")).toBe(1);
-  expect(app.count("id:todo-flow-line-report>risk.each.rest.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>digest.rest.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>risk.rest.none")).toBe(1);
 });
 
 test("link mode marks the jobs that may use a job, never one that would close a loop or uses it already", async () => {
@@ -141,9 +141,9 @@ test("link mode marks the jobs that may use a job, never one that would close a 
   }
   expect(app.count("label:Let Heartbeat use Weekly brief")).toBe(1);
   // Every link steps back, and none opens a picker meanwhile.
-  expect(lineOpacity(app, "todo-flow-line-report>digest.each.ink.none")).toBe(0.25);
-  expect(lineOpacity(app, "todo-flow-line-report>peer.latest.rest.none")).toBe(0.25);
-  expect(app.count("label:Team digest uses Morning report: each new result")).toBe(1);
+  expect(lineOpacity(app, "todo-flow-line-report>digest.ink.none")).toBe(0.25);
+  expect(lineOpacity(app, "todo-flow-line-report>peer.rest.none")).toBe(0.25);
+  expect(app.count("label:Team digest runs each time Morning report finishes, with that result")).toBe(1);
   expect(calls(app)).toEqual([]);
 
   // Escape leaves link mode and keeps the selection.
@@ -175,7 +175,7 @@ test("choosing a target asks for the link, the jobs take their new places with t
   await app.press("id:todo-flow-link-from-brief");
   await app.press("label:Let Triage family requests use Weekly brief");
   expect(calls(app)).toEqual(["add(triage,brief)"]);
-  expect(jobsOf(app).find((item) => item.id === "triage")?.uses).toEqual([{ job_id: "brief", mode: "each" }]);
+  expect(jobsOf(app).find((item) => item.id === "triage")?.uses).toEqual([{ job_id: "brief" }]);
   // Link mode is over; the job that now uses it is the selected one.
   expect(app.count("id:todo-flow-hint")).toBe(0);
   expect(app.count("id:todo-flow-open-triage")).toBe(1);
@@ -194,10 +194,9 @@ test("choosing a target asks for the link, the jobs take their new places with t
   expect(frames(app)["job-triage"].x - canvas.x).toBe((triage?.x ?? 0) + 14);
   expect(frames(app)["job-triage"].y - canvas.y).toBe((triage?.y ?? 0) + 14);
   expect(frames(app)["job-triage"].x).toBeGreaterThan(before["job-brief"].x + 228);
-  expect(app.count("id:todo-flow-line-brief>triage.each.ink.none")).toBe(1);
-  // The new link's picker is open, on its kind.
+  expect(app.count("id:todo-flow-line-brief>triage.ink.none")).toBe(1);
+  // The new link's picker is open.
   await app.waitFor("text:Remove this link");
-  expect(app.texts()).toContain("Each new result");
   await app.keyboard.press("escape");
   await app.waitFor("text:Remove this link", { state: "gone" });
   // Now Weekly brief depends on nothing new, but Triage depends on it: no loop back.
@@ -208,44 +207,19 @@ test("choosing a target asks for the link, the jobs take their new places with t
   expect(app.enabled("id:todo-flow-job-heartbeat")).toBe(true);
 });
 
-test("a link's picker changes its kind and removes it, through the page", async () => {
+test("a link's picker removes it, through the page, and offers no kinds", async () => {
   const app = await openFlow();
   await app.press("id:stop");
   expect(app.count("text:Remove this link")).toBe(0);
-  await app.press("label:Answer build questions uses Morning report: its latest result");
+  await app.press("label:Answer build questions runs each time Morning report finishes, with that result");
   await app.waitFor("text:Remove this link");
-  // The three kinds with what each does, then the removal.
-  for (const text of ["Each new result", "Runs every time that job finishes.", "Its latest result", "Reads what is there. Never starts anything.", "A fresh result", "Runs that job first when its result is out of date."]) {
-    expect(app.texts()).toContain(text);
-  }
+  // A link is one thing: there is no kind to choose.
+  for (const text of ["Each new result", "Its latest result", "A fresh result"]) expect(app.texts()).not.toContain(text);
   // Opening a link's picker selects the job that uses it.
   expect(app.count("id:todo-flow-open-peer")).toBe(1);
-  // The current kind again changes nothing.
-  await app.press("text:Its latest result");
-  await app.waitFor("text:Remove this link", { state: "gone" });
-  expect(calls(app)).toEqual([]);
-
-  await app.press("id:todo-flow-link-report>peer");
-  await app.waitFor("text:Remove this link");
-  await app.press("text:A fresh result");
-  await app.waitFor("text:Remove this link", { state: "gone" });
-  expect(calls(app)).toEqual(["mode(peer,report,fresh)"]);
-  // The line is dashed now, in its place: a kind moves nothing, so the links never went out.
-  expect(app.count("id:todo-flow-line-report>peer.fresh.ink.none")).toBe(1);
-  expect(app.count("label:Answer build questions uses Morning report: a fresh result")).toBe(1);
-  expect(events(app).map((event) => event.name)).toEqual(["links:in"]);
-
-  await app.press("id:todo-flow-link-report>peer");
-  await app.waitFor("text:Remove this link");
-  await app.press("text:Each new result");
-  await app.waitFor("text:Remove this link", { state: "gone" });
-  expect(calls(app)).toEqual(["mode(peer,report,fresh)", "mode(peer,report,each)"]);
-
-  await app.press("id:todo-flow-link-report>peer");
-  await app.waitFor("text:Remove this link");
   await app.press("text:Remove this link");
   await app.waitFor("text:Remove this link", { state: "gone" });
-  expect(calls(app)[2]).toBe("remove(peer,report)");
+  expect(calls(app)).toEqual(["remove(peer,report)"]);
   expect(jobsOf(app).find((item) => item.id === "peer")?.uses).toEqual([]);
   expect(app.count("id:todo-flow-link-report>peer")).toBe(0);
   // Answer build questions uses nothing now: it stands in the first column.
@@ -253,25 +227,24 @@ test("a link's picker changes its kind and removes it, through the page", async 
   expect(frames(app)["job-peer"].x - frames(app).canvas.x).toBe(14);
 });
 
-test("a job with more than one input for each new result shows its join rule, and a press switches it", async () => {
+test("a job that uses more than one job shows its join rule, and a press switches it", async () => {
   const app = await openFlow();
   // Weekly brief has two; no other job has more than one.
   expect(app.count("id:todo-flow-join-brief")).toBe(1);
   for (const id of PROTO.filter((item) => item !== "brief")) expect(app.count(`id:todo-flow-join-${id}`)).toBe(0);
-  expect(app.texts()).toContain("runs when all are new");
+  expect(app.texts()).toContain("runs when all have finished");
   await app.press("id:todo-flow-join-brief");
   expect(calls(app)).toEqual(["join(brief,any)"]);
-  expect(app.texts()).toContain("runs when any one is new");
-  expect(app.texts()).not.toContain("runs when all are new");
-  await app.press("label:Weekly brief runs when any one is new");
+  expect(app.texts()).toContain("runs when any one finishes");
+  expect(app.texts()).not.toContain("runs when all have finished");
+  await app.press("label:Weekly brief runs when any one finishes");
   expect(calls(app)).toEqual(["join(brief,any)", "join(brief,all)"]);
-  expect(app.texts()).toContain("runs when all are new");
-  // One of its two inputs made a latest one: a single input for each new result has no rule to show.
+  expect(app.texts()).toContain("runs when all have finished");
+  // One of its two inputs removed: a single input has no rule to show.
   await app.press("id:todo-flow-link-risk>brief");
   await app.waitFor("text:Remove this link");
-  await app.press("text:Its latest result");
-  await app.waitFor("text:Remove this link", { state: "gone" });
-  expect(app.count("id:todo-flow-join-brief")).toBe(0);
+  await app.press("text:Remove this link");
+  await app.waitFor("id:todo-flow-join-brief", { state: "gone" });
 });
 
 test("while a save is under way nothing can be edited, and reading goes on", async () => {
@@ -282,8 +255,8 @@ test("while a save is under way nothing can be edited, and reading goes on", asy
   await app.press("id:busy");
   // No link button; the join rule is words, not a control; a link's picker does not open.
   expect(app.count("id:todo-flow-link-from-brief")).toBe(0);
-  expect(app.count("label:Weekly brief runs when all are new")).toBe(0);
-  expect(app.texts()).toContain("runs when all are new");
+  expect(app.count("label:Weekly brief runs when all have finished")).toBe(0);
+  expect(app.texts()).toContain("runs when all have finished");
   // Selecting and opening still work.
   expect(fadedJobs(app)).toEqual(["backup", "heartbeat", "notes", "peer", "triage"]);
   await app.press("label:Open Weekly brief");
@@ -296,7 +269,7 @@ test("while a save is under way nothing can be edited, and reading goes on", asy
   expect(app.count("id:todo-flow-hint")).toBe(0);
   expect(app.enabled("id:todo-flow-job-digest")).toBe(true);
   // A link's target is still there and named, but opens nothing (the press falls to the ground).
-  expect(app.count("label:Team digest uses Morning report: each new result")).toBe(1);
+  expect(app.count("label:Team digest runs each time Morning report finishes, with that result")).toBe(1);
   await app.press("id:todo-flow-link-report>digest");
   await app.wait(200);
   expect(app.count("text:Remove this link")).toBe(0);
@@ -323,12 +296,12 @@ test("a replay travels a column at a time: pulses into the next jobs, none out o
   expect(app.texts()).toContain("When Lucy asks over Agent Link");
   // Pulses ran along the links out of jobs that finished; the link out of the one that failed is
   // the danger colour and carried none; links the chain did not take are dimmed.
-  expect(app.count("id:todo-flow-line-report>digest.each.ink.replay")).toBe(1);
-  expect(app.count("id:todo-flow-line-report>risk.each.ink.replay")).toBe(1);
-  expect(app.count("id:todo-flow-line-digest>brief.each.ink.replay")).toBe(1);
-  expect(app.count("id:todo-flow-line-risk>brief.each.danger.none")).toBe(1);
-  expect(app.count("id:todo-flow-line-report>peer.latest.dim.none")).toBe(1);
-  expect(lineOpacity(app, "todo-flow-line-report>peer.latest.dim.none")).toBe(0.25);
+  expect(app.count("id:todo-flow-line-report>digest.ink.replay")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>risk.ink.replay")).toBe(1);
+  expect(app.count("id:todo-flow-line-digest>brief.ink.replay")).toBe(1);
+  expect(app.count("id:todo-flow-line-risk>brief.danger.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>peer.dim.none")).toBe(1);
+  expect(lineOpacity(app, "todo-flow-line-report>peer.dim.none")).toBe(0.25);
   // The job that failed says so to screen readers (its mark turned the danger colour); the running
   // job's mark is its own state again, not the ring.
   expect(app.count("label:Risk summary, failed, Failed: the model timed out")).toBe(1);
@@ -341,7 +314,7 @@ test("a replay travels a column at a time: pulses into the next jobs, none out o
   expect(fadedJobs(app)).toEqual(["backup", "heartbeat", "notes", "peer", "triage"]);
   await app.press("label:Open Risk summary");
   expect(calls(app)).toEqual(["open(risk)"]);
-  expect(app.count("label:Weekly brief uses Team digest: each new result")).toBe(1);
+  expect(app.count("label:Weekly brief runs each time Team digest finishes, with that result")).toBe(1);
   await app.press("id:todo-flow-link-digest>brief");
   await app.wait(200);
   expect(app.count("text:Remove this link")).toBe(0);
@@ -352,19 +325,19 @@ test("a replay travels a column at a time: pulses into the next jobs, none out o
   expect(app.count("id:todo-flow-open-risk")).toBe(0);
   expect(app.texts()).toContain("Tells Slack #team");
   expect(app.texts()).not.toContain("Finished");
-  expect(app.count("id:todo-flow-line-report>digest.each.rest.live")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>digest.rest.live")).toBe(1);
   expect(app.count("id:todo-flow-join-brief")).toBe(1);
 });
 
 test("with reduced motion a replay shows where the chain ended at once, and nothing travels", async () => {
   const app = await openFlow({ reducedMotion: true });
   // No live pulse either.
-  expect(app.count("id:todo-flow-line-report>digest.each.rest.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>digest.rest.none")).toBe(1);
   await app.press("id:replay");
   expect(events(app).filter((event) => event.name.startsWith("step:")).map((event) => event.name)).toEqual(["step:2:report+digest+risk+brief"]);
   expect(fadedJobs(app)).toEqual(["backup", "heartbeat", "notes", "peer", "triage"]);
-  expect(app.count("id:todo-flow-line-report>digest.each.ink.none")).toBe(1);
-  expect(app.count("id:todo-flow-line-risk>brief.each.danger.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-report>digest.ink.none")).toBe(1);
+  expect(app.count("id:todo-flow-line-risk>brief.danger.none")).toBe(1);
   // A new link: the jobs are in their new places at once, and the links never go out.
   await app.press("id:live");
   await app.press("id:todo-flow-job-heartbeat");
@@ -399,13 +372,13 @@ test("a phone lays the jobs out top to bottom and edits nothing", async () => {
   await app.press("label:Open Team digest");
   expect(calls(app)).toEqual(["open(digest)"]);
   // Links are named and take no presses: no picker.
-  expect(app.count("label:Team digest uses Morning report: each new result")).toBe(1);
+  expect(app.count("label:Team digest runs each time Morning report finishes, with that result")).toBe(1);
   await app.press("id:todo-flow-link-report>digest");
   await app.wait(200);
   expect(app.count("text:Remove this link")).toBe(0);
   // The join rule is words.
-  expect(app.texts()).toContain("runs when all are new");
-  expect(app.count("label:Weekly brief runs when all are new")).toBe(0);
+  expect(app.texts()).toContain("runs when all have finished");
+  expect(app.count("label:Weekly brief runs when all have finished")).toBe(0);
   await app.press("id:todo-flow-ground");
   expect(fadedJobs(app)).toEqual([]);
   // The same replay.

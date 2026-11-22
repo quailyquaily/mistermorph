@@ -312,22 +312,24 @@ gets a `skipped` run. Other channels store the trigger and never fire it.
 
 A job in the answer of `GET /todo/tasks` or `PUT /todo/tasks` may carry
 `warnings`, a list of short plain-text strings about a job that is stored as
-written but will not do what it says: `join: all` over `each` inputs that no
+written but will not do what it says: `join: all` over inputs that no
 single run leads to (the job never starts), or a one-time schedule that failed
 five times and is not tried again. They are worked out for the answer, never
 stored, and ignored on write. A one-time schedule whose run fails is tried
 again after 1, 5, 15 and 60 minutes; each failed try's history row says so in
 its cause's `note`.
 
-A job's `uses` (`job_id`, `mode`, and for `fresh` an optional `max_age`) give
-each of its runs the used jobs' definitions and results as read-only source
-data, in the block job references use. `latest` gives the latest finished
-output. `each` starts the job after each `done` run of the input and gives that
-run's output. `fresh` first runs an input whose latest `done` run is older than
-`max_age` (a Go duration, 1 minute to 720 hours, `1h` by default); that run is
-in the history with cause `job` and a note, and when it does not end `done` the
-dependent is recorded as `skipped`. A history row carries `task_id`, the task
-record that keeps the run's output, once the run has started.
+A job's `uses` (a list of `{job_id}`) name the jobs it depends on. Each `done`
+run of a used job starts the job, with cause `job`, and the run is given the
+used jobs' definitions and results as read-only source data, in the block job
+references use: the output of the run that started it, or the latest finished
+output when something else started it. With several uses, `join` is `all` (the
+default: the job starts once every one of them has finished in the same chain)
+or `any`. When an input does not end `done`, the dependent is recorded as
+`skipped`. A use has no mode: to only read another job's definition and latest
+result, link to it in the text as `[label](job:<id>)`. A history row carries
+`task_id`, the task record that keeps the run's output, once the run has
+started.
 
 ## Scope and management extensions
 

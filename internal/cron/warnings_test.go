@@ -12,7 +12,7 @@ func TestJoinWarnings(t *testing.T) {
 	job := func(id string, uses ...Use) Task {
 		return Task{ID: id, Content: "x", Triggers: []Trigger{}, Uses: uses}
 	}
-	each := func(id string) Use { return Use{JobID: id, Mode: UseEach} }
+	each := func(id string) Use { return Use{JobID: id} }
 	joinAny := func(task Task) Task {
 		task.Join = JoinAny
 		return task
@@ -24,7 +24,7 @@ func TestJoinWarnings(t *testing.T) {
 		want string
 	}{
 		{"no uses", []Task{job("a"), job("b")}, ""},
-		{"one each input", []Task{job("a"), job("d", each("a"))}, ""},
+		{"one input", []Task{job("a"), job("d", each("a"))}, ""},
 		{"two unrelated inputs, join all", []Task{job("a"), job("b"), job("d", each("a"), each("b"))}, "d"},
 		{"two unrelated inputs, join any", []Task{job("a"), job("b"), joinAny(job("d", each("a"), each("b")))}, ""},
 		{"a diamond: one root starts both", []Task{job("root"), job("a", each("root")), job("b", each("root")), job("d", each("a"), each("b"))}, ""},
@@ -32,9 +32,6 @@ func TestJoinWarnings(t *testing.T) {
 		{"a deeper common root", []Task{job("root"), job("a", each("root")), job("mid", each("root")), job("b", each("mid")), job("d", each("a"), each("b"))}, ""},
 		{"two roots, one branch each", []Task{job("r1"), job("r2"), job("a", each("r1")), job("b", each("r2")), job("d", each("a"), each("b"))}, "d"},
 		{"three inputs, one outside", []Task{job("root"), job("a", each("root")), job("b", each("root")), job("c"), job("d", each("a"), each("b"), each("c"))}, "d"},
-		{"an input that is only latest or fresh does not count", []Task{job("a"), job("b"), job("d", each("a"), Use{JobID: "b", Mode: UseLatest})}, ""},
-		{"a job that needs the other input fresh brings it into its chain", []Task{job("b"), job("a", Use{JobID: "b", Mode: UseFresh}), job("d", each("a"), each("b"))}, ""},
-		{"a latest link is no common root", []Task{job("root"), job("a", Use{JobID: "root", Mode: UseLatest}), job("b", each("root")), job("d", each("a"), each("b"))}, "d"},
 		{"two such jobs", []Task{job("a"), job("b"), job("d", each("a"), each("b")), job("e", each("b"), each("a"))}, "d,e"},
 	}
 	for _, tc := range cases {
@@ -44,7 +41,7 @@ func TestJoinWarnings(t *testing.T) {
 			for _, task := range tc.tasks {
 				if list := warnings[task.ID]; len(list) > 0 {
 					ids = append(ids, task.ID)
-					if len(list) != 1 || !strings.Contains(list[0], "never starts") || !strings.Contains(list[0], strings.Join(EachInputs(task), ", ")) || strings.Contains(list[0], "\n") {
+					if len(list) != 1 || !strings.Contains(list[0], "never starts") || !strings.Contains(list[0], strings.Join(Inputs(task), ", ")) || strings.Contains(list[0], "\n") {
 						t.Fatalf("warning of %s = %q", task.ID, list)
 					}
 				}

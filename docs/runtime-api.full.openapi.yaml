@@ -5951,7 +5951,8 @@ components:
           enum:
           - all
           - any
-          description: How several each inputs combine. Left out means all.
+          description: How the several jobs a job uses combine. all starts it once every one has finished in the
+            same chain, any after each. Left out means all.
         last_run_at:
           type: string
           format: date-time
@@ -5965,7 +5966,7 @@ components:
             type: string
           description: Response only (GET and PUT /todo/tasks); never stored, ignored when sent, left out
             when empty. Short plain-text notes on a job that is stored as written but will not do what
-            it says. Today, join all over each inputs that share no common upstream job (the job never
+            it says. Today, join all over inputs that share no common upstream job (the job never
             starts), and a one-time schedule that failed five times and is not tried again.
       required:
       - id
@@ -6017,21 +6018,8 @@ components:
       properties:
         job_id:
           type: string
-        mode:
-          type: string
-          enum:
-          - latest
-          - each
-          - fresh
-          description: Which result of job_id each run of this job is given as read-only source data, and
-            whether job_id starts this job. latest gives the latest finished output. each starts this job
-            after every run of job_id that ends done and gives that run's output. fresh runs job_id first
-            when its latest done run is older than max_age, and gives the new output. Left out means
-            latest.
-        max_age:
-          type: string
-          description: fresh only (400 on another mode). A Go duration such as 30m, 1h or 24h, from 1m to
-            720h. Left out means 1h.
+          description: The job this one depends on. Every run of job_id that ends done starts this job,
+            whose run is given job_id's definition and that run's output as read-only source data.
       required:
       - job_id
       x-source: internal/cron/triggers.go:Use
@@ -6057,8 +6045,7 @@ components:
           description: The run that started the whole chain; a run that starts one is its own origin.
         note:
           type: string
-          description: More in words, such as why a run was skipped, that an input was run for a fresh
-            result, or when a failed one-time schedule is tried again.
+          description: More in words, such as why a run was skipped, or when a failed one-time schedule is tried again.
       required:
       - kind
       - trigger_id

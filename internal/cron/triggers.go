@@ -17,12 +17,8 @@ const (
 	TriggerMessage  = "message"
 )
 
-// Use modes, and how several "each" inputs join.
+// How the several jobs a job uses join.
 const (
-	UseLatest = "latest"
-	UseEach   = "each"
-	UseFresh  = "fresh"
-
 	JoinAll = "all"
 	JoinAny = "any"
 )
@@ -53,49 +49,15 @@ type Trigger struct {
 	ChatID  string `yaml:"chat_id,omitempty" json:"chat_id,omitempty"`
 }
 
-// Use is a job this one depends on. Every run of this job is given the used job's definition and
-// a result of it as source data (see internal/jobrefs). Mode says which result, and whether the
-// used job starts this one:
+// Use is a job this one depends on: each run of JobID that ends done starts this job, whose run is
+// given the used job's definition and that run's output as source data (see internal/jobrefs).
+// A run of this job that something else started (a trigger, a person) is given the used job's
+// latest finished output.
 //
-//   - UseLatest: the latest finished output, whenever that was.
-//   - UseEach: each run of JobID that ends done starts this job, which is given that run's output.
-//   - UseFresh: before this job runs, JobID is run first when its latest done run is older than
-//     MaxAge (or it never ran), and this job is given the new output.
-//
-// MaxAge is a Go duration ("30m", "1h", "24h") and belongs to UseFresh alone: empty is
-// DefaultFreshMaxAge, and it must be within MinFreshMaxAge and MaxFreshMaxAge.
+// This is not the read-only reference a task's text makes with [label](job:<id>), which starts
+// nothing (see internal/jobrefs).
 type Use struct {
-	JobID  string `yaml:"job_id" json:"job_id"`
-	Mode   string `yaml:"mode" json:"mode"`
-	MaxAge string `yaml:"max_age,omitempty" json:"max_age,omitempty"`
-}
-
-// The age a "fresh" input's latest done run may have before the input is run again.
-const (
-	DefaultFreshMaxAge = time.Hour
-	MinFreshMaxAge     = time.Minute
-	MaxFreshMaxAge     = 30 * 24 * time.Hour
-)
-
-// FreshMaxAge is the use's max age: its own when it has a valid one, else DefaultFreshMaxAge.
-func FreshMaxAge(use Use) time.Duration {
-	if raw := strings.TrimSpace(use.MaxAge); raw != "" {
-		if age, err := time.ParseDuration(raw); err == nil && age >= MinFreshMaxAge && age <= MaxFreshMaxAge {
-			return age
-		}
-	}
-	return DefaultFreshMaxAge
-}
-
-// FreshInputs lists the task's uses with mode "fresh", in order.
-func FreshInputs(task Task) []Use {
-	var out []Use
-	for _, use := range task.Uses {
-		if use.Mode == UseFresh {
-			out = append(out, use)
-		}
-	}
-	return out
+	JobID string `yaml:"job_id" json:"job_id"`
 }
 
 // ErrJobInUse is a delete of a job other jobs use. Nothing is deleted.
@@ -148,23 +110,21 @@ func JoinForTask(task Task) string {
 	return JoinAll
 }
 
-// EachInputs lists the jobs the task uses with mode "each", in order.
-func EachInputs(task Task) []string {
+// Inputs lists the jobs the task uses, in order.
+func Inputs(task Task) []string {
 	var out []string
 	for _, use := range task.Uses {
-		if use.Mode == UseEach {
-			out = append(out, strings.TrimSpace(use.JobID))
-		}
+		out = append(out, strings.TrimSpace(use.JobID))
 	}
 	return out
 }
 
-// EachDependents lists the tasks that use job id with mode "each", in list order.
-func EachDependents(tasks []Task, id string) []Task {
+// Dependents lists the tasks that use job id, in list order.
+func Dependents(tasks []Task, id string) []Task {
 	id = strings.TrimSpace(id)
 	var out []Task
 	for _, task := range tasks {
-		for _, input := range EachInputs(task) {
+		for _, input := range Inputs(task) {
 			if input == id {
 				out = append(out, task)
 				break
@@ -174,7 +134,7 @@ func EachDependents(tasks []Task, id string) []Task {
 	return out
 }
 
-// dependentsOf lists the IDs of the tasks that use job id, in any mode.
+// dependentsOf lists the IDs of the tasks that use job id.
 func dependentsOf(tasks []Task, id string) []string {
 	var out []string
 	for _, task := range tasks {
@@ -256,17 +216,11 @@ func normalizeTask(task Task, stored *Task) Task {
 	return task
 }
 
-// normalizeUses returns uses as the store keeps them: trimmed, the mode in lower case and
-// UseLatest when left out. An empty list is nil.
+// normalizeUses returns uses as the store keeps them: trimmed. An empty list is nil.
 func normalizeUses(list []Use) []Use {
 	var uses []Use
 	for _, use := range list {
 		use.JobID = strings.TrimSpace(use.JobID)
-		use.Mode = strings.ToLower(strings.TrimSpace(use.Mode))
-		if use.Mode == "" {
-			use.Mode = UseLatest
-		}
-		use.MaxAge = strings.TrimSpace(use.MaxAge)
 		uses = append(uses, use)
 	}
 	return uses
@@ -397,23 +351,6 @@ func validateUsesShape(task Task) error {
 			return fmt.Errorf("task %s uses job %s more than once", id, jobID)
 		}
 		seen[jobID] = true
-		switch strings.TrimSpace(use.Mode) {
-		case UseLatest, UseEach, UseFresh:
-		default:
-			return fmt.Errorf("task %s: unknown use mode %q for job %s (want latest, each or fresh)", id, strings.TrimSpace(use.Mode), jobID)
-		}
-		if raw := strings.TrimSpace(use.MaxAge); raw != "" {
-			if strings.TrimSpace(use.Mode) != UseFresh {
-				return fmt.Errorf("task %s: max_age for job %s needs mode fresh", id, jobID)
-			}
-			age, err := time.ParseDuration(raw)
-			if err != nil {
-				return fmt.Errorf("task %s: invalid max_age %q for job %s (want a duration such as 30m, 1h or 24h)", id, raw, jobID)
-			}
-			if age < MinFreshMaxAge || age > MaxFreshMaxAge {
-				return fmt.Errorf("task %s: max_age %s for job %s is out of range (want %s to %s)", id, raw, jobID, MinFreshMaxAge, MaxFreshMaxAge)
-			}
-		}
 	}
 	switch strings.TrimSpace(task.Join) {
 	case "", JoinAll, JoinAny:

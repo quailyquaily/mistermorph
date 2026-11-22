@@ -176,16 +176,13 @@ func (t *JobManageTool) ParameterSchema() string {
 			},
 			"uses": map[string]any{
 				"type": "array",
-				"description": "The jobs this job uses, as [{\"job_id\": \"job-...\", \"mode\": \"each\"}], at most 8. Each run is given their definitions and results as read-only data. " +
-					"mode latest (the default): the latest finished output. each: every finished run of that job starts this job, with that run's output. " +
-					"fresh: that job is run first when its latest result is older than max_age (a duration such as \"30m\", \"1h\", \"24h\"; default 1h). " +
+				"description": "The jobs this job uses, as [{\"job_id\": \"job-...\"}], at most 8. Every finished run of a used job starts this job, which is given that job's definition and that run's output as read-only data. " +
+					"To only read another job's definition and latest result without being started by it, link to it in content as [label](job:<id>) instead. " +
 					"For update, the list replaces the job's whole uses, [] clears it, and omitting uses keeps it unchanged.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"job_id":  map[string]any{"type": "string", "description": "The id of the job to use."},
-						"mode":    map[string]any{"type": "string", "enum": []string{cronstore.UseLatest, cronstore.UseEach, cronstore.UseFresh}},
-						"max_age": map[string]any{"type": "string", "description": "fresh only: how old the used job's latest result may be, 1m to 720h."},
+						"job_id": map[string]any{"type": "string", "description": "The id of the job to use."},
 					},
 					"required":             []string{"job_id"},
 					"additionalProperties": false,
@@ -194,7 +191,7 @@ func (t *JobManageTool) ParameterSchema() string {
 			"join": map[string]any{
 				"type":        "string",
 				"enum":        []string{"", cronstore.JoinAll, cronstore.JoinAny},
-				"description": "How several uses with mode each combine: all (the default) starts the job once every one of them has finished in the same chain; any starts it after each. For update, \"\" resets it to all.",
+				"description": "How several uses combine: all (the default) starts the job once every one of them has finished in the same chain; any starts it after each. For update, \"\" resets it to all.",
 			},
 			"people": map[string]any{
 				"type": "array",

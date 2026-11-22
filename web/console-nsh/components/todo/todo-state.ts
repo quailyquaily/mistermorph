@@ -88,11 +88,9 @@ export interface TodoTrigger {
   chat_id: string;
 }
 
-export type TodoUseMode = "latest" | "each" | "fresh";
+/** A job this one uses: each finished run of it starts this job, which is given that run's result. */
 export interface TodoUse {
   job_id: string;
-  mode: TodoUseMode;
-  max_age?: string;
 }
 
 export interface TodoRun {
@@ -1046,7 +1044,7 @@ export function createTodoState() {
           note: parts.join(t("todo_when_separator")),
           enabled: shown.enabled !== false,
           running: taskRun(task)?.state === TODO_RUN_RUNNING,
-          uses: (shown.uses ?? []).map((use) => ({ job_id: use.job_id, mode: use.mode })),
+          uses: (shown.uses ?? []).map((use) => ({ job_id: use.job_id })),
           join: (shown.join === "any" ? "any" : "all") as "all" | "any",
         };
       }),
@@ -1116,8 +1114,7 @@ export function createTodoState() {
     replayLoading: flowReplayLoading,
     toggleReplay: toggleFlowReplay,
     openJob: openJobFromFlow,
-    addUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.addUse(copy, usedJobID, "each")),
-    setUseMode: (jobID: string, usedJobID: string, mode: string) => flowEdit(jobID, (copy) => model.setUseMode(copy, usedJobID, mode)),
+    addUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.addUse(copy, usedJobID)),
     removeUse: (jobID: string, usedJobID: string) => flowEdit(jobID, (copy) => model.removeUse(copy, usedJobID)),
     setJoin: (jobID: string, join: string) => flowEdit(jobID, (copy) => model.setJoin(copy, join)),
   };
@@ -1217,7 +1214,7 @@ export function createTodoState() {
     if (model.taskMode(task) !== "none") parts.push(scheduleLabel(task));
     for (const trigger of model.extraTriggers(task) as TodoTrigger[]) parts.push(triggerPhrase(trigger));
     for (const use of task.uses ?? []) {
-      if (use.mode === "each") parts.push(t("todo_trigger_each", { job: jobTitle(use.job_id) }));
+      parts.push(t("todo_trigger_each", { job: jobTitle(use.job_id) }));
     }
     return parts.length > 0 ? parts.join(t("todo_when_separator")) : t("todo_schedule_none");
   }
@@ -1265,14 +1262,14 @@ export function createTodoState() {
       .map((job) => ({ id: `job-${job.id}`, title: taskTitle(job), value: job.id }));
   }
 
-  /** The jobs that take in `task`'s result, each with how. */
-  function usedBy(task: TodoTask): { id: string; title: string; mode: TodoUseMode }[] {
+  /** The jobs that take in `task`'s result: each finished run of `task` starts them. */
+  function usedBy(task: TodoTask): { id: string; title: string }[] {
     const own = trimText(task?.id);
     if (!own) return [];
-    const out: { id: string; title: string; mode: TodoUseMode }[] = [];
+    const out: { id: string; title: string }[] = [];
     for (const job of tasks()) {
       const use = (job.uses ?? []).find((entry) => entry.job_id === own);
-      if (use) out.push({ id: job.id, title: taskTitle(job), mode: use.mode });
+      if (use) out.push({ id: job.id, title: taskTitle(job) });
     }
     return out;
   }
@@ -1323,7 +1320,6 @@ export function createTodoState() {
       editTask(task, (copy) => model.addMessageTrigger(copy, source.slice(0, at), source.slice(at + 1)));
     },
     addUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.addUse(copy, jobID)),
-    useMode: (task: TodoTask, jobID: string, mode: string) => editTask(task, (copy) => model.setUseMode(copy, jobID, mode)),
     removeUse: (task: TodoTask, jobID: string) => editTask(task, (copy) => model.removeUse(copy, jobID)),
     join: (task: TodoTask, join: string) => editTask(task, (copy) => model.setJoin(copy, join)),
     chat: async (task: TodoTask, chatIDRaw: string) => {

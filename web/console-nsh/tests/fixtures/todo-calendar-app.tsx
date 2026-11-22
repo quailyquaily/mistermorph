@@ -29,7 +29,7 @@ const task = (id: string, title: string, extra: Record<string, unknown> = {}) =>
 const schedule = (id: string, cron: string) => ({ id, kind: "schedule", cron });
 const TASKS = [
   task("report", "Morning report", { cron: "0 9 * * 1-5" }),
-  task("digest", "Team digest", { triggers: [], uses: [{ job_id: "report", mode: "each" }] }),
+  task("digest", "Team digest", { triggers: [], uses: [{ job_id: "report" }] }),
   task("sweep", "Sweep", { cron: "*/30 * * * *" }),
   task("backup", "Backup", { triggers: [schedule("trg-daily", "0 6 * * *"), schedule("trg-sat", "0 18 * * 6")] }),
   task("notes", "Release notes", { triggers: [{ id: "trg-poke", kind: "poke" }] }),

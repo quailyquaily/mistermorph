@@ -15,7 +15,7 @@ import (
 func each(ids ...string) []cronstore.Use {
 	uses := make([]cronstore.Use, 0, len(ids))
 	for _, id := range ids {
-		uses = append(uses, cronstore.Use{JobID: id, Mode: cronstore.UseEach})
+		uses = append(uses, cronstore.Use{JobID: id})
 	}
 	return uses
 }
@@ -55,15 +55,7 @@ func TestCronLoopChainsJobsThatUseEachRun(t *testing.T) {
 			wantRan: "a,b,c",
 		},
 		{
-			name: "latest and fresh are stored and start nothing",
-			tasks: []cronstore.Task{manualOnly("a"),
-				manualOnly("b", cronstore.Use{JobID: "a", Mode: cronstore.UseLatest}),
-				manualOnly("c", cronstore.Use{JobID: "a", Mode: cronstore.UseFresh})},
-			want:    []string{"a done manual"},
-			wantRan: "a",
-		},
-		{
-			name: "join all runs once, when every each input is done",
+			name: "join all runs once, when every input is done",
 			tasks: []cronstore.Task{manualOnly("a"), manualOnly("b", each("a")...), manualOnly("c", each("a")...),
 				{ID: "d", Content: "Run d.", Triggers: []cronstore.Trigger{}, Uses: each("b", "c"), Join: cronstore.JoinAll}},
 			want:    []string{"a done manual", "b done job<-a", "c done job<-a", "d done job<-*"},
@@ -77,11 +69,11 @@ func TestCronLoopChainsJobsThatUseEachRun(t *testing.T) {
 			wantRan: "a,b,c,d",
 		},
 		{
-			name: "join all does not count an input that is not each",
+			name: "join all waits for an input the chain never reaches",
 			tasks: []cronstore.Task{manualOnly("a"), manualOnly("b", each("a")...), manualOnly("never"),
-				manualOnly("d", cronstore.Use{JobID: "b", Mode: cronstore.UseEach}, cronstore.Use{JobID: "never", Mode: cronstore.UseLatest})},
-			want:    []string{"a done manual", "b done job<-a", "d done job<-b"},
-			wantRan: "a,b,d",
+				manualOnly("d", each("b", "never")...)},
+			want:    []string{"a done manual", "b done job<-a"},
+			wantRan: "a,b",
 		},
 		{
 			name:      "a failed input skips the jobs that use it, down the chain",
