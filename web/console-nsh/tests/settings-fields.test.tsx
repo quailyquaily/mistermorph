@@ -99,6 +99,19 @@ test("a percent reads its ratio as a percentage", async () => {
   expect(out(app, "percent")).toBe("0.5");
 });
 
+// The percent is a fader: one bar with a fill and the value inside it, and no separate track or
+// tick marks. (The headless engine does not move a base Slider by a drag, so the dragging itself
+// is not driven here.)
+test("a percent is one bar with its fill and its value inside", async () => {
+  const { app } = await openFixture("/fields");
+  await app.waitFor("id:percent");
+  expect(app.count("id:percent")).toBe(1);
+  expect(app.count("id:percent-fill")).toBe(1);
+  expect(app.shows("text:50")).toBe(true);
+  expect(app.shows("text:%")).toBe(true);
+  expect(out(app, "percent")).toBe("0.5");
+});
+
 test("choices toggle on and off, and a locked one stays as it is", async () => {
   const { app } = await openFixture("/fields");
   await app.waitFor("label:POST");

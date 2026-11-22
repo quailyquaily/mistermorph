@@ -808,9 +808,18 @@ export interface SettingPercentProps {
   testID?: string;
 }
 
+/** The least width of a fader's fill, so its handle shows at 0 too. */
+const FADER_MIN_FILL = 22;
+
 /**
- * A 0–1 ratio as a slider with its value read out beside it. A ratio is a position on a scale, so
- * there is nothing to type: drag, press the track, or use the arrow keys.
+ * A 0–1 ratio as a fader: one bar that fills to the value, a handle at the fill's edge and the
+ * value read out inside the bar's far end. A ratio is a position on a scale, so there is nothing
+ * to type: drag, press the bar, or use the arrow keys.
+ *
+ * The Slider takes the presses, the drags, the keys and the screen reader: it is the bar's own
+ * content, with clear parts, and gives the bar its height. The fill and the value are drawn from
+ * the value behind it and take no presses. Both span the bar's whole width, so the fill's edge is
+ * where the finger is.
  */
 export function SettingPercent(props: SettingPercentProps) {
   const percent = () => {
@@ -825,33 +834,37 @@ export function SettingPercent(props: SettingPercentProps) {
     props.onChange?.(String(number / 100));
   };
   return (
-    <View class="min-h-11 w-full flex-row items-center gap-4">
-      <View class="min-w-0 flex-1">
-        <Slider
-          value={percent() ?? 0}
-          min={0}
-          max={100}
-          step={1}
-          disabled={props.disabled}
-          accessibilityLabel={props.label || undefined}
-          testID={props.testID}
-          onChange={({ value }) => update(Array.isArray(value) ? value[0] : value)}
-          class="disabled:opacity-50"
-          trackClass="h-6 justify-center"
-          indicatorClass="h-1 rounded-[2px] bg-input"
-          rangeClass="rounded-[2px] bg-blue"
-          thumbClass="size-4 rounded-full border-2 border-blue bg-card shadow-[0_1px_3px_rgba(24,24,50,0.18)] transition-transform duration-120 hover:scale-115 focus:scale-115 focus:shadow-[0_0_0_4px_rgba(66,111,158,0.16)]"
-        />
-        <View class="flex-row justify-between px-px" accessibilityElementsHidden>
-          <Each of={[0, 25, 50, 75, 100]}>{() => <View class="h-1 w-px bg-input" />}</Each>
+    <View class={`w-full overflow-hidden ${CONTROL_CORNERS} border border-input bg-muted transition-colors duration-120 ${props.disabled ? "opacity-50" : "hover:border-ink/32"}`}>
+      <View
+        class={`absolute inset-y-0 left-0 ${CONTROL_CORNERS} bg-foreground/12`}
+        style={{ width: `${percent() ?? 0}%`, minWidth: FADER_MIN_FILL, pointerEvents: "none" }}
+        accessibilityElementsHidden
+        testID={props.testID ? `${props.testID}-fill` : undefined}
+      >
+        <View class="absolute inset-y-0 right-2 justify-center">
+          <View class="h-5 w-1.5 rounded-full bg-foreground/40" />
         </View>
       </View>
-      <View class="min-w-14 flex-row items-baseline justify-end">
+      <View class="absolute inset-y-0 right-4 flex-row items-center" style={{ pointerEvents: "none" }} accessibilityElementsHidden>
         <If when={percent() !== null} else={<Text class="font-mono text-base text-muted-foreground">—</Text>}>
           <Text class="font-mono text-base font-semibold tabular-nums text-foreground">{String(percent())}</Text>
           <Text class="ml-px font-mono text-xs text-muted-foreground">%</Text>
         </If>
       </View>
+      <Slider
+        value={percent() ?? 0}
+        min={0}
+        max={100}
+        step={1}
+        disabled={props.disabled}
+        accessibilityLabel={props.label || undefined}
+        testID={props.testID}
+        onChange={({ value }) => update(Array.isArray(value) ? value[0] : value)}
+        trackClass="h-11 justify-center"
+        indicatorClass="h-11 bg-transparent"
+        rangeClass="bg-transparent"
+        thumbClass={`h-11 w-6 ${CONTROL_CORNERS} bg-transparent focus-visible:bg-foreground/10`}
+      />
     </View>
   );
 }
