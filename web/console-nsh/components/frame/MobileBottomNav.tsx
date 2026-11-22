@@ -1,7 +1,10 @@
 // The phone navigation (the Vue console's AppMobileBottomNav, AppMobileBottomMenu and
 // AppMobileAgentSwitcher): icons at the foot of the window, the primary pages, More, and the agent,
-// in a capsule that floats on the page (the layout of Telegram's tab bar, without its labels;
-// design/ui-refresh.html §4). A lighter pill behind the active slot slides to it, and its icon fills.
+// in a capsule that floats on the page (the layout of Telegram's tab bar; design/ui-refresh.html
+// §4). Expanded, each page's icon has its label under it; reading down into a page's content
+// compacts it to the icons alone, and going back up (or reaching the top) expands it again
+// (lib/navScroll.ts, docs/console/mobile-bottom-nav.md). A lighter pill behind the active slot
+// slides to it, and its icon fills.
 // More and the agent open the same popup, over a scrim: the phone's floating paper
 // (design/mobile-popups.md, lib/mobilePopup.ts), which every other popup on phones follows: all
 // four corners round, a small gap in from the window's sides and above the bar, sliding up from
@@ -9,7 +12,7 @@
 // (AgentSwitcher's `AgentList`, the sidebar switcher's rows). Escape, Android's Back or a press
 // outside closes either.
 import type { JSX } from "nsh";
-import { computed, createAnimatedValue, effect, keyboardFrame, keymap, platform, safeArea, signal, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, createAnimatedValue, effect, keyboardFrame, keymap, platform, safeArea, signal, Text, untracked, View, windowSize } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import {
   closeMobileMore,
@@ -28,8 +31,9 @@ import {
   EDGE_TO_EDGE,
   type NavItem,
 } from "../../lib/shell";
+import { navCompact, resetNavScroll } from "../../lib/navScroll";
 import { onSystemBack } from "../../lib/systemBack";
-import { MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SHEET_OUT, motionMs } from "../motion/tokens";
+import { easeProgress, MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SHEET_OUT, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { mobilePopupEntrance } from "../../lib/mobilePopup";
 import { CONTINUOUS } from "../corners";
@@ -38,9 +42,17 @@ import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
 import { uiSlots } from "./slots";
-import { BAR_BELOW, BAR_INSET, BAR_SIDE, GlassCapsule, mobileBarRoom, mobileNavSlots, mobileSheetFrame, MOBILE_NAV_HEIGHT } from "./mobileBar";
+import { BAR_BELOW, BAR_INSET, BAR_SIDE, GlassCapsule, mobileBarRoom, mobileNavSlots, mobileSheetFrame, MOBILE_NAV_EXPANDED_HEIGHT, MOBILE_NAV_HEIGHT } from "./mobileBar";
 
 export { MOBILE_NAV_HEIGHT };
+
+/** How long the capsule takes to expand or compact (none with reduced motion). */
+export const NAV_RESIZE_MS = 160;
+/** A label's line under its icon, and the gap above it. */
+const NAV_LABEL_LINE = 14;
+const NAV_LABEL_GAP = 2;
+
+const between = (from: number, to: number, progress: number) => from + (to - from) * progress;
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -294,9 +306,62 @@ export function MobileBottomMenus(
 export type MobileNavFrame = { x: number; y: number; w: number; h: number; from?: number };
 
 /** The strip itself. `onSlotLayout` hears each slot's frame in the row (by its test id) and the
- * active pill's ("highlight", where its slide puts it). */
-export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: MobileNavFrame) => void } = {}) {
+ * active pill's ("highlight", where its slide puts it); `onResize` each time the capsule expands
+ * or compacts, with how long it takes (0: at once, reduced motion). */
+export function MobileBottomNav(
+  props: { onSlotLayout?: (name: string, frame: MobileNavFrame) => void; onResize?: (expanded: boolean, ms: number) => void } = {},
+) {
   const { personaAvatarURL } = usePersonaSummary();
+  // Expanded on each page the navigation shows on: shown again, or another page, starts there, and
+  // whatever the last page's scroller said is forgotten (lib/navScroll.ts).
+  effect(() => {
+    void currentPath();
+    untracked(resetNavScroll);
+  });
+  // The capsule follows the scrolling (`expanded`: where it is going), and glides between its two
+  // sizes: `openness` runs from 0 (compact) to 1 (expanded) over NAV_RESIZE_MS on MOTION_EASE, at
+  // once with reduced motion, and the slots' width, the row's height and the labels follow it. The
+  // glide is the strip's own, frame by frame, so nothing else on the page moves with it (a layout
+  // animation would ease whatever else the same commit moves, such as a list's rows; and the web
+  // runtime's refs have no `animateLayout`). Turned round half-way, it goes back from where it is.
+  const expanded = signal(!untracked(navCompact));
+  const openness = signal(untracked(expanded) ? 1 : 0);
+  /** While it glides: the pill follows its slot frame by frame (its own slide would lag). */
+  const resizing = signal(false);
+  let glide = 0;
+  const glideTo = (to: number, ms: number) => {
+    const run = ++glide;
+    const from = openness();
+    if (ms <= 0 || from === to) {
+      openness.set(to);
+      resizing.set(false);
+      return;
+    }
+    resizing.set(true);
+    const start = Date.now();
+    const step = () => {
+      if (run !== glide) return;
+      const t = Math.min(1, (Date.now() - start) / ms);
+      openness.set(t >= 1 ? to : between(from, to, easeProgress(t)));
+      if (t < 1) requestAnimationFrame(step);
+      else resizing.set(false);
+    };
+    requestAnimationFrame(step);
+  };
+  effect(() => {
+    const next = !navCompact();
+    untracked(() => {
+      if (next === expanded()) return;
+      const ms = motionMs(NAV_RESIZE_MS);
+      expanded.set(next);
+      glideTo(next ? 1 : 0, ms);
+      props.onResize?.(next, ms);
+    });
+  });
+  cleanup(() => {
+    glide += 1;
+  });
+  const rowHeight = () => between(MOBILE_NAV_HEIGHT, MOBILE_NAV_EXPANDED_HEIGHT, openness()) - BAR_INSET * 2;
   const slotCount = () => primaryItems().length + 2;
   const activeSlot = () => {
     if (agentMenuOpen()) return slotCount() - 1;
@@ -308,6 +373,8 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
   const moreIcon = (): IconName => (moreCurrentItem()?.icon as IconName) || "PhSquaresFour";
   const moreLabel = () =>
     moreActive() ? `${moreCurrentItem()?.title} · ${t("nav_more")}` : t("nav_more");
+  // More's visible label names the page its icon shows (the accessible name says both).
+  const moreTitle = () => moreCurrentItem()?.title || t("nav_more");
 
   // A selected slot's glyph is the primary buttons' colour, the others quiet. The glyph's testID
   // names its tint (no headless image query): `mobile-nav-<slot>-icon.<token>`.
@@ -322,7 +389,14 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
   // fit. The active pill is one slot wide and slides to the slot's place in the same geometry.
   // The strip's own width (the frame it floats in), the window's until its first layout.
   const stripWidth = signal(0);
-  const slots = computed(() => mobileNavSlots(stripWidth() || windowSize().width, slotCount()));
+  // Each size's slots (whole points), and the ones shown now, between them while the capsule glides.
+  const slots = computed(() => {
+    const width = stripWidth() || windowSize().width;
+    const compact = mobileNavSlots(width, slotCount());
+    const wide = mobileNavSlots(width, slotCount(), true);
+    const slot = between(compact.slot, wide.slot, openness());
+    return { slot, rowWidth: slot * slotCount(), left: (index: number) => slot * index };
+  });
   const slotClass = (press = true) =>
     `items-center justify-center rounded-full ${press ? "active:bg-hover-soft transition-colors duration-160" : ""}`;
   const slotStyle = () => ({ width: slots().slot });
@@ -335,10 +409,34 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
   effect(() => {
     const slot = activeSlot();
     const { slot: width, left } = slots();
-    if (props.onSlotLayout && slot >= 0) untracked(() => props.onSlotLayout?.("highlight", { x: left(slot), y: 0, w: width, h: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }));
+    const h = rowHeight();
+    if (props.onSlotLayout && slot >= 0) untracked(() => props.onSlotLayout?.("highlight", { x: left(slot), y: 0, w: width, h }));
   });
 
   const tip = (label: string) => <Tip text={label} />;
+
+  // A slot's icon with its label under it; the label folds away (no height, faded out) in the
+  // compact capsule, leaving the icon centred. The slot's accessible name is the button's own, so
+  // the label is hidden from assistive technology (it would be read twice).
+  const face = (icon: JSX.Element, label: () => string, selected: () => boolean, testID: string) => (
+    <View class="items-center" style={{ width: slots().slot }}>
+      {icon}
+      <View
+        accessibilityElementsHidden
+        class="self-stretch overflow-hidden"
+        // The label is gone by half-way down, and comes in over the second half up.
+        style={{ height: between(0, NAV_LABEL_GAP + NAV_LABEL_LINE, openness()), opacity: Math.max(0, openness() * 2 - 1) }}
+        testID={`${testID}-label.${expanded() ? "shown" : "folded"}`}
+      >
+        <Text
+          class={`px-1 text-center text-[11px] font-medium leading-[14px] ${selected() ? "text-primary" : "text-muted-foreground"}`}
+          style={{ marginTop: NAV_LABEL_GAP, numberOfLines: 1 }}
+        >
+          {label()}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <View
@@ -362,7 +460,11 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
       {/* Glass where the window draws it (lib/glass.ts): the page shows through, blurred; else the
           card's own fill, opaque (a tint alone left the page's text under the icons). */}
       <GlassCapsule testID="mobile-nav-capsule" style={{ marginBottom: systemInsets() ? 0 : BAR_BELOW }}>
-        <View class="relative flex-row" style={{ width: slots().rowWidth, height: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }}>
+        <View
+          class="relative flex-row"
+          style={{ width: slots().rowWidth, height: rowHeight() }}
+          testID={`mobile-nav-row.${expanded() ? "expanded" : "compact"}`}
+        >
           <If when={activeSlot() >= 0}>
             <View
               accessibilityElementsHidden
@@ -371,7 +473,8 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
                 width: slots().slot,
                 transform: [{ translateX: slots().left(activeSlot()) }],
                 transitionProperty: "transform",
-                transitionDuration: motionMs(240),
+                // Gliding to another slot; with its slot, frame by frame, while the capsule resizes.
+                transitionDuration: resizing() ? 0 : motionMs(240),
                 transitionTimingFunction: "cubic-bezier(0.2, 0.7, 0.2, 1)",
               }}
             />
@@ -388,13 +491,18 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
                 style={slotStyle()}
                 onLayout={report(`mobile-nav-${item().pagePath.slice(1)}`)}
               >
-                <Icon
-                  name={item().icon as IconName}
-                  size={24}
-                  filled={activeSlot() === index()}
-                  color={iconTint(activeSlot() === index())}
-                  testID={`mobile-nav-${item().pagePath.slice(1)}-icon.${iconTint(activeSlot() === index())}`}
-                />
+                {face(
+                  <Icon
+                    name={item().icon as IconName}
+                    size={24}
+                    filled={activeSlot() === index()}
+                    color={iconTint(activeSlot() === index())}
+                    testID={`mobile-nav-${item().pagePath.slice(1)}-icon.${iconTint(activeSlot() === index())}`}
+                  />,
+                  () => item().title,
+                  () => activeSlot() === index(),
+                  `mobile-nav-${item().pagePath.slice(1)}`,
+                )}
               </TipButton>
             )}
           </Each>
@@ -408,17 +516,23 @@ export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: Mo
             style={slotStyle()}
             onLayout={report("mobile-nav-more")}
           >
-            <Icon
-              name={moreIcon()}
-              size={24}
-              filled={activeSlot() === primaryItems().length}
-              color={iconTint(activeSlot() === primaryItems().length)}
-              testID={`mobile-nav-more-icon.${iconTint(activeSlot() === primaryItems().length)}`}
-            />
+            {face(
+              <Icon
+                name={moreIcon()}
+                size={24}
+                filled={activeSlot() === primaryItems().length}
+                color={iconTint(activeSlot() === primaryItems().length)}
+                testID={`mobile-nav-more-icon.${iconTint(activeSlot() === primaryItems().length)}`}
+              />,
+              moreTitle,
+              () => activeSlot() === primaryItems().length,
+              "mobile-nav-more",
+            )}
           </TipButton>
           {/* The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing to
               it (no ring, no status mark, no press fill); the pill behind it marks it selected, and
-              the list shows whether the agent is connected. */}
+              the list shows whether the agent is connected. It is not a page, so it takes no label
+              in the expanded capsule either: the portrait is its name there, centred in its slot. */}
           <TipButton
             selected={agentMenuOpen()}
             onPress={toggleAgents}

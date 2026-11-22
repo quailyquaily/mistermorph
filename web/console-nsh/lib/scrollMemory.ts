@@ -21,6 +21,7 @@
 // flight). The reader scrolling in the meantime ends it. Nothing animates.
 import type { ListRef, ScrollEvent, ScrollRef } from "nsh";
 import { cleanup, effect, signal, untracked } from "nsh";
+import { noteNavScroll } from "./navScroll";
 import { currentRoute, pageInstanceKey } from "./router";
 import { SystemBackScope } from "./systemBack";
 
@@ -289,15 +290,24 @@ export function useScrollMemory(options: ScrollMemoryOptions): ScrollMemory {
       reportScrollArea(key, y);
       // How far the content lets the scroller go.
       const end = Math.max(0, event.contentSize.height - event.size.height);
+      // The phone's bottom navigation follows the reader's scrolling (lib/navScroll.ts); a restore
+      // or a pull-back only moves its turning point.
+      const nav = (programmatic: boolean) =>
+        noteNavScroll({ source: key, y, viewport: event.size.height, content: event.contentSize.height, programmatic });
       if (target === null) {
         // Pulled back because the content no longer reaches where it was (rows going with the page
         // as it leaves, a list emptied while it loads again; a browser then puts it at the top,
         // other platforms at the content's end): not the reader's doing, and not their place.
-        if (y < previous - 1 && previous > end + 1) return;
+        if (y < previous - 1 && previous > end + 1) {
+          nav(true);
+          return;
+        }
+        nav(false);
         restored = null;
         store(y);
         return;
       }
+      nav(true);
       if (Math.abs(y - target) <= 1) {
         settle(y, true);
         return;

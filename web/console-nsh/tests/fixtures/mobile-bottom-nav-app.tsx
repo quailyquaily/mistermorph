@@ -4,9 +4,12 @@
 // connected agents (the console's own first, selected). Each time a sheet is told to open or close,
 // its progress (0 out of sight, 1 in its place) is sampled every frame for 500 ms and read out
 // too (`motion:{"<name>.in<n>": …, "<name>.out<n>": …}`); the `bounce-more` button closes More and opens it again 90 ms later, while it is going out.
+// `nav-compact` and `nav-expand` scroll a stand-in page down and back to its top
+// (lib/navScroll.ts), and each resize the strip makes is read out (`resize:[["compact",160],…]`).
 import { createAnimatedValue, host, mount, signal, Text, View } from "nsh";
 import { MobileBottomMenus, MobileBottomNav, type MobileNavFrame } from "../../components/frame/MobileBottomNav";
 import { endpointState } from "../../lib/core/context.js";
+import { noteNavScroll } from "../../lib/navScroll";
 import { closeMobileMore, setMobileMoreOpen } from "../../lib/shell";
 import { Button } from "../../components/ui";
 
@@ -28,6 +31,9 @@ if (agents > 0) {
 const frames = signal<Record<string, MobileNavFrame>>({});
 const motion = signal<Record<string, { t: number; p: number }[]>>({});
 const turns: Record<string, number> = {};
+const resizes = signal<[string, number][]>([]);
+/** A stand-in page 2000pt long in a 600pt scroller, scrolled to `y`. */
+const scrollTo = (y: number) => noteNavScroll({ source: "fixture", y, viewport: 600, content: 2000 });
 
 function sample(name: string, progress: ReturnType<typeof createAnimatedValue>, open: boolean) {
   if (open) turns[name] = (turns[name] ?? 0) + 1;
@@ -57,8 +63,24 @@ function Page() {
         testID="bounce-more"
       />
       <Text class="text-[6px]">{`motion:${JSON.stringify(motion())}`}</Text>
+      <View class="flex-row gap-2">
+        <Button
+          size="xs"
+          label="compact"
+          onPress={() => {
+            scrollTo(0);
+            scrollTo(200);
+          }}
+          testID="nav-compact"
+        />
+        <Button size="xs" label="expand" onPress={() => scrollTo(0)} testID="nav-expand" />
+      </View>
+      <Text class="text-[6px]">{`resize:${JSON.stringify(resizes())}`}</Text>
       <MobileBottomMenus onSheetLayout={(name, frame) => frames.update((all) => ({ ...all, [name]: frame }))} onSheetProgress={sample} />
-      <MobileBottomNav onSlotLayout={(name, frame) => frames.update((all) => ({ ...all, [name]: frame }))} />
+      <MobileBottomNav
+        onSlotLayout={(name, frame) => frames.update((all) => ({ ...all, [name]: frame }))}
+        onResize={(expanded, ms) => resizes.update((all) => [...all, [expanded ? "expanded" : "compact", ms]])}
+      />
     </View>
   );
 }
