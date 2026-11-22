@@ -2,8 +2,8 @@
 // every name starts on one line, the margin's width after it, whatever the marker's state (on, off,
 // queued, running) and however long the name. The page keeps the same room at both sides: the
 // pages' gutter on a phone, and on a desktop a column no wider than a page of text, centred. The
-// head keeps that column: its title starts where the names do and its last button ends where the
-// rows end. The empty list's add row, a dashed box, starts where the names do too. The topic
+// head keeps that column: its title starts at the column's edge (the gutter on a phone, as every
+// page's title does), not set in by the margin, and its last button ends where the rows end. The empty list's add row, a dashed box, starts where the names do too. The topic
 // list's marks: tests/topic-status-alignment.test.tsx.
 import { expect, open, test } from "nsh/test";
 
@@ -20,7 +20,7 @@ async function openIndex(width: number, mode: "list" | "empty") {
   if (mode !== "list") {
     await app.press(`id:mode-${mode}`);
   }
-  const head = ["index", "head-action", "marker-heartbeat", "title-heartbeat"];
+  const head = ["index", "head-title", "head-action", "marker-heartbeat", "title-heartbeat"];
   const needed = [...head, ...(mode === "empty" ? ["empty-add", "empty-text", "empty-marker"] : [...ITEM_IDS.map((id) => `marker-${id}`), ...ITEM_IDS.map((id) => `title-${id}`)])];
   await app.waitUntil(() => needed.every((name) => Boolean(frames()[name])));
   await app.wait(100);
@@ -70,6 +70,11 @@ for (const item of CASES) {
     const action = all["head-action"];
     expect(near(action.w, 38)).toBe(true);
     expect(near(right(action), col.right)).toBe(true);
+    // The head's title starts at the column's edge, where the markers are: no margin before it.
+    expect(near(all["head-title"].x, col.left)).toBe(true);
+    // On a phone that edge is the pages' gutter (gutterX: 12pt, 14pt on a wide one), where every
+    // other page's title starts.
+    if (!item.add) expect(near(all["head-title"].x - index.x, item.width <= 620 ? 12 : 14)).toBe(true);
   });
 }
 

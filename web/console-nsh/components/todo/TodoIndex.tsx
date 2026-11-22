@@ -156,7 +156,7 @@ function Divider(props: { label: string }) {
 export function TodoIndex(props: {
   state: TodoState;
   mobile?: boolean;
-  /** Hears where parts lie on the page (tests): `index`, `head-action` (the head's last button),
+  /** Hears where parts lie on the page (tests): `index`, `head-title`, `head-action` (the head's last button),
    * `marker-<item>` and `title-<item>` (`heartbeat`, else the task's id), `empty-add`,
    * `empty-text` and `empty-marker` (the empty list's add row, its text column and its icon
    * slot), `view-toggle` and `view-toggle-icon` (the calendar toggle and its
@@ -201,11 +201,13 @@ export function TodoIndex(props: {
           transitionDuration: 180,
         }}
       >
-        {/* The head keeps the list's column: the title starts where the names do, after the margin. */}
-        <View class="flex-1 flex-row items-center" style={{ ...column(), paddingLeft: TODO_MARGIN }}>
+        {/* The head keeps the list's column, and its title starts at the column's edge, as every
+            page's title starts at the gutter: it is not set in by the list's margin. */}
+        <View class="flex-1 flex-row items-center" style={column()}>
           <Text
             class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground line-clamp-1"
             role="header"
+            {...parts.probe(() => "head-title")}
           >
             {t("todo_title")}
           </Text>
