@@ -65,7 +65,7 @@ test("a job selected keeps everything up and down its line in ink and fades the 
   }
   // The selected job is the lighter paper, and says so to screen readers.
   expect(app.viewStyle("id:todo-flow-job-digest")?.backgroundColor).toBe("#ffffffff");
-  expect(app.viewStyle("id:todo-flow-job-report")?.backgroundColor).toBe("#fbfdffff");
+  expect(app.viewStyle("id:todo-flow-job-report")?.backgroundColor).toBe("#fcfcffff");
 
   // Opening is its own action, on the selected job only.
   expect(app.count("id:todo-flow-open-digest")).toBe(1);

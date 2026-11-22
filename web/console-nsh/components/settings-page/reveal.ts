@@ -31,7 +31,7 @@ export function createRevealRegistry(): RevealRegistry {
     rows: new Map(),
     marked,
     ringed,
-    tint: level.interpolate({ inputRange: [0, 1], outputRange: ["rgba(66,111,158,0)", "rgba(66,111,158,0.1)"] }),
+    tint: level.interpolate({ inputRange: [0, 1], outputRange: ["rgba(125,130,184,0)", "rgba(125,130,184,0.14)"] }),
     mark(text: string) {
       const run = ++seq;
       const duration = motionMs(HIT_MS);

@@ -91,7 +91,7 @@ test("Start is the primary button, Stop a solid red one, View Job the navigation
   expect(new Set([start.icon, stop.icon, view.icon]).size).toBe(3);
   // A keyboard focus shows on each: a ring inside the pill (seen in Chrome on Tab), and a fill.
   expect(TODO_JOB_FOCUS_RING).toMatch(/^group-focus-visible:border-/);
-  expect(classes(start.box)).toContain("focus:bg-ink");
+  expect(classes(start.box)).toContain("focus:bg-primary-hover");
   expect(classes(stop.tint)).toContain("group-focus:bg-danger/18");
   expect(classes(view.box)).toContain("focus:bg-hover");
 });

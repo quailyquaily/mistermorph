@@ -20,6 +20,42 @@ function readStore(storage) {
   return values;
 }
 
+// The page's own colours under the app, per theme: what the page's markup gives it before the app
+// draws (scripts/build-web.sh writes the same values), so a switch leaves the page as a reload would.
+export const PAGE_COLORS = {
+  light: { background: "#eeeef6", color: "#17182b" },
+  dark: { background: "#0f0f0f", color: "#f3f3f6" },
+};
+
+// Gives the page (html and body, under the app) the colours of `scheme`, in one style of its own
+// placed last in the head, over the ones the markup set.
+export function setPageColors(scheme, doc = document) {
+  const colors = PAGE_COLORS[scheme];
+  if (!colors) return;
+  let style = doc.querySelector("style[data-morph-page-colors]");
+  if (!style) {
+    style = doc.createElement("style");
+    style.setAttribute("data-morph-page-colors", "");
+  }
+  style.textContent = `html, body { background: ${colors.background}; color: ${colors.color}; }`;
+  // Appended also when it is there already: it stays the last word.
+  doc.head.appendChild(style);
+}
+
+// The page's `theme-color`: the colour browsers draw their own chrome in around the page. The
+// page's markup sets it for the theme the console opens in; this follows a switch after that.
+export function setThemeColor(color, doc = document) {
+  const value = String(color || "").trim();
+  if (!/^#[0-9a-f]{3,8}$/i.test(value)) return;
+  let meta = doc.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = doc.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    doc.head.appendChild(meta);
+  }
+  meta.setAttribute("content", value);
+}
+
 // The console's mount point on this origin, which the Go server writes into the page.
 function basePath() {
   const meta = document.querySelector('meta[name="mistermorph-base-path"]');
@@ -594,6 +630,11 @@ export function createHost(player) {
       },
     ],
     ["morph.title", ({ title }) => void (document.title = title)],
+    // The browser's own chrome around the page follows the theme shown (lib/platform.ts).
+    ["morph.themeColor", ({ color, scheme }) => {
+      setThemeColor(color);
+      setPageColors(scheme);
+    }],
     ["morph.favicon", ({ url }) => favicon.show(url)],
     ["morph.language", ({ language }) => void (document.documentElement.lang = language)],
     ["morph.notify.state", () => notificationState()],

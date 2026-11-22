@@ -1,8 +1,9 @@
 // General: this device's own settings, the same whichever agent is selected: the interface language,
+// the appearance (light or dark),
 // notifications, the console session, and installing the selected agent as an app.
 import { Text, View } from "nsh";
 import { Button } from "../../../components/ui";
-import { localeState } from "../../../lib/stores/index.js";
+import { localeState, themeState } from "../../../lib/stores/index.js";
 import { SettingSelect } from "../../../components/settings/SettingFields";
 import { SettingsAppPanel } from "../../../components/settings/SettingsAppPanel";
 import { TopicNotificationSetting } from "../../../components/settings/TopicNotificationSetting";
@@ -36,6 +37,20 @@ export function GeneralSection(props: { s: SettingsStore }) {
                 onChange={(value) => localeState.setLanguage(value)}
                 label={t("settings_language_title")}
                 testID="settings-language"
+              />
+            </View>
+          </SettingRow>
+          <SettingRow title={t("settings_appearance_title")} note={t("settings_appearance_hint")} copyClass={isMobile() ? "" : "max-w-40"}>
+            <View class={isMobile() ? "self-stretch" : "min-w-[180px] flex-[3]"}>
+              <SettingSelect
+                value={themeState.scheme}
+                options={[
+                  { title: t("settings_appearance_light"), value: "light" },
+                  { title: t("settings_appearance_dark"), value: "dark" },
+                ]}
+                onChange={(value) => themeState.setScheme(value)}
+                label={t("settings_appearance_title")}
+                testID="settings-appearance"
               />
             </View>
           </SettingRow>

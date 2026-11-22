@@ -1,6 +1,6 @@
 // The entry: read the host's boot data, restore the session and the language, start the router,
 // then mount the frame. Page logic lives in pages/, shared state in lib/.
-import { effect, keyboardFrame, mount, untracked, View } from "nsh";
+import { colorScheme, effect, keyboardFrame, mount, token, untracked, View } from "nsh";
 import "./assets/fonts/ibm-plex-sans-latin-400-normal.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-400-italic.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-500-normal.woff2";
@@ -11,10 +11,11 @@ import { Scrollbar } from "nsh/base";
 import { SCROLLBAR } from "./components/motion/ScrollEdges";
 import { Shell } from "./components/Shell";
 import { authState, configureApiBase, endpointState, localeState } from "./lib/core/context.js";
+import { themeState } from "./lib/stores/index.js";
 import { currentLocale } from "./lib/i18n/index.js";
 import { installSystemNotifications } from "./lib/core/system-notifications.js";
 import { startCache } from "./lib/cache";
-import { boot, isMobile, reportFrontendReady, setDocumentLanguage, startVisibilityTracking } from "./lib/platform";
+import { boot, isMobile, reportFrontendReady, setDocumentLanguage, setThemeColor, startVisibilityTracking } from "./lib/platform";
 import { route, router, startRouter } from "./lib/router";
 import { inShellless, inStandalone, startShell, systemInsets } from "./lib/shell";
 import { startSystemBack } from "./lib/systemBack";
@@ -45,6 +46,13 @@ function App() {
     const language = currentLocale();
     untracked(() => setDocumentLanguage(language));
   });
+  // The browser's own chrome (its `theme-color`) takes the bars' colour in the theme shown, the
+  // page under the app that theme's colours, and both follow a switch in Settings without a reload.
+  effect(() => {
+    const color = String(token("nav"));
+    const scheme = colorScheme();
+    untracked(() => setThemeColor(color, scheme));
+  });
   let reported = false;
   effect(() => {
     if (route() && !reported) {
@@ -72,6 +80,8 @@ async function start() {
   configureApiBase();
   startVisibilityTracking();
   localeState.hydrateLanguage();
+  // The appearance this device chose, before the first page mounts: no light frame before a dark one.
+  themeState.hydrateScheme();
   authState.hydrate();
   endpointState.hydrateEndpointSelection();
   // The pages' last answers, read before the first page mounts so it opens with them.

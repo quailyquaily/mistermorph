@@ -202,6 +202,13 @@ export const previousLocation = () => (MOBILE ? mobileHost.previousEntry() : "")
 export function setDocumentTitle(title: string) {
   if (hosted) void hostChannel.call("morph.title", { title }).catch(() => {});
 }
+/** The colour the browser draws around the page (its `theme-color`): the bars' own, in the theme shown, and that theme's name. */
+export function setThemeColor(color: string, scheme: "light" | "dark") {
+  // An opaque token reads as #rrggbbff: the meta takes the plain six digits.
+  const plain = /^#[0-9a-f]{6}ff$/i.test(color) ? color.slice(0, 7) : color;
+  // `scheme` has the host give the page under the app that theme's own colours too.
+  if (hosted) void hostChannel.call("morph.themeColor", { color: plain, scheme }).catch(() => {});
+}
 /**
  * The browser tab's icon: the image at `url` (an avatar), drawn small and round by the page, or
  * the app icon for "". Only the web has one; the desktop and phone apps keep their own icons.

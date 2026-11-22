@@ -533,6 +533,7 @@ export async function call(name: string, data?: unknown): Promise<unknown> {
       writeEntry(String(args.op || "push"), location);
       return kvSet({ area: "local", key: LOCATION_KEY, value: location });
     case "morph.title":
+    case "morph.themeColor":
     case "morph.favicon":
     case "morph.language":
     case "morph.desktop.ready":

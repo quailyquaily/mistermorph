@@ -19,8 +19,16 @@ html = html.replace(
   "<head>",
   '<head>\n<meta name="mistermorph-base-path" content="__MISTERMORPH_BASE_PATH__">\n<base href="__MISTERMORPH_BASE_HREF__">',
 );
-html = html.replace('<meta name="theme-color" content="#ffffff">', '<meta name="theme-color" content="#edf3f8">');
-html = html.replace("html, body { background: #ffffff; color: #1c1c1e; }", "html, body { background: #edf3f8; color: #181832; }");
+html = html.replace('<meta name="theme-color" content="#ffffff">', '<meta name="theme-color" content="#eeeef6">');
+// (host.js PAGE_COLORS holds the same values, for a switch while the console runs.)
+// The page's own colours before the app draws (the page's stylesheet says white): the light
+// palette's, and the dark ones when this device chose the dark
+// appearance (lib/stores/themeStore.js keeps it under this key), so a dark console never opens
+// on a light page.
+html = html.replace(
+  "</head>",
+  `<style>html, body { background: #eeeef6; color: #17182b; }</style>\n<script>try{if(localStorage.getItem("mistermorph.colorScheme")==="dark"){var s=document.createElement("style");s.textContent="html, body { background: #0f0f0f; color: #f3f3f6; }";document.head.appendChild(s);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content","#141416");}}catch(e){}</script>\n</head>`,
+);
 html = html.replace("<title>Mister Morph</title>", "<title>Mistermorph Console</title>");
 fs.writeFileSync(file, html);
 JS

@@ -249,7 +249,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
               readonly={locked()}
               accessibilityLabel={label()}
               testID={props.testID ? `${props.testID}-source` : undefined}
-              class="min-h-0 flex-1 self-stretch px-4 py-3 text-sm leading-[21.7px] text-foreground placeholder:text-placeholder caret-blue selection:bg-[#426f9e38]"
+              class="min-h-0 flex-1 self-stretch px-4 py-3 text-sm leading-[21.7px] text-foreground placeholder:text-placeholder caret-blue selection:bg-blue/22"
               onFocus={() => {
                 focused.set(true);
                 for (const done of focusWaiters.slice()) done();

@@ -1,7 +1,7 @@
 // A store skill's details (SkillStoreView.js's StoreSkillDetail): its name and close in a fixed
 // header, then Install, its properties and SKILL.md in a body that scrolls. Shown in the side panel
 // (desktop) and the slide-in panel (phones).
-import { Text, View } from "nsh";
+import { Text, View, token } from "nsh";
 import { Blocks, InlineNotice, LinkText, PropertyList, PropertyRow, PropertyText, t, WorkspaceTitle } from "../../components/knowledge/parts";
 import { SkillDocument } from "../../components/knowledge/SkillDocument";
 import { EdgeScroll } from "../../components/motion";
@@ -32,7 +32,7 @@ export function StoreSkillDetail(props: {
   return (
     <View class="flex-1" testID="store-detail" accessibilityLabel={props.skill.name}>
       {/* The head: the name in the 20pt title face, the description under it, close at the end, on a soft hairline. */}
-      <View class="flex-row items-start justify-between gap-3 pb-3 pl-[18px] pr-3.5 pt-4" style={{ boxShadow: "inset 0 -1px 0 rgba(165, 186, 208, 0.31)" }}>
+      <View class="flex-row items-start justify-between gap-3 pb-3 pl-[18px] pr-3.5 pt-4" style={{ boxShadow: `inset 0 -1px 0 ${token("line-soft")}` }}>
         <View class="flex-1 gap-1">
           <View selectable>
             <WorkspaceTitle text={props.skill.name} />

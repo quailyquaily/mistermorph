@@ -290,8 +290,8 @@ export function SkillStorePage() {
                     accessibilityLabel={skill().name}
                     selected={selected()?.id === skill().id}
                     onPress={() => open(skill())}
-                    class={`min-h-[148px] gap-2 ${CARD_CORNERS} border bg-card px-4 py-3.5 hover:border-[#7092b5d8] ${
-                      selected()?.id === skill().id ? "border-[#7092b5d8]" : "border-line"
+                    class={`min-h-[148px] gap-2 ${CARD_CORNERS} border bg-card px-4 py-3.5 hover:border-blue-light/85 ${
+                      selected()?.id === skill().id ? "border-blue-light/85" : "border-line"
                     }`}
                     style={{ width: cardWidth(), transitionProperty: "colors", transitionDuration: 120, transitionTimingFunction: "ease" }}
                   >

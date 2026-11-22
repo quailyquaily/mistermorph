@@ -363,7 +363,7 @@ function FlowJobBox(props: {
             class={`absolute size-[22px] items-center justify-center rounded-full border border-blue ${props.look().linking ? "bg-blue" : "bg-card hover:bg-dialog"}`}
             style={{ left: width() - 11, top: (height() - 22) / 2 }}
           >
-            <Icon name="PhPlus" size={10} color={props.look().linking ? "primary-foreground" : "blue"} />
+            <Icon name="PhPlus" size={10} color={props.look().linking ? "on-accent" : "blue"} />
           </TipButton>
         </If>
         <If when={props.look().join}>

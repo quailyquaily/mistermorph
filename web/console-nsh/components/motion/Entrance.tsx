@@ -60,7 +60,7 @@ export function Entrance(props: {
 export function createArrivalTint() {
   const level = createAnimatedValue(0);
   return {
-    color: level.interpolate({ inputRange: [0, 1], outputRange: ["rgba(66,111,158,0)", "rgba(66,111,158,0.14)"] }),
+    color: level.interpolate({ inputRange: [0, 1], outputRange: ["rgba(125,130,184,0)", "rgba(125,130,184,0.18)"] }),
     play() {
       const duration = motionMs(MOTION_HIGHLIGHT);
       if (duration <= 0) return;

@@ -14,7 +14,7 @@ import { CALENDAR_DAY_CLASS, DateField } from "../shared/DateField";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, MENU_POPUP_STYLE, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
 import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 import * as model from "./todo-model.js";
 import { TodoJobButton, TODO_JOB_BUTTON_GAP, TODO_JOB_BUTTON_HEIGHT, TODO_JOB_BUTTON_WIDTH, TODO_JOB_ICON_SIZE } from "../chat/TodoJobBar";
@@ -111,7 +111,7 @@ function RunAtField(props: { task: TodoTask; disabled: boolean; onChange: (value
       }}
       offset={4}
       popupClass={`${POPOVER_CORNERS} border border-line-faint bg-dialog p-3`}
-      popupStyle={{ boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)" }}
+      popupStyle={{ boxShadow: MENU_POPUP_STYLE.boxShadow }}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"
@@ -661,7 +661,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               accessibilityLabel={t("todo_bash_env_add")}
               tooltip={<Tip text={t("todo_bash_env_add")} />}
               testID="todo-bash-env-add"
-              class={`h-9.5 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/35 bg-white/45 hover:border-blue/60 hover:bg-white/75 disabled:opacity-50`}
+              class={`h-9.5 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/35 bg-outline-bg hover:border-blue/60 hover:bg-outline-bg-hover disabled:opacity-50`}
               style={{ transitionProperty: "colors", transitionDuration: 180 }}
             >
               <Icon name="PhPlus" size={16} color="subtle" />

@@ -344,7 +344,7 @@ export function PlaceholderButton(props: { label: string; icon?: IconName; disab
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
       testID={props.testID}
-      class={`h-11 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/36 bg-white/46 transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-white/68 disabled:opacity-50 ${
+      class={`h-11 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/36 bg-outline-bg transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-outline-bg-hover disabled:opacity-50 ${
         props.class ?? ""
       }`}
     >

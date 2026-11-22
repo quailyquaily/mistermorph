@@ -12,6 +12,7 @@
 // so sweeping the pointer down a list does not flash every row it passes.
 import type { InputRef, JSX, ScrollRef, ViewRef } from "nsh";
 import { cleanup, effect, keymap, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { withAlpha } from "../motion/color";
 import { Button as BaseButton, Switch } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import type { ScrollMemory } from "../../lib/scrollMemory";
@@ -314,7 +315,7 @@ export function IndexColumn(props: {
           style={{
             paddingLeft: gutterX(),
             paddingRight: props.headRight === "none" && !props.fill ? 0 : gutterX(),
-            borderColor: scrolled() ? "#a5bad040" : "#a5bad000",
+            borderColor: scrolled() ? withAlpha(String(token("line")), 0.35) : withAlpha(String(token("line")), 0),
             transitionProperty: "colors",
             transitionDuration: motionMs(MOTION_NORMAL),
             transitionTimingFunction: MOTION_EASE_CSS,
@@ -395,7 +396,7 @@ export function IndexDivider(props: { label: string; class?: string }) {
       <Text role="header" class="font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[0.12em] text-muted-foreground" style={{ numberOfLines: 1 }}>
         {props.label}
       </Text>
-      <View class="h-px flex-1" style={{ backgroundImage: "linear-gradient(to right, #a5bad085, #a5bad000)" }} />
+      <View class="h-px flex-1" style={{ backgroundImage: `linear-gradient(to right, ${token("line-soft")}, ${withAlpha(String(token("line-soft")), 0)})` }} />
     </View>
   );
 }
@@ -436,7 +437,7 @@ export function IndexRow(props: {
     isMobile() ? (props.meta ? "leading-[16.2px]" : "leading-[19.5px]") : props.meta ? "leading-[15.1px]" : "leading-[18.2px]";
   // The selected row hovered deepens its fill to 13 %: over the gliding highlight a 3 % layer, on
   // a row that draws its own fill the stronger fill itself.
-  const hover = () => (props.active ? (props.sliding ? "hover:bg-[#426f9e08]" : "hover:bg-selection-strong") : "hover:bg-hover-soft");
+  const hover = () => (props.active ? (props.sliding ? "hover:bg-hover-faint" : "hover:bg-selection-strong") : "hover:bg-hover-soft");
   return (
     <BaseButton
       testID={props.testID}

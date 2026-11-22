@@ -749,7 +749,7 @@ export function SkillsPage() {
                     </If>
                     <If when={selectedUpdate()}>
                       {(entry) => (
-                        <View class="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius) border border-[#426f9e4d] bg-[#426f9e0f] px-2.5 py-2">
+                        <View class="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius) border border-blue/30 bg-blue/6 px-2.5 py-2">
                           <Text class="text-xs text-subtle">{t("skills_update_note", { version: entry().version })}</Text>
                           <Button
                             variant="outlined"

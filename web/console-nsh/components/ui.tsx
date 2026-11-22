@@ -27,6 +27,7 @@ import { CARD_CORNERS, CONTINUOUS, CONTROL_CORNERS, cornersClass, fittingRadius,
 import { drawFabMark, FAB_MARK, FAB_MARK_SIZE, type FabMarkCorner } from "./fabMark";
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
 import { PickerList, type PickerItem, type PickerProbe } from "./shared/PickerList";
+import { withAlpha } from "./motion/color";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
 import { RunningMark } from "./motion/RunningMark";
 import { sagHalf, SagRule } from "./motion/Sag";
@@ -89,7 +90,7 @@ export function Icon(props: {
   );
 }
 
-export type StatusState = "on" | "off" | "pending" | "error" | "unread" | "running";
+export type StatusState = "on" | "off" | "pending" | "error" | "unread" | "running" | "done";
 
 /**
  * The console's square status mark: filled when on, hollow when off, orange when waiting. Running,
@@ -113,6 +114,9 @@ export function StatusMark(props: {
     switch (props.state) {
       case "pending":
         return "status-pending";
+      case "done":
+        // Something that ended well: the success colour, where "on" only says it is switched on.
+        return "ok";
       case "error":
         return "status-error";
       case "off":
@@ -360,8 +364,8 @@ const BUTTON_VARIANTS: Record<
   },
   highlight: {
     box: "bg-warn border-[0.5px] border-warn-dark hover:bg-warn-light hover:border-warn-light disabled:bg-warn-disabled disabled:border-warn-disabled-line",
-    text: "primary-foreground",
-    textClass: "text-primary-foreground group-disabled:text-on-disabled",
+    text: "warn-foreground",
+    textClass: "text-warn-foreground group-disabled:text-on-disabled",
     disabledText: "on-disabled",
     press: "group-active:bg-press-light",
     beam: "amber",
@@ -499,7 +503,7 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
   const side = options.size === "sm" ? "size-8" : "size-[38px]";
   const look =
     options.variant === "primary"
-      ? "border border-primary bg-primary hover:bg-ink"
+      ? "border border-primary bg-primary hover:bg-primary-hover"
       : options.variant === "danger"
         ? "border border-destructive bg-destructive hover:bg-danger-light hover:border-danger-light"
         : options.variant === "close"
@@ -509,6 +513,11 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
           : // The plain button's look (BUTTON_VARIANTS.plain): a fill on hover, a deeper one pressed.
             "hover:bg-hover active:bg-press";
   return `relative ${side} items-center justify-center rounded-full transition-colors duration-[180ms] ${look}`;
+}
+
+/** The glyph's colour on a round button's fill: what is written on that fill, else the plain glyphs'. */
+function circleIconColor(variant?: CircleButtonVariant): TokenName {
+  return variant === "primary" ? "primary-foreground" : variant === "danger" ? "destructive-foreground" : "subtle";
 }
 
 /**
@@ -542,7 +551,7 @@ export function CircleButton(props: {
       testID={props.testID}
       class={`${circleButtonClass({ size: props.size, variant: props.variant })} ${props.class ?? ""}`}
     >
-      <If when={props.children} else={<Icon name={props.icon ?? "PhPlus"} size={props.iconSize ?? 14} color={props.iconColor ?? "subtle"} />}>
+      <If when={props.children} else={<Icon name={props.icon ?? "PhPlus"} size={props.iconSize ?? 14} color={props.iconColor ?? circleIconColor(props.variant)} />}>
         {props.children}
       </If>
     </TipButton>
@@ -700,7 +709,15 @@ const CLEAR_SIZES = { md: 32, sm: 28, xs: 24 } as const;
 const clearRadius = (size: keyof typeof CLEAR_SIZES) => nestedRadius(RADIUS.control, (FIELD_SIZES[size].height - CLEAR_SIZES[size]) / 2);
 /** A regular (md) field's height, for boxes that stand in for one (a stored secret, a locked field). */
 export const FIELD_HEIGHT = FIELD_SIZES.md.box;
-const FIELD_FOCUS = { borderColor: "#426f9e9e", boxShadow: "0 0 0 1px rgba(66, 111, 158, 0.16)" };
+const FIELD_FOCUS = {
+  // Read when a field takes the focus, so it follows the theme shown then.
+  get borderColor() {
+    return String(token("ring"));
+  },
+  get boxShadow() {
+    return `0 0 0 1px ${withAlpha(String(token("blue")), 0.16)}`;
+  },
+};
 
 /** A text field with its label, hint and error, as the Vue console's AppInput and AppTextarea. */
 export function TextField(props: TextFieldProps) {
@@ -744,7 +761,7 @@ export function TextField(props: TextFieldProps) {
           testID={props.testID}
           class={`min-w-0 flex-1 self-stretch ${props.multiline ? "p-3 leading-[18.2px]" : `${props.leadingIcon ? "pl-0.5" : "pl-3"} pr-3 py-1.5`} ${
             size().text
-          } text-foreground placeholder:text-placeholder caret-blue selection:bg-[#426f9e38] ${props.mono ? "font-mono" : ""} ${
+          } text-foreground placeholder:text-placeholder caret-blue selection:bg-blue/22 ${props.mono ? "font-mono" : ""} ${
             props.inputClass ?? ""
           }`}
           style={props.multiline ? { minHeight: lines() * 18.2 + 24 } : undefined}
@@ -838,7 +855,7 @@ export function CheckboxField(props: {
       accessibilityLabel={props.label}
       class={`flex-row items-center gap-2 disabled:opacity-45 ${props.class ?? ""}`}
       indicatorClass="size-4 items-center justify-center rounded-(--radius) border border-input bg-field checked:bg-blue checked:border-blue"
-      indicator={<Icon name="PhCheck" size={12} color="primary-foreground" />}
+      indicator={<Icon name="PhCheck" size={12} color="on-accent" />}
     >
       <If when={props.label}>
         <Text class="text-sm text-foreground">{props.label}</Text>
@@ -1077,9 +1094,12 @@ export const MENU_ITEM_CORNERS = cornersClass(MENU_ITEM_RADIUS);
 /** A menu item's box in a `MENU_POPUP`: inset 8pt from the sides, its text 16pt in, its corners nested. */
 export const MENU_ITEM_BOX = `mx-2 px-2 ${MENU_ITEM_CORNERS}`;
 export const MENU_POPUP_STYLE = {
-  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)",
+  // The lit top edge is the theme's (`sheen`): bright on a light popup, faint on a dark one.
+  get boxShadow() {
+    return `inset 0 1px 0 ${token("sheen")}, 0 10px 24px rgba(24, 46, 72, 0.12)`;
+  },
   transitionTimingFunction: MOTION_EASE_CSS,
-} as const;
+};
 export const MENU_STARTING = "opacity-0 -translate-y-1";
 /**
  * The large corners of the console's floating paper: the dialogs, and every popup on phones (More
@@ -1606,7 +1626,7 @@ export function LoadingLine(props: { label?: string; class?: string; testID?: st
         style={{
           width: segment(),
           opacity: still ? 0.5 : 1,
-          backgroundImage: "linear-gradient(90deg, transparent, #426f9e 45%, #426f9e 55%, transparent)",
+          backgroundImage: `linear-gradient(90deg, transparent, ${token("blue")} 45%, ${token("blue")} 55%, transparent)`,
           // translateX(-100%) to translateX(357%) of the segment: fully across the track.
           transform: [{ translateX: still ? 0 : sweep.interpolate({ inputRange: [0, 1], outputRange: [-segment(), segment() * 3.57] }) }],
         }}

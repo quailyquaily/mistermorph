@@ -32,7 +32,7 @@ test("idle, the voice button is Send's primary circle; recording, a red one; nei
   expect(voiceButtonLook(undefined)).toEqual(idle);
   // Send's ready look is this primary circle: same box, side and fill.
   const primary = classes(circleButtonClass({ variant: idle.variant }));
-  for (const c of ["size-[38px]", "rounded-full", "bg-primary", "border-primary", "hover:bg-ink"]) expect(primary).toContain(c);
+  for (const c of ["size-[38px]", "rounded-full", "bg-primary", "border-primary", "hover:bg-primary-hover"]) expect(primary).toContain(c);
   for (const c of primary) expect(/destructive|danger/.test(c)).toBe(false);
 
   const recording = voiceButtonLook("recording");

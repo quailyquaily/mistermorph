@@ -23,7 +23,7 @@ export function SkillDocument(props: { source: string; onLinkPress?: (url: strin
         heading2: "mt-3 text-lg leading-[21.2px] tracking-[-0.02em]",
         heading3: "mt-2 text-base leading-[20.0px]",
         heading4: "text-sm",
-        code: "font-mono text-[11.375px] bg-[#f5f0e8]",
+        code: "font-mono text-[11.375px] bg-muted",
         strong: "font-semibold",
         list: "gap-0",
         listItem: "text-[13px] leading-[22.36px]",

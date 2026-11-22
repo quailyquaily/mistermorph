@@ -4,7 +4,7 @@
 // searched, or the events a memory came from. On a phone the index and the picked view take turns,
 // with a back button.
 import type { JSX } from "nsh";
-import { batch, computed, effect, signal, Text, untracked, View } from "nsh";
+import { batch, computed, effect, signal, Text, untracked, View, token } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { CALENDAR_DAY_CLASS, DATE_CLEAR_CLASS, DateField } from "../../components/shared/DateField";
 import {
@@ -720,7 +720,7 @@ export function MemoriesPage() {
                           <Each of={day().events} key={(event) => String(event.seq ?? event.id)}>
                             {(event, index) => (
                               <View
-                                class={`flex-row items-start gap-4 px-4 py-3 ${index() === 0 ? "" : "border-t border-line-soft"} ${sourcesOf() ? "bg-[#dc892014]" : ""}`}
+                                class={`flex-row items-start gap-4 px-4 py-3 ${index() === 0 ? "" : "border-t border-line-soft"} ${sourcesOf() ? "bg-warn/8" : ""}`}
                                 testID={`journal-event:${event().id}`}
                               >
                                 <Text class="w-[72px] pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">{event().clock}</Text>
@@ -936,7 +936,7 @@ function SectionCard(props: { title: string; meta?: string; literal?: boolean; c
  * Sources banner of the journal. An amber mark and a mono caps label in brackets. */
 function Banner(props: { label: string; text: string; children?: JSX.Element }) {
   return (
-    <View role="alert" class="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-(--radius) border border-[#c9a27a8f] bg-paper-soft px-3 py-2">
+    <View role="alert" class="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-(--radius) border border-warn/45 bg-paper-soft px-3 py-2">
       <View class="size-[7px] rounded-[1px] bg-status-pending" />
       <Text class="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-status-pending">
         <Text class="opacity-45">[</Text>
@@ -955,7 +955,7 @@ function VisibilityMark(props: { value: string; dim?: boolean }) {
 }
 
 // A memory row's fills (Vue .memory-head): hover accent 4 %, an opened row and its more-area 6 %.
-const MEMORY_HOVER = "hover:bg-[#426f9e0a]";
+const MEMORY_HOVER = "hover:bg-blue/4";
 
 function MemoryRow(props: {
   item: Memory;
@@ -1033,7 +1033,7 @@ function MemoryRow(props: {
                     testID={`memory-visibility:${props.item.id}:${value()}`}
                     class={`h-[26px] flex-row items-center gap-1.5 px-[11.2px] ${props.item.visibility === value() ? "bg-card" : ""}`}
                     style={{
-                      boxShadow: props.item.visibility === value() ? "0 0 0 1px rgba(165, 186, 208, 0.52)" : "none",
+                      boxShadow: props.item.visibility === value() ? `0 0 0 1px ${token("line")}` : "none",
                       transitionProperty: "colors, box-shadow",
                       transitionDuration: motionMs(MOTION_NORMAL),
                       transitionTimingFunction: MOTION_EASE_CSS,

@@ -13,6 +13,7 @@ import { SecretInput } from "../../components/settings/SecretInput";
 import { SetupConnectionTestDialog } from "../../components/settings/SetupConnectionTestDialog";
 import { SetupPickerDialog } from "../../components/settings/SetupPickerDialog";
 import { MarkdownEditor } from "../../components/shared/MarkdownEditor";
+import { withAlpha } from "../../components/motion/color";
 import { Button, Icon, TextField, Tip, TipButton, type IconName } from "../../components/ui";
 import { isNetworkErrorMessage } from "../../lib/core/notices.js";
 import {
@@ -443,10 +444,16 @@ function PersonaStage(props: { s: SetupState }) {
 /* ---------- the soul ---------- */
 
 /** A preset's sprite sheet, walking: one frame of its first row at a time, scaled up. */
-// Vue .setup-soul-card-custom: a white-to-warm wash over 1px rules on a 13px pitch.
-const RULED_PAPER =
-  "linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(250, 248, 244, 0.9)), " +
-  "repeating-linear-gradient(180deg, transparent, transparent 12px, rgba(77, 85, 99, 0.05) 12px, rgba(77, 85, 99, 0.05) 13px)";
+/** The cards' paper: the theme's brightest surface (white in the light theme), let through at `alpha`. */
+const paper = (alpha: number) => withAlpha(String(token("dialog")), alpha);
+// Vue .setup-soul-card-custom: a wash of the cards' paper over 1px rules on a 13px pitch.
+const ruledPaper = () => {
+  const rule = withAlpha(String(token("foreground")), 0.05);
+  return (
+    `linear-gradient(180deg, ${paper(0.86)}, ${paper(0.9)}), ` +
+    `repeating-linear-gradient(180deg, transparent, transparent 12px, ${rule} 12px, ${rule} 13px)`
+  );
+};
 
 function SoulSprite(props: { card: SoulCard; tick: number }) {
   const frameWidth = () => Number(props.card.spriteFrameWidth) || 16;
@@ -482,9 +489,9 @@ function SoulStage(props: { s: SetupState }) {
     marginLeft: order === 0 ? 0 : -22,
     zIndex: active ? 40 : 10 + order,
     transform: active ? [{ translateY: -12 }, { scale: 1.02 }] : [{ translateY: 18 }, { scale: 0.94 }],
-    // Vue .setup-soul-card (white at 78%, a soft drop) and .is-active (the accent's 8% tint, a
+    // Vue .setup-soul-card (the paper at 78%, a soft drop) and .is-active (the accent's 8% tint, a
     // deeper drop in its colour).
-    backgroundColor: active ? `color-mix(in srgb, ${token(accent)} 8%, rgba(255, 255, 255, 0.96))` : "rgba(255, 255, 255, 0.78)",
+    backgroundColor: active ? `color-mix(in srgb, ${token(accent)} 8%, ${paper(0.96)})` : paper(0.78),
     boxShadow: active
       ? `0 18px 28px color-mix(in srgb, ${token(accent)} 12%, rgba(28, 33, 41, 0.1))`
       : "0 12px 24px rgba(28, 33, 41, 0.06)",
@@ -492,7 +499,7 @@ function SoulStage(props: { s: SetupState }) {
     transitionDuration: 180,
   });
   // Vue .setup-soul-card:hover: whiter (the active card keeps its tint).
-  const hoverStyle = (active: boolean) => (active ? undefined : { backgroundColor: "rgba(255, 255, 255, 0.94)" });
+  const hoverStyle = (active: boolean) => (active ? undefined : { backgroundColor: paper(0.94) });
   return (
     <View class="gap-2.5 p-2" testID="setup-form-soul">
       <If
@@ -581,9 +588,9 @@ function SoulStage(props: { s: SetupState }) {
                 ...stackStyle(s.isCustomSoulSelected(), cards().length),
                 // A blank sheet of ruled paper until it is chosen (Vue .setup-soul-card-custom, whose
                 // background replaces the card's own).
-                ...(s.isCustomSoulSelected() ? {} : { backgroundColor: "transparent", backgroundImage: RULED_PAPER }),
+                ...(s.isCustomSoulSelected() ? {} : { backgroundColor: "transparent", backgroundImage: ruledPaper() }),
               }}
-              hoverStyle={s.isCustomSoulSelected() ? undefined : { backgroundColor: "rgba(255, 255, 255, 0.94)", backgroundImage: "none" }}
+              hoverStyle={s.isCustomSoulSelected() ? undefined : { backgroundColor: paper(0.94), backgroundImage: "none" }}
             >
               <View class="size-8.5 items-center justify-center rounded-(--radius) border border-dashed border-line bg-card">
                 <Icon name={s.customSoulCardIcon() as IconName} size={18} color={accent} />

@@ -5,7 +5,8 @@
 // inputs and pickers here with the same metrics: white 92 %, the input hairline, the controls'
 // continuous corners, the blue focus border with its faint halo.
 import type { JSX } from "nsh";
-import { Text, View } from "nsh";
+import { Text, View, token } from "nsh";
+import { withAlpha } from "../motion/color";
 import { Input } from "nsh/base";
 import { CONTROL_CORNERS } from "../corners";
 
@@ -13,7 +14,15 @@ import { CONTROL_CORNERS } from "../corners";
 export const FIELD_FRAME = `min-h-11 flex-row items-center gap-2 ${CONTROL_CORNERS} border border-input bg-field pr-2`;
 /** The frame's left padding before a prepended name (the dropdown trigger's 0.8rem). */
 export const FIELD_PAD = "pl-[12.8px]";
-export const FIELD_FOCUS = { borderColor: "#426f9e9e", boxShadow: "0 0 0 1px rgba(66, 111, 158, 0.16)" };
+export const FIELD_FOCUS = {
+  // Read when a field takes the focus, so it follows the theme shown then.
+  get borderColor() {
+    return String(token("ring"));
+  },
+  get boxShadow() {
+    return `0 0 0 1px ${withAlpha(String(token("blue")), 0.16)}`;
+  },
+};
 export const FIELD_TRANSITION = {
   transitionProperty: "colors, box-shadow",
   transitionDuration: 200,
@@ -70,7 +79,7 @@ export function TodoInput(props: {
         autoCorrect={false}
         accessibilityLabel={props.accessibilityLabel}
         testID={props.testID}
-        class={`flex-1 self-stretch py-1.5 ${props.prepend ? "pl-0.5" : "pl-3"} pr-1 text-sm text-foreground placeholder:text-placeholder caret-blue selection:bg-[#426f9e38] ${
+        class={`flex-1 self-stretch py-1.5 ${props.prepend ? "pl-0.5" : "pl-3"} pr-1 text-sm text-foreground placeholder:text-placeholder caret-blue selection:bg-blue/22 ${
           props.strong ? "font-semibold" : ""
         } ${props.mono ? "font-mono" : ""}`}
       />

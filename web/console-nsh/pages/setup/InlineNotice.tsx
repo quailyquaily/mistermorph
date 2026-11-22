@@ -12,7 +12,7 @@ export function InlineNotice(props: { type?: "error" | "warning" | "info" | "suc
       case "success":
         return { border: "border-ok", mark: "bg-ok", text: "text-ok" };
       default:
-        return { border: "border-blue", mark: "bg-blue", text: "text-blue-dark" };
+        return { border: "border-info", mark: "bg-info", text: "text-info" };
     }
   };
   return (

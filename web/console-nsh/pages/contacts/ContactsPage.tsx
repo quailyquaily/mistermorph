@@ -910,7 +910,7 @@ export function ContactsPage(props: {
       </List>
       <View class="absolute inset-0 overflow-hidden" accessibilityElementsHidden style={{ pointerEvents: "none" }}>
         <View class="absolute left-0 top-0" style={{ transform: [{ translateY: scrollShift }] }}>
-          <selection.Highlight class="rounded-[16px] border border-[#426f9e61] bg-selection" testID="contacts-selection" />
+          <selection.Highlight class="rounded-[16px] border border-blue/38 bg-selection" testID="contacts-selection" />
         </View>
       </View>
       </View>

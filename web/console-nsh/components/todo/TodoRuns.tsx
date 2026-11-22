@@ -39,7 +39,7 @@ export interface TodoHistoryRun {
 export function runMarkState(status: string): StatusState {
   if (status === "running") return "running";
   if (status === "queued") return "pending";
-  if (status === "done") return "on";
+  if (status === "done") return "done";
   if (status === "failed") return "error";
   return "off";
 }

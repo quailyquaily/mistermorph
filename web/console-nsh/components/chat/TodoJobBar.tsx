@@ -94,7 +94,7 @@ export function todoJobButtonLook(kind: TodoJobButtonKind, state: { busy?: boole
     filled: true,
     box: state.disabled
       ? "bg-primary-disabled border-[0.5px] border-primary-disabled-line"
-      : "bg-primary border-[0.5px] border-primary-line hover:bg-ink focus:bg-ink",
+      : "bg-primary border-[0.5px] border-primary-line hover:bg-primary-hover focus:bg-primary-hover",
     press: "group-active:bg-press-light",
     icon: state.disabled ? "on-disabled" : "primary-foreground",
     beam: "primary",

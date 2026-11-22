@@ -4,7 +4,7 @@
 import type { EditorDecoration } from "nsh/base";
 
 // OverType's `.syntax-marker` (rgba(13, 59, 102, 0.52)) and `h1`..`h6` (#f95738), measured in Vue.
-const MARKER_CLASS = "font-bold text-[#0d3b6685]";
+const MARKER_CLASS = "font-bold text-ink/52";
 const HEADING_CLASS = "font-bold text-[#f95738]";
 
 /** Decorations for the ATX headings of `source` (not inside fenced code blocks). */

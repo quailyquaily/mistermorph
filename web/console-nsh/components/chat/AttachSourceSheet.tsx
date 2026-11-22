@@ -67,7 +67,7 @@ export function AttachSourceSheet(props: {
               class={`flex-row items-center gap-3 px-3 py-2.5 hover:bg-hover focus:bg-hover active:bg-press ${index() > 0 ? "border-t border-line-faint" : ""}`}
             >
               <View class={`size-11 items-center justify-center rounded-full ${choice().fill}`}>
-                <Icon name={choice().icon} size={20} color="primary-foreground" />
+                <Icon name={choice().icon} size={20} color="on-accent" />
               </View>
               <View class="min-w-0 flex-1 gap-0.5">
                 <Text class="text-base font-medium text-foreground">{choice().label}</Text>

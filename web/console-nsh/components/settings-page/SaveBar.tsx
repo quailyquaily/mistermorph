@@ -1,6 +1,6 @@
 // The Settings page's one save bar (the Vue page's `.settings-save-bar`): what has unsaved changes,
 // or what a save could not save, with Discard and Save. A section and its side pane both save here.
-import { createMotion, effect, signal, Text, untracked, View } from "nsh";
+import { createMotion, effect, signal, Text, untracked, View, token } from "nsh";
 import { Button, Icon } from "../ui";
 import { MOTION_EASE, MOTION_NORMAL, motionMs } from "../motion";
 import { t } from "../../pages/settings/i18n";
@@ -114,7 +114,7 @@ export function SettingsRestartBanner(props: {
       <View
         testID="settings-restart-banner"
         class="flex-row flex-wrap items-center gap-3 border border-warn/45 px-3.5 py-2.5 shadow-[0_2px_8px_rgba(24,24,50,0.08)]"
-        style={{ position: "sticky", top: 8 + (props.topInset ?? 0), zIndex: 5, backgroundColor: "color-mix(in srgb, #eea03e 10%, #f6faff)" }}
+        style={{ position: "sticky", top: 8 + (props.topInset ?? 0), zIndex: 5, backgroundColor: `color-mix(in srgb, ${token("warn")} 10%, ${token("background")})` }}
       >
         <View class={props.restarting ? "animate-spin" : ""} style={{ animationDuration: 800 }}>
           <Icon name="PhArrowClockwise" size={18} color="warn" />

@@ -153,7 +153,7 @@ export function SkillFileTree(props: SkillFileTreeProps) {
                         accessibilityLabel={row().entry?.name}
                         testID={`skill-file:${row().path}`}
                         class={`${ITEM} disabled:opacity-60 ${
-                          row().path === props.selectedPath ? "border-line bg-[#e1e9f2]" : "hover:border-line-soft/75 hover:bg-hover"
+                          row().path === props.selectedPath ? "border-line bg-segment" : "hover:border-line-soft/75 hover:bg-hover"
                         }`}
                         style={ROW_TRANSITION}
                         hoverStyle={ROW_HOVER}

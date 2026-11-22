@@ -31,6 +31,8 @@ export type ApiHandler = StubResponse | ((request: ApiRequest) => StubResponse |
 export interface ConsoleOptions {
   /** Where the app opens (`/e/default/chat`). */
   location?: string;
+  /** The system's appearance (light by default). The console shows its own choice whatever this is. */
+  colorScheme?: "light" | "dark";
   /** Route overrides, merged over the defaults. */
   api?: Record<string, ApiHandler>;
   /** The console asks for a password: no automatic login. */
@@ -226,6 +228,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
       height: options.height ?? 844,
       platform: "android",
       locale: options.locale ?? "en-US",
+      colorScheme: options.colorScheme ?? null,
       safeArea: options.safeArea ?? null,
       storage: {
         [MOBILE_SERVER_KEY]: ORIGIN,
@@ -248,6 +251,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     // A desktop idiom; "web" would load host.js, which needs a browser page.
     platform: options.os ?? "linux",
     locale: options.locale ?? "en-US",
+    colorScheme: options.colorScheme ?? null,
     safeArea: options.safeArea ?? null,
     reducedMotion: options.reducedMotion ?? false,
     clock: options.clock ? {} : null,
@@ -267,6 +271,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         "morph.kv.set": null,
         "morph.history": null,
         "morph.title": null,
+        "morph.themeColor": null,
         "morph.favicon": null,
         "morph.language": null,
         "morph.notify.state": "default",
