@@ -894,8 +894,9 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 // awarenessJobReferences reads the jobs the task references ("[label](job:<id>)"). A scheduled job
 // asks as itself: where it reports decides which jobs it may read, and its own record of this run
 // is left out, so a job that references itself gets its previous run. A heartbeat follows the
-// owner's own checklist and asks as the owner. A poke's text comes from outside: it may reference
-// no job.
+// owner's own checklist and asks as the owner, and so does a poke, whose text came through the
+// runtime's authenticated POST /poke. The data a job's run was started with (the body of its own
+// poke, the message that fired its trigger) is read for references too (see jobSourceReferences).
 //
 // The jobs the run's job uses are read with them, each once, also when the text links to one (see
 // jobInputs).
@@ -904,14 +905,16 @@ func awarenessJobReferences(ctx context.Context, opts awarenessTaskOptions, task
 	if opts.Job != nil {
 		uses = jobInputs(ctx, opts)
 	}
-	if len(jobrefs.ExtractIDs(task)) == 0 && len(uses) == 0 {
+	sourceText, sourceRequester := jobSourceReferences(opts)
+	if len(jobrefs.ExtractIDs(task)) == 0 && len(jobrefs.ExtractIDs(sourceText)) == 0 && len(uses) == 0 {
 		return nil, nil
 	}
 	var requester jobrefs.Requester
 	switch {
 	case opts.Job != nil:
 		requester = jobrefs.ScheduledBy(*opts.Job)
-	case opts.Behavior == awarenessutil.BehaviorHeartbeat:
+	case opts.Behavior == awarenessutil.BehaviorHeartbeat, opts.Behavior == awarenessutil.BehaviorPoke:
+		// POST /poke is the owner's own endpoint: it takes the runtime's auth token.
 		requester.Audience = audience.Owner()
 	}
 	var runs taskdomain.TaskReader
@@ -921,12 +924,47 @@ func awarenessJobReferences(ctx context.Context, opts awarenessTaskOptions, task
 	options := taskruntime.JobReferenceOptions(opts.CronPath, runs)
 	options.ExcludeRunID = opts.TaskRunID
 	options.Uses = uses
+	options.SourceText = sourceText
+	options.SourceRequester = sourceRequester
 	options.Limits = jobrefs.LimitsForContextWindow(contextWindowTokens)
 	resolved, err := jobrefs.Resolve(ctx, task, requester, options)
 	if err != nil {
 		return nil, err
 	}
 	return &resolved, nil
+}
+
+// jobSourceReferences returns the text a job's run was started with, whose job references are read
+// beside the job's own, and who wrote it when that is not the job.
+//
+// The body of POST /poke/{job_id} came with the runtime's auth token: it reads what the job
+// itself may. A chat message that fired a message trigger was written by whoever can post in that
+// chat: it reads only the jobs that report to that same chat, and the job must be allowed them
+// too. Nothing here starts a referenced job.
+func jobSourceReferences(opts awarenessTaskOptions) (string, *jobrefs.Requester) {
+	if opts.Job == nil {
+		return "", nil
+	}
+	text := opts.SourceData.Normalize().BodyText
+	if text == "" {
+		return "", nil
+	}
+	switch strings.TrimSpace(opts.JobCause.Kind) {
+	case cronstore.CausePoke:
+		return text, nil
+	case cronstore.CauseMessage:
+		// No chat to name (the trigger is gone): the message may reference nothing.
+		from := &jobrefs.Requester{}
+		for _, trigger := range cronstore.TriggersForTask(*opts.Job) {
+			chatID := strings.TrimSpace(trigger.ChatID)
+			if trigger.Kind == cronstore.TriggerMessage && trigger.ID == strings.TrimSpace(opts.JobCause.TriggerID) &&
+				chatID != "" && !cronstore.IsConsoleNotificationChatID(chatID) {
+				from = &jobrefs.Requester{Job: &cronstore.Task{ChatID: chatID}}
+			}
+		}
+		return text, from
+	}
+	return "", nil
 }
 
 // jobInputs lists the jobs the run's job uses, for the run to be given as references the text need

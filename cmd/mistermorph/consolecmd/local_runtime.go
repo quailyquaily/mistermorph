@@ -1710,7 +1710,7 @@ const consoleSteerJobReferenceRefusal = "a message with a job reference ([label]
 
 // consoleJobReferenceRequester says who asks for the jobs a Console task references. A task that
 // an Agent Link message started carries text a remote agent wrote: it asks as no one, and may
-// reference no job, as a poke may not. Any other task asks as the audience of its run (nil).
+// reference no job. Any other task asks as the audience of its run (nil).
 func consoleJobReferenceRequester(trigger daemonruntime.TaskTrigger) *jobrefs.Requester {
 	if strings.EqualFold(strings.TrimSpace(trigger.Source), "agentlink") {
 		return &jobrefs.Requester{}

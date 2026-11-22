@@ -789,3 +789,57 @@ func TestResolveUses(t *testing.T) {
 		}
 	})
 }
+
+// Text a run was started with (a poke's body, a chat message) is read for references beside the
+// task's own: after them, each job once, and a job only that text names must be readable by who
+// wrote it as well as by the requester.
+func TestResolveSourceText(t *testing.T) {
+	private := cronstore.Task{ID: "job-private", Cron: "0 9 * * *", Content: "Private payroll numbers", ChatID: cronstore.ConsoleNotificationChatID}
+	group := cronstore.Task{ID: "job-group", Cron: "0 9 * * *", Content: "Group digest", ChatID: "tg:-100"}
+	asker := cronstore.Task{ID: "job-ask", Cron: "0 9 * * *", Content: "x"}
+	store := newStore(t, private, group, asker)
+	fromChat := &Requester{Job: &cronstore.Task{ChatID: "tg:-100"}}
+	ids := func(resolved Resolved) []string {
+		var out []string
+		for _, job := range resolved.Jobs {
+			out = append(out, job.ID)
+		}
+		return out
+	}
+
+	opts := options(store, &fakeRuns{})
+	opts.SourceText = "see [g](job:job-group), [p](job:job-private) and [g again](job:job-group)"
+	resolved := mustResolve(t, "Read [p](job:job-private).", ScheduledBy(asker), opts)
+	if got := ids(resolved); !reflect.DeepEqual(got, []string{"job-private", "job-group"}) || resolved.Jobs[0].Input || resolved.Jobs[1].Input {
+		t.Fatalf("jobs = %v", got)
+	}
+	if resolved := mustResolve(t, "No link here.", ScheduledBy(asker), opts); !reflect.DeepEqual(ids(resolved), []string{"job-group", "job-private"}) {
+		t.Fatalf("jobs = %v", ids(resolved))
+	}
+
+	// Who wrote the source text bounds what only it names; what the task names is the task's.
+	opts.SourceRequester = fromChat
+	if _, err := Resolve(context.Background(), "No link here.", ScheduledBy(asker), opts); !errors.Is(err, ErrUnavailable) || strings.Contains(err.Error(), "payroll") {
+		t.Fatalf("err = %v", err)
+	}
+	if resolved := mustResolve(t, "Read [p](job:job-private).", ScheduledBy(asker), opts); !reflect.DeepEqual(ids(resolved), []string{"job-private", "job-group"}) {
+		t.Fatalf("jobs = %v", ids(resolved))
+	}
+	opts.SourceText = "see [g](job:job-group)"
+	if resolved := mustResolve(t, "No link here.", ScheduledBy(asker), opts); !reflect.DeepEqual(ids(resolved), []string{"job-group"}) {
+		t.Fatalf("jobs = %v", ids(resolved))
+	}
+	// The requester's own reach holds for the source text too, and no writer reads nothing.
+	if _, err := Resolve(context.Background(), "x", ScheduledBy(cronstore.Task{ID: "job-other", ChatID: "tg:-200"}), opts); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+	opts.SourceRequester = &Requester{}
+	if _, err := Resolve(context.Background(), "x", ScheduledBy(asker), opts); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+	opts.SourceText = "see [x](job:job-ghost)"
+	opts.SourceRequester = nil
+	if _, err := Resolve(context.Background(), "x", ScheduledBy(asker), opts); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+}

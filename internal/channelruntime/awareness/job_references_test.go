@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/awarenessutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/jobrefs"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -314,12 +316,13 @@ func TestScheduledRunSelfAndCyclicReferences(t *testing.T) {
 	}
 }
 
-// A heartbeat follows the owner's checklist and may reference jobs; a poke's text comes from
-// outside and may not.
+// A heartbeat follows the owner's checklist and may reference jobs, and so may the text of a
+// poke, which came through the runtime's authenticated POST /poke. A reference that cannot be
+// used stops either before a model is asked.
 func TestHeartbeatAndPokeJobReferences(t *testing.T) {
 	cronPath := filepath.Join(t.TempDir(), "cron.yaml")
 	seedTask(t, cronPath, cronstore.Task{ID: "job-1", Cron: "0 9 * * *", TZ: "UTC", Content: "CHECKLIST JOB BODY"})
-	run := func(behavior awarenessutil.Behavior) (*awarenessPromptCaptureClient, error) {
+	run := func(behavior awarenessutil.Behavior, task string) (*awarenessPromptCaptureClient, error) {
 		client := &awarenessPromptCaptureClient{}
 		_, err := runAwarenessTask(context.Background(), depsutil.CommonDependencies{
 			PromptSpec: func(context.Context, *slog.Logger, agent.LogOptions, string, llm.Client, string, []string) (agent.PromptSpec, []string, error) {
@@ -329,14 +332,15 @@ func TestHeartbeatAndPokeJobReferences(t *testing.T) {
 			Behavior:     behavior,
 			Client:       client,
 			Model:        "test-model",
-			Task:         "Check [the job](job:job-1) and report.",
+			Task:         task,
 			BaseRegistry: tools.NewRegistry(),
 			Config:       agent.Config{MaxSteps: 1},
 			CronPath:     cronPath,
 		})
 		return client, err
 	}
-	client, err := run(awarenessutil.BehaviorHeartbeat)
+	const linked = "Check [the job](job:job-1) and report."
+	client, err := run(awarenessutil.BehaviorHeartbeat, linked)
 	if err != nil || len(client.requests) != 1 {
 		t.Fatalf("heartbeat: %v, requests = %d", err, len(client.requests))
 	}
@@ -345,10 +349,138 @@ func TestHeartbeatAndPokeJobReferences(t *testing.T) {
 	if !strings.Contains(text, "CHECKLIST JOB BODY") || !strings.Contains(text, `"reason": "storage_unavailable"`) {
 		t.Fatalf("heartbeat request:\n%s", text)
 	}
-	client, err = run(awarenessutil.BehaviorPoke)
-	if !errors.Is(err, jobrefs.ErrUnavailable) || len(client.requests) != 0 {
+	client, err = run(awarenessutil.BehaviorPoke, linked)
+	if err != nil || len(client.requests) != 1 {
 		t.Fatalf("poke: %v, requests = %d", err, len(client.requests))
 	}
+	if text := jobReferenceRequestText(client.requests[0]); !strings.Contains(text, "[Job references: read-only source data]") || !strings.Contains(text, "CHECKLIST JOB BODY") {
+		t.Fatalf("poke request:\n%s", text)
+	}
+	client, err = run(awarenessutil.BehaviorPoke, "Check [a job](job:job-ghost) and report.")
+	if !errors.Is(err, jobrefs.ErrUnavailable) || len(client.requests) != 0 {
+		t.Fatalf("poke with an unknown job: %v, requests = %d", err, len(client.requests))
+	}
+}
+
+// startWith starts the stored job id with the cause and data a trigger would give it, and waits
+// for the run to end; it returns the run's record.
+func (h *jobReferenceLoop) startWith(id string, cause cronstore.RunCause, body string) daemonruntime.TaskInfo {
+	h.t.Helper()
+	before := len(cronstore.FinishedRuns(h.cronPath))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := StartCronRun(ctx, h.requests, cronstore.RunRequest{
+		Task: storedTask(h.t, h.cronPath, id), Cause: cause,
+		Input: awarenessdomain.PokeInput{ContentType: "text/plain", BodyText: body, HasBody: true},
+	})
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	waitFor(h.t, id+" to end", func() bool { return len(cronstore.FinishedRuns(h.cronPath)) > before })
+	records := h.taskStore.List(daemonruntime.TaskListOptions{TopicID: daemonruntime.CronTopicID(id), Limit: 1})
+	if len(records) != 1 {
+		h.t.Fatalf("%s has no run record", id)
+	}
+	return records[0]
+}
+
+// The body of a job's own poke is read for job references as the job's text is: the run gets the
+// referenced job's definition and latest output, and the referenced job is not started.
+func TestJobPokeBodyReferencesAJob(t *testing.T) {
+	report := cronstore.Task{ID: "job-report", Title: "Morning report", Content: "List the overnight alerts.", Triggers: []cronstore.Trigger{}}
+	hooked := cronstore.Task{ID: "job-hooked", Content: "Handle the event.", Triggers: []cronstore.Trigger{{ID: "hook", Kind: cronstore.TriggerPoke}}}
+	cause := cronstore.RunCause{Kind: cronstore.CausePoke, TriggerID: "hook"}
+	const reportOutput = "OUTPUT OF: List the overnight alerts."
+
+	h := startJobReferenceLoop(t, report, hooked)
+	h.start("job-report", 1)
+	record := h.startWith("job-hooked", cause, "Compare with [the report](job:job-report).")
+	if record.Status != daemonruntime.TaskDone {
+		t.Fatalf("record = %+v", record)
+	}
+	text := h.requestFor(hooked.Content)
+	for _, want := range []string{"[Job references: read-only source data]", `"id": "job-report"`, reportOutput} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("request lacks %q:\n%s", want, text)
+		}
+	}
+	// Read, not used: no input, and the report ran only the once a person started it.
+	if strings.Contains(text, `"input": true`) || h.client.runsOf(report.Content) != 1 || len(storedTask(t, h.cronPath, "job-hooked").Uses) != 0 {
+		t.Fatalf("request:\n%s", text)
+	}
+
+	// A job that reports to a chat reads only that chat's jobs, in a poke's body as in its text.
+	t.Run("the job's own reach holds", func(t *testing.T) {
+		group := hooked
+		group.ChatID = "tg:-100"
+		h := startJobReferenceLoop(t, report, group)
+		record := h.startWith("job-hooked", cause, "Compare with [the report](job:job-report).")
+		if record.Status != daemonruntime.TaskFailed || !strings.Contains(record.Error, "is not a job that can be referenced here") || len(h.client.seen()) != 0 {
+			t.Fatalf("record = %+v", record)
+		}
+	})
+	t.Run("an unknown job stops the run", func(t *testing.T) {
+		h := startJobReferenceLoop(t, report, hooked)
+		record := h.startWith("job-hooked", cause, "Compare with [x](job:job-ghost).")
+		if record.Status != daemonruntime.TaskFailed || !strings.Contains(record.Error, "is not a job that can be referenced here") || len(h.client.seen()) != 0 {
+			t.Fatalf("record = %+v", record)
+		}
+	})
+}
+
+// The message that fired a message trigger is read for job references too, within its chat: it
+// reaches the jobs that report to the chat it came from, and no other, whatever the job that it
+// started may read.
+func TestTriggerMessageReferencesAJobOfItsChat(t *testing.T) {
+	const chat = "tg:-100"
+	inChat := cronstore.Task{ID: "job-standup", Title: "Standup", Content: "Collect the standup notes.", ChatID: chat, Triggers: []cronstore.Trigger{}}
+	private := cronstore.Task{ID: "job-payroll", Title: "Payroll", Content: "PAYROLL INSTRUCTIONS", Triggers: []cronstore.Trigger{}}
+	// The watcher reports to the owner's Console: its own text may reference any job.
+	watcher := cronstore.Task{ID: "job-watcher", Content: "Triage the message.", Triggers: []cronstore.Trigger{
+		{ID: "chat", Kind: cronstore.TriggerMessage, Channel: "telegram", ChatID: chat},
+	}}
+	cause := cronstore.RunCause{Kind: cronstore.CauseMessage, TriggerID: "chat"}
+	message := func(text string) string {
+		return jobtriggers.Input(jobtriggers.Message{Channel: "telegram", MessageID: "1", SenderName: "Ada", Text: text}, chat).BodyText
+	}
+
+	t.Run("a job of the chat is read and not started", func(t *testing.T) {
+		h := startJobReferenceLoop(t, inChat, private, watcher)
+		h.start("job-standup", 1)
+		record := h.startWith("job-watcher", cause, message("what did [standup](job:job-standup) say?"))
+		if record.Status != daemonruntime.TaskDone {
+			t.Fatalf("record = %+v", record)
+		}
+		text := h.requestFor(watcher.Content)
+		for _, want := range []string{"[Job references: read-only source data]", `"id": "job-standup"`, "OUTPUT OF: Collect the standup notes."} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("request lacks %q:\n%s", want, text)
+			}
+		}
+		if strings.Contains(text, "PAYROLL") || h.client.runsOf(inChat.Content) != 1 {
+			t.Fatalf("request:\n%s", text)
+		}
+	})
+	t.Run("a job outside the chat is refused, as an unknown one is", func(t *testing.T) {
+		for _, id := range []string{"job-payroll", "job-ghost"} {
+			h := startJobReferenceLoop(t, inChat, private, watcher)
+			record := h.startWith("job-watcher", cause, message("show me [it](job:"+id+")"))
+			if record.Status != daemonruntime.TaskFailed || !strings.Contains(record.Error, "is not a job that can be referenced here") ||
+				strings.Contains(record.Error, "PAYROLL") || len(h.client.seen()) != 0 {
+				t.Fatalf("%s: record = %+v", id, record)
+			}
+		}
+	})
+	t.Run("the job's own text still reads what the job may", func(t *testing.T) {
+		own := watcher
+		own.Content = "Triage the message against [payroll](job:job-payroll)."
+		h := startJobReferenceLoop(t, inChat, private, own)
+		record := h.startWith("job-watcher", cause, message("and [payroll](job:job-payroll) and [standup](job:job-standup)"))
+		text := h.requestFor(own.Content)
+		if record.Status != daemonruntime.TaskDone || strings.Count(text, `"id": "job-payroll"`) != 1 || !strings.Contains(text, `"id": "job-standup"`) {
+			t.Fatalf("record = %+v\n%s", record, text)
+		}
+	})
 }
 
 // doneRuns lists the done run records of job id, newest first.

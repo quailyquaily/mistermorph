@@ -43,7 +43,7 @@ A task can point at a job and get, as read-only context, what that job is set to
 Compare today's numbers with [Morning report](job:job-0b7e5d1c-2f7a-4c2e-9a51-1d2f3e4a5b6c).
 ```
 
-The ID is what the reference means. The label is free text for the reader: renaming the job, or writing another label, changes nothing, and a label that names a different job is not looked at. References work in a TODO's content, in a heartbeat workflow, and in a message typed to the agent in the Console or in `mistermorph chat` / `mistermorph run`. In the Console's TODO and Heartbeat editors, the toolbar's **Reference a job** button lists the saved jobs (title, schedule and ID) and inserts the reference at the caret; a reference typed by hand works the same.
+The ID is what the reference means. The label is free text for the reader: renaming the job, or writing another label, changes nothing, and a label that names a different job is not looked at. References work in a TODO's content, in a heartbeat workflow, in a message typed to the agent in the Console or in `mistermorph chat` / `mistermorph run`, in the body of a poke (`POST /poke` and `POST /poke/{job_id}`), and in the chat message that starts a job through a message trigger. In the Console's TODO and Heartbeat editors, the toolbar's **Reference a job** button lists the saved jobs (title, schedule and ID) and inserts the reference at the caret; a reference typed by hand works the same.
 
 **What the run receives.** The references of a task are read once, when the task starts (for a TODO: each time one of its runs starts), before anything is asked of a model. For every referenced job the run gets:
 
@@ -73,7 +73,10 @@ The error does not say which case it is, so it does not reveal whether a job exi
 
 - In a conversation, only the owner, in a conversation of their own: the Console, the command line, or a private chat with the owner on a channel. A reference in a group chat is refused, also when the owner writes it, and so is one from any other contact: the job's content would be shown there.
 - A TODO that reports to the Console (`chat_id: console:user`) or to no chat may reference any job. A TODO that reports to another chat may reference only jobs that report to that same chat.
-- A heartbeat workflow is the owner's own and may reference any job. A poke (`POST /poke`) may reference none.
+- A heartbeat workflow is the owner's own and may reference any job. So may the body of `POST /poke`, which takes the runtime's auth token.
+- The body of `POST /poke/{job_id}` may reference what the poked job itself may.
+- A message that starts a job through a message trigger may reference only jobs that report to the chat the message came from, and only if the started job may read them too.
+- In all three the reference only reads: the referenced job is not started, and nothing is added to the job's **Uses**. To have one job start another, list it under **Uses**.
 
 Jobs record no author, so these rules go by where a run's result is seen, not by who created the job.
 
