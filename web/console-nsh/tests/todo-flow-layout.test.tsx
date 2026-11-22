@@ -244,21 +244,37 @@ test("only a moved job or route changes the signature", () => {
   expect(nodeOf(linked, "triage").col).toBe(3);
 });
 
-test("on a phone the same rule runs top to bottom", () => {
-  const layout = layoutFlow(PROTOTYPE, FLOW_PHONE);
-  checkSound(layout);
-  const report = nodeOf(layout, "report");
-  const digest = nodeOf(layout, "digest");
-  const brief = nodeOf(layout, "brief");
-  expect(report.y).toBe(0);
-  expect(digest.y).toBeGreaterThanOrEqual(report.h + FLOW_PHONE.gutter);
-  expect(brief.y).toBeGreaterThan(digest.y + digest.h);
-  expect(report.w).toBe(FLOW_PHONE.nodeCross);
-  expect(report.h).toBe(58);
-  // Links leave a job's bottom and arrive at a job's top.
-  const link = linkOf(layout, "report>digest");
-  expect(link.points[0][1]).toBe(report.y + report.h);
-  expect(link.points[link.points.length - 1][1]).toBe(digest.y);
+test("on a phone the direction is the desktop's: dependencies left to right, a column's jobs top to bottom", () => {
+  for (const metrics of [FLOW_DESKTOP, FLOW_PHONE]) {
+    const layout = layoutFlow(PROTOTYPE, metrics);
+    checkSound(layout);
+    const report = nodeOf(layout, "report");
+    const digest = nodeOf(layout, "digest");
+    const risk = nodeOf(layout, "risk");
+    const brief = nodeOf(layout, "brief");
+    // A job is to the right of what it depends on, a gutter away at least.
+    expect(report.x).toBe(0);
+    expect(digest.x).toBeGreaterThanOrEqual(report.w + metrics.gutter);
+    expect(brief.x).toBeGreaterThanOrEqual(digest.x + digest.w + metrics.gutter);
+    // The jobs of one column share its left edge and are stacked down it, never side by side.
+    expect(risk.x).toBe(digest.x);
+    expect(Math.abs(risk.y - digest.y)).toBeGreaterThanOrEqual(digest.h + metrics.rowGap);
+    for (const node of layout.nodes) {
+      expect(node.x).toBe(layout.nodes.find((other) => other.col === node.col)?.x);
+      expect([node.w, node.h]).toEqual([metrics.nodeMain, metrics.nodeCross]);
+      // Every dependency of a job lies wholly to its left.
+      for (const link of layout.links.filter((item) => item.to === node.id)) {
+        const from = nodeOf(layout, link.from);
+        expect(from.x + from.w).toBeLessThan(node.x);
+        // Links leave a job's right side and arrive at a job's left side.
+        expect(link.points[0][0]).toBe(from.x + from.w);
+        expect(link.points[link.points.length - 1][0]).toBe(node.x);
+      }
+    }
+  }
+  // A phone's jobs are narrower, not turned: wider than tall.
+  expect(FLOW_PHONE.nodeMain).toBeLessThan(FLOW_DESKTOP.nodeMain);
+  expect(FLOW_PHONE.nodeMain).toBeGreaterThan(FLOW_PHONE.nodeCross);
 });
 
 /** A repeatable pseudo-random graph: `count` jobs, `links` links, each to an earlier job. */

@@ -19,8 +19,9 @@
 //   the ports move along the side to meet a link that comes in nearly level, which then runs
 //   straight.
 //
-// On a phone the same rule runs top to bottom (`FLOW_PHONE`): columns become rows, and the links
-// leave and arrive under the jobs' markers, a rail down the left of each job.
+// The direction is the same everywhere: what a job depends on is to its left, and the jobs of one
+// column are stacked top to bottom. A phone (`FLOW_PHONE`) only has narrower jobs and gutters; the
+// picture scrolls sideways when it is wider than the screen.
 
 /** What the layout reads of a job. */
 export interface FlowLayoutJob {
@@ -29,12 +30,10 @@ export interface FlowLayoutJob {
 }
 
 export interface FlowMetrics {
-  /** Columns run down the page (a phone) instead of across it. */
-  vertical: boolean;
-  /** A job's size along the columns' direction, and across it. */
+  /** A job's width (along the links' direction) and its height. */
   nodeMain: number;
   nodeCross: number;
-  /** How far across a job the line its links leave on lies (and the middle of its ports). */
+  /** How far down a job the line its links leave on lies (and the middle of its ports). */
   anchor: number;
   /** The room between two jobs of a column. */
   rowGap: number;
@@ -66,7 +65,6 @@ export interface FlowMetrics {
 
 /** The prototype's numbers: 228 × 58 jobs, 360 from column to column, 92 from row to row, 8pt turns. */
 export const FLOW_DESKTOP: FlowMetrics = {
-  vertical: false,
   nodeMain: 228,
   nodeCross: 58,
   anchor: 29,
@@ -86,22 +84,21 @@ export const FLOW_DESKTOP: FlowMetrics = {
   hitThick: 20,
 };
 
-/** A phone: narrower jobs in rows, the links on a rail under the markers. */
+/** A phone: the same picture, left to right, with narrower jobs and gutters. */
 export const FLOW_PHONE: FlowMetrics = {
-  vertical: true,
-  nodeMain: 58,
-  nodeCross: 172,
-  anchor: 17,
-  rowGap: 14,
-  passGap: 12,
-  joinRoom: 0,
-  lead: 30,
+  nodeMain: 172,
+  nodeCross: 58,
+  anchor: 29,
+  rowGap: 30,
+  passGap: 15,
+  joinRoom: 26,
+  lead: 20,
   tail: 26,
   lane: 10,
   gutter: 56,
   turn: 8,
-  port: 10,
-  portInset: 7,
+  port: 12,
+  portInset: 8,
   level: 20,
   pad: 6,
   hitLength: 22,
@@ -497,13 +494,14 @@ export function layoutFlow(jobs: readonly FlowLayoutJob[], metrics: FlowMetrics 
     starts[c] = c === 0 ? 0 : starts[c - 1] + m.nodeMain + gutters[c - 1];
   });
 
-  // Out: boxes on the canvas. `main` runs along the columns' direction, `cross` across it.
-  const point = (main: number, cross: number): [number, number] => (m.vertical ? [round(cross), round(main)] : [round(main), round(cross)]);
+  // Out: boxes on the canvas. `main` runs left to right, from a job to the jobs that use it;
+  // `cross` runs down a column.
+  const point = (main: number, cross: number): [number, number] => [round(main), round(cross)];
   const nodes: FlowNode[] = [];
   for (const id of seen) {
     const item = items.get(id) as Item;
     const [x, y] = point(starts[item.col], item.pos - m.anchor);
-    nodes.push({ id, col: item.col, x, y, w: m.vertical ? m.nodeCross : m.nodeMain, h: m.vertical ? m.nodeMain : m.nodeCross, joined: item.joined });
+    nodes.push({ id, col: item.col, x, y, w: m.nodeMain, h: m.nodeCross, joined: item.joined });
   }
 
   const links: FlowLink[] = [];
@@ -549,9 +547,7 @@ export function layoutFlow(jobs: readonly FlowLayoutJob[], metrics: FlowMetrics 
       const inputs = (graph.uses.get(to) ?? []).length;
       const thick = inputs > 1 ? Math.min(m.hitThick, portStep(m, inputs)) : m.hitThick;
       const [ex, ey] = points[points.length - 1];
-      const hit: FlowBox = m.vertical
-        ? { x: ex - thick / 2, y: ey - 6 - m.hitLength, w: thick, h: m.hitLength }
-        : { x: ex - 6 - m.hitLength, y: ey - thick / 2, w: m.hitLength, h: thick };
+      const hit: FlowBox = { x: ex - 6 - m.hitLength, y: ey - thick / 2, w: m.hitLength, h: thick };
       links.push({ key, from: use.from, to, points, box, d: traced.d, length: traced.length, hit });
     }
   }

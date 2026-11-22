@@ -349,21 +349,26 @@ test("with reduced motion a replay shows where the chain ended at once, and noth
   expect(frames(app)["job-backup"].x - frames(app).canvas.x).toBe(360 + 14);
 });
 
-test("a phone lays the jobs out top to bottom and edits nothing", async () => {
+test("a phone lays the jobs out left to right as the desktop does, and edits nothing", async () => {
   const app = await openFlow({ width: 390, platform: "android" });
   const all = frames(app);
   const canvas = all.canvas;
   const layout = layoutFlow(jobsOf(app), FLOW_PHONE);
-  // Where the phone's layout says: rows down the page.
+  // Where the phone's layout says: columns across the page, each stacked down it.
   for (const node of layout.nodes) {
     const frame = all[`job-${node.id}`];
     expect(Math.abs(frame.x - canvas.x - 14 - node.x)).toBeLessThan(0.6);
     expect(Math.abs(frame.y - canvas.y - 14 - node.y)).toBeLessThan(0.6);
-    expect(frame.w).toBe(FLOW_PHONE.nodeCross);
+    expect(frame.w).toBe(FLOW_PHONE.nodeMain);
     expect(frame.h).toBe(58);
   }
-  expect(all["job-digest"].y).toBeGreaterThan(all["job-report"].y + 58);
-  expect(all["job-brief"].y).toBeGreaterThan(all["job-digest"].y + 58);
+  // Dependencies run left to right; the two jobs that use the report are one above the other.
+  expect(all["job-digest"].x).toBeGreaterThan(all["job-report"].x + all["job-report"].w);
+  expect(all["job-brief"].x).toBeGreaterThan(all["job-digest"].x + all["job-digest"].w);
+  expect(all["job-risk"].x).toBe(all["job-digest"].x);
+  expect(Math.abs(all["job-risk"].y - all["job-digest"].y)).toBeGreaterThanOrEqual(58);
+  // The line from the report to the digest spans the gutter between them, left to right.
+  expect(Math.abs(all["line-report>digest"].x + 6 - (all["job-report"].x + all["job-report"].w))).toBeLessThan(1.5);
   // The same selection.
   await app.press("id:todo-flow-job-digest");
   expect(fadedJobs(app)).toEqual(["backup", "heartbeat", "notes", "peer", "risk", "triage"]);

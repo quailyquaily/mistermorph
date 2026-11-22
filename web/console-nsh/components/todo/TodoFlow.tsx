@@ -4,7 +4,7 @@
 // far a replay has travelled); every change to the data goes out through a callback.
 //
 // The picture is laid out by flow-layout.ts (pure, once per change of the jobs): never dragged,
-// nothing saved. On a phone the same rule runs top to bottom and nothing can be edited.
+// nothing saved. On a phone the picture is the same, left to right with narrower jobs, and nothing can be edited.
 //
 // How it is drawn (nsh has no SVG):
 // - a job is a view at its place in the layout; when the layout changes it takes its new place at
@@ -86,7 +86,7 @@ export interface TodoFlowProps {
   jobs: FlowJob[];
   /** The chain to replay; null or absent shows the live state. */
   replay?: FlowRunStep[] | null;
-  /** Phone layout: read-only, top to bottom. */
+  /** Phone layout: read-only, the same left to right with narrower jobs. */
   mobile?: boolean;
   /** A save is under way: no edits. */
   busy?: boolean;
@@ -176,7 +176,6 @@ interface LinkLook {
 function FlowJobBox(props: {
   node: () => FlowNode;
   look: () => JobLook;
-  mobile: () => boolean;
   /** The entrance's delay when the job is made. */
   enterDelay: () => number;
   live: AnimatedValue;
@@ -368,7 +367,7 @@ function FlowJobBox(props: {
           </TipButton>
         </If>
         <If when={props.look().join}>
-          <View class="flex-row" style={{ marginTop: 5, marginLeft: props.mobile() ? 30 : 6 }}>
+          <View class="flex-row" style={{ marginTop: 5, marginLeft: 6 }}>
             <If
               when={props.look().joinEdits}
               else={
@@ -402,7 +401,6 @@ function FlowJobBox(props: {
 function FlowLinkLine(props: {
   link: () => FlowLink;
   look: () => LinkLook;
-  vertical: () => boolean;
   /** The draw-in's delay when the link is made. */
   drawDelay: () => number;
   live: AnimatedValue;
@@ -478,8 +476,7 @@ function FlowLinkLine(props: {
         cx.save();
         // The draw-in: a clip that opens from the job the link leaves.
         cx.beginPath();
-        if (props.vertical()) cx.rect(-1, -1, size.width + 2, reveal.interpolate({ inputRange: [0, 1], outputRange: [0, size.height + 2] }));
-        else cx.rect(-1, -1, reveal.interpolate({ inputRange: [0, 1], outputRange: [0, size.width + 2] }), size.height + 2);
+        cx.rect(-1, -1, reveal.interpolate({ inputRange: [0, 1], outputRange: [0, size.width + 2] }), size.height + 2);
         cx.clip();
         cx.lineWidth = 1;
         cx.strokeStyle = from === to ? to : tint.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
@@ -576,7 +573,7 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
   const column = computed(() => new Map(layout().nodes.map((node) => [node.id, node.col])));
   const length = computed(() => new Map(layout().links.map((link) => [link.key, link.length])));
   // In reading order (a column after the other, down each), which is the order Tab takes.
-  const nodes = computed(() => [...layout().nodes].sort((a, b) => a.col - b.col || (mobile() ? a.x - b.x : a.y - b.y)));
+  const nodes = computed(() => [...layout().nodes].sort((a, b) => a.col - b.col || a.y - b.y));
 
   /* view state */
   /** The job whose line is in ink. */
@@ -976,7 +973,6 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
                       <FlowLinkLine
                         link={link}
                         look={() => linkLook(link().key)}
-                        vertical={mobile}
                         drawDelay={() => (booted ? 0 : DRAW_AFTER_ENTRANCE_MS) + (column().get(link().from) ?? 0) * DRAW_STEP_MS}
                         live={live}
                         clock={clock}
@@ -989,7 +985,6 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
                     <FlowJobBox
                       node={node}
                       look={() => jobLook(node().id)}
-                      mobile={mobile}
                       enterDelay={() => (booted ? 0 : node().col * RISE_STEP_MS)}
                       live={live}
                       clock={clock}
