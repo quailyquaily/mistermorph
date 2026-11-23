@@ -84,3 +84,12 @@ notes:
 - No installs, manifest changes or external dependency changes.
 - No rendered UI checks this run. Owner should inspect solid controls beside outlined-danger, light/dark hairlines and focus clipping at 1x/1.5x/2x, real dialog confirm, Jobs Add, delete confirmation and browser pressed state. Android device/emulator and desktop remain unverified; Android retains its documented no-shadow workaround including no shadow-based keyboard focus ring.
 - Moved review/ → ready/. No merge into master, release or tag performed.
+
+## factory · 2026-11-23 19:29
+Shipped FT175; ready/ → done/.
+- Merge: dc6444a18282015947e7dc5f63d6649247a6fd5d, parents master 752c89f69e733b8432758a90868bc38fedd68392 and reviewed head 5cf4359671253b0d3b41e413da9c3c3fb91e3d59. Pushed master and independently verified the remote head.
+- No tag created or pushed, retaining the owner's earlier no-tag instruction; remote tag refs before/after are identical.
+- Claude Code validated the integration: 12 intended Console files only, no forbidden paths or dependency manifest changes. Both FT174 outlined-danger/FT175 solid treatments and concurrent bottom-nav resize changes preserved. No fixes or extra commits needed.
+- Checks PASS: gofmt, go vet ./..., go test ./... (168 packages ok, 20 without tests); nsh check; targeted Console runner (17 files, zero failures/retries); required full scripts/test.sh (163 files, zero failures/retries, 253s). Console Node 330/330, QR/calendar 27/27, Cloudflare 24/24.
+- No installs. No browser, native-app, physical-device or screen-reader checks this shipment. Prior visual limitations remain: inspect fractional-DPR hairlines/focus clipping, real dialog confirmation and solid controls beside outlined-danger; Android retains its documented no-shadow workaround.
+- No linked issues/PRs to close. Feature branch retained (clean action not configured). Shipment logs retained; run temporary caches and merged item worktrees cleaned at end.
