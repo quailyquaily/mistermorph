@@ -286,12 +286,17 @@ export function TipButton(props: BaseButtonProps) {
   );
 }
 
-export type ButtonVariant = "primary" | "outlined" | "plain" | "danger" | "highlight" | "ghost-danger";
+export type ButtonVariant = "primary" | "outlined" | "plain" | "danger" | "highlight" | "ghost-danger" | "outlined-danger";
+
+/** Every Button variant, in the order the gallery shows them. */
+export const BUTTON_VARIANT_NAMES: readonly ButtonVariant[] = ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger", "outlined-danger"];
 export type ButtonSize = "md" | "sm" | "xs" | "xxs";
 
 // The ui-kit's .touchable variants (styles/ui-kit.css, the morph theme): primary is ink blue with a
 // faint inner highlight and a shadow that deepens on hover; outlined is translucent white on a
 // hairline that darkens on hover; plain is bare text that takes a soft blue fill on hover.
+// outlined-danger is the outlined box drawn in the danger colour: the quieter of two destructive
+// buttons (`danger`, solid, is the confirming press), offered beside other actions.
 // Disabled looks are the morph theme's (`body[data-theme=morph] .touchable.*[disabled]`): never a
 // plain opacity, each variant fades to its own paler colours.
 const BUTTON_VARIANTS: Record<
@@ -314,6 +319,12 @@ const BUTTON_VARIANTS: Record<
     /** A box without a border: the faint hairline drawn for the beam to ride while loading, not
      * laid out, so the button keeps its size. */
     loadingTrack?: TokenName;
+    /** The keyboard focus look (most variants draw none). */
+    focus?: string;
+    /** The fill while `selected`, in place of the soft blue `bg-selection`. */
+    selectedBox?: string;
+    /** The text and icon colour while `selected`, in place of `ink`. */
+    selectedText?: TokenName;
   }
 > = {
   primary: {
@@ -382,7 +393,47 @@ const BUTTON_VARIANTS: Record<
     loadingBox: "bg-transparent",
     loadingTrack: "danger-disabled-line",
   },
+  // The outlined box (its translucent fill, 1pt hairline, corners, shadow and sizes) in the danger
+  // colour: a red hairline and red text. Hover and keyboard focus take the soft red tint of the
+  // close strip and a deeper hairline (not the neutral white); a press deepens the tint a little;
+  // selected is a deeper tint with red text. The tints stay light enough for the red text to keep
+  // 4.5:1 at rest, hovered, focused and selected, in either appearance (a press dips no lower than
+  // the solid danger button's hover). Disabled fades to the danger button's own pale reds; loading
+  // keeps that disabled look, as outlined does, with the red beam riding the hairline.
+  "outlined-danger": {
+    box: "bg-outline-bg border border-danger/45 hover:bg-close hover:border-danger/70 disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line",
+    text: "danger",
+    textClass: "text-danger group-disabled:text-danger-disabled-text",
+    disabledText: "danger-disabled-text",
+    press: "group-active:bg-danger/4",
+    focus: "focus:bg-close focus:border-danger/70",
+    // Hover and focus keep the deeper tint on a selected button (their own lighter one would read as off).
+    selectedBox: "bg-danger/12 border-danger/70 hover:bg-danger/12 focus:bg-danger/12",
+    selectedText: "danger",
+    beam: "red",
+    shadow: [
+      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
+      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
+    ],
+  },
 };
+
+/** A Button variant's classes and colours, by state (the look the Button draws; for tests and probes). */
+export function buttonVariantLook(variant: ButtonVariant = "primary") {
+  const v = BUTTON_VARIANTS[variant];
+  return {
+    box: v.box,
+    text: v.text,
+    textClass: v.textClass,
+    disabledText: v.disabledText,
+    press: v.press,
+    focus: v.focus ?? "",
+    selectedBox: v.selectedBox ?? "bg-selection",
+    selectedText: v.selectedText ?? ("ink" as TokenName),
+    beam: v.beam,
+    loading: busyLook(variant),
+  };
+}
 
 // The ui-kit's .q-button sizes: md 44, sm 38, xs 32, xxs 24 points tall; 0.8rem side padding
 // (1rem at md); text 14, 14, 12 and 11.2; a 16pt icon 8pt before the label. Corners: the
@@ -402,7 +453,8 @@ export function buttonCorners(size: ButtonSize = "sm"): { radius: number; corner
 }
 
 export interface ButtonProps {
-  /** primary (the default commit), outlined, plain (quiet), danger, highlight, ghost-danger. */
+  /** primary (the default commit), outlined, plain (quiet), danger, highlight, ghost-danger,
+   * outlined-danger (the quieter destructive action, beside others; `danger` confirms). */
   variant?: ButtonVariant;
   /** md 44, sm 38 (default), xs 32, xxs 24 points tall, as the Vue console's AppButton sizes. */
   size?: ButtonSize;
@@ -451,6 +503,8 @@ const wrapBox = (box: string) => `${box.replace(/(^|\s)h-/, "$1min-h-")} py-2`;
 const ALIGN_SELF = { start: "self-start", center: "self-center", end: "self-end", stretch: "self-stretch", auto: "self-auto" } as const;
 
 const LOADING_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink", danger: "text-danger", "warn-dark": "text-warn-dark" };
+/** A selected button's text colour classes. */
+const SELECTED_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink", danger: "text-danger" };
 
 /**
  * The busy state's beam (design/ui-refresh.html §6) for any control drawn as a button `variant`:
@@ -489,8 +543,13 @@ export const CIRCLE_BUTTON_SIZES = { md: 38, sm: 32 } as const;
 export type CircleButtonSize = keyof typeof CIRCLE_BUTTON_SIZES;
 /** `plain`: bare, the plain button's fill on hover and press; `outlined`: a hairline ring; `primary`:
  * filled ink; `danger`: filled red (the danger button's), lighter on hover; `close`: a dialog's
- * close button, the soft red tint of the close strip it replaced, deeper on hover. */
-export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger" | "close";
+ * close button, the soft red tint of the close strip it replaced, deeper on hover;
+ * `outlined-danger`: the outlined-danger button's red ring and red glyph, the red tint on hover,
+ * focus and press, the danger button's pale reds when disabled. */
+export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger" | "close" | "outlined-danger";
+
+/** Every CircleButton variant, in the order the gallery shows them. */
+export const CIRCLE_BUTTON_VARIANT_NAMES: readonly CircleButtonVariant[] = ["plain", "outlined", "primary", "danger", "close", "outlined-danger"];
 
 /** The fill of a head's round button while it is on (the Topics head's view toggles, the Contacts head's tabs): a blue tint under a blue icon. */
 export const CIRCLE_BUTTON_ON_FILL = "bg-blue/12";
@@ -510,13 +569,17 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
           ? "bg-close hover:bg-close-hover focus:bg-close-hover active:bg-close-hover"
         : options.variant === "outlined"
           ? "border border-line-soft bg-transparent hover:bg-hover active:bg-press"
+        : options.variant === "outlined-danger"
+          ? "border border-danger/45 bg-transparent hover:bg-close hover:border-danger/70 focus:bg-close focus:border-danger/70 active:bg-danger/14 selected:bg-danger/12 selected:border-danger/70 disabled:bg-transparent disabled:border-danger-disabled-line"
           : // The plain button's look (BUTTON_VARIANTS.plain): a fill on hover, a deeper one pressed.
             "hover:bg-hover active:bg-press";
   return `relative ${side} items-center justify-center rounded-full transition-colors duration-[180ms] ${look}`;
 }
 
-/** The glyph's colour on a round button's fill: what is written on that fill, else the plain glyphs'. */
-function circleIconColor(variant?: CircleButtonVariant): TokenName {
+/** The glyph's colour on a round button's fill: what is written on that fill, else the plain glyphs'
+ * (an outlined-danger one's is red, pale while disabled). */
+export function circleIconColor(variant?: CircleButtonVariant, disabled = false): TokenName {
+  if (variant === "outlined-danger") return disabled ? "danger-disabled-text" : "danger";
   return variant === "primary" ? "primary-foreground" : variant === "danger" ? "destructive-foreground" : "subtle";
 }
 
@@ -540,6 +603,7 @@ export function CircleButton(props: {
   testID?: string;
   children?: JSX.Element;
 }) {
+  const circleGlyph = () => props.iconColor ?? circleIconColor(props.variant, !!props.disabled);
   return (
     <TipButton
       onPress={() => props.onPress?.()}
@@ -551,7 +615,17 @@ export function CircleButton(props: {
       testID={props.testID}
       class={`${circleButtonClass({ size: props.size, variant: props.variant })} ${props.class ?? ""}`}
     >
-      <If when={props.children} else={<Icon name={props.icon ?? "PhPlus"} size={props.iconSize ?? 14} color={props.iconColor ?? circleIconColor(props.variant)} />}>
+      <If
+        when={props.children}
+        else={
+          <Icon
+            name={props.icon ?? "PhPlus"}
+            size={props.iconSize ?? 14}
+            color={circleGlyph()}
+            testID={props.testID ? `${props.testID}-glyph.${circleGlyph()}` : undefined}
+          />
+        }
+      >
         {props.children}
       </If>
     </TipButton>
@@ -587,10 +661,11 @@ export function Button(props: ButtonProps) {
   // disabled text with a faint hairline drawn for the beam. The button's size never changes.
   const loadingFill = () => (props.loading ? variant().loadingBox : undefined);
   const loadingText = () => (props.loading ? variant().loadingText : undefined);
+  const selectedText = () => variant().selectedText ?? "ink";
   const iconColor = (): TokenName =>
-    loadingText() ?? (props.disabled || props.loading ? variant().disabledText : props.selected ? "ink" : variant().text);
+    loadingText() ?? (props.disabled || props.loading ? variant().disabledText : props.selected ? selectedText() : variant().text);
   const textClass = () =>
-    loadingText() ? LOADING_TEXT_CLASS[loadingText()!] : props.selected && enabled() ? "text-ink" : variant().textClass;
+    loadingText() ? LOADING_TEXT_CLASS[loadingText()!] : props.selected && enabled() ? SELECTED_TEXT_CLASS[selectedText()] : variant().textClass;
   // A glyph is the whole face: the label is then the button's name, not drawn (ButtonProps.icon).
   const glyphFace = () => !!props.iconOnly || !!props.icon;
   const square = () => !!props.iconOnly || (!!props.icon && !!props.label);
@@ -605,9 +680,9 @@ export function Button(props: ButtonProps) {
       testID={props.testID}
       hitSlop={props.hitSlop}
       tooltip={tip() ? <Tip text={tip()!} /> : undefined}
-      class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} ${size().corners} border-transparent ${loadingFill() ?? variant().box} ${
+      class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} ${size().corners} border-transparent ${loadingFill() ?? variant().box} ${variant().focus ?? ""} ${
         square() && !props.block ? `${size().square} px-0` : props.wrap && !glyphFace() ? wrapBox(size().box) : size().box
-      } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
+      } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? (variant().selectedBox ?? "bg-selection") : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
       onLayout={props.onLayout}
       style={{
         boxShadow: shadow()?.[0],
@@ -631,7 +706,13 @@ export function Button(props: ButtonProps) {
         testID={props.testID ? `${props.testID}-loading` : undefined}
       />
       <If when={props.icon}>
-        <Icon name={props.icon!} size={size().icon} color={iconColor()} onLayout={props.onIconLayout} />
+        <Icon
+          name={props.icon!}
+          size={size().icon}
+          color={iconColor()}
+          testID={props.testID ? `${props.testID}-glyph.${iconColor()}` : undefined}
+          onLayout={props.onIconLayout}
+        />
       </If>
       <If when={props.label && !glyphFace()}>
         <Text
