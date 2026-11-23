@@ -29,14 +29,16 @@ import {
   Tip,
   TipButton,
   Toggle,
+  BUTTON_VARIANT_NAMES,
+  CIRCLE_BUTTON_VARIANT_NAMES,
   type ButtonSize,
   type ButtonVariant,
   type StatusState,
 } from "../../../components/ui";
 import { CONTROL_CORNERS } from "../../../components/corners";
+import type { IconName } from "../../../components/icons";
 import { act, acts, Col, type DemoMap, LONG_TEXT, LONG_WORD, Row, t, useFlag, useText, V, Wide } from "../demo";
 
-const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger"];
 const BUTTON_SIZES: ButtonSize[] = ["md", "sm", "xs", "xxs"];
 /** The solid variants (one finish, components/solidLook.ts), shown at every size. */
 const SOLID_VARIANTS: ButtonVariant[] = ["primary", "danger", "highlight"];
@@ -69,9 +71,10 @@ const MARKDOWN = [
 function ButtonDemo() {
   const busy = useFlag(false);
   const picked = useFlag(false);
+  const pickedDanger = useFlag(true);
   return (
     <Col>
-      <Each of={BUTTON_VARIANTS} key={(variant) => variant}>
+      <Each of={BUTTON_VARIANT_NAMES} key={(variant) => variant}>
         {(variant) => (
           <V l={variant()} row>
             <Button variant={variant()} label={t("action_save")} onPress={() => act("Button", variant())} testID={`uig-button-${variant()}`} />
@@ -105,6 +108,46 @@ function ButtonDemo() {
         <Button variant="plain" icon="PhTrash" title={t("action_delete")} disabled />
         <Button variant="outlined" icon="PhGearSix" title={t("nav_settings")} loading testID="uig-button-icon-busy" />
       </V>
+      <V l="outlined-danger · size md / sm / xs / xxs" row>
+        <Each of={BUTTON_SIZES} key={(size) => size}>
+          {(size) => (
+            <Button
+              variant="outlined-danger"
+              size={size()}
+              label={t("action_delete")}
+              onPress={() => act("Button outlined-danger", size())}
+              testID={`uig-button-outlined-danger-${size()}`}
+            />
+          )}
+        </Each>
+      </V>
+      <V l="outlined-danger · icon md / sm / xs / xxs · disabled · loading" row>
+        <Each of={BUTTON_SIZES} key={(size) => size}>
+          {(size) => (
+            <Button
+              variant="outlined-danger"
+              size={size()}
+              icon="PhTrash"
+              title={t("action_delete")}
+              onPress={() => act("Button outlined-danger icon", size())}
+              testID={`uig-button-outlined-danger-icon-${size()}`}
+            />
+          )}
+        </Each>
+        <Button variant="outlined-danger" size="xs" icon="PhTrash" title={t("action_delete")} disabled />
+        <Button variant="outlined-danger" size="xs" icon="PhTrash" title={t("action_delete")} loading />
+      </V>
+      <V s="selected" l="outlined-danger" row>
+        <Button
+          variant="outlined-danger"
+          label={t("action_delete")}
+          selected={pickedDanger.on()}
+          onPress={pickedDanger.toggle}
+          testID="uig-button-outlined-danger-selected"
+        />
+        <Button variant="outlined-danger" icon="PhTrash" title={t("action_delete")} selected={pickedDanger.on()} onPress={pickedDanger.toggle} />
+        <Button variant="outlined-danger" label={t("action_delete")} selected disabled />
+      </V>
       <V s="selected" row>
         <Button variant="outlined" icon="PhPushPin" title={t("uig_fixture_toggle")} selected={picked.on()} onPress={picked.toggle} testID="uig-button-selected" />
         <Text class="text-xs text-muted-foreground" testID="uig-button-selected-state">{picked.on() ? t("uig_state_on") : t("uig_state_off")}</Text>
@@ -131,21 +174,31 @@ function ButtonDemo() {
   );
 }
 
+/** A round demo button's glyph: close's ×, outlined-danger's bin, else +. */
+const circleGlyph = (variant: string): IconName => (variant === "close" ? "PhX" : variant === "outlined-danger" ? "PhTrash" : "PhPlus");
+
 function CircleButtonDemo() {
   const on = useFlag(true);
   return (
     <Row>
-      <Each of={["plain", "outlined", "primary", "danger", "close"] as const} key={(variant) => variant}>
+      <Each of={CIRCLE_BUTTON_VARIANT_NAMES} key={(variant) => variant}>
         {(variant) => (
           <V l={variant()} row>
-            <CircleButton title={variant()} icon={variant() === "close" ? "PhX" : "PhPlus"} variant={variant()} onPress={() => act("CircleButton", variant())} />
-            <CircleButton title={`${variant()} sm`} icon={variant() === "close" ? "PhX" : "PhPlus"} variant={variant()} size="sm" onPress={() => act("CircleButton", variant())} />
-            <CircleButton title={`${variant()} disabled`} icon={variant() === "close" ? "PhX" : "PhPlus"} variant={variant()} disabled />
+            <CircleButton
+              title={variant()}
+              icon={circleGlyph(variant())}
+              variant={variant()}
+              onPress={() => act("CircleButton", variant())}
+              testID={`uig-circle-${variant()}`}
+            />
+            <CircleButton title={`${variant()} sm`} icon={circleGlyph(variant())} variant={variant()} size="sm" onPress={() => act("CircleButton", variant())} />
+            <CircleButton title={`${variant()} disabled`} icon={circleGlyph(variant())} variant={variant()} disabled />
           </V>
         )}
       </Each>
       <V s="selected" row>
         <CircleButton title={t("uig_fixture_toggle")} icon="PhMicrophone" selected={on.on()} onPress={on.toggle} />
+        <CircleButton title={`outlined-danger ${t("uig_fixture_toggle")}`} icon="PhTrash" variant="outlined-danger" selected={on.on()} onPress={on.toggle} />
       </V>
     </Row>
   );

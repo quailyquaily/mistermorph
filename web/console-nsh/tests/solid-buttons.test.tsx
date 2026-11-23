@@ -142,7 +142,7 @@ test("primary, danger and highlight share one finish in their own colours; the o
     expect(classes(finish.box).filter((c) => c.startsWith("disabled:bg-")).length).toBe(1);
     expect(classes(finish.box).some((c) => /press-light/.test(c))).toBe(false);
   }
-  for (const variant of ["outlined", "plain", "ghost-danger"] as const) expect(buttonVariantFinish(variant).solid).toBeUndefined();
+  for (const variant of ["outlined", "plain", "ghost-danger", "outlined-danger"] as const) expect(buttonVariantFinish(variant).solid).toBeUndefined();
 });
 
 test("filled round buttons take the same fills and a pale look while disabled; the capsule's primary is solid, its danger a pale stop", () => {
@@ -155,7 +155,7 @@ test("filled round buttons take the same fills and a pale look while disabled; t
   expect([circleIconColor("primary"), circleIconColor("primary", true)]).toEqual(["primary-foreground", "on-disabled"]);
   expect([circleIconColor("danger"), circleIconColor("danger", true)]).toEqual(["destructive-foreground", "danger-disabled-text"]);
   // The others are not filled.
-  for (const variant of ["plain", "outlined", "close"] as const) expect(classes(circleButtonClass({ variant })).some((c) => c === "bg-primary" || c === "bg-destructive")).toBe(false);
+  for (const variant of ["plain", "outlined", "close", "outlined-danger"] as const) expect(classes(circleButtonClass({ variant })).some((c) => c === "bg-primary" || c === "bg-destructive")).toBe(false);
 
   const start = capsuleButtonLook("primary", "PhPlay");
   expect(start.solid).toBe("primary");

@@ -255,6 +255,18 @@ test("the controls work on local state, the overlays open and close, and nothing
   await app.press("id:uig-button-icon-danger");
   await app.waitFor("text:Last local action: Button: danger (2 so far)");
   expect(app.count("id:uig-button-selected")).toBe(1);
+  // The outlined danger button sits beside the others, as a text and an icon button, and in every
+  // size; its glyphs are red (their test ids name the tint).
+  await app.press("id:uig-button-outlined-danger");
+  await app.waitFor("text:Last local action: Button: outlined-danger (3 so far)");
+  await app.press("id:uig-button-icon-outlined-danger");
+  await app.waitFor("text:Last local action: Button: outlined-danger (4 so far)");
+  expect(app.count("id:uig-button-icon-outlined-danger-glyph.danger")).toBe(1);
+  for (const size of ["md", "sm", "xs", "xxs"]) {
+    expect(app.count(`id:uig-button-outlined-danger-${size}`)).toBe(1);
+    expect(app.count(`id:uig-button-outlined-danger-icon-${size}-glyph.danger`)).toBe(1);
+  }
+  expect(app.count("id:uig-button-outlined-danger-selected")).toBe(1);
   expect(app.count("label:Sample switch")).toBeGreaterThan(0);
   expect(app.texts()).not.toContain("Sample switch");
   expect(app.shows("id:uig-button-icon-busy-loading")).toBe(true);
