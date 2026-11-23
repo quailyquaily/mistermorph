@@ -14,7 +14,7 @@
 //
 // Every control's name is its accessible name and its tooltip; none draws text.
 import type { JSX, token } from "nsh";
-import { effect, Text, untracked, View } from "nsh";
+import { computed, effect, Text, untracked, View } from "nsh";
 import { BAR_INSET, GlassCapsule, MOBILE_NAV_EXPANDED_HEIGHT, MOBILE_NAV_HEIGHT, mobileNavSlots, NAV_SLOT_MAX } from "../frame/mobileBar";
 import { motionMs } from "../motion/tokens";
 import type { IconName } from "../icons";
@@ -80,6 +80,14 @@ const NAV_LABEL_GAP = 2;
 
 const between = (from: number, to: number, progress: number) => from + (to - from) * progress;
 
+// For tests (tests/mobile-bottom-nav.test.tsx): hears each captioned face the capsule builds, so a
+// test can tell that a glide only restyles the faces it has and never makes them again.
+let faceListener: ((testID: string) => void) | null = null;
+/** Hears every captioned slot face built from now on; `null` stops it. */
+export function probeCapsuleFaces(listener: ((testID: string) => void) | null) {
+  faceListener = listener;
+}
+
 /**
  * The capsule of the phone's navigation: `slots` side by side, none reaching under its neighbour,
  * each NAV_SLOT_MAX wide where a strip `width` wide has room and narrower on a narrow phone; the
@@ -100,6 +108,10 @@ export function CapsuleNav(props: {
   expansion?: CapsuleNavExpansion;
 }) {
   const openness = () => props.expansion?.openness ?? 0;
+  // Whether slots take captions. The caller hands a new `expansion` on every frame of a glide: a
+  // slot's content read the object itself, so each frame made every captioned face (icon, caption
+  // and its text) again; this changes only when captions come or go.
+  const captioned = computed(() => props.expansion !== undefined);
   // Each size's slots (whole points), and the ones shown now, between them while the capsule glides.
   const geometry = () => {
     const count = props.slots.length;
@@ -130,25 +142,28 @@ export function CapsuleNav(props: {
   // A slot's icon with its caption under it; the caption folds away (no height, faded out) in the
   // compact capsule, leaving the icon centred. The slot's accessible name is the button's own, so
   // the caption is hidden from assistive technology (it would be read twice).
-  const face = (slot: CapsuleNavSlot, selected: boolean) => (
-    <View class="items-center" style={{ width: geometry().slot }}>
-      {icon(slot, selected)}
-      <View
-        accessibilityElementsHidden
-        class="self-stretch overflow-hidden"
-        // The caption is gone by half-way down, and comes in over the second half up.
-        style={{ height: between(0, NAV_LABEL_GAP + NAV_LABEL_LINE, openness()), opacity: Math.max(0, openness() * 2 - 1) }}
-        testID={`${slot.testID}-label.${props.expansion?.expanded ? "shown" : "folded"}`}
-      >
-        <Text
-          class={`px-1 text-center text-[11px] font-medium leading-[14px] ${selected ? "text-primary" : "text-muted-foreground"}`}
-          style={{ marginTop: NAV_LABEL_GAP, numberOfLines: 1 }}
+  const face = (slot: CapsuleNavSlot, selected: boolean) => {
+    faceListener?.(slot.testID);
+    return (
+      <View class="items-center" style={{ width: geometry().slot }}>
+        {icon(slot, selected)}
+        <View
+          accessibilityElementsHidden
+          class="self-stretch overflow-hidden"
+          // The caption is gone by half-way down, and comes in over the second half up.
+          style={{ height: between(0, NAV_LABEL_GAP + NAV_LABEL_LINE, openness()), opacity: Math.max(0, openness() * 2 - 1) }}
+          testID={`${slot.testID}-label.${props.expansion?.expanded ? "shown" : "folded"}`}
         >
-          {slot.caption}
-        </Text>
+          <Text
+            class={`px-1 text-center text-[11px] font-medium leading-[14px] ${selected ? "text-primary" : "text-muted-foreground"}`}
+            style={{ marginTop: NAV_LABEL_GAP, numberOfLines: 1 }}
+          >
+            {slot.caption}
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
   return (
     // Glass where the window draws it (lib/glass.ts): the page shows through, blurred; else the
     // card's own fill, opaque (a tint alone left the page's text under the icons).
@@ -186,7 +201,7 @@ export function CapsuleNav(props: {
                 style={{ width: geometry().slot }}
                 onLayout={report(slot().testID)}
               >
-                <If when={slot().glyph} else={props.expansion && slot().caption !== undefined ? face(slot(), selected()) : icon(slot(), selected())}>
+                <If when={slot().glyph} else={captioned() && slot().caption !== undefined ? face(slot(), selected()) : icon(slot(), selected())}>
                   {slot().glyph!()}
                 </If>
               </TipButton>

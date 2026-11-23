@@ -188,6 +188,21 @@ test("the capsule resizes in a short motion, and at once with reduced motion", a
   await still.app.dispose();
 });
 
+test("a resize restyles the captioned slots it has and makes none of them again", async () => {
+  // Each frame of the glide hands the capsule its new openness. The faces (icon, caption, text)
+  // must be the ones it made at first: made again on every frame, the glide did a page's worth of
+  // work per frame and stuttered on a phone.
+  const { app, setCompact } = await openNav(390, 844);
+  const faces = () => JSON.parse((app.texts().find((text) => text.startsWith("faces:")) ?? "faces:{}").slice(6)) as Record<string, number>;
+  const captioned = ["mobile-nav-chat", "mobile-nav-contacts", "mobile-nav-todo", "mobile-nav-more"];
+  await app.waitUntil(() => captioned.every((slot) => faces()[slot] === 1));
+  await setCompact(true);
+  await setCompact(false);
+  await setCompact(true);
+  expect(faces()).toEqual(Object.fromEntries(captioned.map((slot) => [slot, 1])));
+  await app.dispose();
+});
+
 test("a sheet floats above the bar, inset as the bar is, and leaves room above it", () => {
   // A 780pt page whose bar takes 90pt (58 + 8 below + 12 clear + 12 of system bar): the same gap
   // at the sides as above the bar (the room ends with it), 62% of the page at most.
