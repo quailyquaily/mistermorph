@@ -55,3 +55,14 @@ Decisions: capsule danger remains a pale tinted non-destructive stop, intentiona
 Tests: gofmt, go vet ./..., go test ./... PASS (independently rerun by manager); nsh check PASS (independently rerun); required scripts/test.sh PASS, 162 files, 0 failed, chat-attachments passed the runner's solo retry. Pressed state covered structurally and in Chrome because the headless runner cannot hold a press.
 
 Coder visual checks: Chrome gallery Button/CircleButton/Capsule demos and real Jobs Add, delete confirmation and ready composer Send; both palettes at 1x/1.5x/2x, gallery also 390pt/3x. At 1.5x the inner light anti-aliases and one fractionally-positioned gallery edge blurs. Not checked: real-page primary dialog confirm (scratch Jobs run dialog would not open), Android device/emulator, desktop GPUI (no display). Owner should inspect these, and check solid controls beside FT174 outlined danger; both branches touch ui.tsx/theme.json and may conflict when shipped.
+
+
+## factory · review · 2026-11-23 17:00
+head: 4c4febc04b4a606c18d79958378ca8d0a4984c28
+verdict: pass
+notes:
+- Claude Code reviewed all 10 changed files in origin/master...HEAD against the request and plan; no qualifying P0/P1/P2/P3 findings. Base: 5cd8043216b2f750686e103f83b0df1040969da6. Branch merges cleanly with that base; no code changes or commits made.
+- Validation PASS: gofmt (no files listed), go vet ./..., go test ./... (168 packages ok), nsh check with repository-pinned nsh 0.6.0, required scripts/test.sh (162 files, 0 failed). Six parallel failures passed the script's individual retry: chat-voice, dialog-sheet, settings-integrations-channels, settings-page, settings-page-sections and settings-skills-mcp. No installs or manifest changes.
+- Theme contrast verified for all enabled fills: minimum 4.92:1 light and 4.99:1 dark. Tracked worktree clean after review.
+- Review did not render the UI: shadows, focus ring, clipping and device-pixel alignment were inspected in code only; pressed state verified structurally. Android device/emulator and desktop GPUI remain unverified. Android intentionally preserves the documented no-shadow workaround, including no shadow-based keyboard focus ring. Builder's prior Chrome checks are recorded above, not repeated by reviewer.
+- Owner should inspect real-page primary dialog confirmation, Android/desktop, and fractional-DPR hairlines. FT174 also edits ui.tsx/theme.json and may conflict when shipped. Moved review/ → ready/; no merge into master or release performed.
