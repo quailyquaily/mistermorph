@@ -404,8 +404,9 @@ const BUTTON_VARIANTS: Record<
   // close strip and a deeper hairline (not the neutral white); a press deepens the tint a little;
   // selected is a deeper tint with red text. The tints stay light enough for the red text to keep
   // 4.5:1 at rest, hovered, focused and selected, in either appearance (a press, a moment, may dip
-  // a little under it, to no less than 4.35:1). Disabled fades to the danger button's own pale
-  // reds; loading keeps that disabled look, as outlined does, with the red beam riding the hairline.
+  // a little under it in the light one, to no less than 4.35:1). Disabled fades to the danger
+  // button's own pale reds; loading keeps that disabled look, as outlined does, with the red beam
+  // riding the hairline.
   "outlined-danger": {
     box: "bg-outline-bg border border-danger/45 hover:bg-close hover:border-danger/70 disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line",
     text: "danger",
