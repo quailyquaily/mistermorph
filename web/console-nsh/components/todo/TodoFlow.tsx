@@ -1073,8 +1073,24 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       testID="todo-flow"
       onLayout={(event) => viewport.set({ width: event.bounds.size.width, height: event.bounds.size.height })}
     >
-      <Scroll class="flex-1" scrollbar={SCROLLBAR} testID="todo-flow-scroll">
-        <Scroll horizontal scrollbar={SCROLLBAR} testID="todo-flow-scroll-x">
+      {/* Sideways outside, down inside: the outer scroller is the view's own size, so its bar (the
+          one a mouse needs: a wheel only goes down) lies at the view's foot. Nested the other way,
+          the sideways scroller was as tall as the picture and its bar lay below the window. */}
+      <Scroll
+        horizontal
+        class="flex-1"
+        scrollbar={SCROLLBAR}
+        testID="todo-flow-scroll-x"
+        onScroll={eventListener ? (event) => eventListener?.(`scroll-x:${Math.round(event.offset.x)}`) : undefined}
+        {...parts.probe(() => "scroll-x")}
+      >
+        <Scroll
+          scrollbar={SCROLLBAR}
+          style={{ height: viewport().height }}
+          testID="todo-flow-scroll"
+          onScroll={eventListener ? (event) => eventListener?.(`scroll-y:${Math.round(event.offset.y)}`) : undefined}
+          {...parts.probe(() => "scroll-y")}
+        >
           {/* Empty space: a press clears the selection (Escape does for the keyboard). */}
           <View
             role="group"

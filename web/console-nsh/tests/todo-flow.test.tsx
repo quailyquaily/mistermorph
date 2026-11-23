@@ -396,6 +396,38 @@ test("a phone lays the jobs out left to right as the desktop does, and edits not
   expect(calls(app)).toEqual(["open(digest)"]);
 });
 
+/** Where a scroller of the view last said it was, from the view's events (`scroll-x:120`). */
+const lastScroll = (app: App, axis: "x" | "y") => {
+  const seen = events(app).filter((event) => event.name.startsWith(`scroll-${axis}:`));
+  return seen.length ? Number(seen[seen.length - 1].name.split(":")[1]) : 0;
+};
+
+test("on a phone a picture wider and taller than the window scrolls both ways, its sideways bar inside the window", async () => {
+  const app = await openFlow({ width: 390, platform: "android" });
+  await app.press("id:set-forty");
+  await app.waitFor("id:todo-flow-job-j39");
+  await app.waitUntil(() => !!frames(app)["scroll-x"] && !!frames(app)["scroll-y"] && !!frames(app).canvas);
+  const all = frames(app);
+  // The picture is larger than the window both ways.
+  expect(all.canvas.w).toBeGreaterThan(390);
+  expect(all.canvas.h).toBeGreaterThan(900);
+  // The sideways scroller is the view's own size, so its bar (at its foot) is on screen: nested
+  // inside the scroller that goes down, it was as tall as the picture and its bar lay below the
+  // window, out of a mouse's reach. The scroller that goes down is inside it, as wide as the picture.
+  expect(all["scroll-x"].w).toBe(390);
+  expect(all["scroll-x"].y + all["scroll-x"].h).toBeLessThanOrEqual(900);
+  expect(all["scroll-y"].h).toBe(all["scroll-x"].h);
+  expect(all["scroll-y"].w).toBeGreaterThanOrEqual(all.canvas.w - 4);
+  expect(app.count("id:todo-flow-scroll-x >> id:todo-flow-scroll")).toBe(1);
+  // A finger moves the picture sideways and down, each drag along its own axis.
+  await app.drag("id:todo-flow-job-j0", { x: -240 });
+  await app.waitUntil(() => lastScroll(app, "x") > 150);
+  expect(lastScroll(app, "y")).toBe(0);
+  await app.drag("id:todo-flow-ground", { y: -240 });
+  await app.waitUntil(() => lastScroll(app, "y") > 150);
+  expect(lastScroll(app, "x")).toBeGreaterThan(150);
+});
+
 const overlap = (a: FlowBox, b: FlowBox) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 for (const item of [
