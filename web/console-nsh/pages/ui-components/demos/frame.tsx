@@ -1,16 +1,21 @@
 // Gallery demos: the navigation's and the frame's parts (components/frame) and the Contacts page's
 // cards (pages/contacts), with stand-in agents, pages and people. Choosing an agent or a page here
 // only notes the action: nothing navigates and no agent is selected.
-import { signal, Text, View } from "nsh";
-import { AgentAvatar, AgentList, AgentPicker, AgentSwitcher, ConnectionMark } from "../../../components/frame/AgentSwitcher";
-import { NavLink, NavList } from "../../../components/frame/Sidebar";
-import { NAV_ITEMS_META } from "../../../lib/navOrder";
+import { signal, Text, token, View } from "nsh";
+import { AgentSwitcher } from "../../../components/frame/AgentSwitcher";
 import defaultEndpointAvatar from "../../../assets/images/app_logo_current.svg";
-import type { EndpointItem, NavItem } from "../../../lib/shell";
-import { CARD_HEIGHT, ChannelMark, COMPACT_CARD_HEIGHT, ContactCard, KindAvatar, type LibraryGeometry } from "../../contacts/ContactCard";
-import { ContactKindTabs } from "../../contacts/ContactKindTabs";
-import type { ContactKind } from "../../contacts/contact-format";
-import { act, Col, type DemoMap, LONG_TEXT, Row, t, V } from "../demo";
+import type { EndpointItem } from "../../../lib/shell";
+import { KindAvatar } from "../../contacts/ContactCard";
+import { CAPSULE_COMPACT_SIZE, CapsuleButton, capsuleButtonLook, CapsuleNav, CapsuleToolbar, capsuleToolbarSize } from "../../../components/shared/CapsuleBar";
+import { type HeadTab, HeadTabs, HeadTabsRule, headTabsSagCenter } from "../../../components/shared/HeadTabs";
+import { act, Col, type DemoMap, LONG_TEXT, Row, t, useFlag, V } from "../demo";
+
+type HeadView = "list" | "calendar" | "flow";
+const HEAD_VIEWS: HeadTab<HeadView>[] = [
+  { id: "list", icon: "PhListBullets", label: "List" },
+  { id: "calendar", icon: "PhCalendarBlank", label: "Calendar" },
+  { id: "flow", icon: "PhGitFork", label: "Flow" },
+];
 
 const AGENTS: EndpointItem[] = [
   { id: "ep_alpha", value: "ep_alpha", title: "Morph", image: defaultEndpointAvatar, connected: true },
@@ -18,14 +23,6 @@ const AGENTS: EndpointItem[] = [
   { id: "ep_long", value: "ep_long", title: LONG_TEXT, image: defaultEndpointAvatar, connected: true },
   { id: "ep_off", value: "ep_off", title: "Sleepy", image: defaultEndpointAvatar, connected: false },
 ];
-
-/** The navigation's pages under addresses that open nothing; the gallery's own address is the active one. */
-const navItems = (): NavItem[] =>
-  NAV_ITEMS_META.map((item, index) =>
-    "separator" in item
-      ? { id: item.id, pagePath: "", title: "", icon: "", separator: true }
-      : { id: index === 0 ? "/ui-components" : `/ui-components/demo${item.id}`, pagePath: item.id, title: t(item.titleKey), icon: item.icon },
-  );
 
 function SwitcherDemo() {
   const selected = signal("ep_alpha");
@@ -56,56 +53,6 @@ function SwitcherDemo() {
   );
 }
 
-function PickerDemo() {
-  const selected = signal("ep_beta");
-  return (
-    <Row>
-      <V l="AgentPicker" row>
-        <AgentPicker
-          items={AGENTS}
-          selectedValue={selected()}
-          onSelect={(item) => {
-            selected.set(item.value);
-            act("AgentPicker", item.value);
-          }}
-          onOverview={() => act("AgentPicker", "overview")}
-          trigger={(state) => (
-            <View class={`flex-row items-center gap-2 rounded-(--radius) border px-3 py-2 ${state.open ? "border-blue" : "border-line"}`}>
-              <AgentAvatar image={defaultEndpointAvatar} size={20} />
-              <Text class="text-sm text-foreground">{AGENTS.find((item) => item.value === selected())?.title ?? ""}</Text>
-            </View>
-          )}
-          accessibilityLabel={t("endpoint_switcher_label")}
-          placement="bottom"
-          align="start"
-          testID="uig-agent-picker"
-          partID="uig-agent-picker"
-          optionPrefix="uig-agent-picker-option-"
-          overviewTestID="uig-agent-picker-overview"
-        />
-      </V>
-      <V l="AgentList" class="w-72">
-        <View class="rounded-(--radius) border border-line-faint">
-          <AgentList
-            items={AGENTS}
-            selectedValue={selected()}
-            onSelect={(item) => {
-              selected.set(item.value);
-              act("AgentList", item.value);
-            }}
-            onOverview={() => act("AgentList", "overview")}
-            open
-            maxHeight={260}
-            partID="uig-agent-list"
-            optionPrefix="uig-agent-list-option-"
-            overviewTestID="uig-agent-list-overview"
-          />
-        </View>
-      </V>
-    </Row>
-  );
-}
-
 const PEOPLE = [
   { contact_id: "tg:1001", kind: "human", status: "active", nickname: "Ada Lovelace", channel: "telegram", tg_username: "ada" },
   { contact_id: "slack:T1:U2", kind: "human", status: "inactive", nickname: LONG_TEXT, channel: "slack" },
@@ -114,90 +61,8 @@ const PEOPLE = [
   { contact_id: "tg:1002", kind: "human", status: "active", channel: "telegram" },
 ];
 
-function CardsDemo(props: { compact: boolean }) {
-  const selected = signal("tg:1001");
-  const geometry: LibraryGeometry = props.compact
-    ? { columns: 3, cell: 104, pad: 0, gap: 8, height: COMPACT_CARD_HEIGHT, compact: true }
-    : { columns: 3, cell: 168, pad: 0, gap: 12, height: CARD_HEIGHT, compact: false };
-  const places = new Map<string, { index: number; geometry: LibraryGeometry }>();
-  return (
-    <View class="flex-row flex-wrap" style={{ gap: geometry.gap }}>
-      <Each of={PEOPLE} key={(item) => item.contact_id}>
-        {(item) => (
-          <View style={{ width: geometry.cell, height: geometry.height }}>
-            <ContactCard
-              item={item()}
-              index={0}
-              geometry={{ ...geometry, columns: 1 }}
-              motion={() => null}
-              places={places}
-              selected={selected() === item().contact_id}
-              leaving={false}
-              onPress={() => {
-                selected.set(item().contact_id);
-                act("ContactCard", item().contact_id);
-              }}
-            />
-          </View>
-        )}
-      </Each>
-    </View>
-  );
-}
-
 export const FRAME_DEMOS: DemoMap = {
   AgentSwitcher: { render: () => <SwitcherDemo /> },
-  AgentPicker: { render: () => <PickerDemo /> },
-  AgentAvatar: {
-    render: () => (
-      <V l="size 20 / 32 / 48 · dim" row>
-        <AgentAvatar image={defaultEndpointAvatar} size={20} />
-        <AgentAvatar image={defaultEndpointAvatar} size={32} />
-        <AgentAvatar image={defaultEndpointAvatar} size={48} />
-        <AgentAvatar image={defaultEndpointAvatar} size={48} dim />
-      </V>
-    ),
-  },
-  ConnectionMark: {
-    render: () => (
-      <Row>
-        <V s="on" row><ConnectionMark online /></V>
-        <V s="off" row><ConnectionMark online={false} /></V>
-      </Row>
-    ),
-  },
-  NavList: {
-    render: () => (
-      <Row>
-        <V s="default" class="w-52">
-          <View class="rounded-(--radius) border border-line-faint bg-nav py-2">
-            <NavList items={navItems()} onNavigate={(item) => act("NavList", item.pagePath)} testPrefix="uig-nav" />
-          </View>
-        </V>
-        <V l="collapsed" class="w-14">
-          <View class="rounded-(--radius) border border-line-faint bg-nav py-2">
-            <NavList items={navItems()} collapsed onNavigate={(item) => act("NavList", item.pagePath)} testPrefix="uig-nav-collapsed" />
-          </View>
-        </V>
-        <V l="mobile" class="w-64">
-          <View class="rounded-(--radius) border border-line-faint bg-card py-2">
-            <NavList items={navItems()} mobile onNavigate={(item) => act("NavList", item.pagePath)} testPrefix="uig-nav-mobile" />
-          </View>
-        </V>
-      </Row>
-    ),
-    wide: true,
-  },
-  NavLink: {
-    render: () => (
-      <Row>
-        <V s="selected" class="w-52"><NavLink item={navItems()[0]} onPress={() => act("NavLink", "active")} /></V>
-        <V s="default" class="w-52"><NavLink item={navItems()[1]} onPress={() => act("NavLink", "idle")} /></V>
-        <V l="collapsed" class="w-14"><NavLink item={navItems()[1]} collapsed onPress={() => act("NavLink", "collapsed")} /></V>
-        <V s="long" class="w-52"><NavLink item={{ ...navItems()[2], title: LONG_TEXT }} onPress={() => act("NavLink", "long")} /></V>
-      </Row>
-    ),
-  },
   KindAvatar: {
     render: () => (
       <Row>
@@ -207,32 +72,101 @@ export const FRAME_DEMOS: DemoMap = {
       </Row>
     ),
   },
-  ChannelMark: {
-    render: () => (
-      <V s="default" row>
-        <Each of={["telegram", "slack", "line", "lark", "wechat", "x", "console", "unknown"]} key={(channel) => channel}>
-          {(channel) => <ChannelMark channel={channel()} size={18} />}
-        </Each>
-      </V>
-    ),
-  },
-  ContactCard: {
-    render: () => (
-      <Col>
-        <V s="default"><CardsDemo compact={false} /></V>
-        <V l="compact"><CardsDemo compact /></V>
-      </Col>
-    ),
-    wide: true,
-  },
-  ContactKindTabs: {
+  CapsuleNav: {
     render: () => {
-      const kind = signal<ContactKind>("human");
+      const page = signal("chat");
+      const slots = [
+        { id: "chat", label: "Topics", icon: "PhChats" as const, testID: "uig-capsulenav-chat" },
+        { id: "contacts", label: "Contacts", icon: "PhUsers" as const, testID: "uig-capsulenav-contacts" },
+        { id: "todo", label: "Jobs", icon: "PhListChecks" as const, testID: "uig-capsulenav-todo" },
+        { id: "more", label: "More", icon: "PhSquaresFour" as const, testID: "uig-capsulenav-more" },
+      ];
+      const pick = (id: string) => {
+        page.set(id);
+        act("CapsuleNav", id);
+      };
       return (
         <Row>
-          <V s="default" row><ContactKindTabs value={kind()} onChange={(next) => kind.set(next)} mobile={false} /></V>
-          <V l="mobile" row><ContactKindTabs value={kind()} onChange={(next) => kind.set(next)} mobile /></V>
-          <Text class="self-center text-xs text-muted-foreground" testID="uig-kind-echo">{t("uig_fixture_echo", { value: kind() })}</Text>
+          <V s="default"><CapsuleNav slots={slots} active={page()} onPress={pick} width={390} testID="uig-capsulenav" /></V>
+          <V l="narrow"><CapsuleNav slots={slots} active={page()} onPress={pick} width={200} testID="uig-capsulenav-narrow" /></V>
+        </Row>
+      );
+    },
+    wide: true,
+  },
+  CapsuleToolbar: {
+    render: () => {
+      const running = useFlag(false);
+      const buttons = (compact: boolean, prefix: string) => (
+        <>
+          <CapsuleButton
+            look={capsuleButtonLook(running.on() ? "danger" : "primary", running.on() ? "PhStop" : "PhPlay")}
+            label={running.on() ? "Stop" : "Start"}
+            size={capsuleToolbarSize(compact)}
+            testID={`${prefix}-toggle`}
+            onPress={() => {
+              running.toggle();
+              act("CapsuleToolbar", running.on() ? "start" : "stop");
+            }}
+          />
+          <CapsuleButton look={capsuleButtonLook("quiet", "PhChat")} label="Open topic" size={capsuleToolbarSize(compact)} testID={`${prefix}-topic`} onPress={() => act("CapsuleToolbar", "topic")} />
+        </>
+      );
+      return (
+        <Row>
+          <V l="floating"><CapsuleToolbar floating label="Sample toolbar" testID="uig-capsuletoolbar">{buttons(false, "uig-capsuletoolbar")}</CapsuleToolbar></V>
+          <V l="floating · compact"><CapsuleToolbar floating compact label="Sample toolbar" testID="uig-capsuletoolbar-fc">{buttons(true, "uig-capsuletoolbar-fc")}</CapsuleToolbar></V>
+          <V l="set in · compact"><CapsuleToolbar compact label="Sample toolbar" testID="uig-capsuletoolbar-c">{buttons(true, "uig-capsuletoolbar-c")}</CapsuleToolbar></V>
+        </Row>
+      );
+    },
+    wide: true,
+  },
+  CapsuleButton: {
+    render: () => (
+      <Col>
+        <Each of={["primary", "danger", "quiet"] as const}>
+          {(variant) => {
+            const glyph = variant() === "primary" ? "PhPlay" : variant() === "danger" ? "PhStop" : "PhChat";
+            return (
+              <V l={variant()} row>
+                <CapsuleButton look={capsuleButtonLook(variant(), glyph)} label={variant()} testID={`uig-capsulebutton-${variant()}`} onPress={() => act("CapsuleButton", variant())} />
+                <CapsuleButton look={capsuleButtonLook(variant(), glyph, { busy: true })} label={`${variant()} busy`} busy testID={`uig-capsulebutton-${variant()}-busy`} />
+                <CapsuleButton look={capsuleButtonLook(variant(), glyph, { disabled: true })} label={`${variant()} disabled`} disabled testID={`uig-capsulebutton-${variant()}-disabled`} />
+                <CapsuleButton look={capsuleButtonLook(variant(), glyph)} label={`${variant()} compact`} size={CAPSULE_COMPACT_SIZE} testID={`uig-capsulebutton-${variant()}-compact`} onPress={() => act("CapsuleButton", variant())} />
+              </V>
+            );
+          }}
+        </Each>
+      </Col>
+    ),
+  },
+  HeadTabs: {
+    render: () => {
+      const view = signal<HeadView>("list");
+      const index = () => HEAD_VIEWS.findIndex((tab) => tab.id === view());
+      // A head as a page draws it: its row ends with the tabs, and its hairline dips under the current one.
+      const Head = (headProps: { mobile: boolean }) => {
+        const width = signal(0);
+        return (
+          <View
+            class="relative z-10 w-64 flex-row items-center justify-end border-b border-transparent px-3"
+            style={{ height: 57 }}
+            onLayout={(event) => width.set(event.bounds.size.width)}
+          >
+            <HeadTabs tabs={HEAD_VIEWS} value={view()} onChange={(next) => view.set(next)} mobile={headProps.mobile} name={headProps.mobile ? "uig-headtab-phone" : "uig-headtab"} />
+            <HeadTabsRule
+              center={() => headTabsSagCenter(index(), headProps.mobile, { count: HEAD_VIEWS.length, width: width(), end: 12 })}
+              color={String(token("line-soft"))}
+            />
+          </View>
+        );
+      };
+      return (
+        <Row>
+          <V s="default"><Head mobile={false} /></V>
+          <V l="mobile"><Head mobile /></V>
+          <Text class="self-center text-xs text-muted-foreground" testID="uig-headtabs-echo">{t("uig_fixture_echo", { value: view() })}</Text>
         </Row>
       );
     },

@@ -5,12 +5,9 @@ import {
   BackButton,
   Button,
   BusyBeam,
-  Card,
-  CheckboxField,
   CircleButton,
   Divider,
   DropdownMenu,
-  EmptyState,
   Fab,
   Heading,
   Icon,
@@ -36,7 +33,6 @@ import {
   type ButtonVariant,
   type StatusState,
 } from "../../../components/ui";
-import { LanguageSelector } from "../../../components/LanguageSelector";
 import { CONTROL_CORNERS } from "../../../components/corners";
 import { act, acts, Col, type DemoMap, LONG_TEXT, LONG_WORD, Row, t, useFlag, useText, V, Wide } from "../demo";
 
@@ -85,15 +81,15 @@ function ButtonDemo() {
       </Each>
       <V l="size md / sm / xs / xxs" row>
         <Each of={BUTTON_SIZES} key={(size) => size}>
-          {(size) => <Button variant="outlined" size={size()} label={t("action_refresh")} onPress={() => act("Button size", size())} />}
+          {(size) => <Button variant="outlined" size={size()} label={t("action_save")} onPress={() => act("Button size", size())} />}
         </Each>
       </V>
       <V l="icon" row>
         <Each of={BUTTON_SIZES} key={(size) => size}>
-          {(size) => <Button variant="outlined" size={size()} icon="PhArrowClockwise" title={t("action_refresh")} onPress={() => act("Button icon", size())} />}
+          {(size) => <Button variant="outlined" size={size()} icon="PhGearSix" title={t("nav_settings")} onPress={() => act("Button icon", size())} />}
         </Each>
         <Button variant="plain" icon="PhTrash" title={t("action_delete")} disabled />
-        <Button variant="outlined" icon="PhArrowClockwise" title={t("action_refresh")} loading testID="uig-button-icon-busy" />
+        <Button variant="outlined" icon="PhGearSix" title={t("nav_settings")} loading testID="uig-button-icon-busy" />
       </V>
       <V s="selected" row>
         <Button variant="outlined" icon="PhPushPin" title={t("uig_fixture_toggle")} selected={picked.on()} onPress={picked.toggle} testID="uig-button-selected" />
@@ -207,28 +203,6 @@ function ToggleDemo() {
       </V>
       <V l="hideLabel" row>
         <Toggle checked={b.on()} onChange={b.set} label={t("uig_fixture_toggle")} hideLabel />
-      </V>
-    </Row>
-  );
-}
-
-function CheckboxDemo() {
-  const a = useFlag(true);
-  const b = useFlag(false);
-  return (
-    <Row>
-      <V s="default">
-        <CheckboxField checked={a.on()} onChange={a.set} label={t("uig_fixture_toggle")} />
-      </V>
-      <V s="long" class="w-full">
-        <Wide><CheckboxField checked={b.on()} onChange={b.set} label={LONG_TEXT} /></Wide>
-      </V>
-      <V l="indeterminate">
-        <CheckboxField checked={false} indeterminate label={t("uig_fixture_toggle")} />
-      </V>
-      <V s="disabled">
-        <CheckboxField checked label={t("uig_fixture_toggle")} disabled />
-        <CheckboxField checked={false} label={t("uig_fixture_toggle")} disabled />
       </V>
     </Row>
   );
@@ -353,7 +327,7 @@ function SectionDemo() {
               variant={variant()}
               title={t("uig_fixture_title")}
               meta={t("uig_fixture_count_many", { count: 12 })}
-              actions={<Button variant="plain" size="xs" label={t("action_refresh")} onPress={() => act("Section", variant())} />}
+              actions={<Button variant="plain" size="xs" label={t("action_save")} onPress={() => act("Section", variant())} />}
             >
               <Muted>{LONG_TEXT}</Muted>
             </Section>
@@ -463,17 +437,9 @@ export const CONTROL_DEMOS: DemoMap = {
   },
   TextField: { render: () => <TextFieldDemo />, wide: true },
   Toggle: { render: () => <ToggleDemo /> },
-  CheckboxField: { render: () => <CheckboxDemo /> },
   SelectField: { render: () => <SelectDemo /> },
   DropdownMenu: { render: () => <MenuDemo /> },
   Tabs: { render: () => <TabsDemo /> },
-  LanguageSelector: {
-    render: () => (
-      <V s="default" row>
-        <LanguageSelector />
-      </V>
-    ),
-  },
   Icon: {
     render: () => (
       <Row>
@@ -520,28 +486,6 @@ export const CONTROL_DEMOS: DemoMap = {
       </V>
     ),
   },
-  Badge: {
-    render: () => (
-      <Row>
-        <Each of={TONES} key={(tone) => tone}>
-          {(tone) => (
-            <V l={tone()} row>
-              <Badge tone={tone()} label={t("uig_fixture_count_many", { count: 12 })} />
-            </V>
-          )}
-        </Each>
-        <V s="long" class="w-full">
-          <Wide><Badge tone="info" label={LONG_TEXT} /></Wide>
-        </V>
-        <V l="children" row>
-          <Badge tone="ok">
-            <Icon name="PhCheck" size={11} color="ok" />
-            <Text class="text-xs text-ok">{t("uig_fixture_count_one")}</Text>
-          </Badge>
-        </V>
-      </Row>
-    ),
-  },
   Kicker: {
     render: () => (
       <Col>
@@ -551,24 +495,6 @@ export const CONTROL_DEMOS: DemoMap = {
         <V l="right">
           <Kicker right={<Badge tone="info" label="12" />}>{t("uig_fixture_title")}</Kicker>
         </V>
-      </Col>
-    ),
-  },
-  Heading: {
-    render: () => (
-      <Col>
-        <V l="level 1"><Heading level={1}>{t("uig_fixture_title")}</Heading></V>
-        <V l="level 2"><Heading level={2}>{t("uig_fixture_title")}</Heading></V>
-        <V l="level 3"><Heading level={3}>{t("uig_fixture_title")}</Heading></V>
-        <V s="long"><Heading level={2}>{LONG_TEXT}</Heading></V>
-      </Col>
-    ),
-  },
-  Muted: {
-    render: () => (
-      <Col>
-        <V s="default"><Muted>{t("uig_fixture_hint")}</Muted></V>
-        <V s="long" l="numberOfLines=2"><Muted numberOfLines={2}>{`${LONG_TEXT} ${LONG_TEXT}`}</Muted></V>
       </Col>
     ),
   },
@@ -582,7 +508,7 @@ export const CONTROL_DEMOS: DemoMap = {
     ),
     wide: true,
   },
-  "Divider-components-ui": {
+  Divider: {
     render: () => (
       <Row>
         <V l="horizontal" class="w-48"><Divider /></V>
@@ -590,54 +516,12 @@ export const CONTROL_DEMOS: DemoMap = {
       </Row>
     ),
   },
-  Card: {
-    render: () => (
-      <Row>
-        <V s="default" class="w-64">
-          <Card><Text class="text-sm text-foreground">{t("uig_fixture_hint")}</Text></Card>
-        </V>
-        <V l="onPress" class="w-64">
-          <Card onPress={() => act("Card")} testID="uig-card-press"><Text class="text-sm text-foreground">{t("uig_fixture_press")}</Text></Card>
-        </V>
-        <V s="long" class="w-64">
-          <Card><Text class="text-sm text-foreground">{LONG_TEXT}</Text><Text class="text-sm text-foreground">{LONG_WORD}</Text></Card>
-        </V>
-        <V l="controls on a card" class="w-64">
-          <Card class="gap-3 p-3" testID="uig-card-controls">
-            <TextField value="Morph" size="sm" accessibilityLabel={t("uig_fixture_name")} />
-            <Toggle checked label={t("uig_fixture_toggle")} />
-            <View class="flex-row gap-2">
-              <Button label={t("uig_fixture_press")} size="xs" onPress={() => act("Card", "primary")} />
-              <Button label={t("uig_fixture_press")} size="xs" variant="outlined" onPress={() => act("Card", "outlined")} />
-            </View>
-          </Card>
-        </V>
-      </Row>
-    ),
-  },
   Section: { render: () => <SectionDemo />, wide: true },
-  "Skeleton-components-ui": {
+  Skeleton: {
     render: () => (
       <Row>
         <V s="loading" l="rows=3" class="w-64"><Skeleton rows={3} label={t("msg_loading")} /></V>
         <V s="loading" l="rows=6" class="w-64"><Skeleton rows={6} /></V>
-      </Row>
-    ),
-  },
-  EmptyState: {
-    render: () => (
-      <Row>
-        <V s="empty" class="w-72">
-          <EmptyState title={t("uig_fixture_empty_title")} text={t("uig_fixture_empty_text")} icon="PhTray" />
-        </V>
-        <V s="empty" l="action" class="w-72">
-          <EmptyState
-            title={t("uig_fixture_empty_title")}
-            text={LONG_TEXT}
-            icon="PhMagnifyingGlass"
-            action={<Button variant="outlined" size="xs" label={t("uig_fixture_reset")} onPress={() => act("EmptyState")} />}
-          />
-        </V>
       </Row>
     ),
   },
@@ -657,7 +541,7 @@ export const CONTROL_DEMOS: DemoMap = {
           <View class="border border-line-faint">
             <PageBar
               title={t("uig_fixture_title")}
-              actions={<Button variant="outlined" size="sm" label={t("action_refresh")} onPress={() => act("PageBar")} />}
+              actions={<Button variant="outlined" size="sm" label={t("action_save")} onPress={() => act("PageBar")} />}
             />
           </View>
         </V>

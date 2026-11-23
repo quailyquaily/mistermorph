@@ -8,117 +8,71 @@
 // capsule, never inside it, and the capsule always holds the same two buttons (disabled while they
 // cannot act). The state is the chat's (components/chat/todoJob.ts); the props here are plain values
 // so the gallery can show each state.
-import { Text, type token, View } from "nsh";
-import { BusyBeam, busyLook, type ButtonVariant, Icon, Tip, TipButton } from "../ui";
+import { Text, View } from "nsh";
 import type { IconName } from "../icons";
-import { BAR_BELOW, BAR_INSET, GlassCapsule, MOBILE_NAV_HEIGHT, NAV_SLOT_MAX } from "../frame/mobileBar";
+import { BAR_BELOW, BAR_INSET } from "../frame/mobileBar";
+import {
+  CAPSULE_COMPACT_HEIGHT,
+  CAPSULE_COMPACT_INSET,
+  CAPSULE_COMPACT_SIZE,
+  CAPSULE_DANGER_TINT,
+  CAPSULE_FOCUS_RING,
+  CAPSULE_NAV_SIZE,
+  CapsuleButton,
+  type CapsuleButtonLook,
+  capsuleButtonLook,
+  type CapsuleSize,
+  CapsuleToolbar,
+  capsuleToolbarSize,
+} from "../shared/CapsuleBar";
 import { isMobile } from "../../lib/shell";
 import { t } from "./i18n";
 
+// The toolbar is the shared capsule toolbar (components/shared/CapsuleBar.tsx); its measures are
+// kept here under the names this toolbar's callers and tests know them by.
 /** A button's height: the navigation's slot, so the capsule's padding is the same on every side. */
-export const TODO_JOB_BUTTON_HEIGHT = MOBILE_NAV_HEIGHT - BAR_INSET * 2;
+export const TODO_JOB_BUTTON_HEIGHT = CAPSULE_NAV_SIZE.height;
 /** A button's width: the navigation's slot where it has room. */
-export const TODO_JOB_BUTTON_WIDTH = NAV_SLOT_MAX;
+export const TODO_JOB_BUTTON_WIDTH = CAPSULE_NAV_SIZE.width;
 /** The room between the two buttons: the capsule's padding, so every gap round them is the same. */
 export const TODO_JOB_BUTTON_GAP = BAR_INSET;
 /** The glyphs' size: the navigation's. */
-export const TODO_JOB_ICON_SIZE = 24;
+export const TODO_JOB_ICON_SIZE = CAPSULE_NAV_SIZE.icon;
 /** Stop's fill: the theme's danger at this share over the card, opaque (`bg-danger/12` over `bg-card`). */
-export const TODO_JOB_STOP_TINT = 0.12;
-
-type TokenName = Parameters<typeof token>[0];
-
+export const TODO_JOB_STOP_TINT = CAPSULE_DANGER_TINT;
 /** The keyboard focus mark of each button (the console's Button draws none of its own). */
-export const TODO_JOB_FOCUS_RING = "group-focus-visible:border-blue-lighter";
+export const TODO_JOB_FOCUS_RING = CAPSULE_FOCUS_RING;
 
 /** `topic`: the job's topic, the mirror of View Job on the job's own page (TodoTaskEditor). */
 export type TodoJobButtonKind = "start" | "stop" | "view" | "topic";
 
-/** How one of the toolbar's buttons looks in a state (also read by tests and the gallery). */
-export interface TodoJobButtonLook {
-  /** Which look, for test ids: `primary` (Start), `stop`, `quiet` (View Job), `busy`, `disabled`. */
-  look: "primary" | "stop" | "quiet" | "busy" | "disabled";
-  glyph: IconName;
-  filled: boolean;
-  /** The button's own fill, hairline and hover/focus classes. */
-  box: string;
-  /** A layer over the fill, under the glyph (Stop's red tint over its opaque card), or none. */
-  tint?: string;
-  /** The press layer's class. */
-  press: string;
-  /** The glyph's colour. */
-  icon: TokenName;
-  /** The busy beam's variant while busy. */
-  beam: ButtonVariant;
-}
+/** How one of the toolbar's buttons looks in a state: `look` is `primary` (Start), `stop`, `quiet` (View Job), `busy` or `disabled`. */
+export type TodoJobButtonLook = CapsuleButtonLook;
 
 /**
- * The look of `kind` (`start`, `stop`, `view`) while `busy` (its action is under way: the beam runs
- * and it takes no press) or `disabled`. Start is the primary button: white Play on the primary
- * fill. Stop is as solid but red: a red Stop square on an opaque pale-red fill with a red hairline
- * (red on the primary blue would be illegible). View Job is the navigation's idle slot: a muted
- * glyph on no fill, the hover fill under the pointer and the keyboard's focus.
+ * The look of `kind` (`start`, `stop`, `view`, `topic`) while `busy` or `disabled`: Start is the
+ * primary button (a white Play), Stop the danger one (a red Stop square; it stops that run, not the
+ * schedule), View Job and the topic the quiet ones.
  */
 export function todoJobButtonLook(kind: TodoJobButtonKind, state: { busy?: boolean; disabled?: boolean } = {}): TodoJobButtonLook {
-  if (kind === "view" || kind === "topic") {
-    return {
-      look: state.disabled ? "disabled" : "quiet",
-      glyph: kind === "topic" ? "PhChat" : "PhListChecks",
-      filled: false,
-      box: "hover:bg-hover focus:bg-hover disabled:bg-transparent",
-      press: "group-active:bg-press",
-      icon: state.disabled ? "plain-disabled-text" : "muted-foreground",
-      beam: "plain",
-    };
-  }
-  if (kind === "stop") {
-    return {
-      look: state.busy ? "busy" : state.disabled ? "disabled" : "stop",
-      glyph: "PhStop",
-      filled: true,
-      // While busy or disabled the fill stays (the beam rides the hairline); the glyph pales when it cannot act.
-      box: `bg-card border-[0.5px] ${state.disabled && !state.busy ? "border-danger-disabled-line" : "border-danger/35"}`,
-      tint: `bg-danger/12 ${state.disabled || state.busy ? "" : "group-hover:bg-danger/18 group-focus:bg-danger/18"}`,
-      press: "group-active:bg-press",
-      icon: state.disabled && !state.busy ? "danger-disabled-text" : "danger",
-      beam: "danger",
-    };
-  }
-  if (state.busy) {
-    // As the console's primary Button while loading: its soft blue tint, ink glyph and blue beam.
-    const busy = busyLook("primary");
-    return { look: "busy", glyph: "PhPlay", filled: true, box: busy.box, press: "", icon: busy.text, beam: "primary" };
-  }
-  return {
-    look: state.disabled ? "disabled" : "primary",
-    glyph: "PhPlay",
-    filled: true,
-    box: state.disabled
-      ? "bg-primary-disabled border-[0.5px] border-primary-disabled-line"
-      : "bg-primary border-[0.5px] border-primary-line hover:bg-primary-hover focus:bg-primary-hover",
-    press: "group-active:bg-press-light",
-    icon: state.disabled ? "on-disabled" : "primary-foreground",
-    beam: "primary",
-  };
+  const glyph: IconName = kind === "start" ? "PhPlay" : kind === "stop" ? "PhStop" : kind === "topic" ? "PhChat" : "PhListChecks";
+  const look = capsuleButtonLook(kind === "start" ? "primary" : kind === "stop" ? "danger" : "quiet", glyph, state);
+  return look.look === "danger" ? { ...look, look: "stop" } : look;
 }
 
 /** A button's box and glyph, in points. */
-export interface TodoJobButtonSize {
-  width: number;
-  height: number;
-  icon: number;
-}
+export type TodoJobButtonSize = CapsuleSize;
 /** The navigation's slot: the capsule on a phone. */
-export const TODO_JOB_NAV_SIZE: TodoJobButtonSize = { width: TODO_JOB_BUTTON_WIDTH, height: TODO_JOB_BUTTON_HEIGHT, icon: TODO_JOB_ICON_SIZE };
+export const TODO_JOB_NAV_SIZE: TodoJobButtonSize = CAPSULE_NAV_SIZE;
 // On a desktop the toolbar is as tall as a bar's back button (38pt, its hairline included): the
 // same buttons scaled to fit, with the same room all round. The job's own page sets it into its bar.
-export const TODO_JOB_COMPACT_HEIGHT = 38;
-export const TODO_JOB_COMPACT_SIZE: TodoJobButtonSize = { width: 38, height: 30, icon: 16 };
-export const TODO_JOB_COMPACT_INSET = (TODO_JOB_COMPACT_HEIGHT - TODO_JOB_COMPACT_SIZE.height) / 2 - 0.5;
+export const TODO_JOB_COMPACT_HEIGHT = CAPSULE_COMPACT_HEIGHT;
+export const TODO_JOB_COMPACT_SIZE: TodoJobButtonSize = CAPSULE_COMPACT_SIZE;
+export const TODO_JOB_COMPACT_INSET = CAPSULE_COMPACT_INSET;
 
 type LayoutEvent = { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } };
 
-/** One of the toolbar's icon buttons: a navigation slot, its name read out and shown as its tooltip. */
+/** One of the toolbar's icon buttons (the shared `CapsuleButton`, with this toolbar's looks). */
 export function TodoJobButton(props: {
   kind: TodoJobButtonKind;
   label: string;
@@ -131,46 +85,18 @@ export function TodoJobButton(props: {
   onLayout?: (event: LayoutEvent) => void;
   onIconLayout?: (event: LayoutEvent) => void;
 }) {
-  const size = () => props.size ?? TODO_JOB_NAV_SIZE;
-  const look = () => todoJobButtonLook(props.kind, { busy: props.busy, disabled: props.disabled });
-  const enabled = () => !props.disabled && !props.busy;
   return (
-    <TipButton
-      disabled={!enabled()}
-      onPress={() => enabled() && props.onPress?.()}
-      accessibilityLabel={props.label}
-      tooltip={<Tip text={props.label} />}
+    <CapsuleButton
+      look={todoJobButtonLook(props.kind, { busy: props.busy, disabled: props.disabled })}
+      label={props.label}
+      busy={props.busy}
+      disabled={props.disabled}
+      onPress={props.onPress}
       testID={props.testID}
+      size={props.size}
       onLayout={props.onLayout}
-      class={`group relative items-center justify-center overflow-hidden rounded-full border-transparent transition-colors duration-160 ${look().box}`}
-      style={{ width: size().width, height: size().height }}
-    >
-      <If when={look().tint}>
-        <View accessibilityElementsHidden class={`absolute inset-0 transition-colors duration-160 ${look().tint}`} style={{ pointerEvents: "none" }} />
-      </If>
-      <View
-        accessibilityElementsHidden
-        class={`absolute inset-0 transition-colors duration-100 ease-out ${look().press}`}
-        style={{ pointerEvents: "none" }}
-      />
-      {/* The keyboard's focus: a ring inside the pill, plain on the primary fill as on the others. */}
-      <View
-        accessibilityElementsHidden
-        class={`absolute inset-0 rounded-full border-2 border-transparent ${TODO_JOB_FOCUS_RING}`}
-        style={{ pointerEvents: "none" }}
-        testID={`${props.testID}-focus-ring`}
-      />
-      {/* The glyph's test id names what it draws (headless tests have no image or style query). */}
-      <Icon
-        name={look().glyph}
-        filled={look().filled}
-        size={size().icon}
-        color={look().icon}
-        testID={`${props.testID}-icon.${look().glyph}.${look().look}.${look().icon}`}
-        onLayout={props.onIconLayout}
-      />
-      <BusyBeam busy={!!props.busy} variant={look().beam} radius={size().height / 2} testID={`${props.testID}-loading`} />
-    </TipButton>
+      onIconLayout={props.onIconLayout}
+    />
   );
 }
 
@@ -203,8 +129,8 @@ export function TodoJobBar(props: TodoJobBarProps) {
           props.onPartLayout?.(name, { x: bounds.origin.x, y: bounds.origin.y, w: bounds.size.width, h: bounds.size.height })
       : undefined;
   // A phone's capsule is the navigation's; a desktop's is the compact one of the job's page.
-  const size = () => (isMobile() ? TODO_JOB_NAV_SIZE : TODO_JOB_COMPACT_SIZE);
-  const inset = () => (isMobile() ? BAR_INSET : TODO_JOB_COMPACT_INSET);
+  const compact = () => !isMobile();
+  const size = () => capsuleToolbarSize(compact());
   return (
     // The capsule sits as far above the foot as the navigation's does, and on a phone is as tall.
     <View class="w-full items-center gap-2 pt-2" style={{ pointerEvents: "box-none", paddingBottom: BAR_BELOW }} testID="chat-todo-job">
@@ -218,15 +144,7 @@ export function TodoJobBar(props: TodoJobBarProps) {
           {props.note}
         </Text>
       </If>
-      <GlassCapsule
-        testID="chat-todo-job-bar"
-        role="toolbar"
-        accessibilityLabel={t("chat_todo_job_toolbar")}
-        style={{ padding: inset() }}
-        onLayout={report("capsule")}
-      >
-        {/* The slots, the capsule's padding between them as round them. */}
-        <View class="flex-row items-center" style={{ gap: inset(), height: size().height }} onLayout={report("row")}>
+      <CapsuleToolbar floating compact={compact()} label={t("chat_todo_job_toolbar")} testID="chat-todo-job-bar" onLayout={report("capsule")} onRowLayout={report("row")}>
           <TodoJobButton
             kind={props.running ? "stop" : "start"}
             label={props.running ? t("chat_todo_job_stop") : t("chat_todo_job_start")}
@@ -248,8 +166,7 @@ export function TodoJobBar(props: TodoJobBarProps) {
             onLayout={report("view")}
             onIconLayout={report("view-icon")}
           />
-        </View>
-      </GlassCapsule>
+      </CapsuleToolbar>
     </View>
   );
 }

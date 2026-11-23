@@ -1,11 +1,12 @@
 // The UI component gallery (/ui-components, pages/ui-components): a testing page with a route and
-// no navigation entry, guarded as any page, showing every component of the console from synthetic
-// data, in each language, without talking to the console or an agent.
+// no navigation entry, guarded as any page, showing the console's reused UI components from
+// synthetic data, in each language, without talking to the console or an agent.
 import { expect, test } from "nsh/test";
 import { LANGUAGES } from "../components/LanguageSelector";
 import { NAV_ITEMS_META } from "../lib/navOrder";
 import { DEMOS } from "../pages/ui-components/demos";
 import { GALLERY_ENTRIES, GALLERY_GROUPS } from "../pages/ui-components/inventory.js";
+import theme from "../theme.json";
 import { openConsole } from "./harness";
 
 const PATH = "/ui-components";
@@ -100,11 +101,10 @@ test("no navigation leads to the gallery: not the sidebar, not the phone's bar o
   expect(phone.app.texts().some((text) => /UI components/i.test(text))).toBe(false);
 });
 
-test("every inventory entry is on the page: a demo for each component shown, a reason for each that is not", async () => {
-  const demos = GALLERY_ENTRIES.filter((entry) => entry.mode === "demo");
+test("every inventory entry is on the page with its demo, and nothing else is", async () => {
   // The demos and the inventory name the same components.
-  expect(demos.filter((entry) => !DEMOS[entry.id]).map((entry) => entry.id)).toEqual([]);
-  expect(Object.keys(DEMOS).filter((id) => !demos.some((entry) => entry.id === id))).toEqual([]);
+  expect(GALLERY_ENTRIES.filter((entry) => !DEMOS[entry.id]).map((entry) => entry.id)).toEqual([]);
+  expect(Object.keys(DEMOS).filter((id) => !GALLERY_ENTRIES.some((entry) => entry.id === id))).toEqual([]);
   const { app } = await openConsole({ location: PATH });
   await app.waitFor("id:ui-components-page");
   expect(app.shows(`text:${GALLERY_ENTRIES.length} components`)).toBe(true);
@@ -112,19 +112,43 @@ test("every inventory entry is on the page: a demo for each component shown, a r
     expect(app.shows(`id:uig-group-${group.id}`)).toBe(true);
     expect(app.shows(`id:uig-index-${group.id}`)).toBe(true);
   }
-  for (const entry of GALLERY_ENTRIES) {
-    expect(app.shows(`id:${entry.mode === "demo" ? "uig-demo" : "uig-note"}-${entry.id}`)).toBe(true);
-  }
-  // A component that is not mounted says why, and one shown elsewhere says where.
-  expect(app.shows("id:uig-note-Sidebar >> text:Not mounted: part of the app frame, bound to the router and the selected agent; pressing it would leave this page. The NavList demo shows its parts.")).toBe(true);
-  expect(app.shows("id:uig-note-MenuIconTrigger >> text:Shown inside the DropdownMenu demo.")).toBe(true);
-  expect(app.shows("id:uig-note-SidebarEdge >> text:Not mounted: a private part of Sidebar, which is not mounted on this page.")).toBe(true);
+  for (const entry of GALLERY_ENTRIES) expect(app.shows(`id:uig-demo-${entry.id}`)).toBe(true);
+  // Only reused components are listed: a page's own part, a feature's part and the frame are not.
+  for (const id of ["Sidebar", "ChatHistoryItem", "TodoTaskEditor", "SettingsPage"]) expect(app.count(`id:uig-demo-${id}`)).toBe(0);
+  expect(app.count("text:Not mounted here")).toBe(0);
+});
+
+test("the colour scheme is on the page: every token with its value, in the appearance shown, which the page's own switch changes", async () => {
+  const vars = (theme as { cssVars: Record<string, Record<string, string>> }).cssVars;
+  const { app } = await openConsole({ location: PATH });
+  await app.waitFor("id:ui-components-page");
+  // A section of its own in the index: `All` is the components.
+  expect(app.count("id:uig-group-colors")).toBe(0);
+  await app.press("id:uig-index-colors");
+  await app.waitFor("id:uig-group-colors");
+  await app.waitFor("id:uig-group-controls", { state: "gone" });
+  // Every token the two palettes share, each with the light palette's value.
+  const names = Object.keys(vars.light).filter((name) => name in vars.dark);
+  expect(app.shows(`id:uig-index-colors >> text:${names.length}`)).toBe(true);
+  for (const name of names) expect(app.count(`id:uig-color-${name}`)).toBe(1);
+  expect(app.shows(`id:uig-color-primary >> text:${vars.light.primary.toLowerCase()}`)).toBe(true);
+  // Dark is the console's own appearance: the values are the dark palette's, and the choice is kept.
+  await app.press("id:uig-appearance >> text:Dark");
+  await app.waitFor(`id:uig-color-primary >> text:${vars.dark.primary.toLowerCase()}`);
+  expect(app.host.calls().filter((call) => call.name === "morph.kv.set" && (call.data as any)?.key === "mistermorph.colorScheme").map((call) => (call.data as any)?.value).at(-1)).toBe("dark");
+  // The filter by a token's name.
+  await app.type("id:uig-filter", "blue-l");
+  await app.waitFor("id:uig-color-primary", { state: "gone" });
+  expect(app.count("id:uig-color-blue-light")).toBe(1);
+  expect(app.count("id:uig-color-blue-lighter")).toBe(1);
+  await app.press("id:uig-appearance >> text:Light");
+  await app.waitFor(`id:uig-color-blue-light >> text:${vars.light["blue-light"].toLowerCase()}`);
 });
 
 test("only the demos near the visible part of the page are mounted, and scrolling mounts the next ones", async () => {
   const { app } = await openConsole({ location: PATH });
   await app.waitFor("id:ui-components-page");
-  const demos = GALLERY_ENTRIES.filter((entry) => entry.mode === "demo");
+  const demos = GALLERY_ENTRIES;
   const away = () => demos.filter((entry) => app.shows(`id:uig-demo-away-${entry.id}`)).map((entry) => entry.id);
   // The first card is there with its demo; the last section's are cards without one.
   await app.waitFor("id:uig-demo-away-Button", { state: "gone" });
@@ -155,7 +179,7 @@ test("the index shows one section, the filter finds components by name or file, 
   await app.press("id:uig-index-motion");
   await app.waitFor("id:uig-group-controls", { state: "gone" });
   expect(app.shows("id:uig-group-motion")).toBe(true);
-  expect(app.shows("id:uig-demo-RunningMark")).toBe(true);
+  expect(app.shows("id:uig-demo-FadeText")).toBe(true);
   expect(app.shows("id:uig-demo-Button")).toBe(false);
   // A name that is in another section: nothing here, and the way back.
   await app.type("id:uig-filter", "ChatComposer");
@@ -170,8 +194,7 @@ test("the index shows one section, the filter finds components by name or file, 
   await app.type("id:uig-filter", "composer");
   await app.waitFor("id:uig-demo-Button", { state: "gone" });
   expect(app.shows("id:uig-demo-ChatComposer")).toBe(true);
-  expect(app.shows("id:uig-note-ComposerFieldSlot")).toBe(true);
-  const named = GALLERY_ENTRIES.filter((entry) => [entry.name, entry.id, entry.file, entry.via ?? ""].some((text) => text.toLowerCase().includes("composer"))).length;
+  const named = GALLERY_ENTRIES.filter((entry) => [entry.name, entry.id, entry.file].some((text) => text.toLowerCase().includes("composer"))).length;
   expect(app.shows(`text:${named} of ${GALLERY_ENTRIES.length} components`)).toBe(true);
 });
 
@@ -188,25 +211,21 @@ test("the language control is the console's own: every language, the page and th
   await app.waitFor("id:ui-components-page");
   for (const item of LANGUAGES) expect(app.shows(`id:uig-language >> text:${item.label}`)).toBe(true);
   const before = lastLocation(app);
-  // A fixture with a number in it, and a production component's string.
-  const examples = async (badge: string, save: string) => {
-    await find(app, "Badge");
-    expect(app.shows(`id:uig-demo-Badge >> text:${badge}`)).toBe(true);
+  // A production component's string.
+  const examples = async (save: string) => {
     await find(app, "Button");
     expect(app.shows(`id:uig-demo-Button >> text:${save}`)).toBe(true);
     await app.clear("id:uig-filter");
   };
-  // English: the page's own strings, a fixture with a number in it, and a production component's string.
-  await examples("12 items", "Save");
+  // English: the page's own strings and a production component's string.
+  await examples("Save");
   await app.press("id:uig-language >> label:中文");
   await app.waitFor("text:UI 组件");
   expect(app.shows(`text:${GALLERY_ENTRIES.length} 个组件`)).toBe(true);
-  await examples("12 项", "保存");
-  expect(app.shows("id:uig-note-MenuIconTrigger >> text:在 DropdownMenu 的演示中展示。")).toBe(true);
+  await examples("保存");
   await app.press("id:uig-language >> label:日本語");
   await app.waitFor("text:UI コンポーネント");
-  await examples("12 件", "保存");
-  expect(app.shows("id:uig-note-MenuIconTrigger >> text:DropdownMenu のデモの中で表示されます。")).toBe(true);
+  await examples("保存");
   // The same page, still: no navigation, and the choice is the console's saved language.
   expect(lastLocation(app)).toBe(before);
   expect(app.host.calls().filter((call) => call.name === "morph.kv.set" && (call.data as any)?.key === "quail-language").map((call) => (call.data as any)?.value).at(-1)).toBe("ja");
@@ -249,11 +268,8 @@ test("the controls work on local state, the overlays open and close, and nothing
   await find(app, "ProgressBar");
   await app.press("id:uig-progress-more");
   await app.waitFor("text:50% done");
-  await find(app, "SettingsCard");
-  await app.press("id:uig-fold");
-  await app.waitFor("id:uig-fold-body");
 
-  // A dialog, a message, the confirm host and a notice: each opens and closes.
+  // A dialog, a message and a notice: each opens and closes.
   await find(app, "Modal");
   await app.press("id:uig-modal-open-md");
   await app.waitFor("id:uig-modal");
@@ -264,11 +280,6 @@ test("the controls work on local state, the overlays open and close, and nothing
   await app.waitFor("id:uig-message");
   await app.press("id:dialog-action-cancel");
   await app.waitFor("id:uig-message", { state: "gone" });
-  await find(app, "ConfirmHost");
-  await app.press("id:uig-confirm-open");
-  await app.waitFor("text:This dialog is part of the gallery. Its buttons only close it.");
-  await app.press("id:dialog-action-confirm");
-  await app.waitFor("text:Answer: confirmed");
   // The inline notice demos show the same sentence twice already; the notice stack adds one.
   await find(app, "NoticeHost");
   const NOTICE = "A sample warning notice from the gallery.";
@@ -289,70 +300,24 @@ test("the controls work on local state, the overlays open and close, and nothing
   await app.type("id:uig-composer-default >> id:chat-composer-input", "hello from the gallery");
   await app.press("id:uig-composer-default >> id:chat-composer-send");
   await app.waitUntil(() => app.texts().some((text) => text.includes("ChatComposer send: hello from the gallery")));
-  await find(app, "SettingsSaveBar");
-  await app.press("id:uig-savebar-toggle");
-  await app.waitFor("id:settings-save-bar");
-  await app.press("id:settings-save-bar-save");
-  await app.waitUntil(() => app.texts().some((text) => text.includes("SettingsSaveBar: save")));
 
   expect(afterLoad(calls, loaded)).toEqual([]);
   expect(writes(calls)).toEqual([]);
   expect(lastLocation(app)).toBe(PATH);
 });
 
-test("the quiet runs example folds and opens: a line per group, a row per run, a run in full in place", async () => {
-  const { app, calls } = await openConsole({ location: PATH });
-  await app.waitFor("id:ui-components-page");
-  const loaded = calls.length;
-  await find(app, "ChatQuietRuns");
-  // Three groups: eight runs and one run, both folded, and three runs open with one in full.
-  expect(app.count("id:uig-demo-ChatQuietRuns >> id:chat-quiet-runs-line")).toBe(3);
-  expect(app.shows("id:uig-quiet-many >> text:8 runs, nothing to do")).toBe(true);
-  expect(app.shows("id:uig-quiet-one >> text:1 run, nothing to do")).toBe(true);
-  expect(app.shows("id:uig-quiet-open >> text:3 runs, nothing to do")).toBe(true);
-  expect(app.count("id:uig-quiet-many >> id:chat-quiet-run")).toBe(0);
-  expect(app.count("id:uig-quiet-one >> id:chat-quiet-run")).toBe(0);
-  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run")).toBe(3);
-  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run-full")).toBe(1);
-  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run-full >> id:chat-user-bubble")).toBe(1);
-  // The folded group opens to a row per run, without the task's message, and folds again.
-  await app.press("id:uig-quiet-many >> id:chat-quiet-runs-line");
-  await app.waitUntil(() => app.count("id:uig-quiet-many >> id:chat-quiet-run") === 8);
-  expect(app.count("id:uig-quiet-many >> id:chat-user-bubble")).toBe(0);
-  expect(app.count("id:uig-quiet-many >> id:chat-quiet-run-time")).toBe(8);
-  // A row shows its run in full under it; the other groups are as they were.
-  await app.press("id:uig-quiet-many >> id:chat-quiet-run >> nth=0");
-  await app.waitFor("id:uig-quiet-many >> id:chat-quiet-run-full");
-  expect(app.count("id:uig-quiet-many >> id:chat-quiet-run-full >> id:chat-item-agent")).toBe(1);
-  expect(app.count("id:uig-quiet-one >> id:chat-quiet-run")).toBe(0);
-  expect(app.count("id:uig-quiet-open >> id:chat-quiet-run-full")).toBe(1);
-  await app.press("id:uig-quiet-many >> id:chat-quiet-runs-line");
-  await app.waitUntil(() => app.count("id:uig-quiet-many >> id:chat-quiet-run") === 0);
-  // The line by itself: the context notice's row, plain and as a fold's head.
-  await find(app, "ChatNoticeLine");
-  expect(app.shows("id:uig-demo-ChatNoticeLine >> text:Context compacted. Earlier messages were summarized.")).toBe(true);
-  await app.press("id:uig-notice-fold");
-  await app.waitFor("text:Last local action: ChatNoticeLine: open (1 so far)");
-  // In another language the line is the Console's own string.
-  await app.press("id:uig-language >> label:中文");
-  await find(app, "ChatQuietRuns");
-  await app.waitFor("id:uig-quiet-many >> text:8 次运行，无事可做");
-  expect(afterLoad(calls, loaded)).toEqual([]);
-  expect(writes(calls)).toEqual([]);
-});
-
-test("on a phone the gallery is one column inside the window, and its popups are the phone's sheets", async () => {
+test("on a phone the gallery is one column inside the window, and its dialogs open and close", async () => {
   const { app, calls } = await openConsole({ location: PATH, platform: "android" });
   await app.waitFor("id:ui-components-page");
   await app.waitFor("id:uig-demo-Button");
   expect(app.shows("id:mobile-bottom-nav")).toBe(false);
   const loaded = calls.length;
   await app.press("id:uig-index-overlays");
-  await app.waitFor("id:uig-demo-PopupSheet");
-  await app.press("id:uig-popupsheet-open");
-  await app.waitFor("id:uig-popupsheet-close");
-  await app.press("id:uig-popupsheet-close");
-  await app.waitFor("id:uig-popupsheet-close", { state: "gone" });
+  await app.waitFor("id:uig-demo-Modal");
+  await app.press("id:uig-modal-open-md");
+  await app.waitFor("id:uig-modal");
+  await app.press("id:uig-modal-cancel");
+  await app.waitFor("id:uig-modal", { state: "gone" });
   await app.press("id:uig-language >> label:中文");
   await app.waitFor("text:UI 组件");
   expect(afterLoad(calls, loaded)).toEqual([]);

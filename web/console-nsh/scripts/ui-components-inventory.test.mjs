@@ -1,6 +1,10 @@
-// The UI component gallery's inventory against the sources: every component a .tsx file under
-// components/ and pages/ declares (exported or file-private) has an entry in
-// pages/ui-components/inventory.js, and no entry names a component that is gone.
+// The UI component gallery's inventory against the sources. The gallery lists the console's reused
+// UI components (pages/ui-components/inventory.js says what that means); this checks that
+// - every entry names a component its file exports,
+// - every entry is still reused: at least two areas of the console use it (a component of the
+//   shared kit, components/shared/, needs one user: it is reusable by where it is),
+// - the entries and the demos match one to one.
+// It does not ask for every reused component to be listed.
 //   node --test scripts/ui-components-inventory.test.mjs
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -11,64 +15,70 @@ import { GALLERY_ENTRIES, GALLERY_GROUPS } from "../pages/ui-components/inventor
 
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function tsxFiles(dir) {
+/** The console's sources, the gallery's own left out: `[path, text]`. */
+function sources() {
   const found = [];
-  for (const entry of fs.readdirSync(path.join(app, dir), { withFileTypes: true })) {
-    const rel = `${dir}/${entry.name}`;
-    if (entry.isDirectory()) {
-      // The gallery's demos are fixtures around the components, not components of the console.
-      if (rel === "pages/ui-components/demos") continue;
-      found.push(...tsxFiles(rel));
-    } else if (entry.name.endsWith(".tsx") && rel !== "pages/ui-components/demo.tsx") found.push(rel);
-  }
-  return found;
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(path.join(app, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (rel !== "pages/ui-components" && !entry.name.startsWith(".")) walk(rel);
+      } else if (/\.(tsx|ts|js)$/.test(entry.name)) found.push(rel);
+    }
+  };
+  for (const dir of ["components", "pages", "lib"]) walk(dir);
+  found.push("App.tsx");
+  return new Map(found.map((file) => [file, fs.readFileSync(path.join(app, file), "utf8")]));
 }
 
-/** The components a file declares: top-level functions (and arrow consts) with a capital name. */
-function componentsIn(file) {
-  const source = fs.readFileSync(path.join(app, file), "utf8");
-  const names = new Set();
-  for (const match of source.matchAll(/^(?:export )?function ([A-Z][A-Za-z0-9]*)\s*[<(]/gm)) names.add(match[1]);
-  for (const match of source.matchAll(/^(?:export )?const ([A-Z][A-Za-z0-9]*)\s*=\s*(?:\([^)]*\)|[a-z]\w*)\s*=>/gm)) names.add(match[1]);
-  return [...names];
+/** A file's area: its folder under `components/` or `pages/` (`settings-page` counts with `settings`). */
+function areaOf(file) {
+  const parts = file.split("/");
+  if (parts.length === 1) return "app";
+  if (parts.length === 2) return parts[0] === "components" ? "shared" : parts[1];
+  return parts[1] === "settings-page" ? "settings" : parts[1];
 }
 
-const declared = new Set();
-for (const file of [...tsxFiles("components"), ...tsxFiles("pages")]) {
-  for (const name of componentsIn(file)) declared.add(`${file}#${name}`);
-}
-const listed = new Set(GALLERY_ENTRIES.map((entry) => `${entry.file}#${entry.name}`));
+const SOURCES = sources();
 
-test("every component of the console is in the gallery's inventory", () => {
-  const missing = [...declared].filter((key) => !listed.has(key)).sort();
-  assert.deepEqual(missing, [], "add these to pages/ui-components/inventory.js");
+test("the inventory names only components their files export", () => {
+  const gone = GALLERY_ENTRIES.filter((entry) => !new RegExp(`export (function|const) ${entry.name}\\b`).test(SOURCES.get(entry.file) ?? "")).map((entry) => `${entry.file}#${entry.name}`);
+  assert.deepEqual(gone, [], "remove these from pages/ui-components/inventory.js (and their demos)");
 });
 
-test("the inventory names only components that exist", () => {
-  const gone = [...listed].filter((key) => !declared.has(key)).sort();
-  assert.deepEqual(gone, [], "remove these from pages/ui-components/inventory.js");
+test("every listed component is reused: at least two areas of the console use it, or it is in the shared kit and used", () => {
+  const single = [];
+  for (const entry of GALLERY_ENTRIES) {
+    const named = new RegExp(`\\b${entry.name}\\b`);
+    const users = [...SOURCES].filter(([file, text]) => file !== entry.file && named.test(text)).map(([file]) => file);
+    const kit = entry.file.startsWith("components/shared/");
+    if (kit ? users.length < 1 : users.length < 2 || new Set(users.map(areaOf)).size < 2) single.push(`${entry.file}#${entry.name}`);
+  }
+  assert.deepEqual(single, [], "no longer reused: remove these from pages/ui-components/inventory.js (and their demos)");
+});
+
+test("the entries and the demos match one to one", () => {
+  const dir = path.join(app, "pages/ui-components/demos");
+  const keys = new Set();
+  for (const name of fs.readdirSync(dir).filter((entry) => entry.endsWith(".tsx"))) {
+    const source = fs.readFileSync(path.join(dir, name), "utf8");
+    const from = source.search(/export const [A-Z_]+_DEMOS: DemoMap = \{/);
+    assert.ok(from >= 0, `${name}: no demo map`);
+    // A demo's key: a name at the map's own indent (two spaces), plain or quoted.
+    for (const match of source.slice(from).matchAll(/^  (?:"([^"]+)"|([A-Za-z0-9_$]+)): /gm)) keys.add(match[1] ?? match[2]);
+  }
+  const ids = new Set(GALLERY_ENTRIES.map((entry) => entry.id));
+  assert.deepEqual([...ids].filter((id) => !keys.has(id)).sort(), [], "listed without a demo");
+  assert.deepEqual([...keys].filter((key) => !ids.has(key)).sort(), [], "a demo of a component that is not listed");
 });
 
 test("entries are well formed", () => {
   const ids = new Set();
   const groups = new Set(GALLERY_GROUPS.map((group) => group.id));
-  const byId = new Map(GALLERY_ENTRIES.map((entry) => [entry.id, entry]));
-  const names = new Set(GALLERY_ENTRIES.map((entry) => entry.name));
   for (const entry of GALLERY_ENTRIES) {
     assert.ok(!ids.has(entry.id), `duplicate id ${entry.id}`);
     ids.add(entry.id);
     assert.ok(groups.has(entry.group), `${entry.id}: unknown group ${entry.group}`);
-    if (entry.mode === "composed") {
-      // What a composed entry is shown inside must itself be on the page.
-      const host = byId.get(entry.via) ?? GALLERY_ENTRIES.find((other) => other.name === entry.via && other.mode === "demo");
-      assert.ok(host && host.mode === "demo", `${entry.id}: shown inside ${entry.via}, which has no demo`);
-    } else if (entry.mode === "listed") {
-      assert.ok(entry.reason, `${entry.id}: a component that is not mounted says why`);
-      if (entry.reason === "part") assert.ok(entry.via, `${entry.id}: a private part names what it is part of`);
-      if (entry.via) assert.ok(names.has(entry.via), `${entry.id}: ${entry.via} is not a component`);
-    } else {
-      assert.equal(entry.mode, "demo");
-    }
   }
   for (const group of GALLERY_GROUPS) {
     assert.ok(GALLERY_ENTRIES.some((entry) => entry.group === group.id), `group ${group.id} is empty`);
