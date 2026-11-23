@@ -52,3 +52,13 @@ Built at 66cf94c4 (feat(console): add an outlined danger button).
 - nsh check passed. Console scripts/test.sh: final full run 160 files, 0 failed. Initial run had an unrelated transient settings-integrations-channels notice test failure; it passed 3 isolated reruns. Final run's chat-attachments load-sensitive failure passed the harness retry.
 - Coder reports headless Chrome gallery inspection at desktop 1400 and phone 390 widths, light and dark, using stubbed Console API; web build passed. Real Tab navigation, Android and desktop native apps were not checked; focus was inspected using scripted focus().
 - Review attention: enabled red text meets 4.5:1 at rest/hover/focus/selected in both palettes; held pressed text can dip to roughly 4.4:1, comparable to existing solid danger hover. The 4% pressed overlay is intentionally subtle.
+
+## factory · review · 2026-11-23 16:11
+head: 66cf94c438331d6cf2b5578be058a936ada879ab
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/ui.tsx:573: CircleButton outlined-danger loses its selected appearance while hovered or focused: nsh state priority lets hover:bg-close/focus:bg-close override selected:bg-danger/12. Preserve the selected tint in those states, as the rectangular Button already does. Verified example in a scratch nsh viewStyle probe: focusing an unselected round button then toggling it on leaves the background at #b23b241a; a selected unfocused one is #b23b241f. Both selected and unselected focused buttons thus look identical.
+- Reviewed all seven changed files against origin/master...HEAD (merge base 4ba41b9a; fetched base 5cd80432). No P0/P1 findings; branch merges cleanly with the fetched base. No code changes or commits made during review; worktree remains clean.
+- Validation by Claude Code: required gofmt/vet/Go test command passed; nsh check passed; scripts/test.sh passed, 160 files, 0 failed, 339s. Four parallel failures (chat-attachments, chat-topic-drag, setup, dialog-sheet) passed the harness's isolated retry. Scripted checks used a throwaway HOME and canonical TMPDIR under this run.
+- Installs: none; cached pinned TypeScript copied into throwaway HOME. No manifests changed.
+- Residual risks: review did not inspect a running gallery/browser, light/dark desktop/mobile rendering, real Tab navigation or Android/desktop native apps. Held-press text contrast near 4.4:1 remains the build's disclosed limitation; no new visual contrast verification was performed in review.
