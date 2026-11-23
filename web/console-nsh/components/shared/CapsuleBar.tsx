@@ -8,8 +8,8 @@
 //   in wider slots and a taller row; docs/console/mobile-bottom-nav.md).
 // - `CapsuleToolbar` and `CapsuleButton`: a job's toolbar (its topic's foot, its page's bar or
 //   foot). Buttons, not places: the first is the primary action (a white glyph on the primary
-//   fill), a stop is as solid but red, the others quiet glyphs; a busy one runs the busy beam and
-//   takes no press. Two sizes: the navigation's own (`nav`, 58pt capsule, 24pt glyphs) so a toolbar
+//   fill, with the solid buttons' finish: components/solidLook.ts), a stop is a pale red tinted
+//   stop, the others quiet glyphs; a busy one runs the busy beam and takes no press. Two sizes: the navigation's own (`nav`, 58pt capsule, 24pt glyphs) so a toolbar
 //   and the navigation look alike at a page's foot, and `compact` (38pt, 16pt glyphs) for a bar.
 //
 // Every control's name is its accessible name and its tooltip; none draws text.
@@ -19,6 +19,7 @@ import { BAR_INSET, GlassCapsule, MOBILE_NAV_EXPANDED_HEIGHT, MOBILE_NAV_HEIGHT,
 import { motionMs } from "../motion/tokens";
 import type { IconName } from "../icons";
 import { BusyBeam, busyLook, type ButtonVariant, Icon, Tip, TipButton } from "../ui";
+import { solidBox, solidStateStyles, type SolidTone } from "../solidLook";
 
 type TokenName = Parameters<typeof token>[0];
 type LayoutEvent = { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } };
@@ -216,19 +217,30 @@ export interface CapsuleButtonLook {
   icon: TokenName;
   /** The busy beam's variant while busy. */
   beam: ButtonVariant;
+  /** A solid button's tone (the primary one while it can act): the solid buttons' shadows by state. */
+  solid?: SolidTone;
+  /** Its keyboard focus ring's class (CAPSULE_FOCUS_RING unless the fill wants its own colour). */
+  ring?: string;
 }
 
 /** A danger button's fill: the theme's danger at this share over the card, opaque (`bg-danger/12` over `bg-card`). */
 export const CAPSULE_DANGER_TINT = 0.12;
-/** The keyboard focus mark of each button (the console's Button draws none of its own). */
+/** The keyboard focus mark of each button: a ring inside the pill. */
 export const CAPSULE_FOCUS_RING = "group-focus-visible:border-blue-lighter";
+/** The primary button's: the ring in the colour written on its fill, as the solid buttons' (solidLook.ts). */
+export const CAPSULE_SOLID_FOCUS_RING = "group-focus-visible:border-primary-foreground";
 
 /**
  * The look of a toolbar button of `variant` with `glyph`, while `busy` (its action is under way:
  * the beam runs and it takes no press) or `disabled`. `primary` is the primary button: a white
- * glyph on the primary fill. `danger` is as solid but red: a red glyph on an opaque pale-red fill
- * with a red hairline (red on the primary blue would be illegible). `quiet` is the navigation's
- * idle slot: a muted glyph on no fill, the hover fill under the pointer and the keyboard's focus.
+ * glyph on the primary fill, with the solid buttons' finish (a crisp hairline, a lit top edge and
+ * a soft shadow that deepens on hover, the fill a step deeper on hover and pressed, the shadow gone
+ * while pressed). `danger` is a stop, not a solid destructive fill, and keeps no solid finish: a
+ * red glyph on an opaque pale-red fill with a red hairline. Beside the raised primary blue it is a
+ * quiet, opaque stop that reads on glass (red on the primary blue would be illegible, and a solid
+ * red disc beside a solid blue one would shout); it stops a run, nothing is lost. `quiet` is the
+ * navigation's idle slot: a muted glyph on no fill, the hover fill under the pointer and the
+ * keyboard's focus.
  */
 export function capsuleButtonLook(variant: "primary" | "danger" | "quiet", glyph: IconName, state: { busy?: boolean; disabled?: boolean } = {}): CapsuleButtonLook {
   if (variant === "quiet") {
@@ -260,16 +272,28 @@ export function capsuleButtonLook(variant: "primary" | "danger" | "quiet", glyph
     const busy = busyLook("primary");
     return { look: "busy", glyph, filled: true, box: busy.box, press: "", icon: busy.text, beam: "primary" };
   }
+  if (state.disabled) {
+    return {
+      look: "disabled",
+      glyph,
+      filled: true,
+      box: "bg-primary-disabled border-[0.5px] border-primary-disabled-line",
+      press: "",
+      icon: "on-disabled",
+      beam: "primary",
+    };
+  }
   return {
-    look: state.disabled ? "disabled" : "primary",
+    look: "primary",
     glyph,
     filled: true,
-    box: state.disabled
-      ? "bg-primary-disabled border-[0.5px] border-primary-disabled-line"
-      : "bg-primary border-[0.5px] border-primary-line hover:bg-primary-hover focus:bg-primary-hover",
-    press: "group-active:bg-press-light",
-    icon: state.disabled ? "on-disabled" : "primary-foreground",
+    // Pressed, the fill itself deepens (`active:`), past the hover and focus fill.
+    box: `${solidBox("primary")} focus:bg-primary-hover`,
+    press: "",
+    icon: "primary-foreground",
     beam: "primary",
+    solid: "primary",
+    ring: CAPSULE_SOLID_FOCUS_RING,
   };
 }
 
@@ -288,6 +312,8 @@ export function CapsuleButton(props: {
 }) {
   const size = () => props.size ?? CAPSULE_NAV_SIZE;
   const enabled = () => !props.disabled && !props.busy;
+  // A solid one's shadows (solidLook.ts); its focus ring is the ring view below, not a shadow.
+  const solid = () => solidStateStyles(props.look.solid);
   return (
     <TipButton
       disabled={!enabled()}
@@ -297,7 +323,10 @@ export function CapsuleButton(props: {
       testID={props.testID}
       onLayout={props.onLayout}
       class={`group relative items-center justify-center overflow-hidden rounded-full border-transparent transition-colors duration-160 ${props.look.box}`}
-      style={{ width: size().width, height: size().height }}
+      style={{ width: size().width, height: size().height, boxShadow: solid().style?.boxShadow }}
+      hoverStyle={solid().hoverStyle}
+      activeStyle={solid().activeStyle}
+      disabledStyle={solid().disabledStyle}
     >
       <If when={props.look.tint}>
         <View accessibilityElementsHidden class={`absolute inset-0 transition-colors duration-160 ${props.look.tint}`} style={{ pointerEvents: "none" }} />
@@ -306,7 +335,7 @@ export function CapsuleButton(props: {
       {/* The keyboard's focus: a ring inside the pill, plain on the primary fill as on the others. */}
       <View
         accessibilityElementsHidden
-        class={`absolute inset-0 rounded-full border-2 border-transparent ${CAPSULE_FOCUS_RING}`}
+        class={`absolute inset-0 rounded-full border-2 border-transparent ${props.look.ring ?? CAPSULE_FOCUS_RING}`}
         style={{ pointerEvents: "none" }}
         testID={`${props.testID}-focus-ring`}
       />
