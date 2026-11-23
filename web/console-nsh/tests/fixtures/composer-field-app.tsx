@@ -120,7 +120,11 @@ function FieldRow(props: { name: keyof typeof PLACEHOLDERS; readonly?: boolean; 
             actionsWidth={actionsWidth()}
             onMeasure={(next) => (untracked(late) ? setTimeout(() => measures.set(next), untracked(late)) : measures.set(next))}
           />
-          <If when={!multi()}>{control("add")}</If>
+          {/* As ChatComposer: what stands before the field is in a view always in the row. It is the
+              add button's box on one row, so its frame (in the row) is the add button's. */}
+          <View class="flex-row items-center" style={{ display: multi() ? "none" : "flex" }} onLayout={multi() ? undefined : track(`${props.name}-add`)}>
+            <If when={!multi()}>{control("lead-add")}</If>
+          </View>
           <ComposerFieldSlot
             rows={layout().rows}
             placeholder={PLACEHOLDERS[props.name]}

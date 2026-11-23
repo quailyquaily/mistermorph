@@ -1014,12 +1014,20 @@ export function ChatComposer(props: ChatComposerProps) {
             placeholder on one line (ComposerFieldSlot.tsx). */}
         <View class={composerRowClass(multiRow())}>
           <ComposerMeasure text={value()} actionsWidth={actionsWidth()} onMeasure={(next) => measures.set(next)} />
-          <If when={!multiRow() && !props.attachHidden}>{addControl()}</If>
-          {/* Without the add button the text keeps clear of the pill's round end (28pt in, as a
-              list's names stand from its markers). */}
-          <If when={!multiRow() && props.attachHidden}>
-            <View class="w-2" accessibilityElementsHidden />
-          </If>
+          {/* What stands before the field on one row, in a view that is always there (not laid out
+              on two rows). Put straight into the row, the add button (a trigger and its popover's
+              anchor) coming back as two rows became one made the row move the field's slot after
+              it: a native move of a focused field drops its focus on the phones while the keyboard
+              stays up (the web's runtime moves the siblings instead). Nothing in front of the slot
+              now comes or goes, so the field is never moved. */}
+          <View class="flex-row items-center" style={{ display: multiRow() ? "none" : "flex" }} testID="chat-composer-lead">
+            <If when={!multiRow() && !props.attachHidden}>{addControl()}</If>
+            {/* Without the add button the text keeps clear of the pill's round end (28pt in, as a
+                list's names stand from its markers). */}
+            <If when={!multiRow() && props.attachHidden}>
+              <View class="w-2" accessibilityElementsHidden />
+            </If>
+          </View>
           <ComposerFieldSlot
             rows={layout().rows}
             placeholder={props.placeholder}

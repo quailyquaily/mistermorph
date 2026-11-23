@@ -222,3 +222,31 @@ test("a newer entry focus or a cancel drops the one waiting; a failed arrival fo
   await flush();
   expect(focused).toBe(1);
 });
+
+// A long draft deleted key by key from its end goes from two rows back to one (composerRows.ts).
+// The add button then comes back before the field. Put straight into the row, it made the row move
+// the field's slot after it (`Insert` of the slot, already there, at the row's end: read with
+// `nsh test --trace`), and a native move of the focused field took its focus on the phone while the
+// keyboard stayed up. Now the controls before the field sit in a view that is always in the row,
+// so nothing in front of the slot comes or goes. Headless runs keep the focus whatever moves, so
+// this checks that structure, and that keys keep landing in the field all the way down.
+test("on the Android phone deleting a long draft back to one row keeps the field focused and never moves it", async () => {
+  const { app } = await openTopicList({ platform: "android" });
+  await app.press("id:chat-topic-new-fab");
+  await slidIn(app);
+  const long = "This is a long sentence pasted into the composer so that it wraps";
+  await app.paste("id:chat-composer-input", { text: long });
+  // Two rows: the view of the controls before the field is not laid out (it stays in the row).
+  await app.waitUntil(() => !app.shows("id:chat-composer-lead"));
+  let oneRowAt = -1;
+  for (let left = long.length; left > 0; left--) {
+    await app.keyboard.press("backspace");
+    await app.waitUntil(() => (app.value("id:chat-composer-input") ?? "").length === left - 1);
+    if (oneRowAt < 0 && app.shows("id:chat-composer-lead")) oneRowAt = left - 1;
+  }
+  // One row came back part-way down, with the add button inside the view that stayed.
+  expect(oneRowAt).toBeGreaterThan(0);
+  expect(app.count("id:chat-composer-lead")).toBe(1);
+  expect(app.shows("id:chat-composer-lead >> id:chat-composer-add")).toBe(true);
+  expect(await fieldFocused(app)).toBe(true);
+});
