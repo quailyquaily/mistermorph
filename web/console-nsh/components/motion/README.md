@@ -47,8 +47,10 @@ starts with a comment on why it is built the way it is; keep that when changing 
   row), `bg-selection-strong` (13 %, the selected row hovered), `bg-hover` (10 %, a plain button's
   hover), `bg-segment` (blue 16 % over paper, an active tab).
 - `border-focus` / `outline` colour `focus` (accent 55 %): the one focus ring.
-- `bg-press` (`#0000000d`) and `bg-press-light` (`#ffffff26`): the press overlay on light and
-  filled buttons.
+- `bg-press` (`#0000000d`): the press overlay on light buttons. The solid buttons (primary,
+  danger, highlight; filled round and capsule buttons) deepen their own fill instead
+  (`<tone>-press`), with their hairline (`<tone>-line`), hover fill (`<tone>-hover`), lit edge
+  (`solid-sheen`) and shadows (`solid-shadow`, `solid-shadow-hover`): components/solidLook.ts.
 
 ## Additions (follow-up)
 

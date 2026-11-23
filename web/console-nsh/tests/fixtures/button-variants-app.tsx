@@ -36,7 +36,6 @@ const COLOURS = [
   "ink",
   "destructive",
   "destructive-foreground",
-  "danger-light",
 ];
 
 const frames = signal<Record<string, Frame>>({});

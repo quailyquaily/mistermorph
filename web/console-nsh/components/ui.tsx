@@ -28,6 +28,7 @@ import { drawFabMark, FAB_MARK, FAB_MARK_SIZE, type FabMarkCorner } from "./fabM
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
 import { PickerList, type PickerItem, type PickerProbe } from "./shared/PickerList";
 import { withAlpha } from "./motion/color";
+import { solidBox, SOLID_SHADOWS, solidStateStyles, type SolidTone } from "./solidLook";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
 import { RunningMark } from "./motion/RunningMark";
 import { sagHalf, SagRule } from "./motion/Sag";
@@ -292,9 +293,11 @@ export type ButtonVariant = "primary" | "outlined" | "plain" | "danger" | "highl
 export const BUTTON_VARIANT_NAMES: readonly ButtonVariant[] = ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger", "outlined-danger"];
 export type ButtonSize = "md" | "sm" | "xs" | "xxs";
 
-// The ui-kit's .touchable variants (styles/ui-kit.css, the morph theme): primary is ink blue with a
-// faint inner highlight and a shadow that deepens on hover; outlined is translucent white on a
-// hairline that darkens on hover; plain is bare text that takes a soft blue fill on hover.
+// The ui-kit's .touchable variants (styles/ui-kit.css, the morph theme): primary, danger and
+// highlight are the solid ones, one finish in three colours (components/solidLook.ts: a crisp
+// hairline, a lit top edge and a soft shadow that deepens on hover, a fill a step deeper on hover
+// and pressed, the shadow gone while pressed, an inset focus ring); outlined is translucent white
+// on a hairline that darkens on hover; plain is bare text that takes a soft blue fill on hover.
 // outlined-danger is the outlined box drawn in the danger colour: the quieter of two destructive
 // buttons (`danger`, solid, is the confirming press), offered beside other actions.
 // Disabled looks are the morph theme's (`body[data-theme=morph] .touchable.*[disabled]`): never a
@@ -307,6 +310,9 @@ const BUTTON_VARIANTS: Record<
     textClass: string;
     disabledText: TokenName;
     press: string;
+    /** A solid variant's tone (solidLook.ts): its shadows by state. Its `box` holds the tone's fills. */
+    solid?: SolidTone;
+    /** A non-solid variant's shadow at rest and on hover. */
     shadow?: [string, string];
     /** The border beam's colour while loading. */
     beam: BeamTone;
@@ -328,18 +334,16 @@ const BUTTON_VARIANTS: Record<
   }
 > = {
   primary: {
-    box: "bg-primary border-[0.5px] border-primary-line disabled:bg-primary-disabled disabled:border-primary-disabled-line",
+    box: `${solidBox("primary")} disabled:bg-primary-disabled disabled:border-primary-disabled-line`,
     text: "primary-foreground",
     textClass: "text-primary-foreground group-disabled:text-on-disabled",
     disabledText: "on-disabled",
-    press: "group-active:bg-press-light",
+    // Pressed, the fill itself deepens (the box's `active:`): no layer over it.
+    press: "",
+    solid: "primary",
     beam: "blue",
     loadingBox: "bg-blue/10 border-[0.5px] border-blue/35",
     loadingText: "ink",
-    shadow: [
-      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
-      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
-    ],
   },
   outlined: {
     box: "bg-outline-bg border border-outline-line hover:bg-outline-bg-hover hover:border-outline-line-hover disabled:bg-outline-disabled-bg disabled:border-outline-disabled-line",
@@ -364,21 +368,23 @@ const BUTTON_VARIANTS: Record<
     loadingTrack: "line-faint",
   },
   danger: {
-    box: "bg-destructive border-[0.5px] border-destructive hover:bg-danger-light hover:border-danger-light disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line",
+    box: `${solidBox("danger")} disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line`,
     text: "destructive-foreground",
     textClass: "text-destructive-foreground group-disabled:text-danger-disabled-text",
     disabledText: "danger-disabled-text",
-    press: "group-active:bg-press-light",
+    press: "",
+    solid: "danger",
     beam: "red",
     loadingBox: "bg-danger/10 border-[0.5px] border-danger/35",
     loadingText: "danger",
   },
   highlight: {
-    box: "bg-warn border-[0.5px] border-warn-dark hover:bg-warn-light hover:border-warn-light disabled:bg-warn-disabled disabled:border-warn-disabled-line",
+    box: `${solidBox("warn")} disabled:bg-warn-disabled disabled:border-warn-disabled-line`,
     text: "warn-foreground",
     textClass: "text-warn-foreground group-disabled:text-on-disabled",
     disabledText: "on-disabled",
-    press: "group-active:bg-press-light",
+    press: "",
+    solid: "warn",
     beam: "amber",
     loadingBox: "bg-warn/12 border-[0.5px] border-warn/40",
     loadingText: "warn-dark",
@@ -397,9 +403,10 @@ const BUTTON_VARIANTS: Record<
   // colour: a red hairline and red text. Hover and keyboard focus take the soft red tint of the
   // close strip and a deeper hairline (not the neutral white); a press deepens the tint a little;
   // selected is a deeper tint with red text. The tints stay light enough for the red text to keep
-  // 4.5:1 at rest, hovered, focused and selected, in either appearance (a press dips no lower than
-  // the solid danger button's hover). Disabled fades to the danger button's own pale reds; loading
-  // keeps that disabled look, as outlined does, with the red beam riding the hairline.
+  // 4.5:1 at rest, hovered, focused and selected, in either appearance (a press, a moment, may dip
+  // a little under it in the light one, to no less than 4.35:1). Disabled fades to the danger
+  // button's own pale reds; loading keeps that disabled look, as outlined does, with the red beam
+  // riding the hairline.
   "outlined-danger": {
     box: "bg-outline-bg border border-danger/45 hover:bg-close hover:border-danger/70 disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line",
     text: "danger",
@@ -445,6 +452,12 @@ const BUTTON_SIZES: Record<ButtonSize, { box: string; text: string; icon: number
   xs: { box: "h-8 px-[12.8px] gap-2", text: "text-xs", icon: 16, square: "size-8", radius: RADIUS.control, corners: CONTROL_CORNERS },
   xxs: { box: "h-6 px-[12.8px] gap-1.5", text: "text-[11.2px]", icon: 14, square: "size-6", radius: XXS_RADIUS, corners: cornersClass(XXS_RADIUS) },
 };
+
+/** A Button variant's finish (for tests): its solid tone if it is a solid one, its box classes and its press layer's. */
+export function buttonVariantFinish(variant: ButtonVariant): { solid?: SolidTone; box: string; press: string } {
+  const v = BUTTON_VARIANTS[variant];
+  return { solid: v.solid, box: v.box, press: v.press };
+}
 
 /** A button size's corners: its radius in points and its classes (continuous). */
 export function buttonCorners(size: ButtonSize = "sm"): { radius: number; corners: string } {
@@ -542,10 +555,10 @@ export function BusyBeam(props: {
 export const CIRCLE_BUTTON_SIZES = { md: 38, sm: 32 } as const;
 export type CircleButtonSize = keyof typeof CIRCLE_BUTTON_SIZES;
 /** `plain`: bare, the plain button's fill on hover and press; `outlined`: a hairline ring; `primary`:
- * filled ink; `danger`: filled red (the danger button's), lighter on hover; `close`: a dialog's
- * close button, the soft red tint of the close strip it replaced, deeper on hover;
- * `outlined-danger`: the outlined-danger button's red ring and red glyph, the red tint on hover,
- * focus and press, the danger button's pale reds when disabled. */
+ * filled ink, and `danger`: filled red, the solid buttons' finish (solidLook.ts) and their pale
+ * disabled looks; `close`: a dialog's close button, the soft red tint of the close strip it
+ * replaced, deeper on hover; `outlined-danger`: the outlined-danger button's red ring and red
+ * glyph, the red tint on hover, focus and press, the danger button's pale reds when disabled. */
 export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger" | "close" | "outlined-danger";
 
 /** Every CircleButton variant, in the order the gallery shows them. */
@@ -562,9 +575,9 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
   const side = options.size === "sm" ? "size-8" : "size-[38px]";
   const look =
     options.variant === "primary"
-      ? "border border-primary bg-primary hover:bg-primary-hover"
+      ? `${solidBox("primary")} disabled:bg-primary-disabled disabled:border-primary-disabled-line`
       : options.variant === "danger"
-        ? "border border-destructive bg-destructive hover:bg-danger-light hover:border-danger-light"
+        ? `${solidBox("danger")} disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line`
         : options.variant === "close"
           ? "bg-close hover:bg-close-hover focus:bg-close-hover active:bg-close-hover"
         : options.variant === "outlined"
@@ -576,11 +589,18 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
   return `relative ${side} items-center justify-center rounded-full transition-colors duration-[180ms] ${look}`;
 }
 
-/** The glyph's colour on a round button's fill: what is written on that fill, else the plain glyphs'
- * (an outlined-danger one's is red, pale while disabled). */
+/** The glyph's colour on a round button's fill: what is written on that fill (its disabled text's
+ * while disabled), else the plain glyphs' (an outlined-danger one's is red, pale while disabled). */
 export function circleIconColor(variant?: CircleButtonVariant, disabled = false): TokenName {
+  if (variant === "primary") return disabled ? "on-disabled" : "primary-foreground";
+  if (variant === "danger") return disabled ? "danger-disabled-text" : "destructive-foreground";
   if (variant === "outlined-danger") return disabled ? "danger-disabled-text" : "danger";
-  return variant === "primary" ? "primary-foreground" : variant === "danger" ? "destructive-foreground" : "subtle";
+  return "subtle";
+}
+
+/** A round button's solid tone, if its variant is a filled one. */
+export function circleSolidTone(variant?: CircleButtonVariant): SolidTone | undefined {
+  return variant === "primary" ? "primary" : variant === "danger" ? "danger" : undefined;
 }
 
 /**
@@ -614,6 +634,12 @@ export function CircleButton(props: {
       hitSlop={props.hitSlop as any}
       testID={props.testID}
       class={`${circleButtonClass({ size: props.size, variant: props.variant })} ${props.class ?? ""}`}
+      // A filled one's finish (solidLook.ts): its shadows by state; the fills are in its classes.
+      style={solidStateStyles(circleSolidTone(props.variant)).style}
+      hoverStyle={solidStateStyles(circleSolidTone(props.variant)).hoverStyle}
+      focusVisibleStyle={solidStateStyles(circleSolidTone(props.variant)).focusVisibleStyle}
+      activeStyle={solidStateStyles(circleSolidTone(props.variant)).activeStyle}
+      disabledStyle={solidStateStyles(circleSolidTone(props.variant)).disabledStyle}
     >
       <If
         when={props.children}
@@ -644,8 +670,11 @@ export function busyLook(variant: ButtonVariant = "primary"): { box: string; tex
 /** The console's button: one command, any input. */
 // nsh 0.4.0 on Android: a box that clips (`overflow-hidden`, which rounds the press layer) and casts
 // an outer shadow moves its children into an inner box that takes the presses, and the button
-// never gets them. Android buttons go without the shadow.
-const BUTTON_SHADOWS = platform.os !== "android";
+// never gets them. Android buttons go without the shadow (SOLID_SHADOWS, for the solid ones too).
+const BUTTON_SHADOWS = SOLID_SHADOWS;
+
+/** A selected solid button: the toggles' soft blue under ink (`bg-selection`), with none of the solid fills. */
+const SELECTED_SOLID_BOX = "border-[0.5px] border-transparent";
 
 export function Button(props: ButtonProps) {
   // In a dialog's actions row it counts itself, and shares the row's width when it is one of two
@@ -653,7 +682,10 @@ export function Button(props: ButtonProps) {
   const actions = DialogActionsRow();
   if (actions) cleanup(actions.add());
   const variant = () => BUTTON_VARIANTS[props.variant ?? "primary"];
-  const shadow = () => (BUTTON_SHADOWS ? variant().shadow : undefined);
+  // A selected solid button is a soft toggle, not a raised fill: no solid finish then.
+  const solid = () => (props.selected ? undefined : variant().solid);
+  const shadow = () => (BUTTON_SHADOWS && !variant().solid ? variant().shadow : undefined);
+  const states = () => solidStateStyles(solid());
   const size = () => BUTTON_SIZES[props.size ?? "sm"];
   const enabled = () => !props.disabled && !props.loading;
   // Loading is disabled: presses are blocked. Filled variants turn soft (their own tint, hairline
@@ -680,18 +712,22 @@ export function Button(props: ButtonProps) {
       testID={props.testID}
       hitSlop={props.hitSlop}
       tooltip={tip() ? <Tip text={tip()!} /> : undefined}
-      class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} ${size().corners} border-transparent ${loadingFill() ?? variant().box} ${variant().focus ?? ""} ${
+      class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} ${size().corners} border-transparent ${loadingFill() ?? (variant().solid && props.selected ? SELECTED_SOLID_BOX : variant().box)} ${variant().focus ?? ""} ${
         square() && !props.block ? `${size().square} px-0` : props.wrap && !glyphFace() ? wrapBox(size().box) : size().box
       } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? (variant().selectedBox ?? "bg-selection") : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
       onLayout={props.onLayout}
+      // Only the colours ease: a shadow changes at once (solidLook.ts), and nsh zeroes the easing
+      // under reduced motion.
       style={{
-        boxShadow: shadow()?.[0],
-        transitionProperty: "colors, box-shadow",
+        boxShadow: states().style?.boxShadow ?? shadow()?.[0],
+        transitionProperty: "colors",
         transitionDuration: 180,
         transitionTimingFunction: "ease-out",
       }}
-      hoverStyle={shadow() && enabled() ? { boxShadow: shadow()![1] } : undefined}
-      disabledStyle={shadow() ? { boxShadow: "none" } : undefined}
+      hoverStyle={states().hoverStyle ?? (shadow() && enabled() ? { boxShadow: shadow()![1] } : undefined)}
+      focusVisibleStyle={states().focusVisibleStyle}
+      activeStyle={states().activeStyle}
+      disabledStyle={states().disabledStyle ?? (shadow() ? { boxShadow: "none" } : undefined)}
     >
       <View
         accessibilityElementsHidden

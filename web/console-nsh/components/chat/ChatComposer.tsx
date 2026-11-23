@@ -19,6 +19,7 @@ import {
   busyLook,
   CircleButton,
   circleButtonClass,
+  circleIconColor,
   Icon,
   popupOpen,
   Tip,
@@ -606,6 +607,8 @@ export function ChatComposer(props: ChatComposerProps) {
   // the stop square. While a message is being sent it is a busy primary button (BusyBeam, busyLook).
   const sendBusy = () => !!props.sending && !props.stopMode;
   const sendEmpty = () => !props.stopMode && value().trim() === "" && !(props.fileItems ?? []).length;
+  /** Ready but held back (the parent says it cannot send now): the primary circle's disabled look. */
+  const sendBlocked = () => !props.stopMode && !sendBusy() && !!props.sendDisabled;
   // On touch screens a tap on Send lowers the keyboard, as messaging apps do, so the reply is not
   // under it; the draft stays the parent's to clear or keep. The parent is told, so that it does not
   // give the field the focus back after the send, whatever the window's width (a tablet lays the
@@ -629,9 +632,8 @@ export function ChatComposer(props: ChatComposerProps) {
       title={props.sendLabel ?? ""}
       testID="chat-composer-send"
       variant={sendBusy() ? "plain" : sendEmpty() ? "outlined" : "primary"}
-      class={`${sendBusy() ? `border ${busyLook("primary").box}` : ""} ${
-        !sendEmpty() && props.sendDisabled && !props.stopMode && !sendBusy() ? "opacity-45" : ""
-      }`}
+      // Ready, it is the solid primary circle (its finish, and its pale look while it cannot send).
+      class={sendBusy() ? `border ${busyLook("primary").box}` : ""}
     >
       {/* The glyphs; while the drum turns (VoiceOrSend) it carries them instead. */}
       <View class="absolute inset-0 items-center justify-center" style={{ opacity: drumTurning() ? 0 : 1 }}>
@@ -642,7 +644,7 @@ export function ChatComposer(props: ChatComposerProps) {
           style={{
             width: 14,
             height: 14,
-            tintColor: token(sendBusy() ? busyLook("primary").text : sendEmpty() ? "muted-foreground" : "primary-foreground") as string,
+            tintColor: token(sendBusy() ? busyLook("primary").text : sendEmpty() ? "muted-foreground" : circleIconColor("primary", sendBlocked())) as string,
             opacity: props.stopMode ? 0 : 1,
             scale: props.stopMode ? 0.6 : 1,
             translate: sendEmpty() ? [-1.5, 1.5] : [0, 0],
@@ -672,6 +674,8 @@ export function ChatComposer(props: ChatComposerProps) {
   // primary button Send is while sending (BusyBeam, busyLook). The glyph's testID names its look
   // and tint, for tests (no headless image query).
   const voiceLook = () => voiceButtonLook(props.voiceState);
+  // While the composer is disabled the solid mic is pale, its glyph in the fill's disabled text.
+  const voiceTint = (): TokenName => (props.disabled && !voiceLook().busy ? circleIconColor(voiceLook().variant, true) : voiceLook().tint);
   const voiceControl = () => (
     <CircleButton
       onPress={() => props.onVoice?.()}
@@ -681,14 +685,15 @@ export function ChatComposer(props: ChatComposerProps) {
       hitSlop={VOICE_HIT_SLOP}
       testID="chat-composer-voice"
       variant={voiceLook().variant}
-      class={voiceLook().busy ? `border ${busyLook("primary").box}` : "disabled:opacity-45"}
+      // Its solid looks carry their own pale disabled colours (CircleButton), the glyph with them.
+      class={voiceLook().busy ? `border ${busyLook("primary").box}` : ""}
     >
       <View style={{ opacity: drumTurning() ? 0 : 1 }}>
         <Icon
           name="PhMicrophone"
           size={14}
-          color={voiceLook().tint}
-          testID={`chat-composer-voice-icon.PhMicrophone.${voiceLook().look}.${voiceLook().tint}`}
+          color={voiceTint()}
+          testID={`chat-composer-voice-icon.PhMicrophone.${voiceLook().look}.${voiceTint()}`}
         />
       </View>
       <BusyBeam busy={voiceLook().busy} short radius={19} testID="chat-composer-voice-beam" />

@@ -13,7 +13,9 @@ import { circleButtonClass } from "../components/ui";
 const IDLE = "id:chat-composer-voice-icon.PhMicrophone.primary.primary-foreground";
 const RED = "id:chat-composer-voice-icon.PhMicrophone.recording.destructive-foreground";
 const BUSY = "id:chat-composer-voice-icon.PhMicrophone.busy.ink";
-const LOOKS = [IDLE, RED, BUSY];
+const IDLE_DISABLED = "id:chat-composer-voice-icon.PhMicrophone.primary.on-disabled";
+const RED_DISABLED = "id:chat-composer-voice-icon.PhMicrophone.recording.danger-disabled-text";
+const LOOKS = [IDLE, RED, BUSY, IDLE_DISABLED, RED_DISABLED];
 // The FT88 looks (a plain button, a muted or red microphone) are gone.
 const OLD = ["subtle", "danger", "plain-disabled-text"].map((tint) => `id:chat-composer-voice-icon.PhMicrophone.${tint}`);
 
@@ -32,14 +34,14 @@ test("idle, the voice button is Send's primary circle; recording, a red one; nei
   expect(voiceButtonLook(undefined)).toEqual(idle);
   // Send's ready look is this primary circle: same box, side and fill.
   const primary = classes(circleButtonClass({ variant: idle.variant }));
-  for (const c of ["size-[38px]", "rounded-full", "bg-primary", "border-primary", "hover:bg-primary-hover"]) expect(primary).toContain(c);
+  for (const c of ["size-[38px]", "rounded-full", "bg-primary", "border-primary-line", "hover:bg-primary-hover", "active:bg-primary-press"]) expect(primary).toContain(c);
   for (const c of primary) expect(/destructive|danger/.test(c)).toBe(false);
 
   const recording = voiceButtonLook("recording");
   expect(recording).toEqual({ look: "recording", variant: "danger", tint: "destructive-foreground", busy: false });
   const red = classes(circleButtonClass({ variant: recording.variant }));
-  // The same circle, red; on hover a lighter red, never the primary ink.
-  for (const c of ["size-[38px]", "rounded-full", "bg-destructive", "border-destructive", "hover:bg-danger-light"]) expect(red).toContain(c);
+  // The same circle, red (the solid buttons' finish: its hover and pressed reds), never the primary ink.
+  for (const c of ["size-[38px]", "rounded-full", "bg-destructive", "border-danger-line", "hover:bg-danger-hover", "active:bg-danger-press"]) expect(red).toContain(c);
   for (const c of red) expect(/primary|ink|hover:bg-hover/.test(c)).toBe(false);
 
   const busy = voiceButtonLook("transcribing");
@@ -81,14 +83,16 @@ for (const platform of ["linux", "android"] as const) {
       expect(app.count("id:chat-composer-voice-beam")).toBe(0);
       expect(app.count("label:Voice input")).toBe(1);
 
-      // A disabled composer disables the button in either look and keeps its glyph.
+      // A disabled composer disables the button in either look: it keeps its microphone and look,
+      // pale as every disabled solid button is (the fill's disabled colours, the glyph's with them).
       await app.press("id:toggle-disabled");
-      expectLook(app, IDLE);
+      expectLook(app, IDLE_DISABLED);
       expect(app.enabled("id:chat-composer-voice")).toBe(false);
       await app.press("id:set-recording");
-      expectLook(app, RED);
+      expectLook(app, RED_DISABLED);
       expect(app.enabled("id:chat-composer-voice")).toBe(false);
       await app.press("id:toggle-disabled");
+      expectLook(app, RED);
       expect(app.enabled("id:chat-composer-voice")).toBe(true);
       await app.press("id:set-idle");
       expectLook(app, IDLE);

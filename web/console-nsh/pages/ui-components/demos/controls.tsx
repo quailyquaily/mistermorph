@@ -32,6 +32,7 @@ import {
   BUTTON_VARIANT_NAMES,
   CIRCLE_BUTTON_VARIANT_NAMES,
   type ButtonSize,
+  type ButtonVariant,
   type StatusState,
 } from "../../../components/ui";
 import { CONTROL_CORNERS } from "../../../components/corners";
@@ -39,6 +40,8 @@ import type { IconName } from "../../../components/icons";
 import { act, acts, Col, type DemoMap, LONG_TEXT, LONG_WORD, Row, t, useFlag, useText, V, Wide } from "../demo";
 
 const BUTTON_SIZES: ButtonSize[] = ["md", "sm", "xs", "xxs"];
+/** The solid variants (one finish, components/solidLook.ts), shown at every size. */
+const SOLID_VARIANTS: ButtonVariant[] = ["primary", "danger", "highlight"];
 const STATUS_STATES: StatusState[] = ["on", "off", "pending", "error", "unread", "running"];
 const TONES = ["neutral", "info", "ok", "warn", "danger"] as const;
 
@@ -78,6 +81,18 @@ function ButtonDemo() {
             <Button variant={variant()} icon="PhCheck" title={t("action_save")} onPress={() => act("Button", variant())} testID={`uig-button-icon-${variant()}`} />
             <Button variant={variant()} label={t("action_save")} disabled />
             <Button variant={variant()} label={t("action_save")} loading />
+          </V>
+        )}
+      </Each>
+      <Each of={SOLID_VARIANTS} key={(variant) => variant}>
+        {(variant) => (
+          <V l={`${variant()} md / sm / xs / xxs`} row>
+            <Each of={BUTTON_SIZES} key={(size) => size}>
+              {(size) => <Button variant={variant()} size={size()} label={t("action_save")} onPress={() => act("Button size", `${variant()} ${size()}`)} />}
+            </Each>
+            <Each of={BUTTON_SIZES} key={(size) => size}>
+              {(size) => <Button variant={variant()} size={size()} icon="PhCheck" title={t("action_save")} onPress={() => act("Button icon", `${variant()} ${size()}`)} />}
+            </Each>
           </V>
         )}
       </Each>

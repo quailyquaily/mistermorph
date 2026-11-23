@@ -11,6 +11,10 @@ import { expect, open, test } from "nsh/test";
 
 const SIZES = ["md", "sm", "xs", "xxs"] as const;
 const VARIANT = "outlined-danger";
+/** The least a press may leave the red label, by appearance: the bound the press tints were tuned
+ * against, 4.5:1 capped by the old solid danger hover's contrast (`danger-light`, since replaced by
+ * the solid finish's deeper `danger-hover`, solidLook.ts): 4.35:1 in light, 4.5:1 in dark. */
+const PRESS_FLOOR = { light: 4.35, dark: 4.5 } as const;
 
 type Look = {
   box: string;
@@ -190,10 +194,10 @@ for (const colorScheme of ["light", "dark"] as const) {
       const selected = tint(look.selectedBox, "bg-");
       const selectedPressed = over(c("danger"), selected, dangerAlpha(look.press, "group-active:bg-"));
       // Text contrast (4.5:1) at rest, hovered or focused, and selected, as the outlined button's
-      // text keeps on its box; a press (a moment) dips no lower than the solid danger button's hover.
+      // text keeps on its box; a press (a moment) may dip a little under it, to no less than
+      // PRESS_FLOOR (under 4.5:1 in the light appearance only).
       for (const fill of [idle, hover, selected]) expect(contrast(c("danger"), fill)).toBeGreaterThan(4.5);
-      const dangerHover = Math.min(4.5, contrast(c("destructive-foreground"), c("danger-light")));
-      for (const fill of [pressed, selectedPressed]) expect(contrast(c("danger"), fill)).toBeGreaterThanOrEqual(dangerHover);
+      for (const fill of [pressed, selectedPressed]) expect(contrast(c("danger"), fill)).toBeGreaterThanOrEqual(PRESS_FLOOR[colorScheme]);
       expect(contrast(c("foreground"), idle)).toBeGreaterThan(4.5);
       // The hover, focus and press tints show on the box (not the neutral white of outlined).
       expect(contrast(hover, idle)).toBeGreaterThan(1.03);
@@ -204,7 +208,7 @@ for (const colorScheme of ["light", "dark"] as const) {
       const ring = report().circles[VARIANT];
       expect(contrast(c("danger"), over(c("close"), under))).toBeGreaterThan(4.5);
       expect(contrast(c("danger"), tint(ring, "selected:bg-"))).toBeGreaterThan(4.5);
-      expect(contrast(c("danger"), tint(ring, "active:bg-"))).toBeGreaterThanOrEqual(dangerHover);
+      expect(contrast(c("danger"), tint(ring, "active:bg-"))).toBeGreaterThanOrEqual(PRESS_FLOOR[colorScheme]);
       // The hairline: at least as strong as the outlined button's, stronger on hover and focus.
       const line = over(c("danger"), idle, dangerAlpha(look.box, "border-"));
       const neutral = over(c("outline-line"), idle);
@@ -227,9 +231,9 @@ test("CircleButton outlined-danger: a red ring and red glyph, the red tint on ho
   expectAll(ring, ["border", "bg-transparent", "hover:bg-close", "focus:bg-close", "active:bg-danger/14", "selected:bg-danger/12", "disabled:border-danger-disabled-line", "rounded-full"]);
   expect(ring.some((c) => c.startsWith("border-danger/"))).toBe(true);
   expect(ring.some((c) => c.includes("line-soft"))).toBe(false);
-  // The other round variants are as they were.
+  // The other round variants keep their looks (danger has the solid finish, solidLook.ts).
   expect(report().circles.outlined).toContain("border border-line-soft bg-transparent hover:bg-hover active:bg-press");
-  expect(report().circles.danger).toContain("border border-destructive bg-destructive");
+  expect(report().circles.danger).toContain("bg-destructive border-[0.5px] border-danger-line hover:bg-danger-hover active:bg-danger-press");
 
   expect(app.count(`id:circle-${VARIANT}-glyph.danger`)).toBe(1);
   expect(app.count(`id:circle-${VARIANT}-sm-glyph.danger`)).toBe(1);
