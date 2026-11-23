@@ -1,7 +1,7 @@
 // The topic list beside the conversation (the whole screen on phones): its views (by date, by tag,
 // the agents' topics, the TODO items' runs with their running count), a search on the loaded
 // topics' titles, foldable groups, each topic with its icon, title and activity mark, and older
-// topics on demand. Metrics from the Vue
+// topics on demand (the last row, `olderRow`). Metrics from the Vue
 // console's ChatView.css / common.css (`.chat-topic-*`, `.workspace-sidebar-*`): a 57pt head, rows
 // 40pt tall 2pt apart (44 on phones) with a 20pt icon and a 14pt title (15 on mobile) that fades
 // where it is cut, group labels in mono caps with a hairline running out to the right, one
@@ -12,9 +12,9 @@
 // measure them and move with them. A topic in the tag view can be dragged onto a tag group to add
 // that tag (./topicDrag.ts), the groups it can go to outlined meanwhile: with a mouse straight away,
 // on a touch screen once a finger has rested on it (a swipe stays the list's scroll).
-import { Image, Scroll, signal, Text, token, View, type InputRef, type ViewRef } from "nsh";
+import { cleanup, Image, Scroll, signal, Text, token, untracked, View, type InputRef, type ScrollRef, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { BAR_ICON_SIZE, Button, CIRCLE_BUTTON_ON_FILL, circleButtonClass, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
+import { BAR_ICON_SIZE, CIRCLE_BUTTON_ON_FILL, circleButtonClass, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
@@ -181,7 +181,8 @@ export function TopicSidebar(props: {
   hidden?: boolean;
   /** Hears where parts lie on the page (tests): `sidebar`, `head-action` (the head's last button),
    * `head-icon` (its icon), `head-<agents|cron|tags|new>` and `head-<…>-icon` (each head button and
-   * its icon), `status-<topic id>` and `title-<topic id>`. */
+   * its icon), `status-<topic id>`, `title-<topic id>`, and `older`, `older-icon` and `older-label`
+   * (the load-older row, its icon's box and its label). */
   onPartLayout?: PartLayoutListener;
 }) {
   const c = props.c;
@@ -242,6 +243,42 @@ export function TopicSidebar(props: {
     (headParts[key] ??= {}).icon = boundsFrame(event);
     reportHead(key, last);
   };
+  // Each row's view by its key, the list and its content: loading older topics keeps the reader's
+  // place (`loadOlder`).
+  const rowRefs = new Map<string, ViewRef>();
+  const keepRowRef = (key: string) => (node: ViewRef) => {
+    rowRefs.set(key, node);
+    cleanup(() => {
+      if (rowRefs.get(key) === node) rowRefs.delete(key);
+    });
+  };
+  let listRef: ScrollRef | undefined;
+  let contentRef: ViewRef | undefined;
+  // Older topics come in where the load-older row was, under the last row. Some go higher up (an
+  // old pinned topic joins the pinned group at the top, a tagged one its tag's group): the list
+  // then scrolls by what grew above that last row, so the rows on screen stay where they were.
+  const loadOlder = async () => {
+    if (untracked(c.topicsLoadingOlder) || untracked(c.topicsLoading)) return;
+    const rows = untracked(c.topicRows);
+    const anchor = rows.length ? rows[rows.length - 1].key : "";
+    // Where the row is in the list's content, and how far the list is scrolled (the content's top
+    // above the viewport's: measured, as the throttled scroll events may not have told the last
+    // offset). The row by its key each time: its view may be a new one once the page is in.
+    const place = async () => {
+      const [row, content, list] = await Promise.all([rowRefs.get(anchor)?.measure(), contentRef?.measure(), listRef?.measure()]);
+      if (!row || !content || !list) return null;
+      return { y: row.pagePosition.y - content.pagePosition.y, offset: list.pagePosition.y - content.pagePosition.y };
+    };
+    // Measured before the page is asked for: the commands go in order with the changes.
+    const before = place();
+    const landed = await c.loadOlderTopics();
+    const was = await before;
+    if (!landed || !was) return;
+    const now = await place();
+    if (!now || Math.abs(now.y - was.y) < 0.5) return;
+    listRef?.scrollTo({ y: now.offset + now.y - was.y, animated: false });
+  };
+
   // The search is the list's first view, scrolling with it, never the head's (the head keeps the
   // title and its buttons). On a touch phone it hides until the list is pulled down from its top;
   // on a desktop (and a desktop's window narrowed to the phone layout) it always shows.
@@ -288,6 +325,7 @@ export function TopicSidebar(props: {
     return (
       <View
         {...drag.handlers(row)}
+        ref={keepRowRef(key)}
         onLayout={(event) => {
           placeSelection(event);
           placeDrop(event);
@@ -350,6 +388,69 @@ export function TopicSidebar(props: {
     );
   };
 
+  // The last row while the agent has older topics: a press loads the next page (never on its own),
+  // and its topics come in where it was. It is drawn as a topic row is (the rows' height, inset,
+  // corners, 20pt icon box and title type, the same hover fill) in the quieter muted ink, so it
+  // reads as the list's end rather than a form button under it; the keyboard's focus shows as a
+  // fill. Loading, the clock gives way to the spinner and the label stays: busy for assistive tech
+  // (keeping the focus), and a press (or a key) does nothing. Failed, it says so in the danger ink
+  // with a warning mark, the reason in its tooltip and description, and a press tries the page
+  // again. While the first page reloads it takes no press. With no older page left it goes, and
+  // its room with it.
+  const olderRow = () => {
+    const loading = () => c.topicsLoadingOlder();
+    const failed = () => !loading() && !!c.topicsOlderError();
+    const refreshing = () => !loading() && c.topicsLoading();
+    // Failed, the words are short enough for a narrow sidebar's one line (the row keeps its
+    // height); its name says the whole of it.
+    const label = () => (failed() ? t("chat_topics_load_older_retry") : t("chat_topics_load_older"));
+    const name = () => (loading() ? t("chat_topics_loading_older") : failed() ? t("chat_topics_load_older_failed") : t("chat_topics_load_older"));
+    return (
+      <View
+        role="button"
+        onPress={() => {
+          if (!loading() && !refreshing()) void loadOlder();
+        }}
+        accessibilityLabel={name()}
+        accessibilityDescription={failed() ? c.topicsOlderError() : undefined}
+        // Busy, not disabled: a disabled view lets go of the keyboard's focus (to the page), and a
+        // keyboard user would start over from the top. Its presses are ignored instead.
+        accessibilityState={{ busy: loading(), disabled: refreshing() }}
+        android={{ accessibilityLiveRegion: "polite" }}
+        tooltip={failed() ? <Tip text={c.topicsOlderError()} /> : undefined}
+        class={`${rowHeight()} mt-0.5 flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 ${rowPadding()} transition-colors duration-[180ms] focus-visible:bg-hover ${
+          loading() || refreshing() ? "" : "hover:bg-hover-soft active:bg-hover"
+        } ${refreshing() ? "opacity-60" : ""}`}
+        style={{ paddingRight: topicRowPaddingRight(c.mobileMode()) }}
+        testID="chat-topics-load-older"
+        {...probe(() => "older")}
+      >
+        {/* Clipped: an icon's 256pt SVG would count its natural size into the list's scroll extent,
+            past its end (as the last row, the list then scrolled on into nothing, and shrank back
+            the moment the spinner took the icon's place). */}
+        <View class="size-5 items-center justify-center overflow-hidden" accessibilityElementsHidden {...probe(() => "older-icon")}>
+          <If
+            when={loading()}
+            else={
+              <If when={failed()} else={<Icon name="PhClockCounterClockwise" size={18} color="muted-foreground" testID="chat-topics-load-older-icon" />}>
+                <Icon name="PhWarningCircle" size={18} color="danger" testID="chat-topics-load-older-failed" />
+              </If>
+            }
+          >
+            <View testID="chat-topics-load-older-loading">
+              <Spinner size={16} />
+            </View>
+          </If>
+        </View>
+        <View class="flex-1" {...probe(() => "older-label")}>
+          <Text class={`${listTitleSize(c.mobileMode())} ${c.mobileMode() ? "leading-[22px]" : "leading-5"} tracking-[-0.025em] ${failed() ? "text-danger" : "text-muted-foreground"}`}>
+            {label()}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
   // A group's heading: a small mono label in caps, then a hairline that runs out to the list's
   // edge, fading (the Vue console's `.workspace-sidebar-divider`). A foldable group's is a toggle
   // with a caret, and its count while folded.
@@ -395,7 +496,7 @@ export function TopicSidebar(props: {
   );
 
   const groupRow = (row: () => Extract<TopicRow, { kind: "group" }>) => (
-    <View onLayout={drag.track(row().key)}>
+    <View onLayout={drag.track(row().key)} ref={keepRowRef(row().key)}>
       {dropOutline(row)}
       {groupHeading(row)}
     </View>
@@ -505,7 +606,10 @@ export function TopicSidebar(props: {
       <Scroll
         class={`flex-1 ${c.topicsLoading() && !c.topicsFromLastTime() ? "opacity-70" : ""}`}
         testID="chat-topic-list"
-        ref={memory.ref}
+        ref={(node: ScrollRef) => {
+          listRef = node;
+          memory.ref(node);
+        }}
         onScroll={(event) => {
           edges.handlers.onScroll(event);
           drag.onScroll(event);
@@ -526,7 +630,13 @@ export function TopicSidebar(props: {
         accessibilityActions={pull.actions()}
         onAccessibilityAction={pull.onAction}
       >
-        <View class="grow" onLayout={edges.onContentLayout}>
+        <View
+          class="grow"
+          onLayout={edges.onContentLayout}
+          ref={(node: ViewRef) => {
+            contentRef = node;
+          }}
+        >
           {/* The head's room, inside the content the rows are placed in (the drag's `contentInset`). */}
           <BarRoom />
           {/* The search (on a touch phone once pulled down): the list's first view, scrolling with
@@ -566,7 +676,7 @@ export function TopicSidebar(props: {
                     <If
                       when={row().kind === "group"}
                       else={
-                        <View class="px-3.5 pb-2.5 pt-1.5">
+                        <View class="px-3.5 pb-2.5 pt-1.5" ref={keepRowRef(row().key)}>
                           <Text class="text-xs leading-[18px] text-muted-foreground">{(row() as Extract<TopicRow, { kind: "note" }>).text}</Text>
                         </View>
                       }
@@ -579,18 +689,7 @@ export function TopicSidebar(props: {
                 </If>
               )}
             </Each>
-            <If when={c.topicsNextCursor()}>
-              <View class="items-center py-2">
-                <Button
-                  variant="plain"
-                  size="sm"
-                  label={t("chat_topics_load_older")}
-                  loading={c.topicsLoadingOlder()}
-                  onPress={() => void c.loadOlderTopics()}
-                  testID="chat-topics-load-older"
-                />
-              </View>
-            </If>
+            <If when={c.topicsNextCursor()}>{olderRow()}</If>
             <View class={c.mobileTopicSplitEnabled() ? "h-21" : "h-4"} />
           </View>
         </View>
