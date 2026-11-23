@@ -8,8 +8,14 @@ import { mobileBottomNavVisible, phoneWorkbenchOpen, systemInsets } from "../../
 import { mobilePopupFrame, type MobilePopupFrame } from "../../lib/mobilePopup";
 import type { Edges } from "../../lib/systemInsets";
 
-/** The capsule's height: 44pt slots inset 4pt all round. */
+/** The capsule's height, compact (icons only): 50pt slots inset 4pt all round. */
 export const MOBILE_NAV_HEIGHT = 58;
+/**
+ * The capsule's height expanded (icons over their labels): 56pt slots inset 4pt all round. The
+ * most it takes, so the pages' room for it (mobileBarRoom) is this whichever way it shows: the
+ * capsule compacting or expanding never moves the page.
+ */
+export const MOBILE_NAV_EXPANDED_HEIGHT = 64;
 /** The capsule's gap above the bottom safe area. */
 export const BAR_BELOW = 8;
 /** Room left between the end of a page's list and the capsule's top. */
@@ -21,17 +27,21 @@ export const BAR_INSET = 4;
 const BAR_BORDER = 0.5;
 /** The capsule's outer shadow (none on Android, where it would not follow the corners). */
 const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
-/** A slot's width where the window has room for it. */
+/** A slot's width where the window has room for it (the compact capsule). */
 export const NAV_SLOT_MAX = 60;
+/** A slot's width where the window has room for it, expanded: room for its label. */
+export const NAV_SLOT_EXPANDED_MAX = 76;
 
 /**
  * The capsule's slots in a strip `width` wide: `count` slots side by side, none reaching under its
- * neighbour, each as wide as the room allows up to NAV_SLOT_MAX (on whole points, so the row never
- * outgrows the capsule). Slot `i` starts at `slot * i`; the active pill is one slot, placed the same way.
+ * neighbour, each as wide as the room allows up to NAV_SLOT_MAX (NAV_SLOT_EXPANDED_MAX `expanded`;
+ * on whole points, so the row never outgrows the capsule). Slot `i` starts at `slot * i`; the
+ * active pill is one slot, placed the same way.
  */
-export function mobileNavSlots(width: number, count: number) {
+export function mobileNavSlots(width: number, count: number, expanded = false) {
+  const max = expanded ? NAV_SLOT_EXPANDED_MAX : NAV_SLOT_MAX;
   const room = width - 2 * (BAR_SIDE + BAR_INSET + BAR_BORDER);
-  const slot = count > 0 ? Math.max(0, Math.min(NAV_SLOT_MAX, Math.floor(room / count))) : NAV_SLOT_MAX;
+  const slot = count > 0 ? Math.max(0, Math.min(max, Math.floor(room / count))) : max;
   return { slot, rowWidth: slot * Math.max(0, count), left: (index: number) => slot * index };
 }
 
@@ -49,12 +59,15 @@ export function mobileSheetFrame(width: number, height: number, barRoom: number,
   return mobilePopupFrame({ width, height, area, keyboard, below: barRoom, share: SHEET_MAX_SHARE });
 }
 
-/** The room the floating bar takes at the foot of the window, clearance included (0 while it is not shown). */
+/**
+ * The room the floating bar takes at the foot of the window, clearance included (0 while it is not
+ * shown): for the expanded capsule, the taller, whether it is expanded or compact now.
+ */
 export function mobileBarRoom() {
   if (!mobileBottomNavVisible()) return 0;
   // The bottom inset under the bar, unless the open workbench below the page takes it.
   const below = systemInsets() ? systemInsets()!.bottomNav : phoneWorkbenchOpen() ? 0 : safeArea().bottom;
-  return MOBILE_NAV_HEIGHT + BAR_BELOW + below + BAR_CLEARANCE;
+  return MOBILE_NAV_EXPANDED_HEIGHT + BAR_BELOW + below + BAR_CLEARANCE;
 }
 
 /**

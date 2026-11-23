@@ -1,10 +1,11 @@
 // The phone's bottom navigation: its five slots (Chat, Contacts, TODO, More, the agent) sit side by
 // side, none reaching under another, each wide enough to press, on the narrowest phones, in
-// landscape and with larger text; the active pill covers its own slot and no other; and More and
-// the agent open the same sheet: as wide as the window less the bar's margins, above the bar, and
-// no taller than its rows.
+// landscape and with larger text, expanded (icons over labels) and compact (icons only); the active
+// pill covers its own slot and no other; and More and the agent open the same sheet: as wide as
+// the window less the bar's margins, above the bar, and no taller than its rows. When it expands
+// and compacts: tests/mobile-nav-scroll.test.tsx.
 import { expect, open, test } from "nsh/test";
-import { mobileNavSlots, mobileSheetFrame, NAV_SLOT_MAX } from "../components/frame/mobileBar";
+import { MOBILE_NAV_EXPANDED_HEIGHT, MOBILE_NAV_HEIGHT, mobileNavSlots, mobileSheetFrame, NAV_SLOT_EXPANDED_MAX, NAV_SLOT_MAX } from "../components/frame/mobileBar";
 import { POPUP_GAP, POPUP_MAX_WIDTH } from "../lib/mobilePopup";
 
 type Frame = { x: number; y: number; w: number; h: number; from?: number };
@@ -25,16 +26,26 @@ async function openNav(width: number, height: number, extra: Record<string, unkn
     await app.waitUntil(() => motion()[label] !== undefined);
     return motion()[label];
   };
-  return { app, frames, sampled };
+  /** The resizes the strip made, in order: `["compact", ms]`, `["expanded", ms]`. */
+  const resizes = () =>
+    JSON.parse((app.texts().find((text) => text.startsWith("resize:")) ?? "resize:[]").slice(7)) as [string, number][];
+  /** Scrolls the stand-in page down (compact) or back to its top (expanded), and waits for the slots. */
+  const setCompact = async (compact: boolean) => {
+    await app.press(compact ? "id:nav-compact" : "id:nav-expand");
+    await app.waitFor(`id:mobile-nav-row.${compact ? "compact" : "expanded"}`);
+    const height = (compact ? MOBILE_NAV_HEIGHT : MOBILE_NAV_EXPANDED_HEIGHT) - 8;
+    await app.waitUntil(() => SLOTS.every((slot) => frames()[slot]?.h === height));
+  };
+  return { app, frames, sampled, resizes, setCompact };
 }
 
 /** The slots' frames side by side: each its own stretch of the row, as wide as a press needs. */
-function expectSeparateSlots(frames: Record<string, Frame>, width: number) {
+function expectSeparateSlots(frames: Record<string, Frame>, width: number, compact = false) {
   const row = SLOTS.map((slot) => frames[slot]);
   for (const frame of row) {
     expect(frame).toBeDefined();
     expect(frame.w).toBeGreaterThanOrEqual(MIN_TARGET);
-    expect(frame.w).toBeLessThanOrEqual(NAV_SLOT_MAX);
+    expect(frame.w).toBeLessThanOrEqual(compact ? NAV_SLOT_MAX : NAV_SLOT_EXPANDED_MAX);
     expect(frame.h).toBeGreaterThanOrEqual(MIN_TARGET);
   }
   for (let i = 1; i < row.length; i++) {
@@ -71,6 +82,17 @@ test("the slots' geometry fits the strip without overlapping", () => {
   expect(mobileNavSlots(320, 5).slot).toBe(57);
   expect(mobileNavSlots(360, 5).slot).toBe(NAV_SLOT_MAX);
   expect(mobileNavSlots(844, 5).slot).toBe(NAV_SLOT_MAX);
+  // Expanded, a slot takes the room its label needs, as far as the window has it.
+  for (const width of [288, 320, 360, 390, 740, 980]) {
+    const { slot, rowWidth } = mobileNavSlots(width, 5, true);
+    expect(slot).toBeGreaterThanOrEqual(mobileNavSlots(width, 5).slot);
+    expect(slot).toBeLessThanOrEqual(NAV_SLOT_EXPANDED_MAX);
+    expect(rowWidth + 2 * (12 + 4 + 0.5)).toBeLessThanOrEqual(width);
+  }
+  expect(mobileNavSlots(320, 5, true).slot).toBe(57);
+  expect(mobileNavSlots(360, 5, true).slot).toBe(65);
+  expect(mobileNavSlots(390, 5, true).slot).toBe(71);
+  expect(mobileNavSlots(844, 5, true).slot).toBe(NAV_SLOT_EXPANDED_MAX);
 });
 
 for (const [label, width, height] of [
@@ -80,9 +102,21 @@ for (const [label, width, height] of [
   ["a phone in landscape", 780, 360],
 ] as const) {
   test(`on ${label} the slots sit side by side, and the pill covers only the active one`, async () => {
-    const { app, frames } = await openNav(width, height);
+    const { app, frames, setCompact } = await openNav(width, height);
+    // Expanded first: each label under its icon; the agent's portrait has none.
     expectSeparateSlots(frames(), width);
+    expect(frames()["mobile-nav-chat"].h).toBe(MOBILE_NAV_EXPANDED_HEIGHT - 8);
+    for (const slot of ["mobile-nav-chat", "mobile-nav-contacts", "mobile-nav-todo", "mobile-nav-more"]) {
+      expect(app.shows(`id:${slot}-label.shown`)).toBe(true);
+    }
+    expect(app.count("id:mobile-nav-agent-label.shown") + app.count("id:mobile-nav-agent-label.folded")).toBe(0);
+    if (width >= 400) expect(frames()["mobile-nav-chat"].w).toBe(NAV_SLOT_EXPANDED_MAX);
+    // Compact: the same slots, icons alone, as before the labels came.
+    await setCompact(true);
+    expectSeparateSlots(frames(), width, true);
     if (width >= 360) expect(frames()["mobile-nav-chat"].w).toBe(NAV_SLOT_MAX);
+    expect(app.shows("id:mobile-nav-chat-label.folded")).toBe(false);
+    expect(app.count("id:mobile-nav-chat-label.shown")).toBe(0);
 
     // Every destination takes its press: More and the agent open their sheets, and the pill moves
     // onto the slot that is now active.
@@ -98,19 +132,60 @@ for (const [label, width, height] of [
     expectHighlightOn(frames(), "mobile-nav-agent");
     await app.keyboard.press("escape");
     await app.waitFor("id:mobile-agents-list", { state: "gone" });
+
+    // Expanded again, the pill follows its slot to the wider row.
+    await expectPillOnExpandedMore(app, frames, setCompact);
     // (The primary pages' slots navigate: tests/shell.test.tsx presses them in the console at 320pt.)
   });
 }
 
+/** More open in the expanded capsule: the pill lies on More's wider slot; closed again. */
+async function expectPillOnExpandedMore(
+  app: Awaited<ReturnType<typeof openNav>>["app"],
+  frames: () => Record<string, Frame>,
+  setCompact: (compact: boolean) => Promise<void>,
+) {
+  await setCompact(false);
+  await app.press("id:mobile-nav-more");
+  await app.waitFor("id:mobile-more");
+  await app.waitUntil(() => Math.abs(frames().highlight.x - frames()["mobile-nav-more"].x) < 0.5);
+  expectHighlightOn(frames(), "mobile-nav-more");
+  await app.keyboard.press("escape");
+  await app.waitFor("id:mobile-more", { state: "gone" });
+}
+
 test("rotating the phone refits the slots", async () => {
-  const { app, frames } = await openNav(320, 640);
+  const { app, frames, setCompact } = await openNav(320, 640);
   expect(frames()["mobile-nav-chat"].w).toBe(57);
   await app.setViewport(640, 320);
-  await app.waitUntil(() => frames()["mobile-nav-chat"].w === NAV_SLOT_MAX);
+  await app.waitUntil(() => frames()["mobile-nav-chat"].w === NAV_SLOT_EXPANDED_MAX);
   expectSeparateSlots(frames(), 640);
+  await setCompact(true);
+  await app.waitUntil(() => frames()["mobile-nav-chat"].w === NAV_SLOT_MAX);
   await app.setViewport(320, 640);
   await app.waitUntil(() => frames()["mobile-nav-chat"].w === 57);
-  expectSeparateSlots(frames(), 320);
+  expectSeparateSlots(frames(), 320, true);
+});
+
+test("the capsule resizes in a short motion, and at once with reduced motion", async () => {
+  const moving = await openNav(390, 844);
+  await moving.setCompact(true);
+  await moving.setCompact(false);
+  expect(moving.resizes()).toEqual([
+    ["compact", 160],
+    ["expanded", 160],
+  ]);
+  const still = await openNav(390, 844, { reducedMotion: true });
+  await still.setCompact(true);
+  await still.setCompact(false);
+  expect(still.resizes()).toEqual([
+    ["compact", 0],
+    ["expanded", 0],
+  ]);
+  // The same frames either way, once settled.
+  expect(still.frames()["mobile-nav-todo"]).toEqual(moving.frames()["mobile-nav-todo"]);
+  await moving.app.dispose();
+  await still.app.dispose();
 });
 
 test("a sheet floats above the bar, inset as the bar is, and leaves room above it", () => {
