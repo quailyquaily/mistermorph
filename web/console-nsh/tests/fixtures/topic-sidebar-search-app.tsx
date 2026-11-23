@@ -55,6 +55,7 @@ const c = {
   topicsLoading: () => loading(),
   topicsFromLastTime: () => false,
   topicsLoadingOlder: () => false,
+  topicsOlderError: () => "",
   topicsLoadError: () => "",
   topicsLoadErrorInSidebar: () => false,
   chatLoadBusy: () => false,

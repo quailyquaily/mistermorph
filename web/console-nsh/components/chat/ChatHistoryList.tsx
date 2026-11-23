@@ -71,9 +71,9 @@ export const HISTORY_OLDER_ROW_HEIGHT = 44;
 // messages and the composer in weight. The button is the shared plain one at the sizes the
 // console's other commands take: on a phone the 44pt one, so the whole height of the row is the
 // button itself (its press and focus fills too, not room lent to a smaller one); on wider
-// screens the 38pt one, as the topic list's own "load older". It keeps its size whether idle or
-// loading (the button turns busy in place, its presses blocked, and says so to assistive tech),
-// so nothing on screen moves while a page loads; with no older page left the row goes
+// screens the 38pt one. It keeps its size whether idle or loading (the button turns busy in
+// place, its presses blocked, and says so to assistive tech), so nothing on screen moves while a
+// page loads; with no older page left the row goes
 // (ChatHistoryList's `hasOlder`). A label too long for the column wraps between rules that keep
 // a stub each, and the row grows with it: never cut off, never pushed out of the column.
 export function OlderBoundary(props: {

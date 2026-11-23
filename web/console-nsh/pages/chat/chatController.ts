@@ -114,6 +114,7 @@ import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCar
 import type { ComposerFileItem, ComposerHandle, ComposerProfileItem } from "../../components/chat/ChatComposer";
 import { popupOpen } from "../../components/ui";
 import { createEntryFocus } from "./entryFocus";
+import { createOlderTopicPages } from "./olderTopics";
 import type { ChatRowContext, HistoryItem } from "../../components/chat/ChatHistoryItem";
 import type { ElevationAnswer, ElevationState } from "../../components/chat/ChatElevationCard";
 import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQuestionCard";
@@ -414,8 +415,39 @@ export function createChatController() {
   const historyNextCursor = signal("");
   const topics = signal<any[]>([]);
   const topicsLoading = signal(false);
-  const topicsLoadingOlder = signal(false);
   const topicsNextCursor = signal("");
+  // The older pages of the topic list, a press at a time (./olderTopics.ts). A page that fails says
+  // so in the list's own control, which then tries it again: not in the notices.
+  const olderTopics = createOlderTopicPages({
+    cursor: () => untracked(topicsNextCursor),
+    blocked: () => untracked(topicsLoading) || !untracked(consoleTopicsEnabled),
+    fetch: async (cursor) => {
+      const data = await runtimeApiFetchForEndpoint(
+        untracked(submitEndpointRef),
+        `/topics?limit=${encodeURIComponent(TOPIC_PAGE_LIMIT)}&cursor=${encodeURIComponent(cursor)}`,
+      );
+      return { items: Array.isArray(data?.items) ? data.items : [], nextCursor: String(data?.next_cursor || "").trim() };
+    },
+    land: (page) => {
+      const known = new Set(untracked(topics).map((topic) => normalizeTopicID(topic?.id)).filter(Boolean));
+      const older = page.items.filter((topic: any) => {
+        const id = normalizeTopicID(topic?.id);
+        if (!id || known.has(id)) return false;
+        known.add(id);
+        return true;
+      });
+      const items = [...untracked(topics), ...older];
+      items.sort(compareTopicsNewestFirst);
+      batch(() => {
+        topics.set(items);
+        topicsNextCursor.set(page.nextCursor);
+      });
+    },
+    errorText: (error) => errorMessage(error, t("msg_load_failed")),
+  });
+  const topicsLoadingOlder = olderTopics.loading;
+  /** Why the last older page of topics did not come ("" when it did): the list's control says so and tries again. */
+  const topicsOlderError = olderTopics.error;
   // Why the conversation or the topic list could not be loaded, shown in the chat view with a
   // Refresh (ChatLoadError) rather than in the notice stack. A history failure belongs to the
   // conversation it was for (its history scope); a topic list failure to the agent.
@@ -2403,7 +2435,7 @@ export function createChatController() {
       topicsFromLastTime.set(false);
       topics.set([]);
       topicsLoading.set(false);
-      topicsLoadingOlder.set(false);
+      olderTopics.reset();
       topicsNextCursor.set("");
       selectedTopicID.set("");
       applyComposerTopicLLMProfile("");
@@ -2471,6 +2503,8 @@ export function createChatController() {
         topicsNextCursor.set(String(data?.next_cursor || "").trim());
         topicsLoadError.set("");
         topicsFromLastTime.set(false);
+        // A fresh first page and its cursor: an older page that failed before is not the one now.
+        if (!untracked(topicsLoadingOlder)) olderTopics.clearError();
       });
       if (preferredTopicID && items.some((topic) => normalizeTopicID(topic?.id) === preferredTopicID)) {
         batch(() => {
@@ -2534,33 +2568,9 @@ export function createChatController() {
     }
   }
 
-  async function loadOlderTopics() {
-    const cursor = String(untracked(topicsNextCursor) || "").trim();
-    if (!cursor || untracked(topicsLoading) || untracked(topicsLoadingOlder) || !untracked(consoleTopicsEnabled)) return;
-    topicsLoadingOlder.set(true);
-    try {
-      const data = await runtimeApiFetchForEndpoint(
-        untracked(submitEndpointRef),
-        `/topics?limit=${encodeURIComponent(TOPIC_PAGE_LIMIT)}&cursor=${encodeURIComponent(cursor)}`,
-      );
-      const known = new Set(untracked(topics).map((topic) => normalizeTopicID(topic?.id)).filter(Boolean));
-      const older = (Array.isArray(data?.items) ? data.items : []).filter((topic: any) => {
-        const id = normalizeTopicID(topic?.id);
-        if (!id || known.has(id)) return false;
-        known.add(id);
-        return true;
-      });
-      const items = [...untracked(topics), ...older];
-      items.sort(compareTopicsNewestFirst);
-      batch(() => {
-        topics.set(items);
-        topicsNextCursor.set(String(data?.next_cursor || "").trim());
-      });
-    } catch (error) {
-      err.set(errorMessage(error, t("msg_load_failed")));
-    } finally {
-      topicsLoadingOlder.set(false);
-    }
+  /** Loads the topic list's next older page (one at a time); true once it landed. */
+  function loadOlderTopics() {
+    return olderTopics.load();
   }
 
   const currentHistoryScope = () => {
@@ -3739,6 +3749,7 @@ export function createChatController() {
     topicsLoading,
     topicsFromLastTime,
     topicsLoadingOlder,
+    topicsOlderError,
     topicsNextCursor,
     selectedTopicID,
     creatingTopic,
