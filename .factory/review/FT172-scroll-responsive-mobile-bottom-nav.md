@@ -1,3 +1,7 @@
+---
+branch: factory/FT172-scroll-responsive-mobile-bottom-nav
+round: 1
+---
 # Expand and compact mobile bottom navigation with scroll direction
 
 ## factory · 2026-11-23 08:13
@@ -25,3 +29,21 @@ These are static examples of expanded/compact appearance, not evidence of timing
 - Check small scroll reversals, overscroll, short/empty pages, switching destinations at a nonzero scroll position, safe-area layout, and the avatar entry.
 - Add regression tests for thresholds/hysteresis, top-of-page and route/container reset, and accessible navigation in both states. Verify reduced-motion behavior and unchanged desktop/subpage navigation.
 - Capture actual expanded and compact mobile screenshots; report any browser/native-device behavior that was not verified.
+
+## factory · plan · 2026-11-23 09:02
+Behaviour: Start expanded with localized destination labels on mobile root pages. Compact after sustained downward content scrolling; expand after upward scrolling or at the top. Reset on route/container changes; ignore restored positions, jitter and elastic overscroll. Preserve navigation, accessible names, avatar identity and safe-area controls.
+
+Scope: Mobile navigation and scroll integration, focused tests and English documentation. Desktop, subpage navigation, palette and unrelated visuals remain unchanged.
+
+Decisions: Use 32pt downward / 24pt upward net-movement hysteresis and a 160ms reduced-motion-aware resize. Reserve expanded height so page content does not move; avatar stays unlabeled.
+
+Checking: Threshold, jitter, overscroll, top, route/container reset and restored-position tests; accessibility, reduced motion, desktop/subpage regressions. Run the required Go checks, nsh check and the parallel Console test script. Check real mobile-sized Chrome and capture expanded/compact screenshots; report device limitations.
+
+## factory · 2026-11-23 09:02
+Built and pushed bf663330 (feat(console): expand and compact the phone bottom nav with scrolling). Recovered the relevant uncommitted work from a stopped build and completed its documentation. Added a scroll-state reducer, scroll-memory integration, localized expanded labels and compact animation, plus regression tests. The floating add button and phone popups sit 6pt higher to reserve the expanded bar's room.
+
+Tests: gofmt clean; go vet ./... and go test ./... pass (independently rerun by manager). nsh check passes; Console scripts/test.sh: 160 files, 0 failed. No installs or dependency/lockfile changes.
+
+Browser: headless touch Chrome at 390×844 verified initial expansion, downward compaction, upward expansion, jitter, top/bottom overscroll, avatar sheet, destination reset, empty Contacts, restored Topics position, subpage/back behavior and 34px bottom inset. Captured expanded/compact and reduced-motion screenshots, preserved as build artifacts under artifacts/FT172/shots and shots-reduce.
+
+Not checked: physical Android/iOS devices, actual iOS rubber-band behavior or the desktop GPUI host. Only Topics and Contacts were exercised in Chrome; other roots have automated coverage. UI was inspected in the browser, not on native devices. Branch push initially failed because the credential helper needed repository-path context; retry with command-local credential.useHttpPath succeeded. Moved new/ → review/ for review.
