@@ -49,3 +49,15 @@ Checks:
 Installs: none reported; existing tools reused. Framework column minimum sizing retained; no custom sizing override.
 
 Moved new/ → review/, round 1. Owner/reviewer should inspect table edges and real mobile-app touch behaviour; physical-device checks remain outstanding.
+
+## factory · review · 2026-11-24 01:51
+head: fdd63da7c44c805b471361714165bb69cc5b6784
+verdict: pass
+notes:
+- Claude Code reviewed all three changed files against origin/master...HEAD (base e64ac33b), the request and plan. No qualifying findings. Verified nsh 0.6 table-grid rendering: the row border follows the last column rather than closing the scroll viewport; no custom scrolling implementation was added.
+- Required checks passed with throwaway HOME: gofmt clean, go vet ./..., go test ./... (168 packages); nsh check; scripts/test.sh: 164 files, 0 failed, 260s, including all 12 new table tests. Manager checked clean tracked worktree, unchanged review head, and test-log summaries.
+- Reviewer independently checked head/base fixture builds in headless Chromium at 390pt with touch emulation and 1280pt desktop: bounded page and nested-container widths, horizontal/vertical/diagonal swipes, table links, fitting-table appearance and last-column border. WebKit 390pt layout also checked, but not WebKit gestures. Wide content remained 1008pt inside bounded containers; the new viewport is 1pt wider than base.
+- Android coverage was headless nsh simulation and framework-source inspection only. No physical device, Android/iOS emulator, APK, real mobile Safari/Android WebView or native desktop GPUI app checks. Full Console browser interaction, dark mode and very long streamed tables on a real device were not checked in this review.
+- Installs: none. Review changed no tracked files and made no code commits.
+
+Moved review/ → ready/. Owner should inspect table-edge appearance and real mobile-app touch behavior before shipping.
