@@ -61,3 +61,14 @@ notes:
 - Installs: none. Review changed no tracked files and made no code commits.
 
 Moved review/ → ready/. Owner should inspect table-edge appearance and real mobile-app touch behavior before shipping.
+
+## factory · 2026-11-24 08:09
+Shipped ready/ → done/ in scheduled ship.
+
+Merge: a9421ae8ebc73fec072fcaa7528164463a98f4a5 into master.
+Tag: v0.3.132 (base and tag pushed atomically).
+Reviewed branch head: fdd63da7c44c805b471361714165bb69cc5b6784, unchanged; latest review passed and no owner note followed it.
+
+Merged-base checks passed with throwaway HOME: gofmt clean, go vet ./..., go test ./...; nsh check; required scripts/test.sh: 164 files, 0 failed, 374s. No new browser/device checks in this ship; physical mobile-device checks remain outstanding as recorded in review.
+
+Linked issues/PRs: none; nothing closed. Branch not deleted (clean not configured). Installs: none. Scheduled ship required no coder changes or conflict resolution.
