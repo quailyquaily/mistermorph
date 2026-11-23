@@ -52,3 +52,13 @@ Installs: none; existing pinned nsh 0.6.0, playwright-core and Chrome used.
 Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`; `nsh check`; and `web/console-nsh/scripts/test.sh` (160 files, 0 failed, 251s). Coder also passed all checks; 18 new regression tests cover single request, retry, scope reset, geometry, state transitions, keyboard Space, grouped/search views and scroll anchoring. No forbidden paths changed; one focused code commit, clean worktree.
 
 Visual/manual: coder inspected actual running Console with a stub API in Chrome at desktop 1280x800 and phone 390x844, light/dark, including idle/loading/failure/exhaustion, focus, retry, duplicate input, and scroll retention. Limitations: only date view inspected in Chrome (tag/search headless only); dark screenshots predate shorter final retry label (final label inspected in light only). No real screen reader, physical mobile device or desktop app. Accessibility announcements checked by ARIA attributes only. Exhaustion removes a focused control and returns focus to page. Review should examine these remaining visual/accessibility cases.
+
+## factory · review · 2026-11-23 14:43
+head: 77a9e7d41d9c4652dba27146287255dd635a6534
+verdict: pass
+notes:
+- Claude Code reviewed all 11 files in origin/master...HEAD against the request and plan; no P0/P1/P2/P3 findings. Merge with current master (4ba41b9a) is clean.
+- Required Go gate passed: clean gofmt, go vet ./..., go test ./... (168 tested packages; exit 0). nsh check passed. Console scripts/test.sh passed: 160 files, 0 final failures, 392s; eight parallel-pass failures all passed the script's isolated retries. Extra Node tests passed. Worktree unchanged; no installs or manifest changes.
+- Review did not repeat browser visual checks. Builder's desktop/phone light/dark Chrome checks and headless geometry tests remain the visual evidence; final shorter retry label was not rechecked in dark. Real screen reader, physical phone and desktop app remain unchecked.
+- Residual coverage: middle tag-group insertion scroll anchoring and focus during first-page refresh were not verified; last-row/pinned anchoring covered. Focus returning to page on exhaustion is pre-existing, not introduced.
+- Moved review/ → ready/.
