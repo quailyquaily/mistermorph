@@ -4,7 +4,7 @@
 import { mount, signal, Text, View } from "nsh";
 import { Button, type ButtonVariant } from "../../components/ui";
 
-const VARIANTS: ButtonVariant[] = ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger"];
+const VARIANTS: ButtonVariant[] = ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger", "outlined-danger"];
 
 function Out(props: { name: string; value: unknown }) {
   return (

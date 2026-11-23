@@ -47,17 +47,17 @@ test("a failed action clears the beam too, and the button works again", async ()
 
 test("every variant draws the beam while loading, keeps its label, and none when idle", async () => {
   const app = await openGallery();
-  for (const variant of ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger"]) {
+  for (const variant of ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger", "outlined-danger"]) {
     expect(app.count(`id:idle-${variant}-loading`)).toBe(0);
     expect(app.shows(`id:held-${variant}-loading`)).toBe(true);
     expect(app.shows(`id:icon-${variant}-loading`)).toBe(true);
     expect(app.enabled(`id:held-${variant}`)).toBe(false);
     expect(app.enabled(`id:idle-${variant}`)).toBe(true);
   }
-  expect(app.texts().filter((text) => text === "Held")).toHaveLength(6);
+  expect(app.texts().filter((text) => text === "Held")).toHaveLength(7);
 
   await app.press("id:toggle-held");
-  for (const variant of ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger"]) {
+  for (const variant of ["primary", "outlined", "plain", "danger", "highlight", "ghost-danger", "outlined-danger"]) {
     expect(app.count(`id:held-${variant}-loading`)).toBe(0);
     expect(app.count(`id:icon-${variant}-loading`)).toBe(0);
     expect(app.enabled(`id:held-${variant}`)).toBe(true);
