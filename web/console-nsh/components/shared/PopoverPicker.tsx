@@ -266,13 +266,21 @@ export function PopoverPicker(props: {
     return Math.max(least, Math.min(most, left));
   };
 
+  // The trigger is made once and told whether the list is open through a getter: read here, `open`
+  // would make the trigger again each time the list opens or closes, and a new view has nothing to
+  // ease from (a caret would jump round instead of turning).
+  const triggerState = {
+    get open() {
+      return open();
+    },
+  };
   const anchorView = () => (
     <View
       ref={(node: ViewRef) => {
         anchor = node;
       }}
     >
-      {props.trigger({ open: open() })}
+      {props.trigger(triggerState)}
     </View>
   );
 
