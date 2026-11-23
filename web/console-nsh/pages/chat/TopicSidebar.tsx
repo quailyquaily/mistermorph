@@ -544,9 +544,7 @@ export function TopicSidebar(props: {
               compact
               title={t("chat_topics_load_failed")}
               message={c.topicsLoadError()}
-              refreshLabel={t("action_refresh")}
               busy={c.chatLoadBusy()}
-              onRefresh={() => void c.retryChatLoad()}
               testID="chat-topics-load-error"
             />
           </If>
