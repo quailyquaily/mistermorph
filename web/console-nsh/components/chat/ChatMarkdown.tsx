@@ -3,8 +3,16 @@
 // 20/18/16), tables with a hairline frame and row rules but no cell grid, quotes with a blue rule on
 // a faint fill, inline code on a light blue tint, and code blocks as one dark panel with the
 // language at the top left and copy at the top right. Links open outside the app.
+//
+// Tables keep TextView's own widths and scrolling: each column fits its content when there is room
+// and shrinks (its cells wrapping) only down to a readable floor; past the floors the cells scroll
+// sideways in the table's own horizontal scroll view, as wide as the text at most (a phone's reply,
+// a panel), so a wide table never widens the reply or the page, and a table that fits hugs its
+// cells with nothing to scroll. The frame's right line is drawn by the rows, at the cells' end,
+// not by that scroll view: a table cut by the reply's edge shows open cells there, which read as
+// "more this way", and the frame closes once it is scrolled to its end.
 import { Image, Scroll, signal, Text, View } from "nsh";
-import { Button as BaseButton, TextView, type TextViewCodeBlock } from "nsh/base";
+import { Button as BaseButton, TextView, type TextViewClasses, type TextViewCodeBlock } from "nsh/base";
 import { ICONS } from "../icons";
 import { pushNotice } from "../../lib/core/notices.js";
 import { copyText, openExternal } from "../../lib/platform";
@@ -84,6 +92,30 @@ function CodeBlock(props: { block: TextViewCodeBlock; copyLabel: string }) {
   );
 }
 
+/** The reply's look, by TextView part. */
+export const CHAT_MARKDOWN_CLASSES = {
+  root: "gap-2.5 leading-[27.2px]",
+  paragraph: "text-base leading-[27.2px]",
+  heading1: "text-xl font-semibold",
+  heading2: "text-lg font-semibold tracking-[-0.02em]",
+  heading3: "text-base font-semibold",
+  heading4: "text-base font-semibold",
+  // Its own ink and no underline, so inline code pressed to copy (a link around it) does not
+  // read as a link.
+  code: "font-mono text-[14px] text-foreground no-underline bg-selection",
+  strong: "font-semibold",
+  blockquote: "border-l-[3px] border-blue/45 bg-hover-soft py-[12.8px] pl-4 pr-4 text-foreground",
+  list: "gap-[3.5px]",
+  // As wide as its cells, at most the text's width (past it the cells scroll).
+  table: "max-w-full self-start",
+  // Each row spans the cells: its right line is the frame's, at the cells' end.
+  tableRow: "border-r border-line-soft",
+  tableHead: "bg-line/12",
+  tableCell: "border-r-0 border-b-line/31 px-[11.5px] py-[9.3px] text-base leading-[27.2px] text-foreground",
+  tableHeaderCell: "border-b-line-soft font-semibold",
+  link: "text-blue",
+} satisfies TextViewClasses;
+
 export function ChatMarkdown(props: { source: string; streaming?: boolean; class?: string; testID?: string; copyLabel?: string }) {
   return (
     <TextView
@@ -94,25 +126,7 @@ export function ChatMarkdown(props: { source: string; streaming?: boolean; class
       renderCodeBlock={(block) => <CodeBlock block={block} copyLabel={props.copyLabel ?? "Copy"} />}
       onLinkPress={(event) => openChatLink(event.url)}
       class={`text-base text-foreground ${props.class ?? ""}`}
-      classes={{
-        root: "gap-2.5 leading-[27.2px]",
-        paragraph: "text-base leading-[27.2px]",
-        heading1: "text-xl font-semibold",
-        heading2: "text-lg font-semibold tracking-[-0.02em]",
-        heading3: "text-base font-semibold",
-        heading4: "text-base font-semibold",
-        // Its own ink and no underline, so inline code pressed to copy (a link around it) does not
-        // read as a link.
-        code: "font-mono text-[14px] text-foreground no-underline bg-selection",
-        strong: "font-semibold",
-        blockquote: "border-l-[3px] border-blue/45 bg-hover-soft py-[12.8px] pl-4 pr-4 text-foreground",
-        list: "gap-[3.5px]",
-        table: "max-w-full self-start border-r border-line-soft",
-        tableHead: "bg-line/12",
-        tableCell: "border-r-0 border-b-line/31 px-[11.5px] py-[9.3px] text-base leading-[27.2px] text-foreground",
-        tableHeaderCell: "border-b-line-soft font-semibold",
-        link: "text-blue",
-      }}
+      classes={CHAT_MARKDOWN_CLASSES}
     />
   );
 }
