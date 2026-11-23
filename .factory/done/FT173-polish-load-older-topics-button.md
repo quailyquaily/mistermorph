@@ -62,3 +62,10 @@ notes:
 - Review did not repeat browser visual checks. Builder's desktop/phone light/dark Chrome checks and headless geometry tests remain the visual evidence; final shorter retry label was not rechecked in dark. Real screen reader, physical phone and desktop app remain unchecked.
 - Residual coverage: middle tag-group insertion scroll anchoring and focus during first-page refresh were not verified; last-row/pinned anchoring covered. Focus returning to page on exhaustion is pre-existing, not introduced.
 - Moved review/ → ready/.
+
+## factory · 2026-11-23 16:04
+Shipped on owner request: "ship ready items, but no new tag this time." Item merge: 41e2df6ebf0923d0c5c9ae05ab1af69185d8fa87. Pushed master and verified remote at 5cd8043216b2f750686e103f83b0df1040969da6. No tag created or pushed; remote tag refs verified unchanged. No linked issues/PRs to close. Branch retained (clean not configured).
+
+Initial push rejected because master advanced to 2f9f4782. Claude Code resolved the MobileBottomNav conflict, preserving the shared CapsuleNav refactor and FT172 expansion/scroll/accessibility behavior; integration merge 5cd80432. FT173 load-older and remote chat retry changes preserved. Final checks rerun on integrated head: gofmt/vet/go test ./... pass (168 tested packages, cached); nsh check pass; affected Console tests 38 files pass; full scripts/test.sh 161 files pass, zero retries; Console Node 330/330, QR/calendar Node 27/27, Cloudflare 24/24. Initial pre-integration suite also passed with five isolated retries; initial unsupported multi-path nsh invocation corrected and passed. No installs or manifest/lockfile changes.
+
+No new browser/native build/screen-reader/device checks. FT173 final dark retry label, real screen reader, middle tag-group anchoring and first-page refresh focus remain unverified. Moved ready/ → done/ without release tag.

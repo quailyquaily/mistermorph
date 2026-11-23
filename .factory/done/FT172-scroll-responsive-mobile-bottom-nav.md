@@ -57,3 +57,10 @@ notes:
 - Evidence correction to the build report: the safe-area compact artifact still records expanded state, and the safe-area logs retain the same capsule position as without the inset; these artifacts do not demonstrate compact safe-area behavior or the claimed 34px inset. No concrete code defect established, but this browser check remains unverified.
 - Reviewer performed no new browser/native checks. Existing Topics/Contacts screenshots were inspected; other roots have automated coverage only. Physical iOS/Android rubber-band/fling behavior, desktop GPUI at phone width, and actual bottom-inset behavior still need manual checking.
 - Moved review/ → ready/. Owner should inspect safe-area behavior on an actual mobile device before shipping.
+
+## factory · 2026-11-23 16:04
+Shipped on owner request: "ship ready items, but no new tag this time." Item merge: cc4ed20c314836523af866622ddddaf1d9c99177. Pushed master and verified remote at 5cd8043216b2f750686e103f83b0df1040969da6. No tag created or pushed; remote tag refs verified unchanged. No linked issues/PRs to close. Branch retained (clean not configured).
+
+Initial push rejected because master advanced to 2f9f4782. Claude Code resolved the MobileBottomNav conflict, preserving the shared CapsuleNav refactor and FT172 expansion/scroll/accessibility behavior; integration merge 5cd80432. FT173 load-older and remote chat retry changes preserved. Final checks rerun on integrated head: gofmt/vet/go test ./... pass (168 tested packages, cached); nsh check pass; affected Console tests 38 files pass; full scripts/test.sh 161 files pass, zero retries; Console Node 330/330, QR/calendar Node 27/27, Cloudflare 24/24. Initial pre-integration suite also passed with five isolated retries; initial unsupported multi-path nsh invocation corrected and passed. No installs or manifest/lockfile changes.
+
+No new browser/native build/screen-reader/device checks. FT172 actual compact safe-area/inset behavior, physical Android/iOS scroll behavior and desktop GPUI at phone width remain unverified. Moved ready/ → done/ without release tag.
