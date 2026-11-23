@@ -62,3 +62,10 @@ notes:
 - Validation by Claude Code: required gofmt/vet/Go test command passed; nsh check passed; scripts/test.sh passed, 160 files, 0 failed, 339s. Four parallel failures (chat-attachments, chat-topic-drag, setup, dialog-sheet) passed the harness's isolated retry. Scripted checks used a throwaway HOME and canonical TMPDIR under this run.
 - Installs: none; cached pinned TypeScript copied into throwaway HOME. No manifests changed.
 - Residual risks: review did not inspect a running gallery/browser, light/dark desktop/mobile rendering, real Tab navigation or Android/desktop native apps. Held-press text contrast near 4.4:1 remains the build's disclosed limitation; no new visual contrast verification was performed in review.
+
+## factory · 2026-11-23 17:19
+Shipped ready/ → done/.
+- Merge commit: e5c2829c95b034b0b5ac28d071dbb74d16ef9119 on master; release tag: v0.3.129. Both pushed atomically.
+- Checks on merged base: nsh check PASS; required Console scripts/test.sh PASS (162 files, 0 failed); gofmt, go vet ./... and go test ./... PASS. No installs.
+- Linked issues/PRs: none; nothing closed. Branch retained (clean is not configured).
+- Visual/UI inspection was not repeated during ship; prior build/review limitations and P3 note remain recorded above.

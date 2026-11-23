@@ -66,3 +66,9 @@ notes:
 - Theme contrast verified for all enabled fills: minimum 4.92:1 light and 4.99:1 dark. Tracked worktree clean after review.
 - Review did not render the UI: shadows, focus ring, clipping and device-pixel alignment were inspected in code only; pressed state verified structurally. Android device/emulator and desktop GPUI remain unverified. Android intentionally preserves the documented no-shadow workaround, including no shadow-based keyboard focus ring. Builder's prior Chrome checks are recorded above, not repeated by reviewer.
 - Owner should inspect real-page primary dialog confirmation, Android/desktop, and fractional-DPR hairlines. FT174 also edits ui.tsx/theme.json and may conflict when shipped. Moved review/ → ready/; no merge into master or release performed.
+
+## factory · 2026-11-23 17:19
+Scheduled ship could not merge this item; ready/ → review/.
+- Conflict: web/console-nsh/components/ui.tsx when merging after FT174. Merge aborted, no conflict edits or code fixes made.
+- Base head: e5c2829c95b034b0b5ac28d071dbb74d16ef9119 (master, released in v0.3.129).
+- The next review must merge current origin/master into this item branch, preserve both button treatments, resolve the conflict, rerun checks and review the resulting head. Not shipped or tagged; branch retained.
