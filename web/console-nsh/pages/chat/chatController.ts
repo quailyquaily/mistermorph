@@ -2812,10 +2812,10 @@ export function createChatController() {
   // the list failed itself; otherwise the conversation's panel or strip does.
   const topicsLoadErrorInSidebar = () => topicsLoadError() !== "" && (mobileTopicSplitEnabled() || chatLoadErrorKind() !== "topics");
   const chatLoadRetrying = () => chatLoadRetryScope() === currentHistoryScope();
-  // A load is under way (a Refresh, a topic switch, the first load): the Refresh waits for it.
+  // A load is under way (a retry, a topic switch, the first load): the next retry waits for it.
   const chatLoadBusy = () => chatLoadRetrying() || topicsLoading() || historyLoading();
 
-  // Refresh: the conversation on screen again, and the topic list too when that failed. One at a
+  // A retry: the conversation on screen again, and the topic list too when that failed. One at a
   // time; what a load answers for a conversation no longer on screen is dropped (loadHistory's
   // version, loadTopics' draft scope).
   async function retryChatLoad() {
@@ -2837,6 +2837,38 @@ export function createChatController() {
       if (seq === chatLoadRetrySeq) chatLoadRetryScope.set(null);
     }
   }
+
+  // A load that failed is tried again without being asked (there is no Refresh to press): a
+  // little later each time while it keeps failing, and at once when the window is shown again
+  // (onPageVisibilityChange). A load that works, or a conversation with no failure, ends it.
+  const CHAT_LOAD_RETRY_DELAYS_MS = [2000, 4000, 8000, 15000, 30000];
+  let chatLoadRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  let chatLoadRetryAttempt = 0;
+  const chatLoadFailed = () => chatLoadErrorKind() !== "" || (consoleTopicsEnabled() && topicsLoadError() !== "");
+  effect(() => {
+    const failed = chatLoadFailed();
+    const busy = chatLoadBusy();
+    untracked(() => {
+      if (chatLoadRetryTimer) clearTimeout(chatLoadRetryTimer);
+      chatLoadRetryTimer = undefined;
+      if (!failed) {
+        chatLoadRetryAttempt = 0;
+        return;
+      }
+      if (busy) return;
+      const delay = CHAT_LOAD_RETRY_DELAYS_MS[Math.min(chatLoadRetryAttempt, CHAT_LOAD_RETRY_DELAYS_MS.length - 1)];
+      chatLoadRetryTimer = setTimeout(() => {
+        chatLoadRetryTimer = undefined;
+        // A hidden window waits: it tries as soon as it is shown again.
+        if (!isVisible()) return;
+        chatLoadRetryAttempt += 1;
+        void retryChatLoad();
+      }, delay);
+    });
+  });
+  cleanup(() => {
+    if (chatLoadRetryTimer) clearTimeout(chatLoadRetryTimer);
+  });
 
   async function syncTopicFromRoute(options: { force?: boolean } = {}) {
     if (!untracked(consoleTopicsEnabled)) return;
@@ -3561,6 +3593,11 @@ export function createChatController() {
     if (isVisible()) {
       resumeTrackedTasks();
       void refreshTopicActivity();
+      // A load that failed is tried again at once, from the shortest wait.
+      if (untracked(chatLoadFailed)) {
+        chatLoadRetryAttempt = 0;
+        void retryChatLoad();
+      }
     }
   }
   cleanup(onVisibilityChange(onPageVisibilityChange));

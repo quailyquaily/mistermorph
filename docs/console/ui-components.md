@@ -1,7 +1,8 @@
 # UI component gallery
 
-A testing page of the Console that lists its UI components, for looking at them, pressing them and
-reading them in each language, on a desktop window and on a phone.
+A testing page of the Console that shows its colour scheme and lists its reused UI components (the
+ones more than one area of the Console uses), for looking at them, pressing them and reading them
+in each language and in the light and dark appearance, on a desktop window and on a phone.
 
 - **Address:** `/ui-components` (under the Console's base path, for example
   `http://127.0.0.1:9080/ui-components`).
@@ -13,19 +14,25 @@ reading them in each language, on a desktop window and on a phone.
   unchanged.
 - **Optional start:** `/ui-components?group=<section id>&q=<text>` opens one section and/or with the
   filter filled in (`group` is one of the ids in `GALLERY_GROUPS`, such as `controls`, `overlays`,
-  `chat`, `settings`). The query is read once; the page does not write it back.
+  `motion`, `settings`). The query is read once; the page does not write it back.
 
 ## What is on the page
 
-- A head with the language control, a filter (by component name, file path, or the demo a
-  component is shown in), the count of matching components, and the last local action.
+- A head with the appearance control (Light or Dark), the language control, a filter (by
+  component name or file path, and by a colour token's name or value), the count of matching
+  components, and the last local action.
+- The colour scheme, a section of its own (`Colors` in the index, `?group=colors`; `All` shows
+  the components): every token of `theme.json`
+  that both palettes have, in sections by what it is for (surfaces, text, primary and accent,
+  status, lines and states, charts; `pages/ui-components/colors.ts`). Each is a swatch drawn in the
+  token as the app draws it now, with its name and its value in the appearance shown. The
+  appearance control is the Console's own setting (`themeState.setScheme`), as the language control
+  is: the choice is kept on the device.
 - A section index: a sidebar beside the page on a window wider than 900pt (a row per section with
   its count, drawn as the Settings page's index is), and a row of chips in the head that scrolls
   sideways on narrower ones. `All` shows every section; a row or a chip shows one. When nothing matches, the page says so and offers one button that
   clears the filter and shows every section again.
-- Per section: a card for each component that has a demo (its name, its file, labelled variants),
-  then a list named "No demo of their own" with every other component of that section and the
-  reason.
+- Per section: a card for each listed component (its name, its file, labelled variants).
 
 The cards take one column on a phone, two on a wide window and three on a very wide one; demos
 marked `wide` take the whole row. A card never grows past the page: tables and variants whose text
@@ -51,48 +58,32 @@ catalog strings, and the fixtures add fixed mixed-script long text to show wrapp
 
 ## Inventory
 
-`pages/ui-components/inventory.js` lists every component declared in a `.tsx` file under
-`components/` and `pages/`, exported or file-private, with how the gallery shows it:
+`pages/ui-components/inventory.js` lists the Console's reused UI components, by the file each is
+in; the gallery mounts one demo for each (`pages/ui-components/demos/`, by the entry's id).
 
-| Mode | Meaning | Count |
-| --- | --- | --- |
-| `demo` | The production component, mounted with synthetic props | 153 |
-| `composed` | Shown inside another component's demo (named by `via`) | 72 |
-| `listed` | Not mounted; the page gives the reason | 165 |
+A component is reused when its file exports it and at least two areas of the Console use it; a
+component of the shared kit (`components/shared/`) is reusable by where it is, and is listed once
+anything uses it (the capsule navigation of the phone's bottom bar, for one). An
+area is a folder of `components/` or `pages/` (`chat`, `todo`, `settings`, `contacts`, …;
+`settings-page` counts with `settings`, a file directly in `components/` is `shared`). So the
+gallery has the shared kit (`components/ui.tsx`, `components/motion/`, `components/shared/`) and
+the parts one feature made that another took up (the chat composer on the Jobs page, the index
+column of the knowledge pages, the settings fields the Setup page uses).
 
-`scripts/ui-components-inventory.test.mjs` reads the sources and fails when a component is missing
-from the inventory or when an entry names a component that no longer exists, so a new component
-must be added to the inventory (and given a demo or a reason) before the tests pass.
+Not listed, on purpose:
 
-### Components that are not mounted, and why
+- a page's own parts and file-private components;
+- a part only its own feature uses, however many of that feature's files use it;
+- whole pages and the app's frame (`Shell`, `Sidebar`, the page stack): they are bound to the
+  router and to live data, and are looked at where they are;
+- a reused component that cannot be mounted with stand-in props (it reads live stores or calls the
+  Console as soon as it mounts, such as `SecretInput`), or that only ever shows inside another
+  one's demo.
 
-- **Whole pages (16)** — Audit, Chat, Contacts, Context, Login, Logs, Memories, Overview, Repair,
-  Settings, Setup, Skills, Skill store, Stats, TODO, and the gallery itself. Each is bound to its
-  route and loads its data when mounted. Open them at their own addresses.
-- **Private parts of something not mounted (94)** — file-private components of those pages and of
-  the live panels below (for example the Setup page's stages, the Stats page's bands, the
-  Memories page's rows). They are not exported, so they cannot be mounted apart from their owner.
-- **Live components (41)** — they read live stores or call the Console or an agent as soon as they
-  mount, and take no stand-in: `InsecureBanner`, `AppMarkdownEditor`, `WorkspaceDirPickerDialog`,
-  `ArtifactPreviewCard`, `SkillFileTree`, `CoderQuotaButton`, `DailyUsagePanel`,
-  `WeChatLoginPanel`, `XLoginPanel`, `ConsoleEndpointsPanel`, `SecretInput` (asks
-  `/secrets/info` when it mounts), `SecretKeyPicker`, `LLMConfigForm` (contains `SecretInput`),
-  `SettingsAppPanel`, `SettingsUpdatePanel`, `SettingsCreditsPanel`, `ShortcutsPanel` and
-  `TopicNotificationSetting` (both change saved settings), `TodoHeartbeatEditor`, `TodoIndex`,
-  `TodoTaskEditor` (all three need the TODO page's state, which loads and saves through the API),
-  `FilePreviewDialog`, `TopicRenameDialog`, `TopicSidebar`, `WorkspacePanel` (all need the chat
-  controller), `ServerDialog`, `RuntimePanel`, `SettingsDialogs` and the Settings sections and
-  panes (all need the Settings store).
-- **Frame components (8)** — `Shell`, `Sidebar`, `MobileBottomNav`, `MobileBottomMenus`,
-  `PageStack`, `PageView`, `Workbench`, `TodoCalendar`. They follow the router and the selected
-  agent, and pressing them navigates away. Their parts that take props are shown instead:
-  `NavList`, `NavLink`, `AgentSwitcher`, `AgentPicker`.
-- **Nothing to draw (5)** — `BarRoom`, `MobileBarSpacer`, `ComposerMeasure`, `UnderContext`,
-  `AgentFavicon`.
-- **Needs a picked file (1)** — `ImageAdjustDialog`; `ImageUploadField`, which opens it, is shown.
-
-Non-visual modules (stores, helpers, hooks such as the pane stack and the sliding selection) are
-not components and are not listed.
+`scripts/ui-components-inventory.test.mjs` reads the sources and fails when an entry names a
+component that is gone or is not exported, when a listed component is no longer reused, and when
+the entries and the demos do not match one to one. It does not ask for every reused component to be
+listed: a new component needs no entry, and adding one (with its demo) is a choice.
 
 ## What the demos do and do not do
 
@@ -102,23 +93,12 @@ upload, install or navigate ends in a local note, shown in the head as "Last loc
 the page asks the Console only what the route guard and the app frame ask on any page; the demos
 ask nothing. Known limits, stated plainly:
 
-- The chat fixtures are shaped by the chat's own pure normalizers
-  (`lib/core/chat-task-history.js`, `lib/core/chat-approvals.js`, and
-  `lib/core/chat-quiet-runs.js` for the folded TODO runs of the `ChatQuietRuns` demo: eight
-  runs and one run folded, three runs open with one shown in full); `ReceivedFile` gets a stand-in
-  file store that fetches and downloads nothing.
-- `KindAvatar` and `ContactCard` read the endpoint list to find an agent contact's avatar. The
-  fixture contacts have none, so nothing is fetched and the result does not depend on that list.
-- `NavList` and `NavLink` mark the row whose address is the current one; the fixture gives its
-  first row the gallery's own address so one row is active.
+- `KindAvatar` reads the endpoint list to find an agent contact's avatar. The fixture contacts
+  have none, so nothing is fetched and the result does not depend on that list.
 - Some controls act on the device rather than the Console, as they do in production: copy buttons
   write to the clipboard, links in Markdown and in the sign-in dialogs open an `example.com`
   address, `ImageUploadField` opens the device's file picker, and the notice demo uses the
   Console's real notice stack (in memory only).
-- The elevation card counts down to a deadline, so its open example is dated one hour after the
-  page mounts; a message's relative labels follow the device's clock and time zone.
-- `RunMarker` is given an empty layout probe, because it spreads the probe it is given and the
-  web runtime cannot spread a missing one.
 - Changing the language here changes the Console's language, as the control is the Console's own.
 
 ## Buttons: text or a glyph, never both
@@ -148,7 +128,7 @@ it has no example with both.
 - `tests/ui-components.test.tsx`: the direct address and its guard (session, login redirect and
   return, setup), no navigation entry on desktop or phone, every inventory entry on the page,
   the index, the filter, the empty state and its reset, the three languages changing in place,
-  working local controls and overlays, the phone layout's sheets, and that no request is made
-  after the page has loaded.
+  working local controls and overlays, the phone layout, and that no request is made after the
+  page has loaded.
 - `scripts/ui-components-inventory.test.mjs`: the inventory against the sources
   (`node --test scripts/ui-components-inventory.test.mjs` in `web/console-nsh`).

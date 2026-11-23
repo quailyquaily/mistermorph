@@ -2,13 +2,11 @@
 // (components/shared). Each animated demo has a control that plays it again.
 import type { CanvasRenderingContext2D } from "nsh";
 import { signal, Text, token, View } from "nsh";
-import { AdjustingClock } from "../../../components/motion/AdjustingClock";
 import { BorderBeam } from "../../../components/motion/BorderBeam";
 import { Entrance } from "../../../components/motion/Entrance";
 import { FadeText } from "../../../components/motion/FadeText";
 import { PixelResolve } from "../../../components/motion/PixelResolve";
-import { RunningMark } from "../../../components/motion/RunningMark";
-import { BandEdge, sagHalf, SagRule } from "../../../components/motion/Sag";
+import { sagHalf, SagRule } from "../../../components/motion/Sag";
 import { EdgeScroll } from "../../../components/motion/ScrollEdges";
 import { ContactAvatar } from "../../../components/shared/ContactAvatar";
 import { CutoutAvatar } from "../../../components/shared/CutoutAvatar";
@@ -207,23 +205,6 @@ function SagDemo() {
   );
 }
 
-function BandDemo() {
-  const at = signal<number | null>(30);
-  return (
-    <V l="BandEdge">
-      <View class="relative h-40 w-48">
-        <BandEdge center={() => at()} band={{ size: 36, color: String(token("selection")) }} fill={String(token("nav"))} line={String(token("line-soft"))} class="absolute inset-0" />
-      </View>
-      <View class="flex-row gap-2">
-        <Button variant="outlined" size="xs" label="30" onPress={() => at.set(30)} />
-        <Button variant="outlined" size="xs" label="80" onPress={() => at.set(80)} />
-        <Button variant="outlined" size="xs" label="130" onPress={() => at.set(130)} />
-        <Button variant="plain" size="xs" label="null" onPress={() => at.set(null)} />
-      </View>
-    </V>
-  );
-}
-
 function ReplayDemo(props: { kind: "entrance" | "pixel" }) {
   const key = signal(1);
   return (
@@ -273,23 +254,6 @@ function RawJsonDemo() {
 }
 
 export const MOTION_DEMOS: DemoMap = {
-  AdjustingClock: {
-    render: () => {
-      const running = useFlag(true);
-      return (
-        <Row>
-          <V s="default" l="adjusting" row>
-            <AdjustingClock adjusting={running.on()} size={28} color="foreground" />
-            <AdjustingClock adjusting={running.on()} size={16} color="blue" />
-            <Button variant="outlined" size="xs" label={running.on() ? t("uig_state_off") : t("uig_state_on")} onPress={running.toggle} />
-          </V>
-          <V s="off" row>
-            <AdjustingClock adjusting={false} size={28} color="muted-foreground" />
-          </V>
-        </Row>
-      );
-    },
-  },
   BorderBeam: {
     render: () => (
       <Row>
@@ -321,23 +285,7 @@ export const MOTION_DEMOS: DemoMap = {
       </Col>
     ),
   },
-  RunningMark: {
-    render: () => {
-      const running = useFlag(true);
-      return (
-        <Row>
-          <V s="default" row>
-            <RunningMark running={running.on()} color={String(token("blue"))} />
-            <RunningMark running={running.on()} color={String(token("blue"))} size={12} corner={3} />
-            <RunningMark running={running.on()} color={String(token("ok"))} hollow />
-            <Button variant="outlined" size="xs" label={running.on() ? t("uig_state_off") : t("uig_state_on")} onPress={running.toggle} />
-          </V>
-        </Row>
-      );
-    },
-  },
   SagRule: { render: () => <SagDemo /> },
-  BandEdge: { render: () => <BandDemo /> },
   EdgeScroll: {
     render: () => (
       <Row>

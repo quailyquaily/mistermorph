@@ -2,7 +2,8 @@
 
 On a phone, the navigation's root pages (Topics, Contacts, TODO, and More's pages: Memories,
 Skills, Usage, Audit, Settings) show the floating capsule at the foot of the window
-(`web/console-nsh/components/frame/MobileBottomNav.tsx`). It has two sizes (FT172):
+(`web/console-nsh/components/frame/MobileBottomNav.tsx`, drawn by the shared `CapsuleNav` of
+`web/console-nsh/components/shared/CapsuleBar.tsx` with its `expansion`). It has two sizes (FT172):
 
 - **Expanded**: each page's icon with its localized label under it (the `nav_*` titles; More's
   label names the More page that is open, or "More"). This is the starting state.

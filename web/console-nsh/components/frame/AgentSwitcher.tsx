@@ -266,7 +266,9 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
   // The trigger itself is a plain view: the popover opens on a press of the view around it.
   const trigger = (): JSX.Element => (
     <View
-      class={`h-14 flex-row items-center gap-2 ${props.compact && !open() ? "justify-center px-0" : "px-[13px]"} ${
+      // Folded, the avatar stands alone in the middle, open or not: nothing joins it while its
+      // list is open (a name there has no room, and only pushed the avatar aside).
+      class={`h-14 flex-row items-center gap-2 ${props.compact ? "justify-center px-0" : "px-[13px]"} ${
         // Open: the hover's translucent tint, a step deeper; an opaque fill would lighten the
         // sidebar and cover its right edge, which is drawn under the switcher.
         open() ? "bg-hover" : "hover:bg-hover-soft"
@@ -274,7 +276,7 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
       style={{ transitionProperty: "colors", transitionDuration: 140, transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)" }}
     >
       <AgentAvatar image={triggerAvatar()} size={24} />
-      <If when={!props.compact || open()}>
+      <If when={!props.compact}>
         <FadeText text={triggerName()} class="flex-1 text-xs font-semibold leading-[14.4px] text-foreground" />
       </If>
       {/* The caret is the unfolded switcher's: folded, the avatar stands alone, open or not, whether

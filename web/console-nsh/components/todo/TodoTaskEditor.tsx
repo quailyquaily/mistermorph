@@ -17,8 +17,8 @@ import { AppMarkdownEditor } from "../shared/MarkdownEditor";
 import { Button, BusyBeam, busyLook, DropdownMenu, Icon, MENU_POPUP_STYLE, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
 import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 import * as model from "./todo-model.js";
-import { TodoJobButton, TODO_JOB_COMPACT_INSET, TODO_JOB_COMPACT_SIZE, TODO_JOB_NAV_SIZE } from "../chat/TodoJobBar";
-import { BAR_INSET, GlassCapsule } from "../frame/mobileBar";
+import { TodoJobButton } from "../chat/TodoJobBar";
+import { CapsuleToolbar, capsuleToolbarSize } from "../shared/CapsuleBar";
 import { isMobile } from "../../lib/shell";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
@@ -269,12 +269,12 @@ export function TodoEnabledSwitch(props: { state: TodoState }) {
  */
 export function TodoJobToolbar(props: { state: TodoState; compact?: boolean }) {
   const state = props.state;
-  const size = () => (props.compact ? TODO_JOB_COMPACT_SIZE : TODO_JOB_NAV_SIZE);
-  const inset = () => (props.compact ? TODO_JOB_COMPACT_INSET : BAR_INSET);
+  const size = () => capsuleToolbarSize(!!props.compact);
   const starting = () => state.runningTaskKey() === state.selectedTask()?._key;
   const items = () => jobMenuItems(state).filter((item) => item.id !== "run-manually" && item.id !== "open-topic");
-  const buttons = () => (
-    <>
+  return (
+    // The shared capsule toolbar: set into the bar at the compact size, else floating at the navigation's.
+    <CapsuleToolbar floating={!props.compact} compact={props.compact} label={t("chat_todo_job_toolbar")} testID="todo-toolbar">
       <If
         when={state.selectedRunStop()}
         else={
@@ -325,29 +325,7 @@ export function TodoJobToolbar(props: { state: TodoState; compact?: boolean }) {
           </View>
         }
       />
-    </>
-  );
-  return (
-    <If
-      when={props.compact}
-      else={
-        <GlassCapsule testID="todo-toolbar" role="toolbar" accessibilityLabel={t("chat_todo_job_toolbar")}>
-          <View class="flex-row items-center" style={{ gap: inset() }}>
-            {buttons()}
-          </View>
-        </GlassCapsule>
-      }
-    >
-      <View
-        role="toolbar"
-        accessibilityLabel={t("chat_todo_job_toolbar")}
-        class="flex-row items-center rounded-full border-[0.5px] border-line bg-card"
-        style={{ padding: inset(), gap: inset() }}
-        testID="todo-toolbar"
-      >
-        {buttons()}
-      </View>
-    </If>
+    </CapsuleToolbar>
   );
 }
 

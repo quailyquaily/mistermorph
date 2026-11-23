@@ -5,16 +5,12 @@ import { signal, Text, View } from "nsh";
 import { dismissNotice, NOTICE_TYPES, pushNotice } from "../../../lib/core/notices.js";
 import {
   Button,
-  confirm,
   DialogActions,
   DialogLayer,
   MessageDialog,
   Modal,
   Muted,
   Page,
-  PopupList,
-  PopupSheet,
-  PopupTitle,
   SidePane,
   TextField,
 } from "../../../components/ui";
@@ -111,32 +107,6 @@ function MessageDialogDemo() {
   );
 }
 
-function ConfirmDemo() {
-  const answer = signal("");
-  const ask = async (danger: boolean) => {
-    const ok = await confirm({
-      title: t("uig_fixture_title"),
-      text: t("uig_fixture_dialog_text"),
-      confirmLabel: danger ? t("action_delete") : t("action_save"),
-      cancelLabel: t("action_cancel"),
-      danger,
-    });
-    answer.set(ok ? "confirmed" : "cancelled");
-    act("confirm", ok ? "confirmed" : "cancelled");
-  };
-  return (
-    <Row>
-      <V s="default" row>
-        <Button variant="outlined" label={t("uig_fixture_open")} onPress={() => void ask(false)} testID="uig-confirm-open" />
-      </V>
-      <V l="danger" row>
-        <Button variant="outlined" label={t("uig_fixture_open")} onPress={() => void ask(true)} testID="uig-confirm-open-danger" />
-      </V>
-      <Text class="self-center text-xs text-muted-foreground" testID="uig-confirm-answer">{t("uig_fixture_answer", { value: answer() || "–" })}</Text>
-    </Row>
-  );
-}
-
 function NoticeDemo() {
   const ids = signal<string[]>([]);
   const push = (type: string, long = false) => {
@@ -165,56 +135,6 @@ function NoticeDemo() {
         <Button variant="plain" label={t("uig_fixture_reset")} onPress={clear} testID="uig-notice-clear" />
       </V>
     </Row>
-  );
-}
-
-function PopupDemo() {
-  const sheet = useFlag(false);
-  const list = signal<"" | "list" | "menu" | "empty">("");
-  const chosen = signal("b");
-  const items = () => [
-    { value: "a", title: t("uig_fixture_option", { n: 1 }), subtitle: "option/one" },
-    { value: "b", title: t("uig_fixture_option", { n: 2 }), note: t("uig_fixture_hint") },
-    { value: "c", title: t("uig_fixture_option", { n: 3 }), disabled: true },
-    { value: "d", title: LONG_TEXT, separated: true },
-    ...Array.from({ length: 16 }, (_, i) => ({ value: `n${i}`, title: t("uig_fixture_option", { n: i + 5 }) })),
-  ];
-  return (
-    <Col>
-      <V l="PopupSheet" row>
-        <Button variant="outlined" label={t("uig_fixture_open")} onPress={() => sheet.set(true)} testID="uig-popupsheet-open" />
-        <PopupSheet open={sheet.on()} onClose={() => sheet.set(false)} label={t("uig_fixture_title")} testID="uig-popupsheet">
-          {() => (
-            <View class="gap-3 p-4">
-              <Muted>{t("uig_fixture_dialog_text")}</Muted>
-              <Button variant="outlined" label={t("action_close")} onPress={() => sheet.set(false)} testID="uig-popupsheet-close" />
-            </View>
-          )}
-        </PopupSheet>
-      </V>
-      <V l="PopupList · listbox / menu / empty" row>
-        <Button variant="outlined" label="listbox" onPress={() => list.set("list")} testID="uig-popuplist-open" />
-        <Button variant="outlined" label="menu" onPress={() => list.set("menu")} />
-        <Button variant="outlined" label={t("uig_state_empty")} onPress={() => list.set("empty")} />
-        <Text class="text-xs text-muted-foreground" testID="uig-popuplist-echo">{t("uig_fixture_echo", { value: chosen() })}</Text>
-        <PopupList
-          open={list() !== ""}
-          onClose={() => list.set("")}
-          label={t("uig_fixture_choice")}
-          items={list() === "empty" ? [] : items()}
-          value={list() === "menu" ? undefined : chosen()}
-          role={list() === "menu" ? "menu" : "listbox"}
-          onChoose={(value) => {
-            chosen.set(value);
-            act("PopupList", value);
-          }}
-          filterPlaceholder={list() === "menu" ? undefined : t("uig_filter_placeholder")}
-          emptyText={t("uig_fixture_empty_title")}
-          footer={list() === "menu" ? [{ value: "delete", title: t("action_delete"), danger: true }] : undefined}
-          partID="uig-popuplist"
-        />
-      </V>
-    </Col>
   );
 }
 
@@ -283,17 +203,7 @@ function SidePaneDemo() {
 export const OVERLAY_DEMOS: DemoMap = {
   Modal: { render: () => <ModalDemo /> },
   MessageDialog: { render: () => <MessageDialogDemo /> },
-  ConfirmHost: { render: () => <ConfirmDemo /> },
   NoticeHost: { render: () => <NoticeDemo /> },
-  PopupSheet: { render: () => <PopupDemo /> },
-  PopupTitle: {
-    render: () => (
-      <Col>
-        <V s="default"><View class="border border-line-faint"><PopupTitle label={t("uig_fixture_title")} /></View></V>
-        <V s="long"><View class="border border-line-faint"><PopupTitle label={LONG_TEXT} /></View></V>
-      </Col>
-    ),
-  },
   DialogLayer: { render: () => <DialogLayerDemo /> },
   SidePane: { render: () => <SidePaneDemo /> },
   Page: {
@@ -301,7 +211,7 @@ export const OVERLAY_DEMOS: DemoMap = {
       <Col>
         <V s="default" l="scroll">
           <View class="h-56 overflow-hidden rounded-(--radius) border border-line-faint">
-            <Page title={t("uig_fixture_title")} actions={<Button variant="outlined" size="sm" label={t("action_refresh")} onPress={() => act("Page", "refresh")} />}>
+            <Page title={t("uig_fixture_title")} actions={<Button variant="outlined" size="sm" label={t("action_save")} onPress={() => act("Page", "refresh")} />}>
               <Muted>{LONG_TEXT}</Muted>
               <Muted>{LONG_TEXT}</Muted>
               <Muted>{LONG_TEXT}</Muted>

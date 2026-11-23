@@ -215,9 +215,7 @@ function LoadError(props: { c: ChatController; compact?: boolean; testID: string
       compact={props.compact}
       title={c.chatLoadErrorTitle()}
       message={c.chatLoadErrorMessage()}
-      refreshLabel={t("action_refresh")}
       busy={c.chatLoadBusy()}
-      onRefresh={() => void c.retryChatLoad()}
       testID={props.testID}
     />
   );

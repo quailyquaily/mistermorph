@@ -1,7 +1,7 @@
 // Chat: a conversation or topic list that fails to load (the network, the agent restarting) says so
-// in the view, centred, with a Refresh; a Refresh that works shows the conversation, one that fails
-// again leaves the Refresh usable; messages already on screen stay through a failed reload; a send
-// that fails is not a load failure.
+// in the view, centred, and is tried again by itself: there is no Refresh to press. A try that
+// works shows the conversation, one that fails again keeps the error and is followed by another;
+// messages already on screen stay through a failed reload; a send that fails is not a load failure.
 import { expect, test } from "nsh/test";
 import { openConsole, type ApiRequest } from "./harness";
 
@@ -27,7 +27,7 @@ function topicListRequests(calls: ApiRequest[]) {
   return calls.filter((call) => call.method === "GET" && call.uri?.startsWith("/topics?")).length;
 }
 
-test("a conversation that fails to load shows a centred error with a Refresh, and a Refresh that works shows the conversation", async () => {
+test("a conversation that fails to load shows a centred error with no Refresh, and loads by itself once it can", async () => {
   let fail = true;
   const { app, calls } = await openConsole({
     location: `${CHAT}/topic-1`,
@@ -42,7 +42,9 @@ test("a conversation that fails to load shows a centred error with a Refresh, an
   // Not a blank view, nor a load that never ends: the error stands in for the list.
   expect(app.shows("id:chat-history-skeleton")).toBe(false);
   expect(app.shows("id:chat-history")).toBe(false);
-  expect(app.enabled("id:chat-load-error-refresh")).toBe(true);
+  // Nothing to press: the chat tries again by itself.
+  expect(app.count("id:chat-load-error-refresh")).toBe(0);
+  expect(app.count("label:Refresh")).toBe(0);
   // Said once, in the view (not in the notice stack as well).
   expect(app.count("text:runtime is restarting")).toBe(1);
   // The composer stays.
@@ -51,16 +53,19 @@ test("a conversation that fails to load shows a centred error with a Refresh, an
   fail = false;
   const history = historyRequests(calls);
   const topicLists = topicListRequests(calls);
-  await app.press("id:chat-load-error-refresh");
   await app.waitFor("text:Hi there");
   await app.waitFor("id:chat-load-error", { state: "gone" });
   expect(app.shows("id:chat-load-error-strip")).toBe(false);
-  // One press, one load of this conversation; the topic list loaded fine, so it is not asked again.
-  expect(historyRequests(calls) - history).toBe(1);
+  // The try that worked loaded this conversation; the topic list loaded fine, so it is not asked again.
+  expect(historyRequests(calls) - history).toBeGreaterThanOrEqual(1);
   expect(topicListRequests(calls) - topicLists).toBe(0);
+  // Loaded, nothing is tried any more.
+  const loaded = historyRequests(calls);
+  await new Promise((resolve) => setTimeout(resolve, 2600));
+  expect(historyRequests(calls)).toBe(loaded);
 });
 
-test("a Refresh that fails again keeps the error and the Refresh, and an empty conversation is told apart from a failed one", async () => {
+test("a try that fails again keeps the error and is followed by another, and an empty conversation is told apart from a failed one", async () => {
   let attempt = 0;
   let fail = true;
   const { app, calls } = await openConsole({
@@ -74,23 +79,18 @@ test("a Refresh that fails again keeps the error and the Refresh, and an empty c
     },
   });
   await app.waitFor("text:network down (1)");
-  await app.press("id:chat-load-error-refresh");
+  // The second try, a moment later, fails too: the error stays, with what this try said.
   await app.waitFor("text:network down (2)");
   expect(app.shows("id:chat-load-error")).toBe(true);
-  expect(app.enabled("id:chat-load-error-refresh")).toBe(true);
-  await app.press("id:chat-load-error-refresh");
-  await app.waitFor("text:network down (3)");
-  expect(app.enabled("id:chat-load-error-refresh")).toBe(true);
-  expect(historyRequests(calls)).toBe(3);
+  expect(historyRequests(calls)).toBe(2);
 
   fail = false;
-  await app.press("id:chat-load-error-refresh");
   await app.waitFor("text:No tasks in this topic yet.");
   await app.waitFor("id:chat-load-error", { state: "gone" });
   expect(app.shows("text:/network down/")).toBe(false);
 });
 
-test("a topic list that fails to load shows the error in place of the landing, and a Refresh loads the topics", async () => {
+test("a topic list that fails to load shows the error in place of the landing, and the topics load by themselves once they can", async () => {
   let fail = true;
   const { app } = await openConsole({
     location: CHAT,
@@ -104,18 +104,13 @@ test("a topic list that fails to load shows the error in place of the landing, a
   await app.waitFor("text:topics unavailable");
   expect(app.shows("id:chat-placeholder")).toBe(false);
 
-  await app.press("id:chat-load-error-refresh");
-  await app.waitFor("text:topics unavailable");
-  expect(app.shows("id:chat-load-error")).toBe(true);
-
   fail = false;
-  await app.press("id:chat-load-error-refresh");
   await app.waitFor("id:chat-topic-topic-1");
   await app.waitFor("id:chat-load-error", { state: "gone" });
   expect(app.shows("text:topics unavailable")).toBe(false);
 });
 
-test("on an Android phone a failed first load shows the error with its Refresh, which brings the topic list", async () => {
+test("on an Android phone a failed first load shows the error, and the topic list comes by itself", async () => {
   let fail = true;
   const { app } = await openConsole({
     platform: "android",
@@ -128,12 +123,11 @@ test("on an Android phone a failed first load shows the error with its Refresh, 
   await app.waitFor("id:chat-load-error");
   await app.waitFor("text:no network");
   fail = false;
-  await app.press("id:chat-load-error-refresh");
   await app.waitFor("id:chat-topic-topic-2");
   expect(app.shows("id:chat-load-error")).toBe(false);
 });
 
-test("a reload that fails keeps the messages already on screen and offers a Refresh beside them", async () => {
+test("a reload that fails keeps the messages already on screen and says so beside them", async () => {
   let topicsFail = true;
   let historyFail = false;
   const { app } = await openConsole({
@@ -149,17 +143,15 @@ test("a reload that fails keeps the messages already on screen and offers a Refr
   await app.waitFor("text:/Couldn't load your conversations/");
   expect(app.shows("id:chat-load-error")).toBe(false);
 
-  // The Refresh reloads both; both fail now, and the messages stay.
+  expect(app.count("id:chat-load-error-strip-refresh")).toBe(0);
+  // The next try reloads both; both fail now, and the messages stay.
   historyFail = true;
-  await app.press("id:chat-load-error-strip-refresh");
   await app.waitFor("text:/history store down/");
   expect(app.shows("text:Hi there")).toBe(true);
   expect(app.shows("id:chat-load-error")).toBe(false);
-  expect(app.enabled("id:chat-load-error-strip-refresh")).toBe(true);
 
   topicsFail = false;
   historyFail = false;
-  await app.press("id:chat-load-error-strip-refresh");
   await app.waitFor("id:chat-topic-topic-2");
   await app.waitFor("id:chat-load-error-strip", { state: "gone" });
   expect(app.shows("text:Hi there")).toBe(true);
@@ -240,7 +232,6 @@ test("on a phone a topic list that fails to refresh keeps its topics and says so
   await app.waitFor("id:chat-topics-load-error");
   expect(app.shows("id:chat-topic-topic-2")).toBe(true);
   topicsFail = false;
-  await app.press("id:chat-topics-load-error-refresh");
   await app.waitFor("id:chat-topics-load-error", { state: "gone" });
   expect(app.shows("id:chat-topic-topic-2")).toBe(true);
 });

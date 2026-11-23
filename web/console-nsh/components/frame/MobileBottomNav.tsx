@@ -12,7 +12,7 @@
 // (AgentSwitcher's `AgentList`, the sidebar switcher's rows). Escape, Android's Back or a press
 // outside closes either.
 import type { JSX } from "nsh";
-import { cleanup, computed, createAnimatedValue, effect, keyboardFrame, keymap, platform, safeArea, signal, Text, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, createAnimatedValue, effect, keyboardFrame, keymap, platform, safeArea, signal, untracked, View, windowSize } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import {
   closeMobileMore,
@@ -37,20 +37,18 @@ import { easeProgress, MOTION_EASE, MOTION_EXIT_EASE, MOTION_SHEET_IN, MOTION_SH
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { mobilePopupEntrance } from "../../lib/mobilePopup";
 import { CONTINUOUS } from "../corners";
-import { Icon, MENU_POPUP_STYLE, POPUP_RADIUS, POPUP_TITLE_HEIGHT, PopupTitle, Tip, TipButton, type IconName } from "../ui";
+import { MENU_POPUP_STYLE, POPUP_RADIUS, POPUP_TITLE_HEIGHT, PopupTitle, type IconName } from "../ui";
 import { AgentAvatar, AgentList } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
 import { uiSlots } from "./slots";
-import { BAR_BELOW, BAR_INSET, BAR_SIDE, GlassCapsule, mobileBarRoom, mobileNavSlots, mobileSheetFrame, MOBILE_NAV_EXPANDED_HEIGHT, MOBILE_NAV_HEIGHT } from "./mobileBar";
+import { CapsuleNav, type CapsuleNavSlot } from "../shared/CapsuleBar";
+import { BAR_BELOW, BAR_SIDE, mobileBarRoom, mobileSheetFrame, MOBILE_NAV_HEIGHT } from "./mobileBar";
 
 export { MOBILE_NAV_HEIGHT };
 
 /** How long the capsule takes to expand or compact (none with reduced motion). */
 export const NAV_RESIZE_MS = 160;
-/** A label's line under its icon, and the gap above it. */
-const NAV_LABEL_LINE = 14;
-const NAV_LABEL_GAP = 2;
 
 const between = (from: number, to: number, progress: number) => from + (to - from) * progress;
 
@@ -361,7 +359,6 @@ export function MobileBottomNav(
   cleanup(() => {
     glide += 1;
   });
-  const rowHeight = () => between(MOBILE_NAV_HEIGHT, MOBILE_NAV_EXPANDED_HEIGHT, openness()) - BAR_INSET * 2;
   const slotCount = () => primaryItems().length + 2;
   const activeSlot = () => {
     if (agentMenuOpen()) return slotCount() - 1;
@@ -373,70 +370,40 @@ export function MobileBottomNav(
   const moreIcon = (): IconName => (moreCurrentItem()?.icon as IconName) || "PhSquaresFour";
   const moreLabel = () =>
     moreActive() ? `${moreCurrentItem()?.title} · ${t("nav_more")}` : t("nav_more");
-  // More's visible label names the page its icon shows (the accessible name says both).
   const moreTitle = () => moreCurrentItem()?.title || t("nav_more");
-
-  // A selected slot's glyph is the primary buttons' colour, the others quiet. The glyph's testID
-  // names its tint (no headless image query): `mobile-nav-<slot>-icon.<token>`.
-  const iconTint = (selected: boolean): "primary" | "muted-foreground" => (selected ? "primary" : "muted-foreground");
 
   const selectedName = () => selectedEndpointItem()?.title || t("nav_agent");
   const selectedAvatar = () => personaAvatarURL() || selectedEndpointItem()?.image || defaultEndpointAvatar;
 
-  // The capsule holds its slots and no more, centred: each slot has its own stretch of the row,
-  // side by side (none reaches under its neighbour, so a press always lands on the slot drawn
-  // there), NAV_SLOT_MAX wide where the strip has room and narrower on a narrow phone, so all five
-  // fit. The active pill is one slot wide and slides to the slot's place in the same geometry.
+  // The capsule holds its slots and no more, centred (the shared CapsuleNav): each slot has its
+  // own stretch of the row, NAV_SLOT_MAX wide where the strip has room and narrower on a narrow
+  // phone, so all five fit; the active pill slides to the slot's place in the same geometry.
+  // Expanded, the slots are wider (NAV_SLOT_EXPANDED_MAX) and the pages' icons have their captions
+  // under them; the capsule draws whatever `openness` says between the two sizes.
   // The strip's own width (the frame it floats in), the window's until its first layout.
   const stripWidth = signal(0);
-  // Each size's slots (whole points), and the ones shown now, between them while the capsule glides.
-  const slots = computed(() => {
-    const width = stripWidth() || windowSize().width;
-    const compact = mobileNavSlots(width, slotCount());
-    const wide = mobileNavSlots(width, slotCount(), true);
-    const slot = between(compact.slot, wide.slot, openness());
-    return { slot, rowWidth: slot * slotCount(), left: (index: number) => slot * index };
-  });
-  const slotClass = (press = true) =>
-    `items-center justify-center rounded-full ${press ? "active:bg-hover-soft transition-colors duration-160" : ""}`;
-  const slotStyle = () => ({ width: slots().slot });
-  type LayoutEvent = { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } };
-  const report = (name: string) =>
-    props.onSlotLayout
-      ? ({ bounds }: LayoutEvent) =>
-          props.onSlotLayout?.(name, { x: bounds.origin.x, y: bounds.origin.y, w: bounds.size.width, h: bounds.size.height })
-      : undefined;
-  effect(() => {
-    const slot = activeSlot();
-    const { slot: width, left } = slots();
-    const h = rowHeight();
-    if (props.onSlotLayout && slot >= 0) untracked(() => props.onSlotLayout?.("highlight", { x: left(slot), y: 0, w: width, h }));
-  });
-
-  const tip = (label: string) => <Tip text={label} />;
-
-  // A slot's icon with its label under it; the label folds away (no height, faded out) in the
-  // compact capsule, leaving the icon centred. The slot's accessible name is the button's own, so
-  // the label is hidden from assistive technology (it would be read twice).
-  const face = (icon: JSX.Element, label: () => string, selected: () => boolean, testID: string) => (
-    <View class="items-center" style={{ width: slots().slot }}>
-      {icon}
-      <View
-        accessibilityElementsHidden
-        class="self-stretch overflow-hidden"
-        // The label is gone by half-way down, and comes in over the second half up.
-        style={{ height: between(0, NAV_LABEL_GAP + NAV_LABEL_LINE, openness()), opacity: Math.max(0, openness() * 2 - 1) }}
-        testID={`${testID}-label.${expanded() ? "shown" : "folded"}`}
-      >
-        <Text
-          class={`px-1 text-center text-[11px] font-medium leading-[14px] ${selected() ? "text-primary" : "text-muted-foreground"}`}
-          style={{ marginTop: NAV_LABEL_GAP, numberOfLines: 1 }}
-        >
-          {label()}
-        </Text>
-      </View>
-    </View>
-  );
+  const AGENT_SLOT = "agent";
+  const MORE_SLOT = "more";
+  const slots = computed<CapsuleNavSlot[]>(() => [
+    ...primaryItems().map((item) => ({ id: item.id, label: item.title, caption: item.title, icon: item.icon as IconName, testID: `mobile-nav-${item.pagePath.slice(1)}` })),
+    // More's caption names the page its icon shows (the accessible name says both).
+    { id: MORE_SLOT, label: moreLabel(), caption: moreTitle(), icon: moreIcon(), testID: "mobile-nav-more" },
+    // The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing to it
+    // (no ring, no status mark, no press fill); the pill behind it marks it selected, and the list
+    // shows whether the agent is connected. It is not a page, so it takes no caption in the
+    // expanded capsule either: the portrait is its name there, centred in its slot.
+    { id: AGENT_SLOT, label: `${t("nav_agent")}: ${selectedName()}`, glyph: () => <AgentAvatar image={selectedAvatar()} size={28} />, testID: "mobile-nav-agent" },
+  ]);
+  const activeId = () => {
+    const at = activeSlot();
+    return at >= 0 ? (slots()[at]?.id ?? null) : null;
+  };
+  const pressSlot = (id: string) => {
+    if (id === AGENT_SLOT) return toggleAgents();
+    if (id === MORE_SLOT) return toggleMore();
+    const item = primaryItems().find((entry) => entry.id === id);
+    if (item) navigateTo(item);
+  };
 
   return (
     <View
@@ -457,96 +424,16 @@ export function MobileBottomNav(
         pointerEvents: "box-none",
       }}
     >
-      {/* Glass where the window draws it (lib/glass.ts): the page shows through, blurred; else the
-          card's own fill, opaque (a tint alone left the page's text under the icons). */}
-      <GlassCapsule testID="mobile-nav-capsule" style={{ marginBottom: systemInsets() ? 0 : BAR_BELOW }}>
-        <View
-          class="relative flex-row"
-          style={{ width: slots().rowWidth, height: rowHeight() }}
-          testID={`mobile-nav-row.${expanded() ? "expanded" : "compact"}`}
-        >
-          <If when={activeSlot() >= 0}>
-            <View
-              accessibilityElementsHidden
-              class="absolute bottom-0 left-0 top-0 rounded-full bg-blue/10"
-              style={{
-                width: slots().slot,
-                transform: [{ translateX: slots().left(activeSlot()) }],
-                transitionProperty: "transform",
-                // Gliding to another slot; with its slot, frame by frame, while the capsule resizes.
-                transitionDuration: resizing() ? 0 : motionMs(240),
-                transitionTimingFunction: "cubic-bezier(0.2, 0.7, 0.2, 1)",
-              }}
-            />
-          </If>
-          <Each of={primaryItems()} key={(item) => item.id}>
-            {(item, index) => (
-              <TipButton
-                selected={activeSlot() === index()}
-                onPress={() => navigateTo(item())}
-                accessibilityLabel={item().title}
-                testID={`mobile-nav-${item().pagePath.slice(1)}`}
-                tooltip={tip(item().title)}
-                class={slotClass()}
-                style={slotStyle()}
-                onLayout={report(`mobile-nav-${item().pagePath.slice(1)}`)}
-              >
-                {face(
-                  <Icon
-                    name={item().icon as IconName}
-                    size={24}
-                    filled={activeSlot() === index()}
-                    color={iconTint(activeSlot() === index())}
-                    testID={`mobile-nav-${item().pagePath.slice(1)}-icon.${iconTint(activeSlot() === index())}`}
-                  />,
-                  () => item().title,
-                  () => activeSlot() === index(),
-                  `mobile-nav-${item().pagePath.slice(1)}`,
-                )}
-              </TipButton>
-            )}
-          </Each>
-          <TipButton
-            selected={activeSlot() === primaryItems().length}
-            onPress={toggleMore}
-            accessibilityLabel={moreLabel()}
-            testID="mobile-nav-more"
-            tooltip={tip(moreLabel())}
-            class={slotClass()}
-            style={slotStyle()}
-            onLayout={report("mobile-nav-more")}
-          >
-            {face(
-              <Icon
-                name={moreIcon()}
-                size={24}
-                filled={activeSlot() === primaryItems().length}
-                color={iconTint(activeSlot() === primaryItems().length)}
-                testID={`mobile-nav-more-icon.${iconTint(activeSlot() === primaryItems().length)}`}
-              />,
-              moreTitle,
-              () => activeSlot() === primaryItems().length,
-              "mobile-nav-more",
-            )}
-          </TipButton>
-          {/* The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing to
-              it (no ring, no status mark, no press fill); the pill behind it marks it selected, and
-              the list shows whether the agent is connected. It is not a page, so it takes no label
-              in the expanded capsule either: the portrait is its name there, centred in its slot. */}
-          <TipButton
-            selected={agentMenuOpen()}
-            onPress={toggleAgents}
-            accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
-            testID="mobile-nav-agent"
-            tooltip={tip(selectedName())}
-            class={slotClass(false)}
-            style={slotStyle()}
-            onLayout={report("mobile-nav-agent")}
-          >
-            <AgentAvatar image={selectedAvatar()} size={28} />
-          </TipButton>
-        </View>
-      </GlassCapsule>
+      <CapsuleNav
+        slots={slots()}
+        active={activeId()}
+        onPress={pressSlot}
+        width={stripWidth() || windowSize().width}
+        testID="mobile-nav-capsule"
+        style={{ marginBottom: systemInsets() ? 0 : BAR_BELOW }}
+        onSlotLayout={props.onSlotLayout}
+        expansion={{ openness: openness(), expanded: expanded(), resizing: resizing(), rowTestID: "mobile-nav-row" }}
+      />
     </View>
   );
 }
