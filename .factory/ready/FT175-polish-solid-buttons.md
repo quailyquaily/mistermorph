@@ -72,3 +72,15 @@ Scheduled ship could not merge this item; ready/ → review/.
 - Conflict: web/console-nsh/components/ui.tsx when merging after FT174. Merge aborted, no conflict edits or code fixes made.
 - Base head: e5c2829c95b034b0b5ac28d071dbb74d16ef9119 (master, released in v0.3.129).
 - The next review must merge current origin/master into this item branch, preserve both button treatments, resolve the conflict, rerun checks and review the resulting head. Not shipped or tagged; branch retained.
+
+
+## factory · review · 2026-11-23 18:01
+head: 5cf4359671253b0d3b41e413da9c3c3fb91e3d59
+verdict: pass
+notes:
+- Recovered the prior run's unpushed merge 8a9f1e42 of origin/master e5c2829c into FT175. Claude Code verified the resolution preserves FT174 outlined-danger and FT175 solid finishes. Added 5cf43596 to restore the outlined-danger pressed-contrast test floor separately per palette (light 4.35:1, dark 4.5:1); no colour changes. Manager pushed both commits.
+- Separate read-only Claude Code review of all 12 files in origin/master...HEAD: no qualifying findings. Working tree clean; no review edits or commits.
+- Required gofmt/vet/go test command PASS, independently rerun during review (168 packages ok). nsh check PASS with repository-pinned nsh 0.6.0. Full required scripts/test.sh PASS: 163 files, 0 failed; parallel failures chat-topic-drag, settings-agent-name-set, settings-json-page and settings-menus passed individual retries. Full suite ran with the fix; only a test comment changed afterward. Review reran outlined-danger (9), solid-buttons (10), button-loading (3), ui-components (14), chat-voice-icon (5): all pass.
+- No installs, manifest changes or external dependency changes.
+- No rendered UI checks this run. Owner should inspect solid controls beside outlined-danger, light/dark hairlines and focus clipping at 1x/1.5x/2x, real dialog confirm, Jobs Add, delete confirmation and browser pressed state. Android device/emulator and desktop remain unverified; Android retains its documented no-shadow workaround including no shadow-based keyboard focus ring.
+- Moved review/ → ready/. No merge into master, release or tag performed.
