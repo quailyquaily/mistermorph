@@ -7,9 +7,11 @@ import (
 
 // forcedApprovalTools always ask the user before they run, whatever guard.enabled and
 // guard.approvals.enabled say: their effect is too large to allow silently. Installing a skill
-// adds instructions (and possibly scripts) the agent will follow from then on.
+// adds instructions (and possibly scripts) the agent will follow from then on; config_set changes
+// the agent's own config.
 var forcedApprovalTools = map[string]bool{
 	"skill_install": true,
+	"config_set":    true,
 }
 
 // RequiresForcedApproval reports whether a tool always needs the user's approval.
