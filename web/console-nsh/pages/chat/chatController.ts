@@ -119,7 +119,8 @@ import type { ChatRowContext, HistoryItem } from "../../components/chat/ChatHist
 import type { ElevationAnswer, ElevationState } from "../../components/chat/ChatElevationCard";
 import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQuestionCard";
 import { hasArtifactBlock } from "../../components/chat/ChatRichContent";
-import { createReceivedFiles } from "../../components/chat/ReceivedFile";
+import { createReceivedFiles, receivedFileKey } from "../../components/chat/ReceivedFile";
+import { receivedFileTooLarge, receivedFileURL } from "../../lib/core/received-files.js";
 import { keyedState } from "../../components/chat/rowState";
 import { workspacePathDisplay } from "../../components/chat/workspacePath";
 import {
@@ -129,8 +130,17 @@ import {
   normalizeActivityDetail,
   type ActivityDetailRef,
 } from "../../components/chat/activityDetail";
-import { fetchEndpointBlob, saveEndpointFile, transcribeRecording, uploadPickedFile } from "../../components/chat/files";
-import { createFilePreview, draftFilePreviewable, isBrowserFile, isPickedFile, localImageSource, type FilePreviewState } from "../../components/chat/filePreview";
+import { fetchConsoleBlob, fetchEndpointBlob, saveEndpointFile, transcribeRecording, uploadPickedFile } from "../../components/chat/files";
+import {
+  createFilePreview,
+  draftFilePreviewable,
+  isBrowserFile,
+  isPickedFile,
+  localImageSource,
+  previewFailure,
+  type FilePreviewState,
+  type PreviewFailure,
+} from "../../components/chat/filePreview";
 import { t } from "../../components/chat/i18n";
 import { createVoiceInput, voiceErrorKey } from "../../components/chat/voice";
 import { createTodoJobControl } from "../../components/chat/todoJob";
@@ -489,10 +499,11 @@ export function createChatController() {
   const composerUploading = () => composerFiles().some((item) => item.status === "uploading");
   const composerFilesPending = () => composerFiles().some((item) => item.status !== "ready");
   // The file preview dialog (components/chat/filePreview.ts): the composer's attachments preview
-  // from the device first, sent files from the agent.
+  // from the device first, sent files from the agent, and files the agent sent (`received`) from
+  // the console's attachment route, saying why one cannot show.
   const preview = createFilePreview({
-    fetchRemote: (item) => fetchUploadedFile(item),
-    unavailable: () => t("chat_composer_file_preview_unavailable"),
+    fetchRemote: (item) => (item?.received ? fetchReceivedFile(item) : fetchUploadedFile(item)),
+    unavailable: (reason, item) => (item?.received ? receivedPreviewError(reason) : t("chat_composer_file_preview_unavailable")),
   });
   const filePreview = preview.state;
   const topicContext = signal<any>(null);
@@ -1569,6 +1580,39 @@ export function createChatController() {
       query.set("topic_id", topicID);
     }
     return fetchEndpointBlob(endpointRef, `/files/download?${query.toString()}`);
+  }
+
+  /** The preview's bytes of a file the agent sent: the console's attachment route, with the session's token. */
+  async function fetchReceivedFile(item: any): Promise<Blob> {
+    // The server previews text up to 2 MiB: a larger one is not fetched only to be refused.
+    if (receivedFileTooLarge(item)) throw previewFailure("too_large");
+    return fetchConsoleBlob(receivedFileURL(String(item?.topicID || ""), String(item?.taskID || ""), String(item?.id || ""), true));
+  }
+
+  function receivedPreviewError(reason: PreviewFailure | undefined) {
+    if (reason === "too_large") return t("chat_file_preview_too_large");
+    if (reason === "not_text") return t("chat_file_preview_not_text");
+    return t("chat_file_preview_failed");
+  }
+
+  /** The file the agent sent that the preview shows, or null (a composer attachment, a sent file, closed). */
+  function previewedReceivedFile(): any {
+    const s = filePreview();
+    const item = s.open ? s.items[s.index] : null;
+    return item?.received ? item : null;
+  }
+
+  /** The download of the file the agent sent that the preview shows: its card's (busy, saved, failed). */
+  function previewedReceivedFileState() {
+    const item = previewedReceivedFile();
+    return item ? receivedFiles.state(receivedFileKey(item.topicID, item.taskID, item.id)) : null;
+  }
+
+  /** Saves the file the agent sent that the preview shows, as its card's download does. */
+  function downloadPreviewedFile() {
+    const item = untracked(previewedReceivedFile);
+    if (!item) return;
+    void receivedFiles.download(receivedFileKey(item.topicID, item.taskID, item.id), item, item.topicID, item.taskID);
   }
 
   function closeComposerFilePreview() {
@@ -3966,6 +4010,9 @@ export function createChatController() {
     previewComposerFile,
     navigateComposerFilePreview,
     closeComposerFilePreview,
+    previewedReceivedFile,
+    previewedReceivedFileState,
+    downloadPreviewedFile,
     openWorkspaceBrowser,
     closeWorkspaceBrowser,
     attachWorkspace,
