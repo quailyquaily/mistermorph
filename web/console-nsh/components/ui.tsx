@@ -4,7 +4,7 @@
 // The look follows the Vue console's ui-kit: hairlines, a dark blue primary, quiet plain buttons,
 // mono caps for labels, and red only for what is destructive. Corners are the continuous scale of
 // ./corners.ts (controls 8, cards and popovers 12, dialogs 18, switch tracks 6); circles stay round.
-import type { Bounds, InputRef, JSX, KeyBindingOptions, Motion, MouseEvent, ScrollRef, ViewRef } from "nsh";
+import type { Bounds, InputRef, JSX, KeyBindingOptions, Motion, MouseEvent, ScrollRef, ViewRef, ViewStyle } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
 import { Canvas, cleanup, computed, context, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
@@ -28,7 +28,7 @@ import { drawFabMark, FAB_MARK, FAB_MARK_SIZE, type FabMarkCorner } from "./fabM
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
 import { PickerList, type PickerItem, type PickerProbe } from "./shared/PickerList";
 import { withAlpha } from "./motion/color";
-import { solidBox, SOLID_SHADOWS, solidStateStyles, type SolidTone } from "./solidLook";
+import { shadowColor, solidBox, SOLID_SHADOWS, solidStateStyles, type SolidTone } from "./solidLook";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
 import { RunningMark } from "./motion/RunningMark";
 import { sagHalf, SagRule } from "./motion/Sag";
@@ -227,7 +227,7 @@ export function Markdown(props: {
 
 // The console's tooltip (the Vue console's .app-tooltip, core/tooltips.js): a small paper card
 // with a hairline, rising 3pt into place after a short pause, in place of a grey box.
-const TIP_SHADOW = "0 4px 14px rgba(24, 24, 50, 0.1)";
+const tipShadow = () => `0 4px 14px ${shadowColor(0.1)}`;
 
 /** A tooltip: `tooltip={<Tip text="…" />}` on any view. */
 /** A tooltip; `shortcut` is the keyboard shortcut of what it names, shown after it (`⇧⌘O`). */
@@ -239,7 +239,7 @@ export function Tip(props: { text: string; shortcut?: string; placement?: "top" 
       class="max-w-75 rounded-(--radius) border border-line-soft bg-card px-2 pb-1.25 pt-1 transition duration-180"
       startingClass="opacity-0 translate-y-0.75"
       endingClass="opacity-0"
-      style={{ boxShadow: TIP_SHADOW, transitionTimingFunction: MOTION_EASE_CSS }}
+      style={{ boxShadow: tipShadow(), transitionTimingFunction: MOTION_EASE_CSS }}
     >
       <If when={props.shortcut} else={<Text class="text-xs leading-[17.4px] text-foreground">{props.text}</Text>}>
         <View class="flex-row items-center gap-2">
@@ -303,6 +303,12 @@ export type ButtonSize = "md" | "sm" | "xs" | "xxs";
 // Disabled is one rule for every variant and control: the look at rest at DISABLED_OPACITY, so a
 // disabled button reads as the same button, unavailable (loading, also unpressable, keeps its own
 // look). Each box's `disabled:` classes only hold it at rest: nsh's `hover:` reaches disabled controls.
+/** The outlined boxes' shadow (outlined, outlined-danger): a lit top edge and a soft fall, at rest and on hover. */
+const outlinedShadow = (): [string, string] => [
+  `inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px ${shadowColor(0.05)}`,
+  `inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px ${shadowColor(0.1)}`,
+];
+
 const BUTTON_VARIANTS: Record<
   ButtonVariant,
   {
@@ -312,8 +318,8 @@ const BUTTON_VARIANTS: Record<
     press: string;
     /** A solid variant's tone (solidLook.ts): its shadows by state. Its `box` holds the tone's fills. */
     solid?: SolidTone;
-    /** A non-solid variant's shadow at rest and on hover. */
-    shadow?: [string, string];
+    /** A non-solid variant's shadow at rest and on hover, read while drawing (it follows the appearance). */
+    shadow?: () => [string, string];
     /** The border beam's colour while loading. */
     beam: BeamTone;
     /** The box while loading, in place of `box` and its disabled look: filled variants turn soft (a
@@ -351,10 +357,7 @@ const BUTTON_VARIANTS: Record<
     press: "group-active:bg-press",
     beam: "blue",
     loadingText: "muted-foreground",
-    shadow: [
-      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
-      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
-    ],
+    shadow: outlinedShadow,
   },
   plain: {
     box: "hover:bg-hover disabled:bg-transparent",
@@ -414,10 +417,7 @@ const BUTTON_VARIANTS: Record<
     selectedBox: "bg-danger/12 border-danger/60 hover:bg-danger/12 focus:bg-danger/12",
     selectedText: "danger",
     beam: "red",
-    shadow: [
-      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
-      "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
-    ],
+    shadow: outlinedShadow,
   },
 };
 
@@ -684,7 +684,7 @@ export function Button(props: ButtonProps) {
   const variant = () => BUTTON_VARIANTS[props.variant ?? "primary"];
   // A selected solid button is a soft toggle, not a raised fill: no solid finish then.
   const solid = () => (props.selected ? undefined : variant().solid);
-  const shadow = () => (BUTTON_SHADOWS && !variant().solid ? variant().shadow : undefined);
+  const shadow = () => (BUTTON_SHADOWS && !variant().solid ? variant().shadow?.() : undefined);
   const states = () => solidStateStyles(solid());
   const size = () => BUTTON_SIZES[props.size ?? "sm"];
   const enabled = () => !props.disabled && !props.loading;
@@ -912,6 +912,16 @@ export const SWITCH_TRACK_CORNERS = TRACK_CORNERS;
 export const SWITCH_THUMB_CORNERS = cornersClass(nestedRadius(RADIUS.track, 3));
 
 /** A switch with its label (the Vue console's AppSwitch). */
+/** Every switch's look (Toggle and the bare tracks elsewhere): a hairline track that fills with ink
+ * when on, and a card-coloured knob ringed in the text colour, so it shows on either palette. Give
+ * the Switch `group` for the track's hover. */
+export const SWITCH_TRACK_CLASS = `h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`;
+export const SWITCH_THUMB_CLASS = `size-3.5 ${SWITCH_THUMB_CORNERS} bg-card ring-1 ring-foreground/20 shadow-xs checked:translate-x-3.5 checked:ring-ink/60`;
+/** The knob's spring across the track (none under reduced motion). */
+export function switchThumbStyle(): ViewStyle {
+  return { transitionProperty: "transform", transitionDuration: motionMs(260), transitionTimingFunction: "cubic-bezier(0.3, 1.35, 0.5, 1)" };
+}
+
 export function Toggle(props: {
   checked: boolean;
   onChange?: (checked: boolean) => void;
@@ -931,14 +941,9 @@ export function Toggle(props: {
       accessibilityLabel={props.label}
       testID={props.testID}
       class={`group flex-row items-center gap-2.5 disabled:opacity-50 ${props.class ?? ""}`}
-      trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
-      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
-      thumbStyle={{
-        boxShadow: "0 0 0 1px rgba(24, 24, 50, 0.22), 0 1px 1px rgba(24, 24, 50, 0.1)",
-        transitionProperty: "transform",
-        transitionDuration: 260,
-        transitionTimingFunction: "cubic-bezier(0.3, 1.35, 0.5, 1)",
-      }}
+      trackClass={SWITCH_TRACK_CLASS}
+      thumbClass={SWITCH_THUMB_CLASS}
+      thumbStyle={switchThumbStyle()}
     >
       <If when={!props.hideLabel && (props.label || props.hint)}>
         <View class="flex-1 gap-0.5">
@@ -1213,7 +1218,7 @@ export const MENU_ITEM_BOX = `mx-2 px-2 ${MENU_ITEM_CORNERS}`;
 export const MENU_POPUP_STYLE = {
   // The lit top edge is the theme's (`sheen`): bright on a light popup, faint on a dark one.
   get boxShadow() {
-    return `inset 0 1px 0 ${token("sheen")}, 0 10px 24px rgba(24, 46, 72, 0.12)`;
+    return `inset 0 1px 0 ${token("sheen")}, 0 10px 24px ${shadowColor(0.12)}`;
   },
   transitionTimingFunction: MOTION_EASE_CSS,
 };
@@ -2174,7 +2179,7 @@ export function Tabs(props: {
 // backdrop
 // and the panel are drawn here (the base Dialog is only the layer), so both can move, natively, on
 // opacity and transform alone; the panel stays drawn until it is out.
-const DIALOG_SHADOW = "0 12px 24px rgba(20, 24, 32, 0.14)";
+const dialogShadow = () => `0 12px 24px ${shadowColor(0.14)}`;
 
 /** Below this window width every popup takes the phone's presentation, whatever points at it. */
 export const DIALOG_SHEET_WIDTH = 720;
@@ -2415,7 +2420,7 @@ export function DialogLayer(props: {
         borderRadius: POPUP_RADIUS,
         // Not on Android, as the bottom bar: a shadow there would not follow the corners, and
         // a view that clips and casts one moves its children into a box of their own (PORTING.md).
-        boxShadow: platform.os === "android" ? undefined : narrow() ? MENU_POPUP_STYLE.boxShadow : DIALOG_SHADOW,
+        boxShadow: platform.os === "android" ? undefined : narrow() ? MENU_POPUP_STYLE.boxShadow : dialogShadow(),
         transformOrigin: origin() ?? "center",
         ...panel.style,
       }}
@@ -3047,8 +3052,8 @@ export function Fab(props: {
         testID={props.testID}
         tooltip={<Tip text={props.label} placement="left" />}
         class={`size-13 items-center justify-center ${CONTROL_CORNERS} border border-primary-line bg-primary transition duration-120 active:translate-y-px disabled:opacity-50`}
-        style={{ boxShadow: "0 6px 16px rgba(20, 29, 48, 0.2), 0 1px 3px rgba(20, 29, 48, 0.12)", transitionTimingFunction: MOTION_EASE_CSS }}
-        activeStyle={{ boxShadow: "0 2px 6px rgba(20, 29, 48, 0.18)" }}
+        style={{ boxShadow: `0 6px 16px ${shadowColor(0.2)}, 0 1px 3px ${shadowColor(0.12)}`, transitionTimingFunction: MOTION_EASE_CSS }}
+        activeStyle={{ boxShadow: `0 2px 6px ${shadowColor(0.18)}` }}
       >
         <Icon name={props.icon ?? "PhPlus"} size={22} color="primary-foreground" />
       </TipButton>

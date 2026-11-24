@@ -4,6 +4,7 @@
 // steps here with ?repair=<key>; those go back to it when saved. setup-state.ts holds the logic.
 import type { ImageAsset, InputRef, JSX } from "nsh";
 import { Image, Scroll, Text, token, View, windowSize } from "nsh";
+import { shadowColor } from "../../components/solidLook";
 import { Button as BaseButton } from "nsh/base";
 import { CodexAuthDialog, ProAuthDialog, XAIAuthDialog } from "../../components/settings/AuthDialogs";
 import { EnvManagedField } from "../../components/settings/EnvManagedField";
@@ -493,8 +494,8 @@ function SoulStage(props: { s: SetupState }) {
     // deeper drop in its colour).
     backgroundColor: active ? `color-mix(in srgb, ${token(accent)} 8%, ${paper(0.96)})` : paper(0.78),
     boxShadow: active
-      ? `0 18px 28px color-mix(in srgb, ${token(accent)} 12%, rgba(28, 33, 41, 0.1))`
-      : "0 12px 24px rgba(28, 33, 41, 0.06)",
+      ? `0 18px 28px color-mix(in srgb, ${token(accent)} 12%, ${shadowColor(0.1)})`
+      : `0 12px 24px ${shadowColor(0.06)}`,
     transitionProperty: "transform, colors",
     transitionDuration: 180,
   });

@@ -26,6 +26,8 @@
 // into an inner box that takes the presses, and the button never gets them; Android solid controls
 // go without the shadows (fill, hairline and press only).
 import { platform, token } from "nsh";
+import theme from "../theme.json";
+import { withAlpha } from "./motion/color";
 
 type TokenName = Parameters<typeof token>[0];
 
@@ -83,6 +85,19 @@ export function solidShadow(tone: SolidTone, state: SolidState, read: (name: Tok
     case "focus":
       return `inset 0 0 0 ${SOLID_HAIRLINE_COVER + SOLID_FOCUS_RING}px ${String(read(SOLID_TONES[tone].text))}, 0 1px 2px ${shadow}`;
   }
+}
+
+// Every drop shadow takes its colour from `solid-shadow`: a navy share on the light palette, a deeper
+// black on the dark one, where a light share would vanish against the paper.
+const LIGHT_SHADOW_ALPHA = parseInt(theme.cssVars.light["solid-shadow"].slice(7, 9), 16) / 255;
+
+/**
+ * A drop shadow's colour: `alpha` is its share on the light palette; the dark palette's is as much
+ * deeper as its `solid-shadow` is (`read`: a stand-in for `token` in tests). Read it while drawing,
+ * so it follows the appearance.
+ */
+export function shadowColor(alpha: number, read: (name: TokenName) => unknown = token): string {
+  return withAlpha(String(read("solid-shadow")), alpha / LIGHT_SHADOW_ALPHA);
 }
 
 /** False on Android (see above): its solid controls draw no shadows. */

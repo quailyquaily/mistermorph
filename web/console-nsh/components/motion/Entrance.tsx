@@ -8,7 +8,8 @@
 // Only opacity and transform move, natively, after the new content is mounted: nothing waits for
 // the motion, and the old content is replaced, not faded out. Reduced motion: no motion.
 import type { JSX } from "nsh";
-import { createAnimatedValue, createMotion, effect, untracked, View } from "nsh";
+import { createAnimatedValue, createMotion, effect, token, untracked, View } from "nsh";
+import { withAlpha } from "./color";
 import { MOTION_EASE, MOTION_HIGHLIGHT, MOTION_PAGE, motionMs } from "./tokens";
 
 /** Plays the page entrance (opacity 0 → 1, `rise` points → 0) on `motion`. */
@@ -60,7 +61,7 @@ export function Entrance(props: {
 export function createArrivalTint() {
   const level = createAnimatedValue(0);
   return {
-    color: level.interpolate({ inputRange: [0, 1], outputRange: ["rgba(125,130,184,0)", "rgba(125,130,184,0.18)"] }),
+    color: level.interpolate({ inputRange: [0, 1], outputRange: [withAlpha(String(token("blue")), 0), withAlpha(String(token("blue")), 0.18)] }),
     play() {
       const duration = motionMs(MOTION_HIGHLIGHT);
       if (duration <= 0) return;

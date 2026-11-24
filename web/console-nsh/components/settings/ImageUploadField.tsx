@@ -13,7 +13,8 @@
 // picked.
 import { Buffer } from "buffer";
 import type { ImageAsset } from "nsh";
-import { Canvas, effect, Image, PanResponder, signal, Text, untracked, View } from "nsh";
+import { Canvas, effect, Image, PanResponder, signal, Text, token, untracked, View } from "nsh";
+import { withAlpha } from "../motion/color";
 import { pushNotice } from "../../lib/core/notices.js";
 import { type PickedFile, pickFiles, releaseFile, type UploadResult, type UploadTarget, uploadFile } from "../../lib/platform";
 import { Button, Icon, ProgressBar } from "../ui";
@@ -193,8 +194,9 @@ export function ImageUploadField(props: ImageUploadFieldProps) {
         accessibilityLabel={previewTitle()}
         disabled={props.disabled || props.busy}
         onPress={openPreviewDialog}
-        class="items-center justify-center overflow-hidden rounded-[8px] border border-transparent transition-colors duration-120 hover:border-blue/45 hover:shadow-[0_0_0_3px_rgba(66,111,158,0.12)] disabled:opacity-50"
+        class="items-center justify-center overflow-hidden rounded-[8px] border border-transparent transition-colors duration-120 hover:border-blue/45 disabled:opacity-50"
         style={{ width: props.previewSize ?? 96, height: props.previewSize ?? 96 }}
+        hoverStyle={{ boxShadow: `0 0 0 3px ${withAlpha(String(token("blue")), 0.12)}` }}
         testID="image-upload-preview"
       >
         <ImageFace previewUrl={props.previewUrl} defaultMarkup={props.defaultMarkup} defaultImage={props.defaultImage} size={props.previewSize ?? 96} />

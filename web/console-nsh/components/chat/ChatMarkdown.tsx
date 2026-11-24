@@ -80,7 +80,7 @@ function CodeBlock(props: { block: TextViewCodeBlock; copyLabel: string }) {
         onPress={copy}
         accessibilityLabel={props.copyLabel}
         testID="chat-code-copy"
-        class="absolute right-2.5 top-2.5 size-7 items-center justify-center rounded-(--radius) opacity-0 transition duration-150 group-hover:opacity-100 focus:opacity-100 hover:bg-[#34344b]"
+        class={`absolute right-2.5 top-2.5 size-7 items-center justify-center rounded-(--radius) opacity-0 transition duration-150 group-hover:opacity-100 focus:opacity-100 hover:bg-[${CODE_PANEL.surface}]`}
       >
         <Image
           src={copied() ? ICONS.PhCheck : ICONS.PhCopy}

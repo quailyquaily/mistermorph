@@ -6,12 +6,13 @@
 // card with 8pt corners and a soft shadow, without the frame), as Chat's right pane is.
 import type { JSX } from "nsh";
 import { Text, View, windowSize } from "nsh";
+import { shadowColor } from "../solidLook";
 import { FadeText } from "../motion";
 
 /** AppSection's padding: 16, 12 under a 720 window. */
 export const cardPadding = () => (windowSize().width <= 720 ? 12 : 16);
 
-const PANEL_SHADOW = "0 1px 4px rgba(24, 24, 50, 0.07)";
+const panelShadow = () => `0 1px 4px ${shadowColor(0.07)}`;
 
 export function TodoCard(props: {
   title?: string;
@@ -40,7 +41,7 @@ export function TodoCard(props: {
       class={`${props.panel ? "rounded-lg bg-card" : "rounded-(--radius) border border-line-soft bg-paper/70"} ${
         props.fill ? "flex-1" : ""
       } ${props.class ?? ""}`}
-      style={props.panel ? { boxShadow: PANEL_SHADOW } : undefined}
+      style={props.panel ? { boxShadow: panelShadow() } : undefined}
     >
       <If when={hasHead()}>
         <View class="h-12 flex-row items-center gap-2.5 border-b border-line-soft" style={{ paddingHorizontal: cardPadding() }}>

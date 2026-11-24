@@ -4,8 +4,9 @@
 // The page provides a `RevealRegistry`; SettingField, SettingToggleRow, SettingRow and SettingsCard
 // register their label with a ref, and read `marked()` to show the mark.
 import type { ViewRef } from "nsh";
-import { type AnimatedNode, cleanup, context, createAnimatedValue, type Signal, signal, untracked } from "nsh";
+import { type AnimatedNode, cleanup, context, createAnimatedValue, type Signal, signal, token, untracked } from "nsh";
 import { MOTION_EASE, motionMs } from "../motion";
+import { withAlpha } from "../motion/color";
 
 export interface RevealRegistry {
   /** Labels on screen, each with the views that show it (newest last). */
@@ -31,7 +32,7 @@ export function createRevealRegistry(): RevealRegistry {
     rows: new Map(),
     marked,
     ringed,
-    tint: level.interpolate({ inputRange: [0, 1], outputRange: ["rgba(125,130,184,0)", "rgba(125,130,184,0.14)"] }),
+    tint: level.interpolate({ inputRange: [0, 1], outputRange: [withAlpha(String(token("blue")), 0), withAlpha(String(token("blue")), 0.12)] }),
     mark(text: string) {
       const run = ++seq;
       const duration = motionMs(HIT_MS);

@@ -543,7 +543,7 @@ export function TodoCalendar(props: TodoCalendarProps) {
             </View>
           </If>
           <If when={cell().more > 0}>
-            <Text class="pl-3 font-mono text-[11px] leading-[15.4px] text-placeholder">{t("todo_calendar_more", { count: cell().more })}</Text>
+            <Text class="pl-3 font-mono text-[11px] leading-[15.4px] text-muted-foreground">{t("todo_calendar_more", { count: cell().more })}</Text>
           </If>
         </BaseButton>
       </View>

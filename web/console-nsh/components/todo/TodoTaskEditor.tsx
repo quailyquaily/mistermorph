@@ -14,7 +14,7 @@ import { CALENDAR_DAY_CLASS, DateField } from "../shared/DateField";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, BusyBeam, busyLook, DropdownMenu, Icon, MENU_POPUP_STYLE, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, MENU_POPUP_STYLE, type MenuEntry, SWITCH_THUMB_CLASS, SWITCH_TRACK_CLASS, switchThumbStyle, Tabs, Tip, TipButton } from "../ui";
 import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 import * as model from "./todo-model.js";
 import { TodoJobButton } from "../chat/TodoJobBar";
@@ -189,14 +189,9 @@ function EnabledSwitch(props: { checked: boolean; disabled: boolean; onChange: (
       tooltip={props.label ? undefined : <Tip text={t("todo_field_enabled")} />}
       testID={props.testID ?? "todo-enabled"}
       class="group flex-row items-center disabled:opacity-50"
-      trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
-      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
-      thumbStyle={{
-        boxShadow: "0 0 0 1px rgba(24, 24, 50, 0.22), 0 1px 1px rgba(24, 24, 50, 0.1)",
-        transitionProperty: "transform",
-        transitionDuration: 260,
-        transitionTimingFunction: "cubic-bezier(0.3, 1.35, 0.5, 1)",
-      }}
+      trackClass={SWITCH_TRACK_CLASS}
+      thumbClass={SWITCH_THUMB_CLASS}
+      thumbStyle={switchThumbStyle()}
     />
   );
 }

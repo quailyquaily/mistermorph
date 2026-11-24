@@ -19,7 +19,7 @@ import type { ScrollMemory } from "../../lib/scrollMemory";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
-import { BackButton, BAR_ICON_SIZE, CircleButton, Icon, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, TextField, type IconName } from "../ui";
+import { BackButton, BAR_ICON_SIZE, CircleButton, Icon, SWITCH_THUMB_CLASS, SWITCH_TRACK_CLASS, switchThumbStyle, TextField, type IconName } from "../ui";
 import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { sagHalf, SagRule } from "../motion/Sag";
@@ -680,14 +680,9 @@ export function SwitchOnly(props: {
       testID={props.testID}
       hitSlop={6}
       class="group flex-row items-center disabled:opacity-50"
-      trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
-      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
-      thumbStyle={{
-        boxShadow: props.checked ? "0 0 0 1px rgba(33, 68, 107, 0.6)" : "0 0 0 1px rgba(24, 24, 50, 0.22), 0 1px 1px rgba(24, 24, 50, 0.1)",
-        transitionProperty: "transform",
-        transitionDuration: motionMs(260),
-        transitionTimingFunction: "cubic-bezier(0.3, 1.35, 0.5, 1)",
-      }}
+      trackClass={SWITCH_TRACK_CLASS}
+      thumbClass={SWITCH_THUMB_CLASS}
+      thumbStyle={switchThumbStyle()}
     />
   );
 }

@@ -12,6 +12,7 @@ import { durationSeconds, formatDuration, splitDuration } from "../../lib/core/d
 import { pickDesktopDirectory } from "../../lib/core/desktop-runtime.js";
 import { ROW_MODES } from "../../lib/core/setting-rows.js";
 import { useRevealRow } from "../settings-page/reveal";
+import { t } from "./DialogShell";
 import { isMobile } from "../../lib/shell";
 import { Icon, PopupList, popupSheets, Tip, TipButton } from "../ui";
 import { CONTROL_CORNERS, cornersClass, nestedRadius, POPOVER_CORNERS, RADIUS } from "../corners";
@@ -697,14 +698,14 @@ export function SettingLimit(props: SettingLimitProps) {
             <BaseButton
               disabled={props.disabled}
               onPress={() => setLimited(true)}
-              accessibilityLabel={props.label ? `${props.label}: no limit. Set a limit` : "No limit. Set a limit"}
+              accessibilityLabel={props.label ? t("settings_limit_none_named", { name: props.label }) : t("settings_limit_none_action")}
               testID={props.testID}
               class="flex-1 flex-row items-center px-3 py-2 hover:bg-hover"
             >
-              <Text class="text-sm text-placeholder">No limit</Text>
+              <Text class="text-sm text-muted-foreground">{t("settings_limit_none")}</Text>
             </BaseButton>
             <Sep />
-            <Part label="Set limit" disabled={props.disabled} onPress={() => setLimited(true)} />
+            <Part label={t("settings_limit_set")} disabled={props.disabled} onPress={() => setLimited(true)} />
           </>
         }
       >
@@ -726,7 +727,7 @@ export function SettingLimit(props: SettingLimitProps) {
           class={`${INPUT_CLASS} font-mono`}
         />
         <Sep />
-        <Part label="No limit" quiet disabled={props.disabled} onPress={() => setLimited(false)} />
+        <Part label={t("settings_limit_none")} quiet disabled={props.disabled} onPress={() => setLimited(false)} />
       </If>
     </View>
   );

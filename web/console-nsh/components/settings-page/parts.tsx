@@ -4,7 +4,7 @@ import type { JSX } from "nsh";
 import { Text, View } from "nsh";
 import { Collapsible, Switch } from "nsh/base";
 import { isMobile } from "../../lib/shell";
-import { Icon, type IconName, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tip, TipButton } from "../ui";
+import { Icon, type IconName, SWITCH_THUMB_CLASS, SWITCH_TRACK_CLASS, switchThumbStyle, Tip, TipButton } from "../ui";
 import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 import { useRevealRow } from "./reveal";
 
@@ -37,9 +37,10 @@ export function SettingSwitch(props: {
       onChange={({ checked }) => props.onChange?.(checked)}
       accessibilityLabel={props.accessibilityLabel}
       testID={props.testID}
-      class="disabled:opacity-50"
-      trackClass={`w-[34px] h-5 ${SWITCH_TRACK_CORNERS} border border-line bg-transparent p-0.5 transition-colors duration-180 hover:border-muted-foreground checked:border-primary checked:bg-primary`}
-      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card ring-1 ring-foreground/20 shadow-xs transition-transform duration-260 ease-[cubic-bezier(0.3,1.35,0.5,1)] checked:translate-x-3.5 checked:ring-primary/60`}
+      class="group disabled:opacity-50"
+      trackClass={SWITCH_TRACK_CLASS}
+      thumbClass={SWITCH_THUMB_CLASS}
+      thumbStyle={switchThumbStyle()}
     />
   );
 }
