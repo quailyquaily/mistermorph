@@ -67,3 +67,18 @@ Outside-dir observation: coder harness wrote background output beneath its exist
 Scheduled ship did not merge this item. Merge conflict: agent/engine_loop.go.
 Base head before attempted merge: 1c4ba7323ef05881cd1784a97d8ea2757a427bca. Published base after this batch: 1c4ba732 (v0.3.133).
 Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.
+
+
+## factory · review · 2026-11-25 08:37
+head: e5fa2d49c93c4701fa3480667c9efb46a9d21d11
+verdict: pass
+notes:
+- [P2] cmd/mistermorph/consolecmd/local_runtime.go:2626-2630: an approval resume creates an empty child registry and overwrites result.child_messages without preserving earlier messages. Verified probe: a paused task has child_messages=1/history_items=1; approve/resume produces child_messages=0/history_items=0. Preserve earlier child_messages across resumes, as trace is preserved, and add a regression test.
+- [P2] web/console-nsh/pages/chat/ActivityDetailPanel.tsx:300: a child_finished refusal, visible draft and parent fallback disappear when the next worker update marks it done. Verified probe: error/fallback counts 1/1 before completion, 0/0 afterward. Keep refused state and fallback visible after completion.
+- [P3] cmd/mistermorph/consolecmd/activity_progress.go:686-688: bash run_in_subtask workers are classified as subagents and offered a composer, but every send is refused as child_unsupported with an incorrect external-coding-CLI explanation. Mark shell workers unavailable and explain the actual limitation.
+
+Merged current origin/master (1c4ba732) into the existing item branch, preserving both formatChildSteerMessage and pendingApprovalPreview in the sole conflict in agent/engine_loop.go. Merge commit e5fa2d49 was verified and pushed before review. No unrelated fix commits.
+Claude Code reviewed all 43 changed files in origin/master...HEAD against the request and plan, including targeting/trust, lifecycle races, nested children, history, Console/terminal clients and approval merge interaction. No P0/P1 findings; the configured factory policy permits promotion with P2/P3 notes.
+Validation: manager independently passed gofmt, go vet ./... and go test ./... in isolated HOME; coder independently passed those checks (169 packages), nsh check, 315 core JS tests, and the full required Console script (167 files, 0 failed). Two Console files failed under concurrent execution and passed the runner's isolated retry. Worktree clean; diff whitespace check passed.
+Installs: none. Not checked: live-model operation, visual UI, desktop, Android keyboard, live terminal steering or older runtimes. Message-history retention remains bounded to 64 messages.
+Outside-dir observation: coder harness background output was recorded for owner inspection, not deleted; a mistaken redirect to an existing temporary directory failed without writing. No base branch or tags changed. Moved review/ → ready/.
