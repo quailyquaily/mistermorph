@@ -57,3 +57,10 @@ notes:
 - Required formatting check, go vet ./... and go test ./... passed with isolated HOME/XDG/build cache (168 packages). Targeted integration lifecycle race tests (count=3) and awareness AttachTriggers race tests passed. Manager checked clean worktree, unchanged branch head and test logs with exit status 0. No code edits or commits during review, no installs.
 - Not verified: live Telegram/Slack traffic, a message traversing a live bot into the dispatcher, and scheduling across separate processes sharing state. Slow MCP connection/shutdown blocking was not measured. Existing embedders now acquire the configured job/heartbeat loop while bots or ServeRuntimeAPI are alive, as documented; job runs appear under the integration task target.
 - Harness-managed temporary output outside the run directory was recorded for later owner-approved cleanup; nothing in /tmp was deleted. Prior build execution caveats remain recorded above; no new boundary violations were reported in this review.
+
+
+## factory · 2026-11-25 07:20
+Merged into master at d357de53ea8c4dbd0fd105db4efd4d93ab0d93c6; released in v0.3.133.
+Validation: per-item Go gate passed; final gofmt check, go vet ./... and go test ./... passed. Final nsh check and full Console runner passed: 165 files, 0 failed (581s).
+Linked issues/PRs: none. Branch retained (ship clean not configured). No installs or code fixes. Existing review notes remain applicable; in particular FT182 Agent Link file delivery and FT183 PDF preview limitations were not fixed or live-tested.
+Move: ready/ → done/.

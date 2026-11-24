@@ -56,3 +56,9 @@ notes:
 - All 8 focused headless layout tests pass independently at phone and desktop widths. Removing the fix classes in a temporary copy makes 6 of 8 fail, confirming regression coverage.
 - Review did not repeat browser measurements; physical Android, native desktop and Android JVM tests were not checked. Headless Android-platform layout was checked at 360pt.
 - Installs: none. Worktree unchanged; no code commits. Coder reported harness task output outside the run directory under /tmp/claude-995; recorded for owner-confirmed cleanup, not deleted.
+
+
+## factory · 2026-11-25 07:20
+Scheduled ship did not merge this item. Merge conflict: web/console-nsh/components/chat/ChatSkillInstallPreview.tsx.
+Base head before attempted merge: d357de53ea8c4dbd0fd105db4efd4d93ab0d93c6. Published base after this batch: 1c4ba732 (v0.3.133).
+Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.

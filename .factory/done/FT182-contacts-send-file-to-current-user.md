@@ -45,3 +45,10 @@ notes:
 - [P2] tools/builtin/contacts_send.go:187: File sends to the current Agent Link counterpart bypass its no-new-message guard, but contacts_send does not attach files to the pending reply. A verified probe with incoming hop 1 and a forbidden mm: asker delivered a new non-reply message at hop 2 with one attachment, while reply attachments stayed empty; master blocked it. This can restart agent tasks and permit file-response exchanges until max_hops. Route these files through the reply-attachment path, or retain the mm: counterpart block and direct callers to agent_send. The batch guard at line 292 has the same issue.
 
 Validation: Claude Code reviewed all four changed files against origin/master...HEAD and the request/plan. Gofmt check, go vet ./... and go test ./... passed (168 tested packages). The Agent Link probe ran against both head and master in scratch copies. No P0/P1 findings; per factory policy moved review/ → ready/ with the P2 retained for owner attention. Live channel delivery was not checked. No installs. Repository working tree stayed unchanged. Harness output was written outside dir under /tmp/claude-995/; recorded for later owner-approved cleanup.
+
+
+## factory · 2026-11-25 07:20
+Merged into master at 1ed74e7d02a0b803333afde38a68cd3726a75807; released in v0.3.133.
+Validation: per-item Go gate passed; final gofmt check, go vet ./... and go test ./... passed. Final nsh check and full Console runner passed: 165 files, 0 failed (581s).
+Linked issues/PRs: none. Branch retained (ship clean not configured). No installs or code fixes. Existing review notes remain applicable; in particular FT182 Agent Link file delivery and FT183 PDF preview limitations were not fixed or live-tested.
+Move: ready/ → done/.

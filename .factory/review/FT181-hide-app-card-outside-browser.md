@@ -49,3 +49,9 @@ notes:
 - Not manually checked in browser, desktop or Android/iOS. No visual layout measurement; no iOS-specific test or phone-width pull-to-reveal search test. Headless regression coverage includes browser secure/insecure, desktop, Android and tablet paths.
 - CLI background-task artifacts were reported outside the run directory in the shared temporary area and recorded for owner-confirmed cleanup; not deleted.
 - Move: review/ → ready/. Awaiting ship.
+
+
+## factory · 2026-11-25 07:20
+Scheduled ship did not merge this item. Merge conflict: web/console-nsh/tests/settings-page-sections.test.tsx.
+Base head before attempted merge: 018bbcd8cc6f1452f02990bd38e0d8522d95a863. Published base after this batch: 1c4ba732 (v0.3.133).
+Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.

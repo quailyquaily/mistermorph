@@ -67,3 +67,9 @@ Reviewed origin/master...HEAD with Claude Code, against the request and plan. No
 Not checked: live model discovery, manual approval-card interaction, Settings matrix in a browser, Android JVM tests (no JDK). Residual uncertainties: reply/file-view workspace aliases after a switch; workspace-list title trust marking; symlink replacement between selection and tool execution. No confirmed P0/P1 defect in these surfaces.
 
 Installs: none. Shared Go module cache reused offline and nsh cache copied into isolated HOME. Harness output under /tmp/claude-995 recorded as written outside dir; no new top-level /tmp entries observed. Review temporary artifacts cleaned at end. Moved review/ → ready/; not merged into master.
+
+
+## factory · 2026-11-25 07:20
+Scheduled ship did not merge this item. Merge conflict: assets/config/config.example.yaml, tools/tool.go.
+Base head before attempted merge: 1c4ba7323ef05881cd1784a97d8ea2757a427bca. Published base after this batch: 1c4ba732 (v0.3.133).
+Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.

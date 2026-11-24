@@ -61,3 +61,9 @@ Validation: Claude Code reviewed origin/master...HEAD, all 43 changed files. Req
 Installs/dependency changes: none. Worktree unchanged.
 Limits: no live-model run or visual UI inspection in this review; desktop, Android keyboard, terminal live steering and older-runtime compatibility not exercised. Bounded message-history trimming and approval-cancel in-memory history remain residual risks.
 Outside-dir observation: coder harness wrote background output beneath its existing temporary tasks folder; recorded for inspection, not deleted. Previous review worktree was removed during recovery. No code commits, base changes or tags in this run.
+
+
+## factory · 2026-11-25 07:20
+Scheduled ship did not merge this item. Merge conflict: agent/engine_loop.go.
+Base head before attempted merge: 1c4ba7323ef05881cd1784a97d8ea2757a427bca. Published base after this batch: 1c4ba732 (v0.3.133).
+Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.

@@ -60,3 +60,10 @@ Validation: required gofmt/vet/go test command passed (168 packages); nsh check 
 Limits: reviewer did not independently inspect the rendered header or real mobile/desktop devices; prior build's headless Chrome checks remain the visual evidence. Slow-request gallery-button disabling relies on shared helper tests and Button loading contract. Server-side logout revocation is unchanged and was not reverified.
 
 Process: Claude harness output under /tmp/claude-995 tracked for owner-approved cleaning, not deleted. Moved review/ → ready/; not merged into master.
+
+
+## factory · 2026-11-25 07:20
+Merged into master at 018bbcd8cc6f1452f02990bd38e0d8522d95a863; released in v0.3.133.
+Validation: per-item Go gate passed; final gofmt check, go vet ./... and go test ./... passed. Final nsh check and full Console runner passed: 165 files, 0 failed (581s).
+Linked issues/PRs: none. Branch retained (ship clean not configured). No installs or code fixes. Existing review notes remain applicable; in particular FT182 Agent Link file delivery and FT183 PDF preview limitations were not fixed or live-tested.
+Move: ready/ → done/.

@@ -76,3 +76,10 @@ notes:
 - Residual risks: nonsecret config_get values are readable to all audiences; unrecognised credentials embedded in MCP args, URLs or unusual keys are not guaranteed masked. Secret setter arguments remain in pending approval storage, though approval presentation/log output is masked. Command-line overrides still take precedence over persisted settings.
 - Not checked: live channel approval UI (including LINE/Lark), real OS keyring, live Console runtime reload. No frontend changed. Installs: none. Runtime-owned temporary output was observed outside the run directory and recorded for owner-confirmed cleanup.
 - Move: review/ → ready/.
+
+
+## factory · 2026-11-25 07:20
+Merged into master at a22996fa4fcd1fc4baf21cec565e473f09579de9; released in v0.3.133.
+Validation: per-item Go gate passed; final gofmt check, go vet ./... and go test ./... passed. Final nsh check and full Console runner passed: 165 files, 0 failed (581s).
+Linked issues/PRs: none. Branch retained (ship clean not configured). No installs or code fixes. Existing review notes remain applicable; in particular FT182 Agent Link file delivery and FT183 PDF preview limitations were not fixed or live-tested.
+Move: ready/ → done/.

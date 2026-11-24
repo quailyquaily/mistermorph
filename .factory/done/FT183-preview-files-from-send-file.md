@@ -65,3 +65,10 @@ Review scope: Claude Code reviewed all 12 changed files in origin/master...HEAD,
 Validation: required gofmt/vet/go test gate PASS (168 packages); nsh check PASS (0.6.0); required Console scripts/test.sh PASS (165 files, 0 failed, 274s; two parallel timing failures passed the runner's solo retry); targeted received-preview test PASS (9/9, with PDF warnings); node library tests PASS (313/313). Worktree clean; no commits or source changes. No installs or manifest changes.
 
 Limits: no live web/desktop/Android UI verification; browser PDF sandbox behavior unverified; Android JVM tests unavailable without JDK; 2 MiB text rendering speed on phones not measured. Review worktree from the previous stopped run was removed during recovery. Test artifacts stayed in this run's temporary directory; harness reported its own /tmp/claude-995 output directory, retained in the outside ledger and not deleted.
+
+
+## factory · 2026-11-25 07:20
+Merged into master at 1c4ba7323ef05881cd1784a97d8ea2757a427bca; released in v0.3.133.
+Validation: per-item Go gate passed; final gofmt check, go vet ./... and go test ./... passed. Final nsh check and full Console runner passed: 165 files, 0 failed (581s).
+Linked issues/PRs: none. Branch retained (ship clean not configured). No installs or code fixes. Existing review notes remain applicable; in particular FT182 Agent Link file delivery and FT183 PDF preview limitations were not fixed or live-tested.
+Move: ready/ → done/.
