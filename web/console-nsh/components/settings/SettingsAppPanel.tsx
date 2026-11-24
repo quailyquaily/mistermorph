@@ -6,7 +6,7 @@ import type { JSX, ViewRef } from "nsh";
 import { cleanup, computed, effect, Image, signal, Text, untracked, View } from "nsh";
 import appLogo from "../../assets/images/app_logo_current.svg";
 import { endpointApiFetch, endpointState, localeState, runtimeEndpointByRef } from "../../lib/core/context.js";
-import { canCheckDesktopUpdate, isDesktopRuntime } from "../../lib/core/desktop-runtime.js";
+import { canCheckDesktopUpdate } from "../../lib/core/desktop-runtime.js";
 import { endpointDisplayItem } from "../../lib/core/endpoints.js";
 import { pushNotice } from "../../lib/core/notices.js";
 import { checkDesktopUpdate, copyText, downloadTarget, openExternal, origin, shellInfo } from "../../lib/platform";
@@ -37,8 +37,9 @@ function secureOrigin() {
 
 /**
  * Installs the console as an app for the selected agent, named after it and with its avatar.
- * The browser's install offer (`beforeinstallprompt`) does not reach an nsh app, so on the web the
- * panel says how to install from the browser's own menu ("waiting") or why it cannot ("insecure").
+ * The browser's install offer (`beforeinstallprompt`) does not reach an nsh app, so the panel says
+ * how to install from the browser's own menu ("waiting") or why it cannot ("insecure"). Only a web
+ * browser shows it (General checks `isBrowser`): the desktop and phone apps are installed already.
  */
 export function SettingsAppPanel() {
   const agent = () => {
@@ -49,7 +50,7 @@ export function SettingsAppPanel() {
       image: String(item.avatar_url || "").trim(),
     };
   };
-  const mode = () => (isDesktopRuntime() ? "desktop" : secureOrigin() ? "waiting" : "insecure");
+  const mode = () => (secureOrigin() ? "waiting" : "insecure");
   const hint = () => t(`settings_app_hint_${mode()}`);
 
   return (
