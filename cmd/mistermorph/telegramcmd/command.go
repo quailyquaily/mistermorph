@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"log/slog"
 	"strings"
 	"time"
 
-	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	awarenessruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -17,8 +15,8 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
-	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/spf13/cobra"
@@ -183,17 +181,10 @@ func attachTelegramAwarenessTriggers(telegramOpts *telegramruntime.RunOptions, a
 		return
 	}
 	awarenessOpts.TaskStore = telegramOpts.TaskStore
-	pokeRequests := make(chan awarenessruntime.PokeRequest)
-	awarenessOpts.PokeRequests = pokeRequests
-	telegramOpts.Server.Poke = func(ctx context.Context, input awarenessdomain.PokeInput) error {
-		return awarenessruntime.Trigger(ctx, pokeRequests, input)
-	}
-	if awarenessOpts.CronEnabled {
-		cronRequests := make(chan awarenessruntime.CronRequest)
-		awarenessOpts.CronRequests = cronRequests
-		telegramOpts.Server.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
-			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
-		}
+	triggers := awarenessruntime.AttachTriggers(awarenessOpts)
+	telegramOpts.Server.Poke = triggers.Poke
+	if triggers.CronRun != nil {
+		telegramOpts.Server.CronRun = triggers.CronRun
 		// The jobs whose message triggers watch a chat of this runtime start through the same loop.
 		telegramOpts.JobTriggers = jobtriggers.New(awarenessOpts.CronPath, telegramOpts.Server.CronRun, slog.Default())
 	}

@@ -212,7 +212,7 @@ func (r *telegramBotRunner) Run(ctx context.Context) error {
 	if r == nil {
 		return fmt.Errorf("telegram runner is nil")
 	}
-	return runChannelLoop(ctx, &r.state, "telegram", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+	return runChannelLoop(ctx, &r.state, "telegram", r.rt, func(runCtx context.Context, snap runtimeSnapshot, jobs jobHooks) (runErr error) {
 		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
 		if err != nil {
 			return err
@@ -238,9 +238,10 @@ func (r *telegramBotRunner) Run(ctx context.Context) error {
 		}
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
+		runOpts.Server.Poke, runOpts.Server.CronRun, runOpts.JobTriggers = jobs.Poke, jobs.CronRun, jobs.Triggers
 		deps := r.rt.telegramDependencies(snap)
 		deps.CommonDependencies = common
-		return telegramruntime.Run(runCtx, deps, runOpts)
+		return r.rt.buildDeps.channels.telegram(runCtx, deps, runOpts)
 	})
 }
 
@@ -261,7 +262,7 @@ func (r *slackBotRunner) Run(ctx context.Context) error {
 	if r == nil {
 		return fmt.Errorf("slack runner is nil")
 	}
-	return runChannelLoop(ctx, &r.state, "slack", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+	return runChannelLoop(ctx, &r.state, "slack", r.rt, func(runCtx context.Context, snap runtimeSnapshot, jobs jobHooks) (runErr error) {
 		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
 		if err != nil {
 			return err
@@ -285,13 +286,17 @@ func (r *slackBotRunner) Run(ctx context.Context) error {
 		})
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
+		runOpts.Server.Poke, runOpts.Server.CronRun, runOpts.JobTriggers = jobs.Poke, jobs.CronRun, jobs.Triggers
 		deps := r.rt.slackDependencies(snap)
 		deps.CommonDependencies = common
-		return slackruntime.Run(runCtx, deps, runOpts)
+		return r.rt.buildDeps.channels.slack(runCtx, deps, runOpts)
 	})
 }
 
-func runChannelLoop(ctx context.Context, state *runState, name string, rt *Runtime, run func(context.Context, runtimeSnapshot) error) error {
+// runChannelLoop runs one channel bot. With jobs on, the bot is an owner of the runtime's job
+// loop while it runs: it gets the loop's triggers, stops if the loop fails, and returns only once
+// the loop has stopped when it was the last owner.
+func runChannelLoop(ctx context.Context, state *runState, name string, rt *Runtime, run func(context.Context, runtimeSnapshot, jobHooks) error) error {
 	name = strings.TrimSpace(name)
 	if rt == nil {
 		return fmt.Errorf("%s runner is nil", name)
@@ -301,7 +306,54 @@ func runChannelLoop(ctx context.Context, state *runState, name string, rt *Runti
 		return err
 	}
 	defer state.end(cancel)
-	return run(runCtx, rt.snapshot())
+	snap := rt.snapshot()
+	lease, err := rt.acquireJobs(snap)
+	if err != nil {
+		return err
+	}
+	defer lease.release()
+	stopWatching := lease.cancelOnFailure(cancel)
+	runErr := run(runCtx, snap, lease.hooks())
+	stopWatching()
+	if jobsErr := lease.failure(); jobsErr != nil {
+		if runErr == nil || errors.Is(runErr, context.Canceled) {
+			return jobsErr
+		}
+		return errors.Join(runErr, jobsErr)
+	}
+	return runErr
+}
+
+// channelRunners start the channel runtimes; tests replace them with fakes.
+type channelRunners struct {
+	telegram func(context.Context, telegramruntime.Dependencies, telegramruntime.RunOptions) error
+	slack    func(context.Context, slackruntime.Dependencies, slackruntime.RunOptions) error
+	mixin    func(context.Context, mixinruntime.Dependencies, mixinruntime.RunOptions) error
+	discord  func(context.Context, discordruntime.Dependencies, discordruntime.RunOptions) error
+	wechat   func(context.Context, accountdm.Dependencies, wechatruntime.RunOptions) error
+	whatsapp func(context.Context, accountdm.Dependencies, whatsappruntime.RunOptions) error
+}
+
+func normalizeChannelRunners(in channelRunners) channelRunners {
+	if in.telegram == nil {
+		in.telegram = telegramruntime.Run
+	}
+	if in.slack == nil {
+		in.slack = slackruntime.Run
+	}
+	if in.mixin == nil {
+		in.mixin = mixinruntime.Run
+	}
+	if in.discord == nil {
+		in.discord = discordruntime.Run
+	}
+	if in.wechat == nil {
+		in.wechat = wechatruntime.Run
+	}
+	if in.whatsapp == nil {
+		in.whatsapp = whatsappruntime.Run
+	}
+	return in
 }
 
 func (r *slackBotRunner) Close() error {
@@ -322,7 +374,7 @@ func (r *mixinBotRunner) Run(ctx context.Context) error {
 	if r == nil {
 		return fmt.Errorf("mixin runner is nil")
 	}
-	return runChannelLoop(ctx, &r.state, "mixin", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+	return runChannelLoop(ctx, &r.state, "mixin", r.rt, func(runCtx context.Context, snap runtimeSnapshot, jobs jobHooks) (runErr error) {
 		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
 		if err != nil {
 			return err
@@ -338,9 +390,10 @@ func (r *mixinBotRunner) Run(ctx context.Context) error {
 		runOpts.Credentials = r.credentials
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
+		// Mixin takes no job triggers; the bot still keeps the runtime's job loop running.
 		deps := r.rt.mixinDependencies(snap)
 		deps.CommonDependencies = common
-		return mixinruntime.Run(runCtx, deps, runOpts)
+		return r.rt.buildDeps.channels.mixin(runCtx, deps, runOpts)
 	})
 }
 
@@ -361,7 +414,7 @@ func (r *discordBotRunner) Run(ctx context.Context) error {
 	if r == nil {
 		return fmt.Errorf("discord runner is nil")
 	}
-	return runChannelLoop(ctx, &r.state, "discord", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+	return runChannelLoop(ctx, &r.state, "discord", r.rt, func(runCtx context.Context, snap runtimeSnapshot, jobs jobHooks) (runErr error) {
 		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
 		if err != nil {
 			return err
@@ -382,9 +435,10 @@ func (r *discordBotRunner) Run(ctx context.Context) error {
 		})
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
+		runOpts.Poke, runOpts.CronRun = jobs.Poke, jobs.CronRun
 		deps := r.rt.discordDependencies(snap)
 		deps.CommonDependencies = common
-		return discordruntime.Run(runCtx, deps, runOpts)
+		return r.rt.buildDeps.channels.discord(runCtx, deps, runOpts)
 	})
 }
 
@@ -405,7 +459,7 @@ func (r *wechatBotRunner) Run(ctx context.Context) error {
 	if r == nil {
 		return fmt.Errorf("wechat runner is nil")
 	}
-	return runChannelLoop(ctx, &r.state, "wechat", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+	return runChannelLoop(ctx, &r.state, "wechat", r.rt, func(runCtx context.Context, snap runtimeSnapshot, jobs jobHooks) (runErr error) {
 		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
 		if err != nil {
 			return err
@@ -419,7 +473,8 @@ func (r *wechatBotRunner) Run(ctx context.Context) error {
 		applyAccountDMLimits(&cfg.AccountDMConfig, r.opts.TaskTimeout, r.opts.MaxConcurrency)
 		runOpts := channelopts.BuildWeChatRunOptions(cfg, "integration", r.rt.inspect.Prompt, r.rt.inspect.Request)
 		r.rt.gateEngineTools(&runOpts.EngineToolsConfig)
-		return wechatruntime.Run(runCtx, r.rt.accountDMDependencies(snap, common), runOpts)
+		runOpts.Poke, runOpts.CronRun = jobs.Poke, jobs.CronRun
+		return r.rt.buildDeps.channels.wechat(runCtx, r.rt.accountDMDependencies(snap, common), runOpts)
 	})
 }
 
@@ -440,7 +495,7 @@ func (r *whatsappBotRunner) Run(ctx context.Context) error {
 	if r == nil {
 		return fmt.Errorf("whatsapp runner is nil")
 	}
-	return runChannelLoop(ctx, &r.state, "whatsapp", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+	return runChannelLoop(ctx, &r.state, "whatsapp", r.rt, func(runCtx context.Context, snap runtimeSnapshot, jobs jobHooks) (runErr error) {
 		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
 		if err != nil {
 			return err
@@ -451,7 +506,8 @@ func (r *whatsappBotRunner) Run(ctx context.Context) error {
 		applyAccountDMLimits(&cfg.AccountDMConfig, r.opts.TaskTimeout, r.opts.MaxConcurrency)
 		runOpts := channelopts.BuildWhatsAppRunOptions(cfg, "integration", r.rt.inspect.Prompt, r.rt.inspect.Request)
 		r.rt.gateEngineTools(&runOpts.EngineToolsConfig)
-		return whatsappruntime.Run(runCtx, r.rt.accountDMDependencies(snap, common), runOpts)
+		runOpts.Poke, runOpts.CronRun = jobs.Poke, jobs.CronRun
+		return r.rt.buildDeps.channels.whatsapp(runCtx, r.rt.accountDMDependencies(snap, common), runOpts)
 	})
 }
 

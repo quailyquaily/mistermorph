@@ -10,6 +10,10 @@
 // Runtime.NewSlackBot(...), Runtime.NewMixinBot(...), Runtime.NewDiscordBot(...),
 // Runtime.NewWeChatBot(...), and Runtime.NewWhatsAppBot(...).
 //
+// Jobs (job_manage) run in one job loop per Runtime while a channel bot,
+// ServeRuntimeAPI or Runtime.RunJobs runs; see Runtime.RunJobs and
+// docs/integration.md.
+//
 // Configuration is explicit via Config.Set(...) / Config.Overrides.
 // The embedding host owns env/config-file loading and passes resolved values in.
 //

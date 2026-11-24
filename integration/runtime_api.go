@@ -41,6 +41,10 @@ type RuntimeAPIOptions struct {
 // chat with the program: each message runs through this Runtime, with the earlier exchanges of its
 // topic as history. When ctx ends, ServeRuntimeAPI stops the tasks it started, waits for them and
 // returns.
+//
+// With jobs on, the runtime API is an owner of the runtime's job loop (see RunJobs): jobs run while
+// it serves, and its job routes (POST /poke/{job_id}) start them. If the loop fails,
+// ServeRuntimeAPI stops and returns the error.
 func (rt *Runtime) ServeRuntimeAPI(ctx context.Context, opts RuntimeAPIOptions) error {
 	if err := rt.Err(); err != nil {
 		return err
@@ -52,19 +56,29 @@ func (rt *Runtime) ServeRuntimeAPI(ctx context.Context, opts RuntimeAPIOptions) 
 	if snap.Server.Listen == "" {
 		return errors.New("server.listen is not set")
 	}
-	api, err := rt.newRuntimeAPI(ctx, opts)
+	serveCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	api, err := rt.newRuntimeAPI(serveCtx, opts)
 	if err != nil {
 		return err
 	}
 	defer api.close()
-	if _, err := daemonruntime.StartServer(ctx, snap.Logger, daemonruntime.ServerOptions{
+	lease, err := rt.acquireJobs(snap)
+	if err != nil {
+		return err
+	}
+	defer lease.release()
+	api.jobs = lease.hooks()
+	stopWatching := lease.cancelOnFailure(cancel)
+	defer stopWatching()
+	if _, err := daemonruntime.StartServer(serveCtx, snap.Logger, daemonruntime.ServerOptions{
 		Listen: snap.Server.Listen,
 		Routes: api.routes(),
 	}); err != nil {
 		return err
 	}
-	<-ctx.Done()
-	return nil
+	<-serveCtx.Done()
+	return lease.failure()
 }
 
 // runtimeAPI runs the tasks submitted over the runtime API and keeps them, with the program's own
@@ -74,6 +88,7 @@ type runtimeAPI struct {
 	snap     runtimeSnapshot
 	registry *tools.Registry
 	store    *daemonruntime.ConsoleFileStore
+	jobs     jobHooks
 	ctx      context.Context
 	cancel   context.CancelFunc
 	seq      atomic.Uint64
@@ -139,6 +154,8 @@ func (a *runtimeAPI) routes() daemonruntime.RoutesOptions {
 		RuntimePaths:  a.snap.Paths,
 		HealthEnabled: true,
 		Overview:      a.overview,
+		Poke:          a.jobs.Poke,
+		CronRun:       a.jobs.CronRun,
 		TaskTopic: daemonruntime.TaskTopicRoutes{
 			TaskReader:    a.store,
 			TopicReader:   a.store,
@@ -167,6 +184,8 @@ func (a *runtimeAPI) overview(ctx context.Context) (map[string]any, error) {
 			"configured": false,
 			"running":    defaultIntegrationTaskTarget,
 		},
+		"poke_enabled":     a.jobs.Poke != nil,
+		"cron_run_enabled": a.jobs.CronRun != nil,
 	}, nil
 }
 

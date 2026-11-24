@@ -329,7 +329,10 @@ func TestChannelBotRunConnectsMCPWithRunContextAndClosesIt(t *testing.T) {
 			connectCalls := 0
 			closeCalls := 0
 			var gotContext context.Context
-			rt := newRuntime(integrationLifecycleConfig(t), runtimeBuildDependencies{
+			cfg := integrationLifecycleConfig(t)
+			// With jobs on, the job loop connects MCP servers of its own (see jobs_test.go).
+			cfg.Set("tools.job_manage.enabled", false)
+			rt := newRuntime(cfg, runtimeBuildDependencies{
 				buildClient: func(llmconfig.ClientConfig, llmutil.RuntimeValues) (llm.Client, error) {
 					return &stubIntegrationLLMClient{}, nil
 				},

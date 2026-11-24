@@ -89,5 +89,5 @@ Checked on nsh 0.6.0 (5541637):
   390pt phone and with reduced motion; the button still presses and names itself.
 - By eye: `nsh test --target web` with `app.screenshot`, or the fixture packaged for the web and
   opened in Chrome, where `getComputedStyle(el).cornerShape` reads `superellipse(1.7)` on every
-  shaped control. The gallery (`/ui-components`) shows the controls, a long value in a field and
+  shaped control. The gallery (`/__ui-components`) shows the controls, a long value in a field and
   controls on a card.

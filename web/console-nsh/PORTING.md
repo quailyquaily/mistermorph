@@ -33,7 +33,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `components/Shell.tsx` | Sidebar, mobile bottom nav, notice stack |
 | `components/frame/PageStack.tsx` | The page host: a layer per page instance and the slide between two (docs/console/page-transitions.md) |
 | `pages/<area>/` | One folder per screen; `pages/routes.tsx` maps routes to pages |
-| `pages/ui-components/` | The UI component gallery, a testing page at `/ui-components` with no navigation entry: every component from synthetic data (docs/console/ui-components.md). A new component goes in its `inventory.js` |
+| `pages/ui-components/` | The UI component gallery, a testing page at `/__ui-components` with no navigation entry (its head's Logout is the way out, lib/logout.ts): every component from synthetic data (docs/console/ui-components.md). A new component goes in its `inventory.js` |
 | `tests/harness.ts` | `openConsole({ location, api })`: the app with a fake host and a stubbed console API |
 
 ## Rules (nsh is not Vue)
