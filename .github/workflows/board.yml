@@ -52,5 +52,8 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+      # The artifact can take a moment to be listed after it is finalized: deploy-pages, asking at
+      # once, sometimes finds none ("No artifacts named github-pages") and fails.
+      - run: sleep 30
       - id: deploy
         uses: actions/deploy-pages@v4
