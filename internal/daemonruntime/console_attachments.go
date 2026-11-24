@@ -1,6 +1,7 @@
 package daemonruntime
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -64,15 +65,9 @@ func (s *ConsoleFileStore) AddAttachment(taskID, topicID, name string, source io
 	if size > fileUploadMaxBytes {
 		return attachment, fmt.Errorf("file exceeds the 64 MiB limit")
 	}
-	var head [512]byte
-	n, err := file.ReadAt(head[:], 0)
-	if err != nil && err != io.EOF {
+	contentType, err := attachmentContentType(name, file, size)
+	if err != nil {
 		return attachment, err
-	}
-	contentType := "application/octet-stream"
-	switch detected := http.DetectContentType(head[:n]); detected {
-	case "image/png", "image/jpeg", "image/gif", "image/webp":
-		contentType = detected
 	}
 	if err := file.Sync(); err != nil {
 		return attachment, err
@@ -171,20 +166,25 @@ func (s *ConsoleFileStore) ServeAttachment(w http.ResponseWriter, r *http.Reques
 	}
 	contentType := "application/octet-stream"
 	disposition := attachmentContentDisposition(attachment.Name)
+	// Every answer, a refusal too, keeps these: nothing served here runs or is sniffed or cached.
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; frame-ancestors 'none'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, no-store")
+	var content io.ReadSeeker = file
 	if query.Get("preview") == "1" {
-		switch attachment.ContentType {
-		case "image/png", "image/jpeg", "image/gif", "image/webp":
-			contentType = attachment.ContentType
-			disposition = "inline"
-		default:
-			http.Error(w, "file type has no preview; download it instead", http.StatusBadRequest)
+		// Images, PDFs and checked UTF-8 text show inline (console_attachment_preview.go).
+		previewType, text, refused := attachmentPreview(attachment.Name, attachment.ContentType, file, info.Size())
+		if refused != nil {
+			http.Error(w, refused.message, refused.status)
 			return
+		}
+		contentType = previewType
+		disposition = "inline"
+		if text != nil {
+			content = bytes.NewReader(text)
 		}
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", disposition)
-	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; frame-ancestors 'none'")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, no-store")
-	http.ServeContent(w, r, attachment.Name, info.ModTime(), file)
+	http.ServeContent(w, r, attachment.Name, info.ModTime(), content)
 }

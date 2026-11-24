@@ -9,6 +9,10 @@
 // to fetch it back through. Anything else (a PDF, text, a sent file) comes from the agent once it
 // is uploaded (`fetchRemote`), as before.
 //
+// A file the agent sent (a task attachment, `received` set) comes from the console's attachment
+// route, which serves images, PDFs and checked UTF-8 text for previews; one it cannot show says
+// why (too large, not text) and the dialog offers its download.
+//
 // Every load is numbered: a fetch or a read that ends after the preview closed, moved on or lost
 // its file changes nothing, so it can never reopen a preview or show a removed file.
 import { signal, untracked } from "nsh";
@@ -92,11 +96,25 @@ export function previewKind(name: unknown, type: unknown): "image" | "pdf" | "" 
   return "";
 }
 
+/** Why a preview shows nothing: too large, not UTF-8 text, or anything else. */
+export type PreviewFailure = "failed" | "too_large" | "not_text";
+
+/** An error a fetch throws to say why the file has no preview (`status` 413 is too large too). */
+export function previewFailure(reason: PreviewFailure): Error {
+  return Object.assign(new Error(reason), { previewFailure: reason });
+}
+
+function failureOf(error: unknown): PreviewFailure {
+  const reason = (error as { previewFailure?: PreviewFailure })?.previewFailure;
+  if (reason) return reason;
+  return (error as { status?: number })?.status === 413 ? "too_large" : "failed";
+}
+
 export interface FilePreviewDeps {
   /** The bytes of a file uploaded to the agent; rejects when it has none to give. */
   fetchRemote: (item: any) => Promise<Blob>;
-  /** What the dialog says of a file it cannot show. */
-  unavailable: () => string;
+  /** What the dialog says of a file it cannot show, and why it cannot. */
+  unavailable: (reason?: PreviewFailure, item?: any) => string;
   createObjectURL?: (blob: Blob) => string;
   revokeObjectURL?: (url: string) => void;
 }
@@ -149,11 +167,16 @@ export function createFilePreview(deps: FilePreviewDeps) {
       } else {
         const buffer = await blob.arrayBuffer();
         if (!current(seq)) return;
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+        let text: string;
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+        } catch {
+          throw previewFailure("not_text");
+        }
         state.update((s) => ({ ...s, kind: "text", text }));
       }
-    } catch {
-      if (current(seq)) state.update((s) => ({ ...s, error: deps.unavailable() }));
+    } catch (error) {
+      if (current(seq)) state.update((s) => ({ ...s, error: deps.unavailable(failureOf(error), item) }));
     } finally {
       if (current(seq)) state.update((s) => ({ ...s, loading: false }));
     }

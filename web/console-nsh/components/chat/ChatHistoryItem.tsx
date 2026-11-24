@@ -47,6 +47,7 @@ import { t } from "./i18n";
 import { watchTaskProcesses } from "./taskProcesses";
 import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
+import { canOpenReceivedFile } from "../../lib/core/received-files.js";
 import type { KeyedState } from "./rowState";
 import { BUBBLE_CLASS, BUBBLE_EDITING_CLASS, FILES_CLASS } from "./userBubble";
 import { fileIcon, SENT_FILE_PILL_CLASS } from "./filePill";
@@ -403,6 +404,17 @@ export function ChatHistoryItem(props: {
     ctx.onPreviewFile({ ...previewItems[index], previewItems });
   }
 
+  /** Opens the file preview on a file the agent sent, among this reply's files that preview. */
+  function previewReceivedFile(file: any) {
+    const taskID = String(item()?.taskId || "").trim();
+    const topicID = String(item()?.topicID || ctx.topicID() || "").trim();
+    const files = (Array.isArray(item()?.attachments) ? item().attachments : []).filter(canOpenReceivedFile);
+    const previewItems = files.map((entry: any) => ({ ...entry, received: true, taskID, topicID, status: "ready" }));
+    const index = previewItems.findIndex((entry: any) => String(entry?.id || "") === String(file?.id || ""));
+    if (!taskID || !topicID || index < 0) return;
+    ctx.onPreviewFile({ ...previewItems[index], previewItems });
+  }
+
   const agentBody = () => (
     <View class="max-w-[736px] gap-[7px]">
       <If
@@ -452,6 +464,7 @@ export function ChatHistoryItem(props: {
             files={ctx.receivedFiles}
             downloadLabel={t("chat_workspace_action_download")}
             errorLabel={t("artifact_preview_error")}
+            onPreview={previewReceivedFile}
           />
         )}
       </Each>

@@ -25,7 +25,7 @@ type consoleSendFileTool struct {
 func (*consoleSendFileTool) Name() string   { return "send_file" }
 func (*consoleSendFileTool) Deferred() bool { return true }
 func (*consoleSendFileTool) Description() string {
-	return "Send a local file, image, photo, document or report as a downloadable attachment to the current Console Web conversation. Share files from workspace_dir or file_cache_dir. Images receive a preview."
+	return "Send a local file, image, photo, document or report as a downloadable attachment to the current Console Web conversation. Share files from workspace_dir or file_cache_dir. Images, PDFs and UTF-8 text files (up to 2 MiB) can also be previewed."
 }
 func (*consoleSendFileTool) ParameterSchema() string {
 	return `{"type":"object","additionalProperties":false,"properties":{"dir_name":{"type":"string","enum":["workspace_dir","file_cache_dir"],"description":"Allowed directory containing the file."},"path":{"type":"string","minLength":1,"description":"File path relative to dir_name. Non-empty regular files up to 64 MiB."}},"required":["dir_name","path"]}`
