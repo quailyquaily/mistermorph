@@ -32,6 +32,8 @@ type Runtime struct {
 	snap             runtimeSnapshot
 	selection        *llmselect.Store
 	buildDeps        runtimeBuildDependencies
+	// jobs is the one job loop the runtime's channel bots, runtime API and RunJobs callers share.
+	jobs jobRunner
 }
 
 type PreparedRun struct {
