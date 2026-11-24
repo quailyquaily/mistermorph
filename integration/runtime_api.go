@@ -178,6 +178,9 @@ func (a *runtimeAPI) submit(_ context.Context, req daemonruntime.SubmitTaskReque
 	if len(req.FileReferences) > 0 {
 		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("this runtime does not take attached files")
 	}
+	if strings.TrimSpace(req.SteerTargetChildID) != "" {
+		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("this runtime does not send messages to subagents")
+	}
 	topicID := strings.TrimSpace(req.TopicID)
 	if topicID != "" && topicID != daemonruntime.ConsoleDefaultTopicID {
 		if topic, ok := a.store.GetTopic(topicID); !ok || topic == nil || topic.DeletedAt != nil {

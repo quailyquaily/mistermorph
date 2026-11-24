@@ -60,6 +60,62 @@ Polling also reads the field, and remote Console endpoints relay the same frames
 Other channel reaction tools keep their existing behavior. No new configuration
 keys are required.
 
+## Messages to running subagents
+
+A message typed in the composer while a task runs goes to the task itself (the main agent), as
+before. A subagent the task started with `spawn` can also be sent a message directly, at any depth
+(a subagent's own subagents included), while it runs.
+
+In the Console, a running subagent's panel (opened from its chip in the task's worker roster) has a
+message field at its foot; on phones it sits at the foot of the panel's sheet. Sending queues the
+message for that worker alone. The worker's record shows it under `YOU > <worker>`: queued until the
+worker takes it in, then applied with the step it took it in at. A message arrives at the worker's
+next step: it never interrupts a model call or a running tool. The worker reads it as a message from
+the person, not from the agent that started it, and its result tells that agent that the person
+redirected it, so a changed result is not taken for a fault.
+
+- A finished worker's panel has no field.
+- A coder (an external coding CLI) cannot take messages while it runs: its panel has no field and
+  says so.
+- A worker that finishes between the panel being drawn and the message being sent refuses it: the
+  draft stays in the field, and the panel offers **Send to the main agent**. The message goes there
+  only when that button is pressed. A message the worker had queued but returned without taking is
+  shown as not applied, with the same button.
+- Agent Link conversations (`agent_send`) take no such messages.
+
+The message is kept in the worker's record (`result.activity.workers[].messages` of the task) and in
+the task's `result.child_messages`, so it survives reopening the topic. The topic's history for later
+turns holds each one as a message from the person, saying which subagent it went to and whether it
+was applied.
+
+### API
+
+`POST /tasks` (through `/proxy`) with `steer_target_child_id` names the subagent: its worker ID
+(`worker-2`, as the roster records it) or its subtask ID (`sub_…`). `task` is the message, sent as
+written (a leading `/` is not a command); `topic_id` is the topic whose task runs. Attached files and
+job references are refused with `400`.
+
+- Queued: `200` with `{"id","status":"running","topic_id","steer_target_task_id","steer_target_child_id","steer_target_child_task_id","steer_target_child_name","steer_status":"queued"}`; `id` and `steer_target_task_id` are the running task's. No task is added to the topic.
+- Refused: `409` with `{"error","code","task_id","child_id","child_name"}`. Nothing was sent. `code`
+  is `no_active_run` (the topic has no running task), `child_not_found`, `child_finished` (the
+  worker has already returned), `child_unsupported` (a coder or another external program),
+  `stopping` (the task is being stopped), `full` (too many messages wait for the worker) or `empty`.
+  The Console offers the main agent for `child_finished`, `no_active_run` and `child_not_found`.
+
+Without `steer_target_child_id`, `POST /tasks` steers the task as before.
+
+### Live events
+
+The task's live stream (`/stream/ws`, after a `/stream/ticket` for the task) reports a worker's messages in the `activity` frames, on the
+worker's roster entry: `activity.workers[].messages` is a list of `{"text","status","step","at","applied_at"}`,
+where `status` is `queued`, then `applied` (with `step`, the worker's step, counted from 1, whose
+model request first saw the message) or `dropped` (the worker returned, or the task was stopped,
+before it took the message in). Underneath, the runtime's events are `steer_queued`, `steer_applied`
+and `steer_dropped`, each carrying the worker's metadata (`worker.id`), its run (`run_id`, the subtask
+ID) and, in `args`, `target: "child"`, `child_id`, `child_task_id` and `parent_run_id`;
+`steer_applied` also carries `step`. They are kept in the task's trace, which the terminal chat's
+`/agents` inspector reads.
+
 ## Restart
 
 Settings that only apply after a restart (`process_restart` and `runtime_restart` fields) show a **Restart now** banner once saved. It calls `POST /api/system/restart`:
@@ -225,6 +281,7 @@ Dashboard/system:
 Tasks:
 - `GET /proxy?endpoint=<ref>&uri=/tasks?limit=<n>[&cursor=<opaque>]`
 - `POST /proxy?endpoint=<ref>&uri=/tasks`
+  - with `steer_target_child_id`, the message goes to one running subagent of the topic's running task instead; see [Messages to running subagents](#messages-to-running-subagents)
 - `GET /proxy?endpoint=<ref>&uri=/tasks/{id}`
 - `GET /proxy?endpoint=<ref>&uri=/topics?limit=<n>[&cursor=<opaque>]`
 - `DELETE /proxy?endpoint=<ref>&uri=/topics/{topic_id}`
@@ -453,6 +510,7 @@ remain accessible via `/topic switch <id>`.
 | `/init`, `/update` | Create/read or regenerate AGENTS.md in the server workspace |
 | `/approve`, `/deny` | Resolve the pending approval through Console; y/n also works in the panel |
 | `/agents`, `/agent`, `/subagents` | Inspect retained child execution records; Ctrl+G opens the same view |
+| `/steer <child-id> <message>` | Send a running subagent of the topic's task a message ([Messages to running subagents](#messages-to-running-subagents)) |
 | `/topic title regenerate` | Server-generated title, not manual rename |
 | `/topic delete` | Confirm with y; server deletion also stops tasks and cleans up context |
 | `/exit`, `/quit` | Disconnect without stopping server tasks |

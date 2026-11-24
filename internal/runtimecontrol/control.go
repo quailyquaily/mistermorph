@@ -44,6 +44,10 @@ type ActiveRun struct {
 	// to steered input are written with both.
 	Task         string
 	Conversation []ConversationLine
+	// Children keeps the steer queues of the children the run starts with spawn (SteerChild); the
+	// run's context must carry it (agent.WithChildSteerHub). Start makes one when nil; StartLease
+	// puts it in the lease's context.
+	Children *ChildSteering
 }
 
 type StopResult struct {
@@ -102,6 +106,7 @@ type activeRun struct {
 	EventSink       agent.EventSink
 	Task            string
 	Conversation    []ConversationLine
+	Children        *ChildSteering
 	startedAt       time.Time
 
 	// steerLog keeps the replies given to inputs steered into the run.
@@ -116,6 +121,8 @@ type activeRun struct {
 type RunLease struct {
 	Context    context.Context
 	SteerQueue *SteerQueue
+	// Children keeps the steer queues of the run's children; Context carries it.
+	Children *ChildSteering
 
 	control         *RunControl
 	runtime         string
@@ -146,6 +153,9 @@ func (c *RunControl) StartLease(parent context.Context, timeout time.Duration, r
 	if queue == nil {
 		queue = NewSteerQueue(0)
 	}
+	if run.Children == nil {
+		run.Children = NewChildSteering()
+	}
 	run.Cancel = stopCancel
 	run.SteerQueue = queue
 	if err := c.Start(run); err != nil {
@@ -154,8 +164,9 @@ func (c *RunControl) StartLease(parent context.Context, timeout time.Duration, r
 		return nil, err
 	}
 	return &RunLease{
-		Context:         runCtx,
+		Context:         agent.WithChildSteerHub(runCtx, run.Children),
 		SteerQueue:      queue,
+		Children:        run.Children,
 		control:         c,
 		runtime:         strings.TrimSpace(run.Runtime),
 		conversationKey: strings.TrimSpace(run.ConversationKey),
@@ -210,10 +221,14 @@ func (c *RunControl) Start(run ActiveRun) error {
 		EventSink:       run.EventSink,
 		Task:            strings.TrimSpace(run.Task),
 		Conversation:    append([]ConversationLine(nil), run.Conversation...),
+		Children:        run.Children,
 		startedAt:       time.Now(),
 	}
 	if entry.SteerQueue == nil {
 		entry.SteerQueue = NewSteerQueue(0)
+	}
+	if entry.Children == nil {
+		entry.Children = NewChildSteering()
 	}
 
 	c.mu.Lock()

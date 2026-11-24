@@ -114,7 +114,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 	defer func() {
 		if err != nil && final == nil && errors.Is(ctx.Err(), context.DeadlineExceeded) &&
 			SubtaskDepthFromContext(ctx) == 0 && !st.contextCompactionOnly && !st.deadlineConclusion {
-			e.applyFinalQueuedSteer(context.WithoutCancel(ctx), st, "")
+			e.applyFinalQueuedSteer(context.WithoutCancel(ctx), st, st.agentCtx.MaxSteps, "")
 			final, agentCtx, err = e.forceConclusion(ctx, st, forceConclusionTaskDeadline, log)
 		}
 		event := Event{
@@ -174,7 +174,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 			return nil, st.agentCtx, fmt.Errorf("context cancelled at step %d: %w", step, err)
 		}
 		if st.pendingTool == nil {
-			e.applyQueuedSteer(ctx, st, "")
+			e.applyQueuedSteer(ctx, st, step, "")
 			e.remindOfInsights(ctx, st, step)
 		}
 
@@ -354,7 +354,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 			continue
 
 		case TypeFinal, TypeFinalAnswer:
-			if e.applyQueuedSteer(ctx, st, result.Text) {
+			if e.applyQueuedSteer(ctx, st, step+1, result.Text) {
 				continue
 			}
 			fp := resp.FinalPayload()
@@ -866,25 +866,27 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 		}
 	}
 
-	e.applyFinalQueuedSteer(ctx, st, "")
+	e.applyFinalQueuedSteer(ctx, st, st.agentCtx.MaxSteps, "")
 	return e.forceConclusion(ctx, st, conclusionReason, log)
 }
 
-func (e *Engine) applyQueuedSteer(ctx context.Context, st *engineLoopState, assistantText string) bool {
+// applyQueuedSteer takes in what the run's steer source holds, before the model request of step
+// (counted from 0, as the loop counts).
+func (e *Engine) applyQueuedSteer(ctx context.Context, st *engineLoopState, step int, assistantText string) bool {
 	if st == nil || st.steerSource == nil {
 		return false
 	}
-	return e.applySteerItems(ctx, st, st.steerSource.Drain(), assistantText)
+	return e.applySteerItems(ctx, st, step, st.steerSource.Drain(), assistantText)
 }
 
-func (e *Engine) applyFinalQueuedSteer(ctx context.Context, st *engineLoopState, assistantText string) bool {
+func (e *Engine) applyFinalQueuedSteer(ctx context.Context, st *engineLoopState, step int, assistantText string) bool {
 	if st == nil || st.steerSource == nil {
 		return false
 	}
-	return e.applySteerItems(ctx, st, st.steerSource.DrainAndClose(), assistantText)
+	return e.applySteerItems(ctx, st, step, st.steerSource.DrainAndClose(), assistantText)
 }
 
-func (e *Engine) applySteerItems(ctx context.Context, st *engineLoopState, items []string, assistantText string) bool {
+func (e *Engine) applySteerItems(ctx context.Context, st *engineLoopState, step int, items []string, assistantText string) bool {
 	if len(items) == 0 {
 		return false
 	}
@@ -901,20 +903,37 @@ func (e *Engine) applySteerItems(ctx context.Context, st *engineLoopState, items
 	if text := strings.TrimSpace(assistantText); text != "" {
 		st.messages = append(st.messages, llm.Message{Role: "assistant", Content: text})
 	}
+	// A subtask's messages come from the person, not from the agent that started it, and say so.
+	child := SubtaskDepthFromContext(ctx) > 0
 	for _, text := range texts {
+		content := formatSteerMessage(text)
+		if child {
+			content = formatChildSteerMessage(text)
+		}
 		st.messages = append(st.messages, llm.Message{
 			Role:    "user",
-			Content: formatSteerMessage(text),
+			Content: content,
 		})
+	}
+	// Steps are counted from 1 here: the step whose model request is the first to see the messages.
+	applied := step + 1
+	if recorder, ok := st.steerSource.(SteerStepRecorder); ok {
+		recorder.SteerApplied(applied, texts)
+	}
+	args := map[string]any{
+		"count": len(texts),
+		"step":  applied,
+	}
+	if child {
+		args["target"] = "child"
 	}
 	EmitEvent(ctx, nil, Event{
 		Kind:       EventKindSteerApplied,
 		ActivityID: "steer",
+		Step:       applied,
 		Status:     "applied",
 		Text:       strings.Join(texts, "\n\n"),
-		Args: map[string]any{
-			"count": len(texts),
-		},
+		Args:       args,
 	})
 	return true
 }
@@ -925,6 +944,16 @@ func formatSteerMessage(text string) string {
 		return ""
 	}
 	return "[[ Runtime Steer ]]\nThe user sent this while the current task was running. Apply it to this same turn:\n\n" + text
+}
+
+// formatChildSteerMessage is a message the person sent a subtask directly, as the subtask reads it.
+func formatChildSteerMessage(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	return "[[ Message From The User ]]\nThe user (the person, not the agent that gave you this task) sent this to you directly while you were working. " +
+		"Apply it to your current task; it takes precedence over the task where they conflict:\n\n" + text
 }
 
 // guardPreCheck runs the guard pre-tool decision serially. A non-nil approval

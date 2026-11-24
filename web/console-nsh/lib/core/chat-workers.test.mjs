@@ -6,6 +6,8 @@ import {
   normalizeActivityWorkers,
   rosterWorkers,
   workerAsk,
+  workerMessageList,
+  workerMessageMode,
   workerProcessLabel,
   workerSections,
   workerState,
@@ -257,4 +259,41 @@ test("workerAsk renders nothing for an empty, blank or missing task", () => {
   assert.equal(odd.task, "");
   assert.equal(workerAsk(activity, gone), null);
   assert.equal(workerAsk(activity, goneBlank), null);
+});
+
+test("a worker's messages keep their status and step, and pending ones show queued until reported", () => {
+  const [worker] = normalizeActivityWorkers([
+    {
+      id: "worker-1", name: "Curie", kind: "subagent", status: "running",
+      messages: [
+        { text: "use metric units", status: "applied", step: 3, at: "t1", applied_at: "t2" },
+        { text: "and short", status: "weird" },
+        { text: "   " },
+      ],
+    },
+  ]);
+  assert.deepEqual(worker.messages, [
+    { text: "use metric units", status: "applied", step: 3, at: "t1", appliedAt: "t2" },
+    { text: "and short", status: "queued", step: 0, at: "", appliedAt: "" },
+  ]);
+  assert.deepEqual(normalizeActivityWorkers([worker])[0].messages, worker.messages);
+
+  const { list, settled } = workerMessageList(worker.messages, [
+    { id: "p1", text: "and short" },
+    { id: "p2", text: "one more" },
+  ]);
+  assert.deepEqual(settled, ["p1"]);
+  assert.deepEqual(list.map((message) => [message.text, message.status, message.pending]), [
+    ["use metric units", "applied", false],
+    ["and short", "queued", false],
+    ["one more", "queued", true],
+  ]);
+});
+
+test("only a running subagent takes messages; a running coder says why not", () => {
+  assert.equal(workerMessageMode({ kind: "subagent", state: "running" }), "open");
+  assert.equal(workerMessageMode({ kind: "coder", state: "running" }), "coder");
+  assert.equal(workerMessageMode({ kind: "subagent", state: "done" }), "closed");
+  assert.equal(workerMessageMode({ kind: "coder", state: "failed" }), "closed");
+  assert.equal(workerMessageMode(null), "closed");
 });

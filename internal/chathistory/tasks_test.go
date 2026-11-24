@@ -87,3 +87,14 @@ func TestTaskResultOutputKeepsRepliesThatAreNotText(t *testing.T) {
 		})
 	}
 }
+
+func TestChildMessageHistoryText(t *testing.T) {
+	applied := ChildMessageHistoryText(TaskChildMessage{ChildID: "worker-2", ChildName: "Curie", Text: " use metric units ", Status: "applied", Step: 4})
+	if applied != "[Sent directly to the subagent Curie (worker-2) while it ran; it took it in at its step 4]\nuse metric units" {
+		t.Fatalf("applied = %q", applied)
+	}
+	dropped := ChildMessageHistoryText(TaskChildMessage{ChildTaskID: "sub_1", Text: "stop", Status: "dropped"})
+	if dropped != "[Sent directly to the subagent sub_1 while it ran; it finished before taking it in, so it was not applied]\nstop" {
+		t.Fatalf("dropped = %q", dropped)
+	}
+}

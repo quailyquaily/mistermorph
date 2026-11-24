@@ -50,6 +50,11 @@ type SubtaskResult struct {
 	Error        string          `json:"error"`
 	// Usage is what a coder run used and its coder's remaining quota, in a line.
 	Usage string `json:"usage,omitempty"`
+	// UserMessages are the messages the person sent the subtask directly while it ran, which it
+	// took in, in order; Note then tells the agent that started it how to read the result
+	// (MarkRedirectedSubtaskResult).
+	UserMessages []string `json:"user_messages,omitempty"`
+	Note         string   `json:"note,omitempty"`
 }
 
 type SubtaskRunner interface {

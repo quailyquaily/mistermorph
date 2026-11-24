@@ -216,6 +216,10 @@ func (m *chatModel) agentDetailLines(rows []chatAgentRecord) ([]string, []string
 	if row.Finished.IsZero() && row.Activity != "" {
 		header = append(header, escapeTerminalControls(row.Activity)+" · "+formatActivityElapsed(now.Sub(row.Updated)))
 	}
+	if row.Finished.IsZero() {
+		// The view stays read-only; a message for the child is sent from chat.
+		header = append(header, chatMutedStyle.Render("Message it from chat: /steer "+shortChatAgentID(row.ID)+" <message>"))
+	}
 	header = append(header, "")
 	body := make([]string, 0, len(row.Entries)*3)
 	if row.Omitted > 0 {

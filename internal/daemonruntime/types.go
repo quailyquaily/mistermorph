@@ -30,6 +30,11 @@ type SubmitTaskRequest struct {
 	WorkspaceDir   string          `json:"workspace_dir,omitempty"`
 	FileReferences []FileReference `json:"file_references,omitempty"`
 	Trigger        *TaskTrigger    `json:"trigger,omitempty"`
+	// SteerTargetChildID sends Task to a child the topic's running task started with spawn (its
+	// worker ID, such as "worker-2", or its subtask ID), at any depth, instead of to the task: the
+	// child takes it in at its next step. A child that cannot take it is refused with a
+	// SteerRejectedError, and nothing is sent.
+	SteerTargetChildID string `json:"steer_target_child_id,omitempty"`
 }
 
 type FileReference = taskdomain.FileReference
@@ -39,6 +44,31 @@ type SubmitTaskResponse struct {
 	Status            TaskStatus `json:"status"`
 	TopicID           string     `json:"topic_id,omitempty"`
 	SteerTargetTaskID string     `json:"steer_target_task_id,omitempty"`
+	// For a message sent to a child (SubmitTaskRequest.SteerTargetChildID): ID is the running
+	// task's, SteerTargetChildID the child's worker ID, SteerTargetChildTaskID its subtask ID, and
+	// SteerStatus "queued" (the live stream reports it applied).
+	SteerTargetChildID     string `json:"steer_target_child_id,omitempty"`
+	SteerTargetChildTaskID string `json:"steer_target_child_task_id,omitempty"`
+	SteerTargetChildName   string `json:"steer_target_child_name,omitempty"`
+	SteerStatus            string `json:"steer_status,omitempty"`
+}
+
+// SteerRejectedError refuses a message sent to a child of a running task: Code says why
+// (no_active_run, child_not_found, child_finished, child_unsupported, stopping, full, empty). The
+// routes answer it with 409 and {"error", "code", "task_id", "child_id", "child_name"}.
+type SteerRejectedError struct {
+	Code      string `json:"code"`
+	Message   string `json:"error"`
+	TaskID    string `json:"task_id,omitempty"`
+	ChildID   string `json:"child_id,omitempty"`
+	ChildName string `json:"child_name,omitempty"`
+}
+
+func (e *SteerRejectedError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
 }
 
 // ReplaceTaskRequest edits the person's message TaskID of topic TopicID: Task is the new text,

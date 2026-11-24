@@ -15,7 +15,11 @@
 // Its head is its title (the panel's name, or the worker's), what it belongs to (the message the
 // reply answers; not for progress, reasoning or a coder's output, see `showContext`) and close;
 // Escape closes it, and on phones Android's Back does.
-import { Image, Text, View } from "nsh";
+//
+// A running subagent's panel has a message field at its foot (WorkerMessageComposer): what is sent
+// there goes to that worker alone, and its record shows it queued, then applied. A running coder's
+// foot says why it has none; a finished worker's panel has no foot.
+import { effect, Image, Text, View } from "nsh";
 import { bindPaneEscape, Icon, StatusMark, Tip, TipButton } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
 import { ICONS } from "../../components/icons";
@@ -30,7 +34,17 @@ import { OverflowWraps } from "../../components/chat/OverflowLine";
 import { t } from "../../components/chat/i18n";
 import { PinnedScroll } from "../../components/chat/PinnedScroll";
 import { taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
-import { workerAsk } from "../../lib/core/chat-workers.js";
+import { workerAsk, workerMessageList, workerMessageMode } from "../../lib/core/chat-workers.js";
+import {
+  pendingWorkerMessages,
+  settlePendingWorkerMessages,
+  WorkerMessageComposer,
+  workerMessageKey,
+  WorkerMessageUnavailable,
+  type ParentSend,
+  type WorkerSend,
+} from "../../components/chat/WorkerMessageComposer";
+import type { PartLayoutListener } from "../../components/shared/partProbe";
 
 function taskStatus(item: HistoryItem | null) {
   const value = String(item?.status || "").trim().toLowerCase();
@@ -94,6 +108,15 @@ export function ActivityDetailPanel(props: {
    * `byStop` when a Stop pressed in it ended the last one.
    */
   onProcessesEnded?: (byStop: boolean) => void;
+  /**
+   * Sends a running subagent of the reply's task a message (WorkerMessageComposer); without it a
+   * worker's panel has no field.
+   */
+  onWorkerMessage?: WorkerSend;
+  /** Sends a message a worker could not take to the main agent instead, when the person asks. */
+  onSendToParent?: ParentSend;
+  /** Where the worker's message field and button lie (tests). */
+  onPartLayout?: PartLayoutListener;
 }) {
   // Beside the conversation, Escape closes it, also from the composer (where Escape types nothing).
   // A dialog of the page (`escape` false) or any popup over it (a dialog, a menu, a select, the
@@ -115,6 +138,12 @@ export function ActivityDetailPanel(props: {
   const entries = () => activityEntries(item()?.activity).filter((entry: any) => entry?.kind !== "retry");
   const reasoning = () => String(item()?.reasoning ?? "").trim();
   const taskID = () => String(item()?.taskId || props.detail.taskID || "").trim();
+  // A running subagent takes messages from its panel's foot; a running coder's says why it cannot.
+  const messageMode = () => (kind() === "worker" && worker() && props.onWorkerMessage ? workerMessageMode(worker()) : "closed");
+  const messageKey = () => workerMessageKey(taskID() || props.detail.itemID, String(props.detail.workerID || ""));
+  const messages = () => workerMessageList(worker()?.messages, kind() === "worker" ? pendingWorkerMessages(messageKey()) : []);
+  // Sent messages the runtime has reported are no longer this client's to show.
+  effect(() => settlePendingWorkerMessages(messageKey(), messages().settled));
 
   const title = () => {
     switch (kind()) {
@@ -259,12 +288,28 @@ export function ActivityDetailPanel(props: {
                     ask={workerAsk(item()?.activity, entry())}
                     agentName={props.agentName}
                     itemID={props.detail.itemID}
+                    messages={messages().list}
+                    onSendToParent={props.onSendToParent ? (text) => void props.onSendToParent?.(text) : undefined}
                   />
                 </ChatTerminal>
               )}
             </If>
           </PinnedScroll>
         </OverflowWraps.Provider>
+      </If>
+      <If when={item() && messageMode() === "open"}>
+        <WorkerMessageComposer
+          messageKey={messageKey()}
+          workerID={String(props.detail.workerID || "")}
+          name={worker()?.displayName || worker()?.name || ""}
+          dark={props.dark}
+          onSend={(workerID, text) => props.onWorkerMessage!(workerID, text)}
+          onSendToParent={props.onSendToParent}
+          onPartLayout={props.onPartLayout}
+        />
+      </If>
+      <If when={item() && messageMode() === "coder"}>
+        <WorkerMessageUnavailable name={worker()?.displayName || worker()?.name || ""} dark={props.dark} />
       </If>
       <If when={props.dark}>
         <View class="absolute" style={{ top: CORNER, right: CORNER }}>

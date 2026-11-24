@@ -34,6 +34,9 @@ func (s *chatSession) attachTurnSteering(ctx context.Context, turn *activeChatTu
 		return
 	}
 	previous := turn.steering
+	if turn.children == nil {
+		turn.children = runtimecontrol.NewChildSteering()
+	}
 	steering := &chatTurnSteering{control: runtimecontrol.New(), key: s.conversationKey(), runID: strings.TrimSpace(turn.runID)}
 	if steering.key == "" {
 		steering.key = chatSteerRuntime
@@ -60,6 +63,7 @@ func (s *chatSession) attachTurnSteering(ctx context.Context, turn *activeChatTu
 		SteerQueue:      queue,
 		Task:            turn.runInput,
 		Conversation:    chatSteerConversation(history),
+		Children:        turn.children,
 	}); err != nil {
 		if s.logger != nil {
 			s.logger.Warn("chat_steer_attach_failed", "error", err.Error())

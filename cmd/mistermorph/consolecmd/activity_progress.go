@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
@@ -22,6 +23,8 @@ const (
 	consoleActivityMessageMaxChars = 4000
 	// consoleActivityWorkerLimit bounds the workers kept in the roster; the oldest go first.
 	consoleActivityWorkerLimit = 32
+	// consoleWorkerMessageLimit bounds the messages kept on one worker; the oldest go first.
+	consoleWorkerMessageLimit = 16
 )
 
 type consoleActivityProgress struct {
@@ -64,9 +67,23 @@ type consoleActivityWorker struct {
 	Summary   string                `json:"summary,omitempty"`
 	Error     string                `json:"error,omitempty"`
 	Processes []agent.WorkerProcess `json:"processes,omitempty"`
+	// Messages are what the person sent the worker directly while it ran, in order, with what
+	// became of each (consoleWorkerMessage).
+	Messages []consoleWorkerMessage `json:"messages,omitempty"`
 
 	// statusRank is how much the source of Status counts; see consoleWorkerStatusRank.
 	statusRank int
+}
+
+// consoleWorkerMessage is one message the person sent a worker: Status is "queued" until the
+// worker takes it in at its next step ("applied", at Step, counted from 1), or "dropped" when the
+// worker returned (or the task was stopped) first.
+type consoleWorkerMessage struct {
+	Text      string `json:"text"`
+	Status    string `json:"status"`
+	Step      int    `json:"step,omitempty"`
+	At        string `json:"at,omitempty"`
+	AppliedAt string `json:"applied_at,omitempty"`
 }
 
 // The sources of a worker's status, from least to most trusted. A spawn call reports done once
@@ -142,6 +159,7 @@ func cloneConsoleActivityProgress(progress *consoleActivityProgress) *consoleAct
 	}
 	for _, worker := range progress.Workers {
 		worker.Processes = append([]agent.WorkerProcess(nil), worker.Processes...)
+		worker.Messages = append([]consoleWorkerMessage(nil), worker.Messages...)
 		out.Workers = append(out.Workers, worker)
 	}
 	out.WorkersOmitted = progress.WorkersOmitted
@@ -801,6 +819,16 @@ func applyConsoleWorkerEvent(progress *consoleActivityProgress, event agent.Even
 	}
 	tool := strings.TrimSpace(event.ToolName)
 	switch strings.TrimSpace(event.Kind) {
+	case agent.EventKindSteerQueued, agent.EventKindSteerApplied, runtimecontrol.EventKindSteerDropped:
+		if event.Worker == nil {
+			// A message to the task itself: the reply to it shows in the conversation.
+			return false
+		}
+		worker := consoleWorkerForEvent(progress, event)
+		if worker == nil {
+			return false
+		}
+		return applyConsoleWorkerMessage(worker, event)
 	case agent.EventKindToolOutput:
 		if tool != "coder" || event.Text == "" {
 			return false
@@ -882,4 +910,79 @@ func consoleSubtaskResultText(result agent.SubtaskResult) string {
 		text = string(runes[:consoleActivityOutputMaxChars]) + "\n..."
 	}
 	return text
+}
+
+// applyConsoleWorkerMessage records what a steer event says about the messages sent to worker: a
+// message queued for it, the oldest queued ones it took in at a step, or one it returned without.
+func applyConsoleWorkerMessage(worker *consoleActivityWorker, event agent.Event) bool {
+	now := time.Now().Format(time.RFC3339Nano)
+	switch strings.TrimSpace(event.Kind) {
+	case agent.EventKindSteerQueued:
+		text := strings.TrimSpace(event.Text)
+		if text == "" {
+			return false
+		}
+		if runes := []rune(text); len(runes) > consoleActivityMessageMaxChars {
+			text = string(runes[:consoleActivityMessageMaxChars]) + "…"
+		}
+		worker.Messages = append(worker.Messages, consoleWorkerMessage{Text: text, Status: "queued", At: now})
+		if extra := len(worker.Messages) - consoleWorkerMessageLimit; extra > 0 {
+			worker.Messages = append([]consoleWorkerMessage(nil), worker.Messages[extra:]...)
+		}
+		return true
+	case agent.EventKindSteerApplied:
+		count := consoleEventCount(event.Args["count"])
+		if count <= 0 {
+			count = 1
+		}
+		changed := false
+		for i := range worker.Messages {
+			if count == 0 {
+				break
+			}
+			if worker.Messages[i].Status != "queued" {
+				continue
+			}
+			worker.Messages[i].Status = "applied"
+			worker.Messages[i].Step = event.Step
+			worker.Messages[i].AppliedAt = now
+			count--
+			changed = true
+		}
+		return changed
+	case runtimecontrol.EventKindSteerDropped:
+		text := strings.TrimSpace(event.Text)
+		first := -1
+		for i := range worker.Messages {
+			if worker.Messages[i].Status != "queued" {
+				continue
+			}
+			if first < 0 {
+				first = i
+			}
+			if strings.HasPrefix(text, strings.TrimSuffix(worker.Messages[i].Text, "…")) {
+				first = i
+				break
+			}
+		}
+		if first < 0 {
+			return false
+		}
+		worker.Messages[first].Status = "dropped"
+		return true
+	}
+	return false
+}
+
+// consoleEventCount reads a count from an event's args, as Go or as decoded JSON gives it.
+func consoleEventCount(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	}
+	return 0
 }

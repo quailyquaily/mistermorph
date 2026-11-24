@@ -11,6 +11,7 @@ import (
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/jobrefs"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 )
@@ -133,4 +134,46 @@ func (r *consoleLocalRuntime) finishSteerTask(taskID string, reply runtimecontro
 			"steer_reply_status": string(reply.Status),
 		}
 	})
+}
+
+// steerConsoleChild sends task to the child childID of the task running in topicID: the child
+// takes it in at its next step. A message it cannot take is refused (SteerRejectedError) and
+// nothing is sent, so the person keeps it and may send it to the parent instead.
+func (r *consoleLocalRuntime) steerConsoleChild(task string, topicID string, childID string, hasFiles bool) (daemonruntime.SubmitTaskResponse, error) {
+	if hasFiles {
+		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("a message for a subagent cannot carry files")
+	}
+	if len(jobrefs.ExtractIDs(task)) > 0 {
+		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest(consoleSteerJobReferenceRefusal)
+	}
+	result := runtimecontrol.ChildSteerResult{Reason: runtimecontrol.SteerRejectedNoRun}
+	if r != nil && r.runControl != nil {
+		result = r.runControl.SteerChild("console", buildConsoleConversationKey(topicID), childID, task)
+	}
+	if !result.Queued {
+		return daemonruntime.SubmitTaskResponse{}, &daemonruntime.SteerRejectedError{
+			Code:      result.Reason,
+			Message:   runtimecontrol.ChildSteerRejectedText(result),
+			TaskID:    result.TaskID,
+			ChildID:   childOr(result.ChildID, childID),
+			ChildName: result.ChildName,
+		}
+	}
+	return daemonruntime.SubmitTaskResponse{
+		ID:                     result.TaskID,
+		Status:                 daemonruntime.TaskRunning,
+		TopicID:                topicID,
+		SteerTargetTaskID:      result.TaskID,
+		SteerTargetChildID:     result.ChildID,
+		SteerTargetChildTaskID: result.ChildTaskID,
+		SteerTargetChildName:   result.ChildName,
+		SteerStatus:            runtimecontrol.ChildMessageQueued,
+	}, nil
+}
+
+func childOr(found string, asked string) string {
+	if found = strings.TrimSpace(found); found != "" {
+		return found
+	}
+	return strings.TrimSpace(asked)
 }

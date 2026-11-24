@@ -74,12 +74,14 @@ func safeSend(p *tea.Program, msg tea.Msg) {
 }
 
 type activeChatTurn struct {
-	sharedTask            *daemonruntime.TaskInfo
-	trace                 *chattrace.Collector
-	cancel                context.CancelCauseFunc
-	timeoutCancel         context.CancelFunc
-	steerQueue            *runtimecontrol.SteerQueue
-	steering              *chatTurnSteering
+	sharedTask    *daemonruntime.TaskInfo
+	trace         *chattrace.Collector
+	cancel        context.CancelCauseFunc
+	timeoutCancel context.CancelFunc
+	steerQueue    *runtimecontrol.SteerQueue
+	steering      *chatTurnSteering
+	// children keeps the steer queues of the turn's subagents (/steer), across an approval pause.
+	children              *runtimecontrol.ChildSteering
 	prepared              *taskruntime.PreparedEngine
 	stopAcknowledged      bool
 	runInput              string
@@ -191,6 +193,10 @@ func startChatTurn(
 	resultCh chan<- chatTurnResult,
 	run func(context.Context) (*agent.Final, *agent.Context, error),
 ) {
+	if turn.children != nil {
+		// Subagents the turn starts, at any depth, take /steer messages from here.
+		turnCtx = agent.WithChildSteerHub(turnCtx, turn.children)
+	}
 	if turn.trace != nil {
 		baseSink, _ := agent.EventSinkFromContext(turnCtx)
 		turnCtx = agent.WithEventSinkContext(turnCtx, agent.EventSinkFunc(func(ctx context.Context, event agent.Event) {
@@ -403,18 +409,26 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 					runInput = result.turn.runInput
 					contextCompactionOnly = result.turn.contextCompactionOnly
 				}
+				// What the person sent the turn's subagents while it ran sits between the request
+				// and the reply.
+				var childMessages []string
+				if result.turn != nil {
+					childMessages = chatChildMessageHistory(result.turn.children)
+				}
 				if !contextCompactionOnly {
-					history = append(history,
-						llm.Message{Role: "user", Content: runInput},
-						llm.Message{Role: "assistant", Content: rawOutput},
-					)
+					history = append(history, llm.Message{Role: "user", Content: runInput})
+					for _, text := range childMessages {
+						history = append(history, llm.Message{Role: "user", Content: text})
+					}
+					history = append(history, llm.Message{Role: "assistant", Content: rawOutput})
 				}
 				if result.turn != nil {
 					if !contextCompactionOnly {
-						historyBoundaries = append(historyBoundaries,
-							result.turn.userBoundary,
-							"chat:v1:"+result.turn.runID+":assistant",
-						)
+						historyBoundaries = append(historyBoundaries, result.turn.userBoundary)
+						for i := range childMessages {
+							historyBoundaries = append(historyBoundaries, fmt.Sprintf("chat:v1:%s:child:%d", result.turn.runID, i+1))
+						}
+						historyBoundaries = append(historyBoundaries, "chat:v1:"+result.turn.runID+":assistant")
 					}
 					if result.turn.checkpointStore != nil {
 						var loadErr error
@@ -448,6 +462,13 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 				}
 				command, args := chatcommands.ParseCommand(input)
 				command = chatcommands.NormalizeCommand(command)
+				// A message for a subagent goes to it, or is refused: it never reaches the
+				// main agent, an approval or a new turn.
+				if command == chatSteerCommand {
+					text, err := sess.steerChildCommand(active, args, model.agents.snapshot())
+					safeSend(p, agentResultMsg{output: text, err: err, keepThinking: active != nil})
+					continue
+				}
 				// Inspection remains available during execution and approvals; it
 				// must never become a steer message or an approval response.
 				if isChatAgentCommand(command) {
