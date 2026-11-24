@@ -55,3 +55,15 @@ Not checked: live model discovery/use and manual approval-card click-through. UI
 Process deviations: coder wrote personal CLI memory notes outside the worktree/TMPDIR; these were not committed. Its report also identifies harness output under /tmp/claude-995; retained in the run outside list, not deleted. No user-level installs.
 
 Branch pushed; moved new/ → review/. Not merged into master.
+
+## factory · review · 2026-11-25 01:13
+head: d403e5f9f5e8d0bd3538c3a8eb20f0dca6d76f83
+verdict: pass
+notes:
+- [P3] internal/ownertools/workspaces.go:433: workspace_use rejects an otherwise valid user-named unknown workspace when adjacent Chinese text/full-width punctuation is treated as part of a path by isPathByte. Verified example: a message naming /Users/me/proj followed immediately by ， is not recognized; adding ASCII spaces is recognized. Use Unicode-aware path-boundary handling without permitting path-prefix matches.
+
+Reviewed origin/master...HEAD with Claude Code, against the request and plan. No P0/P1 findings. Required gofmt check, go vet ./... and go test ./... passed (isolated HOME); nsh check passed; full Console runner passed: 164 files, 0 failed. Manager verified clean worktree, unchanged reviewed head, diff whitespace check and successful test logs. Branch merges cleanly with current base; no code changed or committed during review.
+
+Not checked: live model discovery, manual approval-card interaction, Settings matrix in a browser, Android JVM tests (no JDK). Residual uncertainties: reply/file-view workspace aliases after a switch; workspace-list title trust marking; symlink replacement between selection and tool execution. No confirmed P0/P1 defect in these surfaces.
+
+Installs: none. Shared Go module cache reused offline and nsh cache copied into isolated HOME. Harness output under /tmp/claude-995 recorded as written outside dir; no new top-level /tmp entries observed. Review temporary artifacts cleaned at end. Moved review/ → ready/; not merged into master.
