@@ -1,3 +1,7 @@
+---
+branch: factory/FT180-ui-components-move-and-logout
+round: 1
+---
 # Move the UI component gallery to /__ui-components and give it a way out to the login page
 
 ## factory · 2026-11-24 20:16
@@ -17,3 +21,30 @@ Acceptance criteria:
 - Pressing the quit control in the gallery calls `/auth/logout`, clears the session and cache, and shows the login page; going back does not reopen the gallery without logging in again.
 - The control fits the header at 360pt and 390pt and on desktop, in light and dark.
 - `tests/ui-components.test.tsx` covers the new address, the old one, and the quit flow; the inventory test and the full Console test runner pass.
+
+## factory · plan · 2026-11-24 21:07
+
+## Behaviour
+- Register only /__ui-components, retaining shellless session/setup guards and group/q parameters. Treat /ui-components as unknown, without an alias.
+- Add an existing-style, action_logout-labelled header button, disabled while pending. POST /auth/logout; always clear auth/cache and replace with /login, even on failure. Settings calls the same shared function.
+- Keep gallery identifiers, inventory and navigation unchanged. Header controls wrap within 360/390px and desktop in light/dark.
+## Scope
+Route, gallery header, minimal shared logout helper and Settings integration, regression tests and old-address references in docs/source. No redesign or navigation additions.
+## Decisions
+Extract an independent logout operation, not the Settings store, avoiding Settings loading from the gallery. Keep caller-local busy state with finally reset. No compatibility alias. Use repository-pinned nsh 0.6.0 rather than stale factory comment.
+## Checking
+Cover session/login redirect, setup guard, unknown old address, query filters, success/failure logout cleanup and routing, pending disabled control and navigation guard. Inventory and no-navigation tests remain valid.
+Run nsh check, scripts/test.sh (failed files retried alone), and test -z "$(gofmt -l .)" && go vet ./... && go test ./... . Scripted tests use throwaway HOME, XDG and configured tool caches.
+Visually inspect header at 360/390px and desktop in both appearances if possible; explicitly report if not inspected.
+
+## factory · 2026-11-24 21:07
+
+Built b807c31f: gallery moved to /__ui-components; old address now has ordinary unknown-route handling. Added a wrapping logout button, shared session/cache cleanup with Settings, pending-state protection, docs and regression tests. Kept gallery identifiers, query filters, session/setup guards and navigation unchanged.
+
+Tests: nsh check passed; gallery tests 20/20; full Console runner 164 files, 0 failed; inventory checks passed. Required gofmt/vet/go test command passed in coder and manager verification (168 packages). No installs.
+
+Visual checks reported by coder: headless Chrome at 360, 390 and 1280 in light/dark; button fits with no overlaps and logout/back behaviour checked. Not checked on real iOS/Android devices or desktop GPUI; Android cache cleanup tested headlessly.
+
+Process notes: coder wrote tooling memory notes outside the run directory (factory-build-tooling.md and MEMORY.md in its Claude project memory); no secrets included. Existing /tmp/claude-995 remains tracked as an outside-dir path, not deleted. Push initially needed per-command credential.useHttpPath=true; retry succeeded.
+
+Moved new/ → review/ for independent review.
