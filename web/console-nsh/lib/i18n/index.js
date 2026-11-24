@@ -2180,7 +2180,7 @@ const I18N = {
     endpoint_switcher_filter_placeholder: "Filter agents",
     endpoint_switcher_empty: "No matching agents",
     msg_select_endpoint: "Please select endpoint",
-    // UI component gallery (/ui-components, pages/ui-components): a testing page.
+    // UI component gallery (/__ui-components, pages/ui-components): a testing page.
     uig_title: "UI components",
     uig_subtitle: "A testing page: the Console's reused UI components with synthetic data. Nothing here talks to an agent or changes settings.",
     uig_language: "Language",
@@ -4454,7 +4454,7 @@ const I18N = {
     endpoint_switcher_filter_placeholder: "筛选 Agent",
     endpoint_switcher_empty: "没有匹配的 Agent",
     msg_select_endpoint: "请先选择 endpoint",
-    // UI component gallery (/ui-components, pages/ui-components): a testing page.
+    // UI component gallery (/__ui-components, pages/ui-components): a testing page.
     uig_title: "UI 组件",
     uig_subtitle: "测试页面：用合成数据展示 Console 中被复用的 UI 组件。这里的任何操作都不会访问 Agent 或修改设置。",
     uig_language: "语言",
@@ -6737,7 +6737,7 @@ const I18N = {
     endpoint_switcher_filter_placeholder: "Agent を絞り込む",
     endpoint_switcher_empty: "一致する Agent はありません",
     msg_select_endpoint: "先に endpoint を選択してください",
-    // UI component gallery (/ui-components, pages/ui-components): a testing page.
+    // UI component gallery (/__ui-components, pages/ui-components): a testing page.
     uig_title: "UI コンポーネント",
     uig_subtitle: "テスト用ページ：Console で再利用されている UI コンポーネントを合成データで表示します。ここでの操作は Agent に届かず、設定も変更しません。",
     uig_language: "言語",
