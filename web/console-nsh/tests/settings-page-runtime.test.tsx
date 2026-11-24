@@ -2,13 +2,16 @@
 import { expect, test } from "nsh/test";
 import { localEndpoint, openConsole } from "./harness";
 import {
-  databaseGroups,
+  databaseLines,
+  modelDetailRows,
+  parseModelDetails,
+  entryTasksText,
   formatCount,
   parseDatabaseMetrics,
-  RUNTIME_FOLD_TOGGLE_CLASS,
   runningTaskCount,
   runningTasksText,
 } from "../pages/settings/RuntimePanel";
+import type { DatabaseMetric } from "../pages/settings/RuntimePanel";
 
 const OVERVIEW = {
   version: "1.2.3",
@@ -35,10 +38,48 @@ test("the runtime panel shows health, model, channels and metrics", async () => 
   expect(app.shows("id:runtime-channels >> text:Telegram")).toBe(true);
   // X's session needs a new login.
   expect(app.shows("Needs a new login")).toBe(true);
-  // The technical details are folded.
-  expect(app.shows("inst-1")).toBe(false);
-  await app.press("id:runtime-technical-toggle");
-  await app.waitFor("inst-1");
+  // The technical details are open, with nothing to unfold.
+  expect(app.shows("id:runtime-technical >> text:inst-1")).toBe(true);
+  expect(app.count("id:runtime-technical-toggle")).toBe(0);
+});
+
+test("the model card shows what the agent reports of its model, and only that", async () => {
+  const llm = {
+    provider: "openai",
+    model: "gpt-5.2",
+    profile: "fast",
+    endpoint_host: "api.openai.com",
+    context_window_tokens: 400000,
+    reasoning_effort: "high",
+    candidates: [
+      { profile: "fast", model: "gpt-5.2", weight: 3 },
+      { profile: "cheap", model: "gpt-5-mini", weight: 1 },
+    ],
+    fallbacks: [{ profile: "backup", provider: "anthropic", model: "claude-sonnet-5-5" }],
+  };
+  const { app } = await openConsole({ location: "/e/default/settings/runtime", api: { "GET /proxy:/overview": { body: { ...OVERVIEW, llm } } } });
+  await app.waitFor("id:runtime-model >> text:api.openai.com");
+  for (const text of ["fast", "400K tokens", "high", "fast (gpt-5.2) 75%, cheap (gpt-5-mini) 25%", "backup (claude-sonnet-5-5)"]) {
+    expect(app.shows(`id:runtime-model >> text:${text}`)).toBe(true);
+  }
+  for (const label of ["Profile", "Endpoint", "Context window", "Reasoning effort", "Split", "Fallbacks"]) {
+    expect(app.shows(`id:runtime-model >> text:${label}`)).toBe(true);
+  }
+});
+
+test("model details: an earlier agent's provider and model alone add no lines", () => {
+  expect(modelDetailRows(null)).toEqual([]);
+  expect(modelDetailRows(parseModelDetails({ provider: "openai", model: "gpt-5.2" }))).toEqual([]);
+  // Malformed parts are left out; one candidate is not a split; fallbacks keep their order.
+  const details = parseModelDetails({
+    profile: 3,
+    context_window_tokens: -1,
+    candidates: [{ profile: "only", weight: 1 }, { profile: "", model: "", weight: 2 }, "x"],
+    fallbacks: [{ profile: "b" }, { model: "c-model" }, { profile: "d", model: "d" }, null],
+  });
+  expect(details.profile).toBe("");
+  expect(details.contextWindowTokens).toBe(null);
+  expect(modelDetailRows(details).map((row) => `${row.key}=${row.value}`)).toEqual(["fallbacks=b → c-model → d"]);
 });
 
 test("a failed overview says so", async () => {
@@ -95,15 +136,15 @@ function tasksLine(app: Awaited<ReturnType<typeof openConsole>>["app"], id: stri
   return null;
 }
 
-test("each entry shows the tasks running in it; an uncounted one says it is unknown, never 0", async () => {
+test("each entry shows the tasks running in it, nothing when none run; an uncounted one says it is unknown, never 0", async () => {
   const { app } = await openConsole({ location: "/e/default/settings/runtime", api: { "GET /proxy:/overview": { body: COUNTED } } });
   await app.waitFor("id:runtime-entry-console");
   // The Console and the chat command need no configuring: they are there in the Console's runtime.
   expect(tasksLine(app, "console")).toBe("2 tasks running");
-  expect(tasksLine(app, "cli")).toBe("No tasks running");
+  expect(tasksLine(app, "cli")).toBe(null);
   expect(tasksLine(app, "telegram")).toBe("1 task running");
-  expect(tasksLine(app, "x")).toBe("No tasks running");
-  // Slack runs, but its count was not taken: unknown, not "No tasks running".
+  expect(tasksLine(app, "x")).toBe(null);
+  // Slack runs, but its count was not taken: unknown, not nothing.
   expect(tasksLine(app, "slack")).toBe("Running tasks unknown");
   // Discord does not run: no tasks line, its status says so.
   expect(tasksLine(app, "discord")).toBe(null);
@@ -150,19 +191,19 @@ test("the counts follow tasks starting and finishing with the minute's refresh",
     api: { "GET /proxy:/overview": () => ({ body: { ...OVERVIEW, running_tasks: running } }) },
   });
   await app.waitFor("id:runtime-entry-console");
-  expect(tasksLine(app, "console")).toBe("No tasks running");
+  expect(tasksLine(app, "console")).toBe(null);
   // A Console task and a CLI task start.
   running = { console: 1, cli: 1, telegram: 0 };
   await app.clock!.runFor(60000);
   await app.waitUntil(() => tasksLine(app, "console") === "1 task running");
   expect(tasksLine(app, "cli")).toBe("1 task running");
-  expect(tasksLine(app, "telegram")).toBe("No tasks running");
+  expect(tasksLine(app, "telegram")).toBe(null);
   // They finish; Telegram starts three.
   running = { console: 0, cli: 0, telegram: 3 };
   await app.clock!.runFor(60000);
   await app.waitUntil(() => tasksLine(app, "telegram") === "3 tasks running");
-  expect(tasksLine(app, "console")).toBe("No tasks running");
-  expect(tasksLine(app, "cli")).toBe("No tasks running");
+  expect(tasksLine(app, "console")).toBe(null);
+  expect(tasksLine(app, "cli")).toBe(null);
 });
 
 test("running counts: only whole counts the agent took are known", () => {
@@ -177,25 +218,22 @@ test("running counts: only whole counts the agent took are known", () => {
   expect(runningTasksText(0)).toBe("No tasks running");
   expect(runningTasksText(1)).toBe("1 task running");
   expect(runningTasksText(7)).toBe("7 tasks running");
+  // Under an entry, none running is said by saying nothing.
+  expect(entryTasksText(0)).toBe("");
+  expect(entryTasksText(2)).toBe("2 tasks running");
+  expect(entryTasksText(null)).toBe("Running tasks unknown");
 });
 
-test("the unconfigured channels fold opens and closes, its keyboard focus shown", async () => {
+test("the unconfigured channels are listed under their own head, with nothing to unfold", async () => {
   const { app } = await openConsole({ location: "/e/default/settings/runtime", api: { "GET /proxy:/overview": { body: COUNTED } } });
-  await app.waitFor("id:runtime-unconfigured");
-  expect(app.shows("id:runtime-unconfigured-list")).toBe(false);
-  // The fold's line is a pressable view, so a Tab stop that Enter and Space press (headless runs
-  // move no keyboard focus; checked in Chrome). nsh web draws no outline: its class shows the focus.
-  expect(RUNTIME_FOLD_TOGGLE_CLASS).toContain("focus:bg-hover");
-  expect(RUNTIME_FOLD_TOGGLE_CLASS).toContain("focus:ring-2");
-  await app.press("id:runtime-unconfigured");
   await app.waitFor("id:runtime-unconfigured-list");
+  expect(app.shows("id:runtime-unconfigured >> text:NOT CONFIGURED") || app.shows("id:runtime-unconfigured >> text:Not configured")).toBe(true);
   for (const name of ["LINE", "Lark", "Mixin", "WeChat", "WhatsApp", "Bluesky"]) {
     expect(app.shows(`id:runtime-unconfigured-list >> text:${name}`)).toBe(true);
   }
   // The configured channels keep their lines and status above it.
   expect(app.shows("id:runtime-entry-x >> text:Needs a new login")).toBe(true);
-  await app.press("id:runtime-unconfigured");
-  await app.waitFor("id:runtime-unconfigured-list", { state: "gone" });
+  expect(app.shows("id:runtime-unconfigured-list >> text:Telegram")).toBe(false);
 });
 
 const DATABASES = [
@@ -219,36 +257,47 @@ function overviewWithDatabases(databases: unknown) {
   return { ...OVERVIEW, runtime: { ...OVERVIEW.runtime, databases } };
 }
 
-test("Runtime metrics group the databases by file: each file's size, then its tables' rows under it", async () => {
+test("Runtime metrics list the databases: each file once with its records and size, no tables", async () => {
   const { app } = await openConsole({
     location: "/e/default/settings/runtime",
     api: { "GET /proxy:/overview": { body: overviewWithDatabases(DATABASES) } },
   });
   await app.waitFor("id:runtime-database-rows");
-  /** In the group of `file`: a line showing `label` and `value`. */
-  const row = (file: string, label: string, value: string) => {
-    expect(app.shows(`id:runtime-db-${file} >> text:${label}`)).toBe(true);
+  /** The line of `file`: its name and `value`. */
+  const line = (file: string, value: string) => {
+    expect(app.shows(`id:runtime-db-${file} >> text:${file}`)).toBe(true);
     expect(app.shows(`id:runtime-db-${file} >> text:${value}`)).toBe(true);
   };
   expect(app.shows("id:runtime-databases >> text:DATABASES") || app.shows("id:runtime-databases >> text:Databases")).toBe(true);
-  // Each file is named once, its size beside it; its tables under it by name, thousands grouped.
   expect(app.count("id:runtime-database-rows >> text:agent.db")).toBe(1);
-  row("agent.db", "agent.db", "3.00 MiB");
-  row("agent.db", "contacts", "1 row");
-  // An empty table is 0 rows; one that could not be counted says so, never 0.
-  row("agent.db", "jobs", "0 rows");
-  row("agent.db", "topic_contexts", "Row count unavailable");
-  row("journal.db", "journal.db", "0 B");
-  row("journal.db", "journal_events", "1,234,567 rows");
-  // The file is not repeated on its tables' lines, but a screen reader hears it on each.
-  expect(app.shows("id:runtime-database-rows >> text:agent.db · contacts")).toBe(false);
-  expect(app.count("label:agent.db · contacts: 1 row")).toBe(1);
-  expect(app.count("label:agent.db size: 3.00 MiB")).toBe(1);
-  // A database not created yet and one that cannot be read are each one line, without tables.
-  row("memory.db", "memory.db", "Not created yet");
-  row("usage.db", "usage.db", "Unavailable");
-  expect(app.shows("id:runtime-db-memory.db >> text:memories")).toBe(false);
-  expect(app.shows("id:runtime-db-usage.db >> text:llm_requests")).toBe(false);
+  line("agent.db", "3.00 MiB");
+  line("journal.db", "0 B");
+  // The records are not shown beside the sizes: pressing a figure turns the column over to them.
+  expect(app.shows("id:runtime-database-rows >> text:records")).toBe(false);
+  await app.press("id:runtime-db-journal.db-figure");
+  // Its tables' rows added up; agent.db has one table uncounted, so its sum is a floor.
+  await app.waitFor("id:runtime-db-agent.db >> text:1+ records");
+  // Ten thousand and up is compact in the column; the exact count is what a screen reader hears.
+  line("journal.db", "1.23M records");
+  expect(app.count("label:journal.db size: 0 B, 1,234,567 records")).toBe(1);
+  expect(app.shows("id:runtime-database-rows >> text:MiB")).toBe(false);
+  // A database not created yet keeps saying so.
+  line("memory.db", "Not created yet");
+  // Pressed again, back to the sizes.
+  await app.press("id:runtime-db-agent.db-figure");
+  await app.waitFor("id:runtime-db-agent.db >> text:3.00 MiB");
+  expect(app.shows("id:runtime-database-rows >> text:records")).toBe(false);
+  // A database not created yet and one that cannot be read say so in words.
+  line("memory.db", "Not created yet");
+  line("usage.db", "Unavailable");
+  // The tables the overview sends are not shown.
+  for (const table of ["contacts", "jobs", "topic_contexts", "journal_events", "memories", "llm_requests"]) {
+    expect(app.shows(`id:runtime-database-rows >> text:${table}`)).toBe(false);
+  }
+  expect(app.count("label:agent.db size: 3.00 MiB, 1+ records")).toBe(1);
+  // A database not created yet has no records to tell; one that cannot be read either.
+  expect(app.shows("id:runtime-db-memory.db >> text:records")).toBe(false);
+  expect(app.shows("id:runtime-db-usage.db >> text:records")).toBe(false);
   expect(app.count("id:runtime-databases-unreported")).toBe(0);
   // The process metrics are still there.
   expect(app.shows("id:runtime-metrics >> text:Goroutines")).toBe(true);
@@ -284,40 +333,46 @@ test("database metrics: unknown is never zero, and not reported is not empty", (
   expect(parseDatabaseMetrics({})).toBe(null);
   expect(parseDatabaseMetrics([])).toEqual([]);
   expect(parseDatabaseMetrics(DATABASES)).toEqual([
-    {
-      file: "agent.db",
-      status: "ok",
-      sizeBytes: 3 * 1024 * 1024,
-      tables: [
-        { name: "contacts", rows: 1 },
-        { name: "jobs", rows: 0 },
-        { name: "topic_contexts", rows: null },
-      ],
-    },
-    { file: "journal.db", status: "ok", sizeBytes: 0, tables: [{ name: "journal_events", rows: 1234567 }] },
-    { file: "memory.db", status: "missing", sizeBytes: null, tables: [{ name: "memories", rows: null }] },
-    { file: "usage.db", status: "unavailable", sizeBytes: null, tables: [{ name: "llm_requests", rows: null }] },
+    // contacts 1 + jobs 0, topic_contexts uncounted: a floor of 1.
+    { file: "agent.db", status: "ok", sizeBytes: 3 * 1024 * 1024, records: 1, recordsPartial: true },
+    { file: "journal.db", status: "ok", sizeBytes: 0, records: 1234567, recordsPartial: false },
+    // A missing database has neither size nor records, whatever it lists.
+    { file: "memory.db", status: "missing", sizeBytes: null, records: null, recordsPartial: false },
+    // No table could be counted: unknown, never 0.
+    { file: "usage.db", status: "unavailable", sizeBytes: null, records: null, recordsPartial: false },
   ]);
-  // Only whole, non-negative numbers are sizes and counts; a missing database has no size.
+  // Only whole, non-negative numbers are sizes and counts; a table without a name is not one.
   expect(
     parseDatabaseMetrics([
       { file: "a.db", status: "ok", size_bytes: -1, tables: [{ name: "t", rows: 1.5 }, { name: "u", rows: "3" }, { rows: 2 }] },
       { file: "b.db", status: "missing", size_bytes: 10, tables: [] },
+      { file: "c.db", status: "ok", size_bytes: 1.5, tables: [{ name: "t", rows: 0 }] },
+      { file: "d.db", status: "ok", size_bytes: 4, tables: "none" },
     ]),
   ).toEqual([
-    { file: "a.db", status: "ok", sizeBytes: null, tables: [{ name: "t", rows: null }, { name: "u", rows: null }] },
-    { file: "b.db", status: "missing", sizeBytes: null, tables: [] },
+    { file: "a.db", status: "ok", sizeBytes: null, records: null, recordsPartial: false },
+    { file: "b.db", status: "missing", sizeBytes: null, records: null, recordsPartial: false },
+    { file: "c.db", status: "ok", sizeBytes: null, records: 0, recordsPartial: false },
+    { file: "d.db", status: "ok", sizeBytes: 4, records: null, recordsPartial: false },
   ]);
-  // A database that is there but unreadable keeps its size; its counts say they are unavailable.
-  const [unreadable] = databaseGroups([{ file: "usage.db", status: "unavailable", sizeBytes: 2048, tables: [{ name: "llm_requests", rows: null }] }]);
-  expect([unreadable.file, unreadable.value, unreadable.label]).toEqual(["usage.db", "2.00 KiB", "usage.db size"]);
-  expect(unreadable.tables.map((table) => `${table.name} = ${table.value} (${table.label})`)).toEqual([
-    "llm_requests = Row count unavailable (usage.db · llm_requests)",
+  const db = (over: Partial<DatabaseMetric>): DatabaseMetric => ({ file: "x.db", status: "ok", sizeBytes: 0, records: null, recordsPartial: false, ...over });
+  // A database that is there but unreadable keeps its size and its records.
+  expect(databaseLines([db({ file: "usage.db", status: "unavailable", sizeBytes: 2048, records: 1 })])).toEqual([
+    { file: "usage.db", value: "2.00 KiB", state: false, records: "1 record", recordsExact: "1 record", label: "usage.db size" },
   ]);
-  expect(databaseGroups([{ file: "x.db", status: "ok", sizeBytes: null, tables: [] }]).map((group) => group.value)).toEqual(["Unavailable"]);
-  // A missing one is its state alone, its tables left out.
-  expect(databaseGroups([{ file: "m.db", status: "missing", sizeBytes: null, tables: [{ name: "t", rows: null }] }])).toEqual([
-    { file: "m.db", value: "Not created yet", state: true, label: "m.db", tables: [] },
+  expect(databaseLines([db({ records: 0 }), db({ records: 4210, recordsPartial: true }), db({ records: null })]).map((line) => line.records)).toEqual([
+    "0 records",
+    "4,210+ records",
+    "",
+  ]);
+  expect(databaseLines([db({ sizeBytes: null })]).map((line) => line.value)).toEqual(["Unavailable"]);
+  expect(databaseLines([db({ records: 9999 }), db({ records: 1234567 })]).map((line) => [line.records, line.recordsExact])).toEqual([
+    ["9,999 records", "9,999 records"],
+    ["1.23M records", "1,234,567 records"],
+  ]);
+  // A missing one is its state alone.
+  expect(databaseLines([db({ file: "m.db", status: "missing", sizeBytes: null })])).toEqual([
+    { file: "m.db", value: "Not created yet", state: true, records: "", recordsExact: "", label: "m.db" },
   ]);
   expect([0, 7, 999, 1000, 12345, 1234567].map(formatCount)).toEqual(["0", "7", "999", "1,000", "12,345", "1,234,567"]);
 });

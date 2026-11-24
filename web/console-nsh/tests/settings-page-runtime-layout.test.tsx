@@ -106,20 +106,18 @@ for (const [name, width] of [
   ["a phone", 390],
   ["a narrow phone", 320],
 ] as const) {
-  test(`on ${name} the channels card holds its lines, closed and opened`, async () => {
+  test(`on ${name} the channels card holds its lines, the unconfigured ones among them`, async () => {
     const app = await openPanel(width);
-    await app.waitFor("id:runtime-unconfigured");
-    await app.waitUntil(() => !!frames(app)["entry-x"] && !!frames(app).metrics);
-    expectContained(app, width, false);
+    await app.waitFor("id:runtime-unconfigured-list");
+    await app.waitUntil(() => !!frames(app)["entry-x"] && !!frames(app).metrics && !!frames(app)["unconfigured-bluesky"]);
     // The databases are inside the metrics card, whose lines stay on the page at every width.
     await app.waitUntil(() => !!frames(app).databases);
     expectInside(frames(app).databases, frames(app).metrics, "databases in the metrics card");
     expectInside(frames(app).metrics, { x: 0, y: 0, w: width, h: 1e6 }, "metrics card on the page");
-    expect(app.shows("id:runtime-db-journal.db >> text:journal_events")).toBe(true);
-    expect(app.shows("id:runtime-db-journal.db >> text:1,234,567 rows")).toBe(true);
-    await app.press("id:runtime-unconfigured");
-    await app.waitFor("id:runtime-unconfigured-list");
-    await app.waitUntil(() => !!frames(app)["unconfigured-bluesky"]);
+    expect(app.shows("id:runtime-db-journal.db >> text:journal.db")).toBe(true);
+    expect(app.shows("id:runtime-db-journal.db >> text:50.0 MiB")).toBe(true);
+    await app.press("id:runtime-db-journal.db-figure");
+    await app.waitFor("id:runtime-db-journal.db >> text:1.23M records");
     await app.wait(100);
     expectContained(app, width, true);
     if (width < 980) {
@@ -140,8 +138,6 @@ for (const [name, width] of [
 
 test("the channels card holds its longer lines in Japanese on a narrow phone", async () => {
   const app = await openPanel(320, "ja");
-  await app.waitFor("id:runtime-unconfigured");
-  await app.press("id:runtime-unconfigured");
   await app.waitFor("id:runtime-unconfigured-list");
   await app.waitUntil(() => !!frames(app)["unconfigured-bluesky"] && !!frames(app).metrics);
   await app.wait(100);
