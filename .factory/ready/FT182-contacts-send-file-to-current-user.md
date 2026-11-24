@@ -37,3 +37,11 @@ Tests: focused `go test ./tools/builtin/... ./internal/channelruntime/...` passe
 Installs: none beyond restoring pinned Go dependencies. No UI changes. Not checked: live channel delivery; fake API and runtime tests cover the changed behaviour. Bluesky/X files still have the same unsupported-channel limitation as any other recipient.
 
 Moved new/ → review/, round 1. Initial branch push needed command-local credential.useHttpPath=true; retry succeeded without changing user settings.
+
+## factory · review · 2026-11-24 23:05
+head: e6d2dadbd20c1e3bd0a3a7c409058c89d0bca8e3
+verdict: pass
+notes:
+- [P2] tools/builtin/contacts_send.go:187: File sends to the current Agent Link counterpart bypass its no-new-message guard, but contacts_send does not attach files to the pending reply. A verified probe with incoming hop 1 and a forbidden mm: asker delivered a new non-reply message at hop 2 with one attachment, while reply attachments stayed empty; master blocked it. This can restart agent tasks and permit file-response exchanges until max_hops. Route these files through the reply-attachment path, or retain the mm: counterpart block and direct callers to agent_send. The batch guard at line 292 has the same issue.
+
+Validation: Claude Code reviewed all four changed files against origin/master...HEAD and the request/plan. Gofmt check, go vet ./... and go test ./... passed (168 tested packages). The Agent Link probe ran against both head and master in scratch copies. No P0/P1 findings; per factory policy moved review/ → ready/ with the P2 retained for owner attention. Live channel delivery was not checked. No installs. Repository working tree stayed unchanged. Harness output was written outside dir under /tmp/claude-995/; recorded for later owner-approved cleanup.
