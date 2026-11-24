@@ -51,3 +51,17 @@ Tests: gofmt clean, go vet ./... and go test ./... PASS (coder and independent m
 KNOWN ACCEPTANCE GAP FOR REVIEW: the existing nsh WebView rejects blob: PDF URLs (headless warning); received PDFs are therefore likely blank, with Download available. Actual PDF rendering was not verified. Passing automated gates does NOT establish the PDF acceptance criterion. Review must assess this as a likely functional defect, not approve solely on passing tests. No interactive web, desktop or Android UI inspection was performed.
 
 External writes: the coder reported a tooling memory note outside the run directory (not permitted by the task); it was not incorporated into the implementation. Early targeted tests touched shared caches, then the final gates used an isolated HOME and caches. Runtime-created /tmp entries were recorded in the run's outside ledger, not deleted; unrelated concurrent entries are only candidates for inspection, not attributed to this item.
+
+
+## factory · review · 2026-11-24 23:47
+head: 500509bd76ef649157894f3ed5acddb4dbc382be
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/ReceivedFile.tsx:177-193: Received PDF cards expose a preview that is blank on desktop and Android. The dialog creates a blob:nsh://app URL; nsh 0.6.0 WebView access checks only accept http(s) inner origins and discard its src. Verified example: the received-file preview tests open three PDFs and log three "blob:nsh://app/... is not granted" warnings while passing. Use a supported PDF source/viewer or disable this action on unsupported platforms. Existing sent-PDF behavior shares the cause; this change exposes it for received PDFs. The PDF acceptance criterion is NOT satisfied on these platforms; web PDF rendering remains unverified.
+- [P3] web/console-nsh/lib/core/received-files.js:63-66: Octet-stream files with text-like names get a preview action even when newly recorded bytes are binary or non-UTF-8; the server rejects them and the dialog shows only a generic error. Verified probes: ELF a.out, MPEG-TS segment0.ts and Windows-1252 export.csv classify as text in the client, but the server returns 400 "file is not UTF-8 text; download it instead". Expose authoritative preview capability or distinguish new metadata from legacy guesses, and map decoding refusals to the specific error.
+
+Review scope: Claude Code reviewed all 12 changed files in origin/master...HEAD, request and plan, attachment access controls and preview security headers. No P0/P1 findings; pass means the factory's P0/P1 gate passed, not that every acceptance criterion was met. Owner should inspect the PDF defect before shipping.
+
+Validation: required gofmt/vet/go test gate PASS (168 packages); nsh check PASS (0.6.0); required Console scripts/test.sh PASS (165 files, 0 failed, 274s; two parallel timing failures passed the runner's solo retry); targeted received-preview test PASS (9/9, with PDF warnings); node library tests PASS (313/313). Worktree clean; no commits or source changes. No installs or manifest changes.
+
+Limits: no live web/desktop/Android UI verification; browser PDF sandbox behavior unverified; Android JVM tests unavailable without JDK; 2 MiB text rendering speed on phones not measured. Review worktree from the previous stopped run was removed during recovery. Test artifacts stayed in this run's temporary directory; harness reported its own /tmp/claude-995 output directory, retained in the outside ledger and not deleted.
