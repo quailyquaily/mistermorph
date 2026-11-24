@@ -11,14 +11,14 @@ test("without a password the console logs in by itself and opens the agent's cha
 test("a wrong password says so, and the right one goes on to the page asked for", async () => {
   const { app } = await openConsole({ location: "/e/default/todo", password: true });
   await app.waitFor("id:login-password");
-  await app.press("role:button[Login]");
+  await app.press("role:button[Log in]");
   await app.waitFor("Please enter password");
   await app.type("id:login-password", "nope");
-  await app.press("role:button[Login]");
+  await app.press("role:button[Log in]");
   await app.waitFor("invalid password");
   await app.clear("id:login-password");
   await app.type("id:login-password", "secret");
-  await app.press("role:button[Login]");
+  await app.press("role:button[Log in]");
   await app.waitFor("id:nav-todo");
 });
 

@@ -82,7 +82,7 @@ test("without a session the gallery asks for the password first, then opens", as
   expect(app.shows("id:ui-components-page")).toBe(false);
   expect(lastLocation(app)).toBe(`/login?redirect=${encodeURIComponent(PATH)}`);
   await app.type("id:login-password", "secret");
-  await app.press("role:button[Login]");
+  await app.press("role:button[Log in]");
   await app.waitFor("id:ui-components-page");
   expect(lastLocation(app)).toBe(PATH);
 });

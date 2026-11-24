@@ -2,7 +2,9 @@
 // Without a password the console logs in by itself and this page only passes through.
 import type { InputRef } from "nsh";
 import { effect, Image, signal, Text, untracked, View, windowSize } from "nsh";
-import loginLogo from "../../assets/images/app_logo.svg";
+// The brand's 128px drawing (design/brand/icons/aojashin/icon-circle-128.svg): the logo here is
+// 48pt, 96 device pixels on most screens, where the app's 64px drawing looks coarse.
+import loginLogo from "../../assets/images/app_logo_128.svg";
 import { LanguageSelector } from "../../components/LanguageSelector";
 import { Button, TextField } from "../../components/ui";
 import { ObserveSection } from "../../components/observe/parts";
@@ -165,15 +167,22 @@ export function LoginPage() {
       style={phone() ? { paddingTop: windowSize().height * 0.12 } : { paddingTop: 24, paddingBottom: windowSize().height * 0.1 }}
     >
       <View class="w-full gap-4" style={{ maxWidth: 400 }} onLayout={probe ? (event) => probe("column", event.bounds) : undefined}>
-        {/* The brand: the mark and the name in tracked mono caps. */}
-        <View class="flex-row items-center gap-3 px-0.5">
-          <Image class="overflow-hidden" src={loginLogo} style={{ width: 32, height: 32 }} />
-          <Text class="font-mono text-base font-semibold uppercase leading-[20.8px] tracking-[0.14em] text-foreground" role="header">
-            Mister Morph
-          </Text>
+        {/* The brand: the mark alone, centred over the card. Its name is what screen readers read. */}
+        <View class="items-center pb-2">
+          <Image
+            class="overflow-hidden"
+            src={loginLogo}
+            role="header"
+            accessibilityLabel="Mister Morph"
+            testID="login-logo"
+            style={{ width: 48, height: 48 }}
+          />
         </View>
-        <ObserveSection variant="boxed" title={t("login_subtitle")} gap={0}>
-          <View class="gap-4 px-2 pb-1 pt-2">
+        {/* On the card's fill, as the settings panels are, not the page's paper. */}
+        <ObserveSection variant="boxed" class="bg-card" title={t("login_subtitle")} gap={0}>
+          {/* The section's own 16pt padding, no more: the labels start on the title's edge, and the
+              body has as much room under it as above. */}
+          <View class="gap-4">
             {/* The console this password is for: its address in full, and in the phone app, which
                 has no console of its own, the button that sets or changes it, named for what it does. */}
             <View class="gap-2" testID="login-server" onLayout={probe ? (event) => probe("server", event.bounds) : undefined}>
@@ -214,7 +223,7 @@ export function LoginPage() {
                     err.set("");
                   }}
                   onSubmit={() => void submit()}
-                  placeholder={t("login_password_placeholder")}
+                  // No placeholder: the label above already says Password, the card's title Console.
                   accessibilityLabel={t("login_password_label")}
                   masked={!showPassword()}
                   disabled={busy()}
@@ -252,7 +261,9 @@ export function LoginPage() {
             </View>
           </View>
         </ObserveSection>
-        <View class="items-end">
+        {/* Outside the card, on the card's edge as the brand mark is: the word ends where the card
+            does, its hover pill (px-2) reaching past it. */}
+        <View class="-mr-1.5 items-end">
           <LanguageSelector />
         </View>
       </View>

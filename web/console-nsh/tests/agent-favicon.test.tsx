@@ -157,7 +157,7 @@ test("the login page shows the app icon; the agent's avatar comes once the frame
   await app.waitFor("id:login-password");
   expect(favicons(app).filter(Boolean)).toEqual([]);
   await app.type("id:login-password", "secret");
-  await app.press("role:button[Login]");
+  await app.press("role:button[Log in]");
   await app.waitFor("id:nav-todo");
   await app.waitUntil(() => Boolean(lastFavicon(app)));
 });
