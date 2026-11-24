@@ -51,6 +51,7 @@ import { isMobile } from "../../lib/shell";
 import { motionMs } from "../motion";
 import { SettingsCard } from "../settings-page/parts";
 import { type ConfigFieldState, type ConfigUpdate, SettingsSaveRegistryContext } from "./ConfigSettingsPanel";
+import { CARD_CORNERS, CONTROL_CORNERS, cornersClass, fittingRadius, RADIUS } from "../corners";
 
 export interface RouteProfileItem {
   title?: string;
@@ -75,7 +76,7 @@ export interface ModelRoutesPanelProps {
 
 const SHARE_STEP = 5;
 const STEP_BUTTON =
-  "size-[22px] items-center justify-center rounded-(--radius) border border-input bg-field transition-colors duration-120 hover:border-blue disabled:opacity-50";
+  `size-[22px] items-center justify-center ${cornersClass(fittingRadius(RADIUS.control, 22))} border border-input bg-field transition-colors duration-120 hover:border-blue disabled:opacity-50`;
 
 interface Purpose {
   key: string;
@@ -690,7 +691,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
 
   const stepper = (name: string, share: number, index: number, testPrefix: string) => (
     // `.model-routes-stepper`: a blue-framed chip with − and + buttons, 11pt mono.
-    <View class="flex-row items-center gap-1 rounded-(--radius) border border-blue bg-card p-0.5">
+    <View class={`flex-row items-center gap-1 ${CONTROL_CORNERS} border border-blue bg-card p-0.5`}>
       <BaseButton
         accessibilityLabel={`Less to ${name}`}
         disabled={share <= 1}
@@ -718,7 +719,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
       onPress={onPress}
       selected={pressed}
       accessibilityLabel={label}
-      class="h-[26px] justify-center rounded-(--radius) border border-input bg-field px-2 transition-colors duration-120 hover:border-blue active:bg-selection selected:border-dashed"
+      class={`h-[26px] justify-center ${CONTROL_CORNERS} border border-input bg-field px-2 transition-colors duration-120 hover:border-blue active:bg-selection selected:border-dashed`}
     >
       <Text class="text-xs text-subtle">{label}</Text>
     </BaseButton>
@@ -744,7 +745,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
     >
       <View class="gap-3" testID={props.testID}>
         <If when={validationError()}>
-          <View class="rounded-(--radius) border border-danger bg-card px-3 py-2" role="alert">
+          <View class={`${CARD_CORNERS} border border-danger bg-card px-3 py-2`} role="alert">
             <Text class="text-sm text-danger">{validationError()}</Text>
           </View>
         </If>
@@ -802,7 +803,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
                       onLayout={scheduleMeasure}
                       accessibilityLabel={purpose().label}
                       testID={`route-${purpose().key}`}
-                      class={`gap-0.5 rounded-(--radius) border bg-card px-2.5 py-2 transition duration-200 ${
+                      class={`gap-0.5 ${CARD_CORNERS} border bg-card px-2.5 py-2 transition duration-200 ${
                         selected() === purpose().key
                           ? "border-blue ring-2 ring-blue/22"
                           : problems(purpose()).length
@@ -844,7 +845,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
                       }}
                       onLayout={scheduleMeasure}
                       testID={`profile-${node().name}`}
-                      class={`gap-0.5 rounded-(--radius) border ${selected() ? "px-2 py-1.5" : "px-2.5 py-2"} ${
+                      class={`gap-0.5 ${CARD_CORNERS} border ${selected() ? "px-2 py-1.5" : "px-2.5 py-2"} ${
                         node().missing
                           ? "border-dashed border-danger bg-card"
                           : roleOf(node().name).role === "use" || roleOf(node().name).role === "split"
@@ -929,7 +930,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
                 onPress={() => props.onAddProfile?.()}
                 accessibilityLabel="Add profile"
                 tooltip={<Tip text="Add profile" />}
-                class="min-h-10 flex-row items-center justify-center rounded-(--radius) border border-dashed border-input px-2.5 py-1.5 transition-colors duration-120 hover:border-blue disabled:opacity-50"
+                class={`min-h-10 flex-row items-center justify-center ${CONTROL_CORNERS} border border-dashed border-input px-2.5 py-1.5 transition-colors duration-120 hover:border-blue disabled:opacity-50`}
               >
                 <Icon name="PhPlus" size={14} color="subtle" />
               </TipButton>

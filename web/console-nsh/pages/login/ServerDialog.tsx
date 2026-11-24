@@ -14,6 +14,7 @@ import { parseServer } from "../../lib/mobileHost";
 import { serverAddress, setServer } from "../../lib/platform";
 import { type ScanEvent, type ScanFailure, scannedServer } from "../../lib/qrScan";
 import { QrScanner } from "./QrScanner";
+import { CARD_CORNERS } from "../../components/corners";
 
 /** How long a server may take to answer the check. */
 const CHECK_TIMEOUT_MS = 8000;
@@ -226,7 +227,7 @@ export function ServerDialog(props: { open: boolean; onClose: () => void; onSave
         }
       >
         <View class="gap-3" android={{ accessibilityLiveRegion: "polite" }} testID="login-server-scanner">
-          <View class="overflow-hidden rounded-(--radius) border border-line-soft bg-[#111318]" style={{ height: CAMERA_HEIGHT }}>
+          <View class={`overflow-hidden ${CARD_CORNERS} border border-line-soft bg-[#111318]`} style={{ height: CAMERA_HEIGHT }}>
             <QrScanner onEvent={onScan} accessibilityLabel={t("login_scan_camera")} class="flex-1" testID="login-server-camera" />
           </View>
           <Text class="text-xs leading-[17.4px] text-muted-foreground" testID="login-server-scan-status">

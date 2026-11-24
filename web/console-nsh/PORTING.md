@@ -95,6 +95,10 @@ Headless tests prove behaviour, not the look.
 - (Up to an earlier nsh; 0.6.0 applies them on web, desktop and Android.) Opacity modifiers on
   the app's own colour tokens (`bg-paper/70`) did nothing. Tints of a colour keep to the steps in
   `scripts/color-steps.test.mjs`.
+- An `Image` counts its source's natural size (a Phosphor icon's 256pt) in the content of a scroll
+  view around it, though it is drawn at the size it is given: an 18pt icon near the end of a short
+  list makes the list scroll over empty room. Give every `Image` `overflow-hidden`
+  (`scripts/image-clip.test.mjs` checks the sources).
 - `style={{ display: "flex" }}` turns a View into a row.
 - (Up to nsh 0.5.0; 0.5.1 disposes it, `tests/list-empty-slot.test.tsx`.) A `List`'s `empty` slot
   given as a function rendered in a scope nsh never disposed: the

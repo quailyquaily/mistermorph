@@ -78,7 +78,7 @@ export function Icon(props: {
   return (
     <Image
       src={(props.filled && FILLED_ICONS[props.name]) || ICONS[props.name]}
-      class={props.class}
+      class={`overflow-hidden ${props.class ?? ""}`}
       testID={props.testID}
       onLayout={props.onLayout}
       accessibilityElementsHidden
@@ -236,7 +236,7 @@ export function Tip(props: { text: string; shortcut?: string; placement?: "top" 
     <Tooltip
       delay={420}
       placement={props.placement ?? "top"}
-      class="max-w-75 rounded-(--radius) border border-line-soft bg-card px-2 pb-1.25 pt-1 transition duration-180"
+      class={`max-w-75 ${CONTROL_CORNERS} border border-line-soft bg-card px-2 pb-1.25 pt-1 transition duration-180`}
       startingClass="opacity-0 translate-y-0.75"
       endingClass="opacity-0"
       style={{ boxShadow: tipShadow(), transitionTimingFunction: MOTION_EASE_CSS }}
@@ -976,7 +976,7 @@ export function CheckboxField(props: {
       onChange={({ checked }) => props.onChange?.(checked)}
       accessibilityLabel={props.label}
       class={`flex-row items-center gap-2 disabled:opacity-50 ${props.class ?? ""}`}
-      indicatorClass="size-4 items-center justify-center rounded-(--radius) border border-input bg-field checked:bg-blue checked:border-blue"
+      indicatorClass={`size-4 items-center justify-center ${cornersClass(fittingRadius(RADIUS.control, 16))} border border-input bg-field checked:bg-blue checked:border-blue`}
       indicator={<Icon name="PhCheck" size={12} color="on-accent" />}
     >
       <If when={props.label}>

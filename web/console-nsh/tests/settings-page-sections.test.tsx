@@ -413,7 +413,7 @@ test("System: Advanced is a rounded bar that still opens and closes its config g
   // The bar is a box of the cards' radius, like the cards above it (a headless test reads no
   // radius back from a view: the class the bar is built from is checked).
   for (const part of CARD_CORNERS.split(" ")) expect(BOX_FOLD_BAR_CLASS.split(" ")).toContain(part);
-  for (const part of ["border", "border-line-soft", "bg-paper", "min-h-[54px]", "px-5"]) expect(BOX_FOLD_BAR_CLASS.split(" ")).toContain(part);
+  for (const part of ["border", "border-line-soft", "bg-card", "min-h-[54px]", "px-5"]) expect(BOX_FOLD_BAR_CLASS.split(" ")).toContain(part);
 
   const { app } = await openConsole({
     location: "/e/default/settings/system",

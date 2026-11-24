@@ -6,6 +6,7 @@ import { Image, Scroll, Text, View, WebView } from "nsh";
 import { Button, Modal } from "../../components/ui";
 import { t } from "../../components/chat/i18n";
 import type { ChatController } from "./chatController";
+import { CARD_CORNERS } from "../../components/corners";
 
 export function FilePreviewDialog(props: { c: ChatController }) {
   const c = props.c;
@@ -26,14 +27,14 @@ export function FilePreviewDialog(props: { c: ChatController }) {
         </If>
         <If when={!state().loading && state().kind === "image" && state().url}>
           <Scroll style={{ maxHeight: 560 }}>
-            <Image src={state().url} accessibilityLabel={state().name} class="w-full" style={{ height: 480, objectFit: "contain" }} testID="chat-file-preview-image" />
+            <Image src={state().url} accessibilityLabel={state().name} class="overflow-hidden w-full" style={{ height: 480, objectFit: "contain" }} testID="chat-file-preview-image" />
           </Scroll>
         </If>
         <If when={!state().loading && state().kind === "pdf" && state().url}>
           <WebView src={state().url} accessibilityLabel={state().name} class="w-full" style={{ height: 560 }} testID="chat-file-preview-pdf" />
         </If>
         <If when={!state().loading && state().kind === "text"}>
-          <Scroll class="rounded-(--radius) border border-line-faint bg-paper" style={{ maxHeight: 560 }}>
+          <Scroll class={`${CARD_CORNERS} border border-line-faint bg-paper`} style={{ maxHeight: 560 }}>
             <View selectable class="p-3">
               <Text class="font-mono text-xs text-foreground" testID="chat-file-preview-text">
                 {state().text}

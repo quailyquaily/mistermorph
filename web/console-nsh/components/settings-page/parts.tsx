@@ -195,10 +195,10 @@ export function Fold(props: {
 }
 
 /**
- * The boxed fold's bar: a hairline box on the paper with the cards' corners (the settings cards
- * above and below it are boxes of the same radius).
+ * The boxed fold's bar: a hairline box on the card's fill with the cards' corners (the settings
+ * cards above and below it are boxes of the same radius and fill).
  */
-export const BOX_FOLD_BAR_CLASS = `min-h-[54px] flex-row items-center justify-between gap-3 ${CARD_CORNERS} border border-line-soft bg-paper px-5`;
+export const BOX_FOLD_BAR_CLASS = `min-h-[54px] flex-row items-center justify-between gap-3 ${CARD_CORNERS} border border-line-soft bg-card px-5`;
 
 /**
  * A boxed fold (`.settings-system-advanced`): a 54pt bar with its title at the left and a caret at
@@ -239,8 +239,9 @@ export function DirtyDot(props: { label: string; testID?: string; class?: string
 /**
  * A titled block (the Vue console's AppSection). The head is one 48pt strip: a mono caps label, the
  * meta beside it on one line (cut where it does not fit), plain actions at the far end, on a
- * hairline. `boxed` (the default) frames it in a hairline on the paper with a 16pt body; `plain`
- * has no frame, the head's rule the only line (settings groups inside a box). `literal` keeps the
+ * hairline. `boxed` (the default) frames it in a hairline on the card's fill (`bg-card`, raised off
+ * the paper) with a 16pt body; `plain` has no frame, the head's rule the only line (settings groups
+ * inside a box). `literal` keeps the
  * title's case (a name the user gave); `list` trims the body's inset for a list of padded rows.
  */
 export function SettingsCard(props: {
@@ -272,7 +273,7 @@ export function SettingsCard(props: {
     <View
       ref={reveal.ref}
       style={reveal.style()}
-      class={`min-w-0 ${boxed() ? `${CARD_CORNERS} border bg-paper/70` : "gap-4"} ${
+      class={`min-w-0 ${boxed() ? `${CARD_CORNERS} border bg-card` : "gap-4"} ${
         reveal.ringed() ? "border-blue ring-2 ring-blue" : "border-line-soft"
       } ${props.class ?? ""}`}
       testID={props.testID}

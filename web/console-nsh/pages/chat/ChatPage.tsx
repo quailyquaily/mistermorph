@@ -29,6 +29,7 @@ import { createPaneStack } from "../../components/motion/PaneStack";
 import { ActivityDetailPanel } from "./ActivityDetailPanel";
 import { WorkspacePanel, WorkspaceSheet } from "./WorkspacePanel";
 import { useWorkbench } from "../../components/frame/Workbench";
+import { CARD_CORNERS } from "../../components/corners";
 
 function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (height: number) => void }) {
   const c = props.c;
@@ -417,7 +418,7 @@ export function ChatPage() {
         when={!c.chatReadonly()}
         else={
           <View class="flex-1 items-center justify-center p-6" testID="chat-readonly">
-            <View class="w-full max-w-md gap-2 rounded-(--radius) border border-line-faint bg-card p-5">
+            <View class={`w-full max-w-md gap-2 ${CARD_CORNERS} border border-line-faint bg-card p-5`}>
               <Kicker right={<Text class="font-mono text-xs uppercase text-muted-foreground">Read Only</Text>}>{c.readonlyKickerLeft()}</Kicker>
               <Text class="text-sm text-subtle">{c.readonlyReason()}</Text>
             </View>

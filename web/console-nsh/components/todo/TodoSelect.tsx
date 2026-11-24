@@ -24,7 +24,7 @@ function ItemMedia(props: { item: TodoMenuItem | undefined; size?: number }) {
           when={props.item?.image}
           else={<Icon name={props.item!.icon as IconName} size={size() - 10} color="muted-foreground" />}
         >
-          <Image src={props.item!.image!} style={{ width: size(), height: size(), borderRadius: size() / 2 }} />
+          <Image class="overflow-hidden" src={props.item!.image!} style={{ width: size(), height: size(), borderRadius: size() / 2 }} />
         </If>
       </View>
     </If>

@@ -25,6 +25,7 @@ import {
 import { DEFAULT_AVATAR_MARKUP } from "./default-avatar";
 import { InlineNotice } from "./InlineNotice";
 import { t, useSetup, type LLMFormField, type SetupStage, type SetupState, type SoulCard } from "./setup-state";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../../components/corners";
 
 type Token = "warn" | "warn-dark" | "ok" | "ink";
 
@@ -90,7 +91,7 @@ function AuthActionButton(props: {
       accessibilityLabel={props.title}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
-      class={`min-h-9.5 min-w-9.5 flex-row items-center justify-center rounded-(--radius) border px-3 active:opacity-80 disabled:opacity-50 ${tone().box}`}
+      class={`min-h-9.5 min-w-9.5 flex-row items-center justify-center ${CONTROL_CORNERS} border px-3 active:opacity-80 disabled:opacity-50 ${tone().box}`}
     >
       <If when={props.needsLogin} else={<Icon name={icon()} size={16} color={tone().color} />}>
         <Text class="text-sm font-medium text-blue">{props.loginLabel}</Text>
@@ -468,7 +469,7 @@ function SoulSprite(props: { card: SoulCard; tick: number }) {
       class="overflow-hidden"
       style={{ width: frameWidth() * scale(), height: frameHeight() * scale() }}
     >
-      <Image
+      <Image class="overflow-hidden"
         src={sheet()}
         style={{
           width: (sheet()?.size?.width || frameWidth()) * scale(),
@@ -530,7 +531,7 @@ function SoulStage(props: { s: SetupState }) {
                 <If
                   when={card().spriteSrc}
                   else={
-                    <View class={`size-9.5 items-center justify-center rounded-(--radius) border border-line bg-card`}>
+                    <View class={`size-9.5 items-center justify-center ${CONTROL_CORNERS} border border-line bg-card`}>
                       <Icon name={card().icon as IconName} size={18} color={accent} />
                     </View>
                   }
@@ -562,15 +563,15 @@ function SoulStage(props: { s: SetupState }) {
                   onPress={() => s.applySoulPreset(card().id)}
                   accessibilityLabel={card().title}
                   testID={`setup-soul-${card().id}`}
-                  class={`items-center justify-center gap-2 rounded-(--radius) border px-2.5 py-3 ${
+                  class={`items-center justify-center gap-2 ${CARD_CORNERS} border px-2.5 py-3 ${
                     s.soulPresetId() === card().id ? `border-${accent}` : "border-line-soft"
                   }`}
                   style={stackStyle(s.soulPresetId() === card().id, card().stackIndex ?? 0)}
                   hoverStyle={hoverStyle(s.soulPresetId() === card().id)}
                 >
-                  <View class="size-8.5 items-center justify-center overflow-hidden rounded-(--radius) border border-line bg-card">
+                  <View class={`size-8.5 items-center justify-center overflow-hidden ${CONTROL_CORNERS} border border-line bg-card`}>
                     <If when={card().faceSrc} else={<Icon name={card().icon as IconName} size={18} color={accent} />}>
-                      <Image src={card().faceSrc as ImageAsset} accessibilityElementsHidden style={{ width: 38, height: 38 }} />
+                      <Image class="overflow-hidden" src={card().faceSrc as ImageAsset} accessibilityElementsHidden style={{ width: 38, height: 38 }} />
                     </If>
                   </View>
                   <Text class="text-center text-sm font-semibold text-foreground">{card().title}</Text>
@@ -582,7 +583,7 @@ function SoulStage(props: { s: SetupState }) {
               onPress={s.selectCustomSoul}
               accessibilityLabel={t("setup_soul_custom_title")}
               testID="setup-soul-custom"
-              class={`items-center justify-center gap-2 rounded-(--radius) border px-2.5 py-3 ${
+              class={`items-center justify-center gap-2 ${CARD_CORNERS} border px-2.5 py-3 ${
                 s.isCustomSoulSelected() ? `border-${accent}` : "border-line-soft"
               }`}
               style={{
@@ -593,7 +594,7 @@ function SoulStage(props: { s: SetupState }) {
               }}
               hoverStyle={s.isCustomSoulSelected() ? undefined : { backgroundColor: paper(0.94), backgroundImage: "none" }}
             >
-              <View class="size-8.5 items-center justify-center rounded-(--radius) border border-dashed border-line bg-card">
+              <View class={`size-8.5 items-center justify-center ${CONTROL_CORNERS} border border-dashed border-line bg-card`}>
                 <Icon name={s.customSoulCardIcon() as IconName} size={18} color={accent} />
               </View>
               <View class="w-full items-center gap-1.75 pt-1" accessibilityElementsHidden>
@@ -678,7 +679,7 @@ export function SetupPage() {
       <Scroll class="flex-1" contentClass={`grow items-center justify-center ${narrow() ? "p-4" : "p-6"}`}>
         <View
           // Vue's boxed AppSection: paper at 70%, the page's grid faintly through it.
-          class={`w-full rounded-(--radius) border border-line-faint bg-paper/70 ${narrow() ? "p-3" : "p-4.5"}`}
+          class={`w-full ${CARD_CORNERS} border border-line-faint bg-paper/70 ${narrow() ? "p-3" : "p-4.5"}`}
           style={{ maxWidth: 640 }}
           testID={`setup-stage-${s.routeStage()}`}
         >

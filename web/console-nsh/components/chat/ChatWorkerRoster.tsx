@@ -37,7 +37,7 @@ function stateTone(state: string) {
 }
 
 export function WorkerAvatar(props: { avatarStyle: string }) {
-  return <Image src={workerAvatarURL(props.avatarStyle)} accessibilityElementsHidden style={{ width: 20, height: 20 }} />;
+  return <Image class="overflow-hidden" src={workerAvatarURL(props.avatarStyle)} accessibilityElementsHidden style={{ width: 20, height: 20 }} />;
 }
 
 export function workerKindLabel(worker: any) {

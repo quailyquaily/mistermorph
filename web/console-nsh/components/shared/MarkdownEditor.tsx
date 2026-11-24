@@ -694,7 +694,7 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
                         class="-mb-px flex-1 items-center border-b-2 border-transparent py-2 hover:bg-hover selected:border-blue"
                       >
                         <If when={CHANNEL_LOGOS[tab().id]} else={<Text class="text-xs text-subtle">{tab().title}</Text>}>
-                          <Image src={CHANNEL_LOGOS[tab().id]} style={{ width: 18, height: 18 }} />
+                          <Image class="overflow-hidden" src={CHANNEL_LOGOS[tab().id]} style={{ width: 18, height: 18 }} />
                         </If>
                       </BaseButton>
                     )}
@@ -708,7 +708,7 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
                   when={item.channel && CHANNEL_LOGOS[item.channel]}
                   else={<Text class="text-xs font-semibold text-blue">{Array.from(item.title)[0]?.toUpperCase() || "?"}</Text>}
                 >
-                  <Image src={CHANNEL_LOGOS[item.channel || ""]} style={{ width: 18, height: 18 }} />
+                  <Image class="overflow-hidden" src={CHANNEL_LOGOS[item.channel || ""]} style={{ width: 18, height: 18 }} />
                 </If>
               </View>
             )}

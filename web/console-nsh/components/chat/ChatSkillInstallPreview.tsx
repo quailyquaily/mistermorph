@@ -10,6 +10,7 @@ import { formatBytes } from "../../lib/core/context.js";
 import { openChatLink } from "./ChatMarkdown";
 import { t } from "./i18n";
 import type { KeyedState } from "./rowState";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 
 const SEVERITY_ICON: Record<string, IconName> = {
   critical: "PhWarningOctagon",
@@ -92,7 +93,7 @@ export function ChatSkillInstallPreview(props: { preview: any; foldKey: string; 
       }
     >
       <If when={item().evidence}>
-        <View selectable class="rounded-(--radius) bg-paper p-2">
+        <View selectable class={`${CONTROL_CORNERS} bg-paper p-2`}>
           <Text class="font-mono text-xs text-foreground">{item().evidence}</Text>
         </View>
       </If>
@@ -115,7 +116,7 @@ export function ChatSkillInstallPreview(props: { preview: any; foldKey: string; 
           <ErrorLine text={t("chat_skill_preview_mismatch")} />
         </If>
         <If when={p().assessment.complete}>
-          <View class="gap-1.5 rounded-(--radius) border border-line-faint bg-paper p-2.5" accessibilityLabel={t("chat_skill_assessment")}>
+          <View class={`gap-1.5 ${CARD_CORNERS} border border-line-faint bg-paper p-2.5`} accessibilityLabel={t("chat_skill_assessment")}>
             <View class="flex-row items-center gap-2">
               <Icon name={severityIcon(p().assessment.level)} size={18} color={severityColor(p().assessment.level)} />
               <Text class="text-sm font-semibold text-foreground">{t(`chat_skill_level_${p().assessment.level}`)}</Text>

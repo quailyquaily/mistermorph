@@ -7,6 +7,7 @@ import { Tip } from "../ui";
 import { currentLocale, translate } from "../../lib/core/context.js";
 import { formatCompactCost, formatExactCost } from "../../lib/core/cost-format.js";
 import { formatNumber as intlNumber } from "../../lib/core/intl-format.js";
+import { CARD_CORNERS } from "../corners";
 
 /** The console's strings (lib/i18n), typed for TSX: `t("stats_title")`, `t("x", { count })`. */
 export const t = translate as unknown as (key: string, vars?: Record<string, unknown>) => string;
@@ -135,7 +136,7 @@ export function ObserveSection(props: {
     <View
       // Vue's boxed AppSection: paper at 70%, the page's grid faintly through it (unless the caller
       // gives it a fill of its own).
-      class={`${boxed() ? `rounded-(--radius) border border-line-soft ${/(^|\s)bg-/.test(props.class ?? "") ? "" : "bg-paper/70"}` : ""} ${props.class ?? ""}`}
+      class={`${boxed() ? `${CARD_CORNERS} border border-line-soft ${/(^|\s)bg-/.test(props.class ?? "") ? "" : "bg-paper/70"}` : ""} ${props.class ?? ""}`}
       style={{ ...props.style, rowGap: boxed() ? 0 : gap() }}
       testID={props.testID}
     >

@@ -17,6 +17,7 @@ import { DirtyDot, PaneHead, SettingField, SettingToggleRow } from "../../../com
 import { CHANNEL_LOGOS } from "../constants";
 import type { SettingsStore } from "../store";
 import { t } from "../i18n";
+import { CARD_CORNERS } from "../../../components/corners";
 
 type Field =
   | { kind: "secret"; field: string; key: string; note?: boolean }
@@ -141,14 +142,14 @@ function ChannelTile(props: { s: SettingsStore; item: { id: string; titleKey: st
         selected={active()}
         accessibilityLabel={t(props.item.titleKey)}
         testID={`settings-channel-${props.item.id}`}
-        class={`size-36 items-center justify-center gap-2.5 overflow-hidden rounded-(--radius) border bg-card p-3 transition-colors duration-120 focus:outline-2 focus:outline-blue ${
+        class={`size-36 items-center justify-center gap-2.5 overflow-hidden ${CARD_CORNERS} border bg-card p-3 transition-colors duration-120 focus:outline-2 focus:outline-blue ${
           active() || hovered() ? "border-blue/45" : "border-line"
         }`}
       >
         <Image
           src={CHANNEL_LOGOS[props.item.id]}
           accessibilityElementsHidden
-          class={lit() ? "" : "grayscale"}
+          class={`overflow-hidden ${lit() ? "" : "grayscale"}`}
           style={{ width: 44, height: 44, opacity: props.item.configured ? 1 : hovered() ? 0.8 : 0.45 }}
         />
         <Text class="max-w-full text-center text-xs leading-[16.2px] text-subtle">{t(props.item.titleKey)}</Text>

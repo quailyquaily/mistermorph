@@ -61,7 +61,7 @@ export function SettingsAppPanel() {
               <Image
                 src={current().image || appLogo}
                 accessibilityElementsHidden
-                class="rounded-[14px] border border-line/70 bg-paper"
+                class="overflow-hidden rounded-[14px] border border-line/70 bg-paper"
                 style={{ width: 56, height: 56 }}
               />
               <View class="min-w-0 flex-1 gap-1">

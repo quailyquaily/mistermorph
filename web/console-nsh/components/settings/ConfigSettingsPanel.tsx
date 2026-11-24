@@ -16,6 +16,7 @@ import { LoadingLine, RestartTag, SettingSwitch, SettingsCard } from "../setting
 import { EnvManagedField } from "./EnvManagedField";
 import { SecretInput } from "./SecretInput";
 import { jsonTextError, SettingJson } from "./SettingJson";
+import { CARD_CORNERS } from "../corners";
 import {
   SettingBytes,
   SettingChoices,
@@ -549,7 +550,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
         <LoadingLine label="Loading" />
       </If>
       <If when={validationError()}>
-        <View class="rounded-(--radius) border border-danger bg-card px-3 py-2" role="alert">
+        <View class={`${CARD_CORNERS} border border-danger bg-card px-3 py-2`} role="alert">
           <Text class="text-sm text-danger">{validationError()}</Text>
         </View>
       </If>

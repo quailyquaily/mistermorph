@@ -5,6 +5,7 @@ import { shadowColor } from "../solidLook";
 import { Button, Icon } from "../ui";
 import { MOTION_EASE, MOTION_NORMAL, motionMs } from "../motion";
 import { t } from "../../pages/settings/i18n";
+import { CARD_CORNERS } from "../corners";
 
 /**
  * The bar floats at the bottom of the window (`position: fixed`), centred, over the section and
@@ -58,7 +59,7 @@ export function SettingsSaveBar(props: {
           role="region"
           accessibilityLabel={t("settings_save_bar_label")}
           testID="settings-save-bar"
-          class="w-full max-w-160 flex-row items-center gap-3 rounded-(--radius) border border-line bg-card px-3.5 py-2.5"
+          class={`w-full max-w-160 flex-row items-center gap-3 ${CARD_CORNERS} border border-line bg-card px-3.5 py-2.5`}
           style={{ ...motion.style, boxShadow: `0 6px 24px ${shadowColor(0.1)}` }}
         >
           <View class={`size-[7px] rounded-[1px] ${props.failed ? "bg-danger" : "bg-status-pending"}`} accessibilityElementsHidden />
@@ -114,7 +115,7 @@ export function SettingsRestartBanner(props: {
           the content scrolls under it. */}
       <View
         testID="settings-restart-banner"
-        class="flex-row flex-wrap items-center gap-3 border border-warn/45 px-3.5 py-2.5"
+        class={`${CARD_CORNERS} flex-row flex-wrap items-center gap-3 border border-warn/45 px-3.5 py-2.5`}
         style={{ boxShadow: `0 2px 8px ${shadowColor(0.08)}`, position: "sticky", top: 8 + (props.topInset ?? 0), zIndex: 5, backgroundColor: `color-mix(in srgb, ${token("warn")} 10%, ${token("paper")})` }}
       >
         <View class={props.restarting ? "animate-spin" : ""} style={{ animationDuration: 800 }}>

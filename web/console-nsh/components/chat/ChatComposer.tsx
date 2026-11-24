@@ -271,7 +271,7 @@ export function ChatComposer(props: ChatComposerProps) {
   // A profile's mark, in the menu and on the picker: its model vendor's logo, else a chip.
   const profileGlyph = (profile: ComposerProfileItem | null | undefined) => (
     <If when={profile?.image} else={<Icon name="PhCpu" size={14} color="subtle" />}>
-      <Image src={profile?.image ?? ""} accessibilityElementsHidden style={{ width: 14, height: 14 }} />
+      <Image class="overflow-hidden" src={profile?.image ?? ""} accessibilityElementsHidden style={{ width: 14, height: 14 }} />
     </If>
   );
   const profileTitle = () => {
@@ -639,7 +639,7 @@ export function ChatComposer(props: ChatComposerProps) {
         <Image
           src={ICONS.PhPaperPlaneTilt}
           accessibilityElementsHidden
-          class="absolute transition duration-[260ms]"
+          class="overflow-hidden absolute transition duration-[260ms]"
           style={{
             width: 14,
             height: 14,
@@ -652,7 +652,7 @@ export function ChatComposer(props: ChatComposerProps) {
         <Image
           src={ICONS.PhStop}
           accessibilityElementsHidden
-          class="absolute transition duration-[260ms]"
+          class="overflow-hidden absolute transition duration-[260ms]"
           style={{
             width: 14,
             height: 14,
@@ -840,7 +840,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <Icon name="PhMicrophone" size={14} color={voiceLook().tint} />
             </View>
             <View class="absolute inset-0 items-center justify-center" style={chamber(-1)}>
-              <Image src={ICONS.PhPaperPlaneTilt} accessibilityElementsHidden style={{ width: 14, height: 14, tintColor: token("primary-foreground") as string }} />
+              <Image class="overflow-hidden" src={ICONS.PhPaperPlaneTilt} accessibilityElementsHidden style={{ width: 14, height: 14, tintColor: token("primary-foreground") as string }} />
             </View>
           </View>
         </If>

@@ -54,6 +54,7 @@ import wechatLogo from "../../assets/images/channels/wechat.svg";
 import whatsappLogo from "../../assets/images/channels/whatsapp.svg";
 import blueskyLogo from "../../assets/images/channels/bluesky.svg";
 import xLogo from "../../assets/images/channels/x.svg";
+import { CARD_CORNERS } from "../../components/corners";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -681,7 +682,7 @@ export function OverviewPage() {
 
   function ReadoutCard(props: { readout: Readout; leader: "top" | "left"; short?: boolean }) {
     return (
-      <View class="relative w-full rounded-(--radius) border border-line-soft bg-card" testID="overview-readout">
+      <View class={`relative w-full ${CARD_CORNERS} border border-line-soft bg-card`} testID="overview-readout">
         <View
           accessibilityElementsHidden
           class={
@@ -710,7 +711,7 @@ export function OverviewPage() {
             <Each of={props.readout.channels} key={(channel) => channel.key}>
               {(channel) => (
                 <If when={channel().logo}>
-                  <Image
+                  <Image class="overflow-hidden"
                     src={channel().logo}
                     accessibilityLabel={channel().title}
                     tooltip={
@@ -772,7 +773,7 @@ export function OverviewPage() {
         onMouseEnter={() => hovered.set(props.row.endpoint_ref)}
         onMouseLeave={() => hovered.set("")}
         testID={`overview-node-${props.row.endpoint_ref}`}
-        class={`items-center gap-4 rounded-lg px-2 py-4 ${props.row.local ? "flex-col-reverse" : ""} ${props.row.connected ? "group" : ""}`}
+        class={`items-center gap-4 ${CARD_CORNERS} px-2 py-4 ${props.row.local ? "flex-col-reverse" : ""} ${props.row.connected ? "group" : ""}`}
         style={{ cursor: props.row.connected ? "pointer" : "default" }}
       >
         <If
@@ -881,7 +882,7 @@ export function OverviewPage() {
           onMouseEnter={() => hovered.set(ADD_KEY)}
           onMouseLeave={() => hovered.set("")}
           testID="overview-add"
-          class="group items-center gap-4 rounded-lg px-2 py-4"
+          class={`group items-center gap-4 ${CARD_CORNERS} px-2 py-4`}
           style={{ cursor: "pointer" }}
         >
           <View class="-m-1.75 rounded-full border-2 border-transparent p-1.25 transition-colors duration-150 group-hover:border-primary group-focus:border-primary">

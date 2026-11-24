@@ -13,6 +13,7 @@ import { openReentrantDialog } from "../../lib/core/reentrant-dialog.js";
 import { copyText, openExternal } from "../../lib/platform";
 import { Button, Spinner, Toggle } from "../ui";
 import { DialogShell, InlineNotice, t } from "./DialogShell";
+import { CARD_CORNERS } from "../corners";
 
 export const CODEX_USAGE_URL = "https://chatgpt.com/codex/settings/usage";
 export const PRO_USAGE_URL = "https://router.mistermorph.com/console/usage";
@@ -114,7 +115,7 @@ export function DeviceAuthDialogContent(props: DeviceAuthDialogContentProps) {
         <InlineNotice type="error" text={props.error ?? ""} testID="device-auth-error" />
       </If>
 
-      <View class="flex-row items-center gap-3 rounded-(--radius) border border-line-faint bg-card px-3 py-2.5">
+      <View class={`flex-row items-center gap-3 ${CARD_CORNERS} border border-line-faint bg-card px-3 py-2.5`}>
         <View class="flex-1 gap-0.5">
           <Text class="text-sm font-medium text-foreground">{tk(props.sessionKey)}</Text>
           <Text class="text-xs text-muted-foreground">{loggedIn() ? tk(props.statusReadyKey) : tk(props.statusNeedsLoginKey)}</Text>
@@ -136,7 +137,7 @@ export function DeviceAuthDialogContent(props: DeviceAuthDialogContentProps) {
       </If>
 
       <If when={props.loginSession}>
-        <View class="gap-3 rounded-(--radius) border border-line-faint bg-paper px-3 py-3">
+        <View class={`gap-3 ${CARD_CORNERS} border border-line-faint bg-paper px-3 py-3`}>
           <View class="gap-1">
             <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">
               {tk(props.userCodeKey || "settings_codex_auth_user_code")}

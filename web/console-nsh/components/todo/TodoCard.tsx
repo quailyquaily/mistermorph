@@ -8,6 +8,7 @@ import type { JSX } from "nsh";
 import { Text, View, windowSize } from "nsh";
 import { shadowColor } from "../solidLook";
 import { FadeText } from "../motion";
+import { CARD_CORNERS } from "../corners";
 
 /** AppSection's padding: 16, 12 under a 720 window. */
 export const cardPadding = () => (windowSize().width <= 720 ? 12 : 16);
@@ -38,7 +39,7 @@ export function TodoCard(props: {
     <View
       testID={props.testID}
       accessibilityLabel={props.accessibilityLabel}
-      class={`${props.panel ? "rounded-lg bg-card" : "rounded-(--radius) border border-line-soft bg-paper/70"} ${
+      class={`${props.panel ? `${CARD_CORNERS} bg-card` : `${CARD_CORNERS} border border-line-soft bg-paper/70`} ${
         props.fill ? "flex-1" : ""
       } ${props.class ?? ""}`}
       style={props.panel ? { boxShadow: panelShadow() } : undefined}

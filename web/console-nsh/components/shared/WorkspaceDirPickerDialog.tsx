@@ -15,6 +15,7 @@ import { hasFeature, isDesktop, pickDirectory } from "../../lib/platform";
 import { isMobile } from "../../lib/shell";
 import { createSlidingSelection, FadeText, SCROLLBAR } from "../motion";
 import { Button, Modal, Tabs, TextField, Tip, TipButton, Toggle } from "../ui";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -566,7 +567,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
               </If>
 
               {/* The browser (`.workspace-picker-browser`): a soft hairline on paper. */}
-              <View class="flex-1 overflow-hidden rounded-(--radius) border border-line-soft/85 bg-paper">
+              <View class={`flex-1 overflow-hidden ${CARD_CORNERS} border border-line-soft/85 bg-paper`}>
                 <If
                   when={!(loading() && rows().length === 0)}
                   else={<Text class="p-3.5 text-sm leading-[20.3px] text-muted-foreground">{t("chat_workspace_dialog_loading")}</Text>}
@@ -591,7 +592,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
                           testID={`workspace-row-${row().entry.path}`}
                           // `.chat-workspace-tree-entry`: a quiet row that takes a hairline and the
                           // plain hover fill; the chosen one a firmer line on a faint ink tint.
-                          class={`flex-row items-center gap-2 rounded-(--radius) border pb-[7px] pl-2 pr-2.5 pt-[7px] disabled:opacity-50 ${
+                          class={`flex-row items-center gap-2 ${CONTROL_CORNERS} border pb-[7px] pl-2 pr-2.5 pt-[7px] disabled:opacity-50 ${
                             selection() === text(row().entry.path)
                               ? "border-line bg-ink/10"
                               : "border-transparent hover:border-line-soft/75 hover:bg-hover"
@@ -599,7 +600,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
                           style={{ transitionProperty: "colors", transitionDuration: 180 }}
                         >
                           <View class="size-[18px] items-center justify-center">
-                            <Image
+                            <Image class="overflow-hidden"
                               src={workspaceTreeIcon(row().entry, row().expanded)}
                               accessibilityElementsHidden
                               style={{ width: 16, height: 16 }}

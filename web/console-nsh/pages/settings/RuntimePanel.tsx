@@ -98,39 +98,47 @@ export function formatCount(value: number) {
   return String(Math.trunc(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+/** A database's line in the ledger: its file and what it holds, each table once under it. */
+export type DatabaseGroup = {
+  file: string;
+  /** Its size, or its state when it has none to give (not created yet, unreadable). */
+  value: string;
+  /** `value` is a state in words, not a size. */
+  state: boolean;
+  /** What a screen reader hears for the file's line ("agent.db size"). */
+  label: string;
+  /** `state`: the count is unknown, said in words. */
+  tables: { key: string; name: string; value: string; state: boolean; label: string }[];
+};
+
 /**
- * The databases as ledger rows, each naming its file: a missing database is one line saying so; any
- * other has its size, then one line per counted table, named as "file · table" with its rows. An
- * unknown size or count says it is unavailable.
+ * The databases grouped by file: each names its file once, with its size beside it, then its counted
+ * tables under it by table name. A missing database, and one that cannot be read and has no size, is
+ * its file and that state, without tables. An unknown size or count says it is unavailable.
  */
-export function databaseRows(databases: DatabaseMetric[]) {
-  const rows: { key: string; label: string; value: string }[] = [];
-  for (const db of databases) {
-    if (db.status === "missing") {
-      rows.push({ key: `${db.file}:state`, label: db.file, value: t("runtime_db_missing") });
-      continue;
+export function databaseGroups(databases: DatabaseMetric[]): DatabaseGroup[] {
+  return databases.map((db) => {
+    if (db.status === "missing" || (db.status === "unavailable" && db.sizeBytes === null)) {
+      const state = t(db.status === "missing" ? "runtime_db_missing" : "runtime_db_unavailable");
+      return { file: db.file, value: state, state: true, label: db.file, tables: [] };
     }
-    if (db.status === "unavailable" && db.sizeBytes === null) {
-      rows.push({ key: `${db.file}:state`, label: db.file, value: t("runtime_db_unavailable") });
-      continue;
-    }
-    rows.push({
-      key: `${db.file}:size`,
-      label: t("runtime_db_size", { file: db.file }),
+    return {
+      file: db.file,
       value: db.sizeBytes === null ? t("runtime_db_unavailable") : formatBytes(db.sizeBytes),
-    });
-    for (const table of db.tables) {
-      rows.push({
+      state: db.sizeBytes === null,
+      label: t("runtime_db_size", { file: db.file }),
+      tables: db.tables.map((table) => ({
         key: `${db.file}:${table.name}`,
-        label: t("runtime_db_table", { file: db.file, table: table.name }),
+        name: table.name,
         value:
           table.rows === null
             ? t("runtime_db_rows_unknown")
             : t(table.rows === 1 ? "runtime_db_rows_one" : "runtime_db_rows_many", { count: formatCount(table.rows) }),
-      });
-    }
-  }
-  return rows;
+        state: table.rows === null,
+        label: t("runtime_db_table", { file: db.file, table: table.name }),
+      })),
+    };
+  });
 }
 
 function stringValue(value: unknown, fallback = "-") {
@@ -218,6 +226,54 @@ function Ledger(props: { rows: { key: string; label: string; value: string }[]; 
             <View selectable class={`min-w-0 ${isMobile() ? "flex-[3]" : "flex-[2]"}`}>
               <Text class="font-mono text-sm leading-normal tabular-nums text-foreground">{row().value}</Text>
             </View>
+          </View>
+        )}
+      </Each>
+    </View>
+  );
+}
+
+/**
+ * The databases as the ledger draws them, grouped: each file's line (its name in mono, its size or
+ * state in the value column), then its tables under it, a step in and closer together, by table name
+ * alone. Hairlines part the databases, not the tables. Each line still names its file to a screen reader.
+ */
+function DatabaseLedger(props: { groups: DatabaseGroup[]; testID?: string }) {
+  const labelCol = () => (isMobile() ? "flex-[2]" : "flex-1");
+  const valueCol = () => (isMobile() ? "flex-[3]" : "flex-[2]");
+  return (
+    <View testID={props.testID}>
+      <Each of={props.groups} key={(group) => group.file}>
+        {(group, index) => (
+          <View
+            class={`gap-1 py-2.5 ${index() === props.groups.length - 1 ? "" : "border-b border-line-soft"}`}
+            testID={`runtime-db-${group().file}`}
+          >
+            <View class="flex-row items-center gap-4" accessibilityLabel={`${group().label}: ${group().value}`}>
+              <Text class={`min-w-0 ${labelCol()} font-mono text-sm font-medium leading-normal text-foreground`}>{group().file}</Text>
+              <View selectable class={`min-w-0 ${valueCol()}`}>
+                <Text
+                  class={`text-sm leading-normal ${group().state ? "text-muted-foreground" : "font-mono tabular-nums text-foreground"}`}
+                >
+                  {group().value}
+                </Text>
+              </View>
+            </View>
+            <Each of={group().tables} key={(table) => table.key}>
+              {(table) => (
+                <View class="flex-row items-center gap-4" accessibilityLabel={`${table().label}: ${table().value}`}>
+                  {/* The step in is inside the column, so the counts stay under the size. */}
+                  <View class={`min-w-0 ${labelCol()}`}>
+                    <Text class="pl-3 font-mono text-xs leading-normal text-subtle">{table().name}</Text>
+                  </View>
+                  <View selectable class={`min-w-0 ${valueCol()}`}>
+                    <Text class={`text-xs leading-normal ${table().state ? "text-muted-foreground" : "font-mono tabular-nums text-subtle"}`}>
+                      {table().value}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </Each>
           </View>
         )}
       </Each>
@@ -359,7 +415,7 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
   ]);
   const databaseLedger = computed(() => {
     const databases = overview.runtime_databases as DatabaseMetric[] | null;
-    return databases ? databaseRows(databases) : null;
+    return databases ? databaseGroups(databases) : null;
   });
   const channelRows = computed(() =>
     CHANNELS.map((id) => ({
@@ -609,7 +665,7 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
                   <RuntimeEntry
                     id={item().key}
                     title={item().title}
-                    logo={<Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />}
+                    logo={<Image class="overflow-hidden" src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />}
                     status={{ tone: channelTone(item()), text: channelStatusText(item()) }}
                     tasks={item().running ? runningTasksText(runningTaskCount(overview.running_tasks, item().key)) : ""}
                     probe={parts.probe(() => `entry-${item().key}`)}
@@ -627,7 +683,7 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
                     <Each of={unconfiguredChannels()} key={(item) => item.key}>
                       {(item) => (
                         <View class="min-w-0 max-w-full flex-row items-center gap-2" {...parts.probe(() => `unconfigured-${item().key}`)}>
-                          <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />
+                          <Image class="overflow-hidden" src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />
                           <Text class="min-w-0 shrink text-sm text-subtle">{item().title}</Text>
                         </View>
                       )}
@@ -642,7 +698,7 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
         <View {...parts.probe(() => "metrics")}>
           <SettingsCard title={t("group_runtime")} list>
             <Ledger rows={runtimeMetrics()} columns={2} testID="runtime-metrics" />
-            {/* One column: a label names both the file and the table. */}
+            {/* One column: each database's file, then its tables under it. */}
             <View class="gap-1 border-t border-line-soft pb-1 pt-3" testID="runtime-databases" {...parts.probe(() => "databases")}>
               <GroupTitle text={t("runtime_databases")} />
               <If
@@ -654,7 +710,7 @@ export function RuntimePanel(props: { onPartLayout?: PartLayoutListener } = {}):
                 }
               >
                 <Text class="text-xs leading-normal text-muted-foreground">{t("runtime_databases_note")}</Text>
-                <Ledger rows={databaseLedger() || []} testID="runtime-database-rows" />
+                <DatabaseLedger groups={databaseLedger() || []} testID="runtime-database-rows" />
               </If>
             </View>
           </SettingsCard>

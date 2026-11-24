@@ -25,7 +25,7 @@ import {
 } from "../../components/knowledge/parts";
 import { createSlidingSelection, EdgeScroll, MOTION_EASE_CSS, MOTION_NORMAL, motionMs } from "../../components/motion";
 import { Button, Icon, MessageDialog, Modal, Page, SelectField, TextField, type IconName } from "../../components/ui";
-import { CONTROL_CORNERS, POPOVER_CORNERS } from "../../components/corners";
+import { CARD_CORNERS, CONTROL_CORNERS, cornersClass, nestedRadius, POPOVER_CORNERS, RADIUS } from "../../components/corners";
 import { currentLocale, endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -45,6 +45,9 @@ import { isMobile, markMobileDetail } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
 import { BarRoom, underBar } from "../../components/frame/glassBar";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
+
+/** A visibility choice inside its 8pt box: the box's corner, nested by its hairline and 2pt inset. */
+const VISIBILITY_SEGMENT_CORNERS = cornersClass(nestedRadius(RADIUS.control, 1 + 2));
 
 const VISIBILITIES = ["private", "conversation", "public"] as const;
 const TYPES = ["person", "feedback", "context", "reference"];
@@ -936,7 +939,7 @@ function SectionCard(props: { title: string; meta?: string; literal?: boolean; c
  * Sources banner of the journal. An amber mark and a mono caps label in brackets. */
 function Banner(props: { label: string; text: string; children?: JSX.Element }) {
   return (
-    <View role="alert" class="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-(--radius) border border-warn/45 bg-paper/70 px-3 py-2">
+    <View role="alert" class={`flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 ${CARD_CORNERS} border border-warn/45 bg-paper/70 px-3 py-2`}>
       <View class="size-[7px] rounded-[1px] bg-status-pending" />
       <Text class="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-status-pending">
         <Text class="opacity-45">[</Text>
@@ -1022,7 +1025,7 @@ function MemoryRow(props: {
         <View class={`gap-3.5 bg-hover-soft pb-4 pr-4 pt-1 ${stacked() ? "pl-4" : "pl-[136px]"}`}>
           <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
             <Text class="text-xs font-medium text-muted-foreground">{t("memories_who_may_hear")}</Text>
-            <View class="h-8 flex-row border border-line-soft bg-paper p-0.5" accessibilityLabel={t("memories_field_visibility")}>
+            <View class={`${CONTROL_CORNERS} h-8 flex-row border border-line-soft bg-paper p-0.5`} accessibilityLabel={t("memories_field_visibility")}>
               <Each of={[...VISIBILITIES]}>
                 {(value) => (
                   <BaseButton
@@ -1031,7 +1034,7 @@ function MemoryRow(props: {
                     disabled={props.busy}
                     accessibilityLabel={t(`memories_visibility_${value()}`)}
                     testID={`memory-visibility:${props.item.id}:${value()}`}
-                    class={`h-[26px] flex-row items-center gap-1.5 px-[11.2px] ${props.item.visibility === value() ? "bg-card" : ""}`}
+                    class={`h-[26px] flex-row items-center gap-1.5 px-[11.2px] ${VISIBILITY_SEGMENT_CORNERS} ${props.item.visibility === value() ? "bg-card" : ""}`}
                     style={{
                       boxShadow: props.item.visibility === value() ? `0 0 0 1px ${token("line")}` : "none",
                       transitionProperty: "colors, box-shadow",

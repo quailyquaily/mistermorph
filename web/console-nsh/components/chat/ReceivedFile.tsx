@@ -13,6 +13,7 @@ import { t } from "./i18n";
 import { SAVE_UNAVAILABLE } from "../../lib/platform";
 import { keyedState } from "./rowState";
 import { fetchConsoleBlob, saveConsoleFile } from "./files";
+import { CARD_CORNERS } from "../corners";
 
 /** How long the check shows after a save. */
 export const SAVED_MS = 2000;
@@ -141,7 +142,7 @@ export function ReceivedFile(props: {
   });
 
   return (
-    <View class="gap-2 rounded-(--radius) border border-line-faint bg-card p-3" accessibilityLabel={props.file?.name}>
+    <View class={`gap-2 ${CARD_CORNERS} border border-line-faint bg-card p-3`} accessibilityLabel={props.file?.name}>
       <View class="flex-row items-center gap-2">
         <Text class="flex-1 text-sm text-foreground line-clamp-1">{props.file?.name}</Text>
         <Button
@@ -162,7 +163,7 @@ export function ReceivedFile(props: {
           src={state().previewURL}
           accessibilityLabel={props.file?.name}
           onError={() => props.files.failPreview(key(), props.errorLabel)}
-          class="max-h-80 w-full rounded-(--radius)"
+          class="overflow-hidden max-h-80 w-full rounded-(--radius)"
           style={{ height: 240, objectFit: "contain" }}
         />
       </If>

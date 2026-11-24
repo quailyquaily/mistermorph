@@ -62,6 +62,17 @@ if [ "$all" -eq 1 ]; then
     cat "$logs/color-steps.log"
   fi
 fi
+# And every Image clipping its source (scripts/image-clip.test.mjs).
+if [ "$all" -eq 1 ]; then
+  if node --test scripts/image-clip.test.mjs >"$logs/image-clip.log" 2>&1; then
+    echo "ok    scripts/image-clip.test.mjs"
+  else
+    failed=$((failed + 1))
+    echo
+    echo "---- scripts/image-clip.test.mjs"
+    cat "$logs/image-clip.log"
+  fi
+fi
 # And the QR scanner's page (lib/qrScannerPage.js), which runs in a web view no test here opens:
 # against a browser made of fakes.
 if [ "$all" -eq 1 ]; then

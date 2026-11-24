@@ -52,6 +52,7 @@ import { BUBBLE_CLASS, BUBBLE_EDITING_CLASS, FILES_CLASS } from "./userBubble";
 import { fileIcon, SENT_FILE_PILL_CLASS } from "./filePill";
 import { boundsFrame, createPartProbe, type LayoutBounds, type PartFrame, type PartLayoutListener } from "../shared/partProbe";
 import { CHECK_CORNER_AT, CHECK_DRAW_MS, CHECK_SIZE, checkAction, checkDash, checkDashOffset, checkStroke } from "./copyCheck";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 
 export type HistoryItem = Record<string, any> & { id: string; role: string; text: string };
 
@@ -120,7 +121,7 @@ function Bubble(props: { system?: boolean; editing?: boolean; probe?: Record<str
     <If
       when={!props.system}
       else={
-        <View class="w-full max-w-[612px] self-center rounded-(--radius) border border-dashed border-line-faint px-3.5 pb-[11px] pt-2.5">
+        <View class={`w-full max-w-[612px] self-center ${CARD_CORNERS} border border-dashed border-line-faint px-3.5 pb-[11px] pt-2.5`}>
           {props.children}
         </View>
       }
@@ -177,7 +178,7 @@ function CopyButton(props: { copied: boolean; copySeq: number; label: string; on
       <Image
         src={ICONS.PhCopy}
         accessibilityElementsHidden
-        class="absolute transition duration-150"
+        class="overflow-hidden absolute transition duration-150"
         style={{ width: CHECK_SIZE, height: CHECK_SIZE, tintColor: token("muted-foreground") as string, opacity: props.copied ? 0 : 1 }}
       />
       {/* The check appears at once (its stroke is what moves) and fades when it expires; its test id
@@ -230,7 +231,7 @@ function EditButton(props: { editing: boolean; label: string; onPress: () => voi
         props.editing ? "bg-press opacity-100" : HOVER ? "opacity-0 group-hover:opacity-70" : "opacity-70"
       }`}
     >
-      <Image
+      <Image class="overflow-hidden"
         src={ICONS.PhPencilSimple}
         accessibilityElementsHidden
         style={{ width: CHECK_SIZE, height: CHECK_SIZE, tintColor: token(props.editing ? "blue" : "muted-foreground") as string }}
@@ -505,7 +506,7 @@ export function ChatHistoryItem(props: {
       </If>
       <If when={approvalVisible()}>
         <View
-          class={`gap-2 rounded-(--radius) border bg-card p-3 ${approvalPending() ? "border-warn" : "border-line-faint"}`}
+          class={`gap-2 ${CARD_CORNERS} border bg-card p-3 ${approvalPending() ? "border-warn" : "border-line-faint"}`}
           accessibilityLabel={approvalHeading()}
           testID="chat-approval"
         >
@@ -535,7 +536,7 @@ export function ChatHistoryItem(props: {
                 {(param) => (
                   <View class={param().command || param().multiline ? "gap-1" : "flex-row gap-2"}>
                     <Text class="font-mono text-xs text-muted-foreground">{param().name}</Text>
-                    <View selectable class={param().command || param().multiline ? "rounded-(--radius) bg-paper p-2" : "flex-1"}>
+                    <View selectable class={param().command || param().multiline ? `${CONTROL_CORNERS} bg-paper p-2` : "flex-1"}>
                       <Text class="font-mono text-xs text-foreground">{param().value}</Text>
                     </View>
                   </View>

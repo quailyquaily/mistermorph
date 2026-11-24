@@ -70,7 +70,7 @@ function LedgerTable(props: { group: LedgerGroup; models: Totals[]; scope: strin
               >
                 <View class="size-5.5 items-center justify-center overflow-hidden rounded-full border border-line-soft bg-white p-0.75">
                   <If when={modelVendorMeta(model().model).icon} else={<Icon name="PhCpu" size={13} color="subtle" />}>
-                    <Image
+                    <Image class="overflow-hidden"
                       src={modelVendorMeta(model().model).icon as any}
                       accessibilityLabel={modelVendorMeta(model().model).label}
                       style={{ width: 14, height: 14, objectFit: "contain" }}
