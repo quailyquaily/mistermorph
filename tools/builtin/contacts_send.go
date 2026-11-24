@@ -80,7 +80,7 @@ func (t *ContactsSendTool) Description() string {
 		To send a file, pass its path; message_text becomes an optional caption. One file per call, at most 20 MiB (64 MiB to Agent Link agents on a route that streams files).
 		Files can be sent on Telegram, Slack, Lark, Discord, Mixin, WeChat, WhatsApp and Agent Link (at most 2 MiB there when the route does not stream files), not LINE.
 		The file must be under file_cache_dir or workspace_dir; copy a file from anywhere else into file_cache_dir first.
-		NEVER send message to people who is talking with you, or the people in the chat history.`
+		NEVER send a text message to the person who is talking with you, or to the people in the chat history: answer in the conversation instead. A file (path, caption optional) may be sent to the person talking with you.`
 }
 
 func (t *ContactsSendTool) ParameterSchema() string {
@@ -182,10 +182,12 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 	if err != nil {
 		return "", err
 	}
-	if policy.blockCurrentConversation && len(contactIDs) == 1 {
+	// A text message to the person this conversation is with would repeat the task's own reply,
+	// so it is refused; a file is not something the reply carries, so it may go to them.
+	if policy.blockCurrentConversation && file == nil && len(contactIDs) == 1 {
 		if runtimeCtx, ok := ContactsSendRuntimeContextFromContext(ctx); ok {
 			if field, target, blocked := contactsSendBlockedTarget(contactIDs[0], chatID, runtimeCtx); blocked {
-				return "", fmt.Errorf("%s blocked: %s %q matches current conversation counterpart", policy.toolName, field, target)
+				return "", contactsSendCurrentConversationError(policy.toolName, field, target)
 			}
 		}
 	}
@@ -287,7 +289,7 @@ func executeContactsSendResolved(
 	if err != nil {
 		return "", err
 	}
-	if policy.blockCurrentConversation {
+	if policy.blockCurrentConversation && file == nil {
 		if runtimeCtx, ok := ContactsSendRuntimeContextFromContext(ctx); ok {
 			if err := checkContactsSendPlanBlocked(plan, runtimeCtx, policy.toolName); err != nil {
 				return "", err
@@ -1037,11 +1039,17 @@ func checkContactsSendPlanBlocked(plan []contactsSendPlanItem, runtimeCtx Contac
 	for _, item := range plan {
 		for _, contactID := range item.RecipientContactIDs {
 			if field, target, blocked := contactsSendBlockedTarget(contactID, item.ChatID, runtimeCtx); blocked {
-				return fmt.Errorf("%s blocked: %s %q matches current conversation counterpart", toolName, field, target)
+				return contactsSendCurrentConversationError(toolName, field, target)
 			}
 		}
 	}
 	return nil
+}
+
+// contactsSendCurrentConversationError refuses a text message to the current conversation's
+// counterpart and says what to do instead.
+func contactsSendCurrentConversationError(toolName, field, target string) error {
+	return fmt.Errorf("%s blocked: %s %q matches current conversation counterpart; a text message to them would repeat your reply, so answer in this conversation instead, or pass path to send them a file", toolName, field, target)
 }
 
 func parseContactsSendChatID(params map[string]any) (string, error) {

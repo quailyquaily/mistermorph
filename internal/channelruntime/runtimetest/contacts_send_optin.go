@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,8 +17,10 @@ import (
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
+	"github.com/quailyquaily/mistermorph/internal/livesend"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -83,8 +86,9 @@ type PublicThreadRun func(t testing.TB, deps depsutil.CommonDependencies, text s
 
 // CheckPublicThreadContactsSendOptIn checks that run keeps a public thread's contacts_send opt-in
 // with tool search on: without $contacts_send, contacts_send can be neither seen, found nor called;
-// with it, the task can message Ann but still not the post's author, authorContactID (a public
-// reply is the only answer to the author). Messages go to a fake Telegram Bot API.
+// with it, the task can message Ann but still not send the post's author, authorContactID, a text
+// message (a public reply is the only answer to the author); a file to the author gets past that
+// block. Messages go to a fake Telegram Bot API.
 func CheckPublicThreadContactsSendOptIn(t *testing.T, run PublicThreadRun, authorContactID string) {
 	t.Helper()
 	channelRun := func(t testing.TB, deps depsutil.CommonDependencies, text string) error { return run(t, deps, text) }
@@ -116,13 +120,45 @@ func CheckPublicThreadContactsSendOptIn(t *testing.T, run PublicThreadRun, autho
 	})
 	t.Run("public post with $contacts_send to its author", func(t *testing.T) {
 		got := attemptWithDeps(t, channelRun, "$contacts_send message me privately", authorContactID)
-		if !strings.Contains(got.sendResult, "contacts_send blocked") || !strings.Contains(got.sendResult, "current conversation counterpart") {
+		if !strings.Contains(got.sendResult, "contacts_send blocked") || !strings.Contains(got.sendResult, "current conversation counterpart") || !strings.Contains(got.sendResult, "pass path to send them a file") {
 			t.Fatalf("contacts_send to the post's author = %q, want blocked", got.sendResult)
 		}
 		if len(got.delivered) != 0 {
 			t.Fatalf("contacts_send to the post's author delivered %v", got.delivered)
 		}
 	})
+	// A file is not blocked: it goes to the author's own route, the network's direct messages.
+	// Bluesky and X direct messages cannot carry files, and no such runtime runs in the test, so
+	// the send fails there, past the current-conversation block.
+	t.Run("public post with $contacts_send sends its author a file", func(t *testing.T) {
+		author, channel := publicThreadAuthor(t, authorContactID)
+		got := attemptSend(t, channelRun, "$contacts_send send me the report", sendCall{to: authorContactID, file: true, contacts: []contacts.Contact{author}})
+		if strings.Contains(got.sendResult, "blocked") {
+			t.Fatalf("a file to the post's author = %q, want it past the current-conversation block", got.sendResult)
+		}
+		if want := channel + ": " + livesend.ErrNotRunning.Error(); !strings.Contains(got.sendResult, want) {
+			t.Fatalf("a file to the post's author = %q, want the author's %s route to be tried (%q)", got.sendResult, channel, want)
+		}
+		if len(got.delivered) != 0 {
+			t.Fatalf("a file to the post's author went to Telegram: %v", got.delivered)
+		}
+	})
+}
+
+// publicThreadAuthor is the contact of a Bluesky or X post's author, authorContactID, and its
+// channel.
+func publicThreadAuthor(t *testing.T, authorContactID string) (contacts.Contact, string) {
+	t.Helper()
+	contact := contacts.Contact{ContactID: authorContactID, Kind: contacts.KindHuman, ContactNickname: "Stranger"}
+	switch {
+	case strings.HasPrefix(authorContactID, "bluesky_user:"):
+		contact.Channel, contact.BlueskyUserID = contacts.ChannelBluesky, strings.TrimPrefix(authorContactID, "bluesky_user:")
+	case strings.HasPrefix(authorContactID, "x_user:"):
+		contact.Channel, contact.XUserID = contacts.ChannelX, strings.TrimPrefix(authorContactID, "x_user:")
+	default:
+		t.Fatalf("author %q is neither a Bluesky nor an X user", authorContactID)
+	}
+	return contact, contact.Channel
 }
 
 // annContactID is the contact the checks try to message.
@@ -156,12 +192,32 @@ func attemptContactsSendTo(t *testing.T, run ChannelRun, text string, group bool
 // attemptWithDeps runs text through run with dependencies whose model messages contactID.
 func attemptWithDeps(t *testing.T, run func(t testing.TB, deps depsutil.CommonDependencies, text string) error, text string, contactID string) contactsSendAttempt {
 	t.Helper()
+	return attemptSend(t, run, text, sendCall{to: contactID})
+}
+
+// sendCall is the contacts_send call the model makes: to the contact to, with a file from
+// file_cache_dir when file is set (and a text message otherwise). contacts are added to Ann.
+type sendCall struct {
+	to       string
+	file     bool
+	contacts []contacts.Contact
+}
+
+// attemptSend runs text through run with dependencies whose model makes call.
+func attemptSend(t *testing.T, run func(t testing.TB, deps depsutil.CommonDependencies, text string) error, text string, call sendCall) contactsSendAttempt {
+	t.Helper()
 	stateDir := t.TempDir()
 	contactsDir := filepath.Join(stateDir, "contacts")
+	cacheDir := t.TempDir() // file_cache_dir; never under the state dir, which is not sent from
+	if err := os.WriteFile(filepath.Join(cacheDir, "report.txt"), []byte("the report"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	store := contacts.NewStoreInStateDir(stateDir, contactsDir)
 	ann := contacts.Contact{ContactID: annContactID, Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, ContactNickname: "Ann", TGUserID: 1001, TGPrivateChatID: 1001}
-	if err := store.PutContact(context.Background(), ann); err != nil {
-		t.Fatalf("PutContact() error = %v", err)
+	for _, contact := range append([]contacts.Contact{ann}, call.contacts...) {
+		if err := store.PutContact(context.Background(), contact); err != nil {
+			t.Fatalf("PutContact(%s) error = %v", contact.ContactID, err)
+		}
 	}
 
 	var mu sync.Mutex
@@ -178,7 +234,7 @@ func attemptWithDeps(t *testing.T, run func(t testing.TB, deps depsutil.CommonDe
 
 	// The runtime's static tools as BuildGenerationDependencies wires them, with contacts_send
 	// enabled and delivering to the fake Bot API.
-	cfg := toolsutil.StaticRegistryConfig{ContactsSend: toolsutil.StaticContactsSendConfig{
+	cfg := toolsutil.StaticRegistryConfig{Common: toolsutil.StaticCommonConfig{PathRoots: pathroots.New("", cacheDir, stateDir)}, ContactsSend: toolsutil.StaticContactsSendConfig{
 		Enabled:          true,
 		ContactsDir:      contactsDir,
 		StateDir:         stateDir,
@@ -188,7 +244,7 @@ func attemptWithDeps(t *testing.T, run func(t testing.TB, deps depsutil.CommonDe
 	}}
 	base := tools.NewRegistry()
 	toolsutil.RegisterStaticTools(base, cfg, nil, nil)
-	client := &optInClient{to: contactID}
+	client := &optInClient{to: call.to, file: call.file}
 	route := llmutil.ResolvedRoute{ClientConfig: llmconfig.ClientConfig{Provider: "openai", Model: "gpt-5.2"}}
 	deps := depsutil.CommonDependencies{
 		Logger:          func() (*slog.Logger, error) { return slog.New(slog.NewTextHandler(io.Discard, nil)), nil },
@@ -239,11 +295,12 @@ func attemptWithDeps(t *testing.T, run func(t testing.TB, deps depsutil.CommonDe
 	return out
 }
 
-// optInClient tries to message to (Ann unless a check says otherwise): it calls contacts_send when
-// it sees it, searches for it first when it does not but tool_search is offered, and calls it after
-// the search either way.
+// optInClient tries to message to (Ann unless a check says otherwise), or to send it file_cache_dir's
+// report.txt when file is set: it calls contacts_send when it sees it, searches for it first when
+// it does not but tool_search is offered, and calls it after the search either way.
 type optInClient struct {
 	to       string
+	file     bool
 	mu       sync.Mutex
 	requests []llm.Request
 	searched bool
@@ -262,7 +319,11 @@ func (c *optInClient) Chat(_ context.Context, req llm.Request) (llm.Result, erro
 		return llm.Result{ToolCalls: []llm.ToolCall{{ID: "search", Name: "tool_search", Arguments: map[string]any{"query": "contacts_send"}}}}, nil
 	default:
 		c.sent = true
-		return llm.Result{ToolCalls: []llm.ToolCall{{ID: "send", Name: "contacts_send", Arguments: map[string]any{"contact_id": c.to, "message_text": "The build is green."}}}}, nil
+		args := map[string]any{"contact_id": c.to, "message_text": "The build is green."}
+		if c.file {
+			args = map[string]any{"contact_id": c.to, "path": "file_cache_dir/report.txt"}
+		}
+		return llm.Result{ToolCalls: []llm.ToolCall{{ID: "send", Name: "contacts_send", Arguments: args}}}, nil
 	}
 }
 
