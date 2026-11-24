@@ -41,7 +41,8 @@ func (s *Collector) HandleEvent(ctx context.Context, event agent.Event) {
 	}
 	if event.ToolName == "write_file" {
 		path, _ := event.Args["path"].(string)
-		_, resolved, err := builtin.ResolveWritePath(s.roots, path)
+		// The event's context carries the run's workspace, which workspace_use may have moved.
+		_, resolved, err := builtin.ResolveWritePath(pathroots.Resolve(ctx, s.roots), path)
 		if err == nil {
 			key := event.RunID + ":" + event.ActivityID
 			switch event.Kind {

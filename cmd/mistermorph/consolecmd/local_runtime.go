@@ -2774,7 +2774,19 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 		ConversationKey: job.ConversationKey,
 		TopicID:         job.TopicID,
 	})
-	ctx = pathroots.WithWorkspaceDir(ctx, job.WorkspaceDir)
+	// The owner's own chat runs may switch workspace for the rest of the run (workspace_use);
+	// every other run works in its topic's workspace.
+	ownerRun := consoleOwnerChatRun(job)
+	var workspaceSwitch *pathroots.WorkspaceSwitch
+	if ownerRun {
+		workspaceSwitch = pathroots.NewWorkspaceSwitch(job.WorkspaceDir)
+		ctx = pathroots.WithWorkspaceSwitch(ctx, workspaceSwitch)
+		if strings.TrimSpace(job.ResumeApprovalID) == "" {
+			r.recordWorkspaceUse(job.WorkspaceDir)
+		}
+	} else {
+		ctx = pathroots.WithWorkspaceDir(ctx, job.WorkspaceDir)
+	}
 	fileCacheDir := consoleFileCacheDir(generation.reader)
 	validatedFileReferences, err := validateConsoleFileReferences(
 		job.FileReferences,
@@ -2932,6 +2944,9 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 			promptprofile.AppendWakeSignalBlock(spec, job.WakeSignal.Normalize())
 		}
 		promptprofile.AppendConsoleRuntimeBlocks(spec)
+		if ownerRun {
+			spec.Blocks = append(spec.Blocks, ownerToolsPromptBlock())
+		}
 	}
 	reactTool := newConsoleMessageReactTool(r.store, r.streamHub, job)
 	reg := bundle.taskRuntime.BaseRegistry.Clone()
@@ -2944,6 +2959,13 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	for _, tool := range r.skillInstallTools(generation, task) {
 		if err := reg.Replace(tool); err != nil {
 			return nil, nil, err
+		}
+	}
+	if ownerRun {
+		for _, tool := range r.ownerTools(generation, job, workspaceSwitch) {
+			if err := reg.Replace(tool); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 	installOnly := skillInstallOnlyTask(generation, task)

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
@@ -44,7 +45,8 @@ func (t *consoleSendFileTool) Execute(ctx context.Context, params map[string]any
 	var dir string
 	switch dirName {
 	case "workspace_dir":
-		dir = t.workspaceDir
+		// The run's workspace: the topic's, or the one the run switched to (workspace_use).
+		dir = pathroots.Resolve(ctx, pathroots.New(t.workspaceDir, "", "")).WorkspaceDir
 	case "file_cache_dir":
 		dir = t.cacheDir
 	default:

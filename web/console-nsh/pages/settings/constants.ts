@@ -78,7 +78,22 @@ export interface ToolChannel {
 // Keep in step with what the runtimes register and with the schema catalog
 // (internal/toolschema, cmd/mistermorph/consolecmd/tool_schemas.go).
 export const TOOL_CHANNELS: ToolChannel[] = [
-  { id: "console", title: "Console", icon: "PhAppWindow", tools: ["send_file", "message_react", "ask_user", "skill_install_preview", "skill_install"] },
+  {
+    id: "console",
+    title: "Console",
+    icon: "PhAppWindow",
+    tools: [
+      "send_file",
+      "message_react",
+      "ask_user",
+      "skill_install_preview",
+      "skill_install",
+      "workspace_list",
+      "workspace_use",
+      "topic_search",
+      "topic_read",
+    ],
+  },
   { id: "telegram", title: "Telegram", logo: telegramLogo, tools: ["send_file", "send_photo", "send_voice", "message_react", "ask_user"] },
   { id: "slack", title: "Slack", logo: slackLogo, tools: ["send_file", "message_react", "ask_user"] },
   { id: "lark", title: "Lark", logo: larkLogo, tools: ["send_file", "send_photo", "send_voice", "message_react"] },
@@ -97,6 +112,11 @@ export const TOOL_CHANNEL_ROWS: { id: string; icon: IconName }[] = [
   { id: "ask_user", icon: "PhQuestion" },
   { id: "skill_install_preview", icon: "PhEye" },
   { id: "skill_install", icon: "PhDownloadSimple" },
+  // The owner's own chat runs: other workspaces and topics (internal/ownertools).
+  { id: "workspace_list", icon: "PhFolder" },
+  { id: "workspace_use", icon: "PhFolderOpen" },
+  { id: "topic_search", icon: "PhMagnifyingGlass" },
+  { id: "topic_read", icon: "PhChats" },
 ];
 
 export const MANAGED_RUNTIME_ITEMS = [

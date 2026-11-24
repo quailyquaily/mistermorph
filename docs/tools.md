@@ -24,6 +24,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `send_voice`, `send_photo`, `send_file`: runtime-injected, depend on active Telegram API context/chat metadata.
   - `message_react`: runtime-injected in Telegram and Slack runtimes; params/context differ by channel.
   - `memory_save`, `memory_search`, `memory_forget`, `journal_search`, `journal_read`: registered for a top-level run that has an audience when `memories.enabled` (default on). `memory_save` is always visible; the others are deferred and found with `tool_search`. See [Memories](./memories.md#tools).
+  - `workspace_list`, `workspace_use`, `topic_search`, `topic_read`: the Console owner's own chat runs only (not TODO runs, Agent Link messages, channel runtimes or subtasks). Deferred, found with `tool_search` when it is on. See [Other topics and workspaces](#other-topics-and-workspaces-console).
   - `skill_install_preview`, `skill_install`: Console only. A task that names one with `$` (the Skills page's Add skill does) gets it visible and runs with only the install tools. With `tools.tool_search.enabled` (default on), every other Console task gets both as deferred tools, found with `tool_search`. `skill_install` always asks for approval. See [Console skills page](./feat/feat_20260926_console_skills_page.md#41-installing-is-a-task).
 
 ### 2) ASCII architecture
@@ -424,6 +425,26 @@ Returns `status` (`created` or `replaced`), `id`, `subject`, `name`, `visibility
 `journal_search`: `query`, `since` and `until` (RFC 3339 or `YYYY-MM-DD`), `domain`, `limit` (1–100, default 20). Returns `events` (`seq`, `id`, `time`, `domain`, `type`, `task_id`, `text` excerpt) and `has_more`. The owner searches every event; anyone else only their own conversation's.
 
 `journal_read`: `seq`. Returns the event with its payload, cut at 8 KiB (`truncated`).
+
+## Other topics and workspaces (Console)
+
+Purpose: let the owner's Console chat reach past its own topic: other workspaces and other topics. Only the Console owner's own chat runs get these tools; each call is refused from any other run, audience or subtask. See [Console](./console.md#other-topics-and-workspaces).
+
+`workspace_list`: `limit` (1–50, default 20). Returns `workspaces` (`path`, `display` with `~`, `exists`, `last_used`, `kinds` from `attached`/`default`/`recent`, the attached `topics` with `id` and `title` (at most 10, `topics_more`), `current` for the one the task uses now, `topic_workspace` for the topic's own) and `has_more`. Read-only.
+
+`workspace_use`:
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `path` | `string` | Yes | None | A workspace from `workspace_list` or a folder inside one, or a folder the user named in this message (absolute or `~/`). A relative path is taken from the workspace in use. |
+
+Switches the running task's workspace for the rest of the task; the topic's attachment does not change. Returns `workspace_dir`, `display`, `activity` (`Using ~/proj/api`), `topic_workspace`, `is_topic_own` and a `note`. A missing, unreadable, unknown or denied folder (`tools.read_file.deny_paths`, protected state files, the state folder, also through symlinks) fails and leaves the workspace as it was. The first `write_file`, `bash`, `powershell`, `coder`, `spawn`, `image_generate` or `image_edit` call in a workspace other than the topic's asks for approval, once per workspace in the task; reads do not. A write or command after `workspace_use` in the same step, checked before the switch, is not run and says why; the model calls it again and the user is asked. Codemode scripts cannot call it.
+
+`topic_search`: `query` (every word must appear in the title, tags, the user's messages or the replies; omit to list), `tag`, `limit` (1–30, default 10). Returns `topics` (`id`, `title`, `kind` (`topic`, `todo`, `agent_link` or `awareness`), `tags`, `last_activity`, `workspace`, `workspace_source`, `matched_in`, `excerpt`, `excerpt_task_id`), most recently active first, and `has_more`; `partial` when it stopped after reading 20,000 messages.
+
+`topic_read`: `topic_id` (required), `cursor` (`next_cursor` from the previous page), `limit` (1–20, default 5). Returns `topic` (`id`, `title`, `kind`, `tags`, `last_activity`, `workspace`, `workspace_source`), `turns` newest first (`task_id`, `time`, `status`, `message` up to 2,000 characters, `reply` up to 4,000, `error`, attachment names in `files`, referenced file names in `referenced_files`, `*_truncated` flags) and `next_cursor` while older turns remain.
+
+Both topic tools' results reach the model as untrusted tool output, like `read_file`'s.
 
 ## `todo_list`
 
