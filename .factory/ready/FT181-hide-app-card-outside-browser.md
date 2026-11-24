@@ -38,3 +38,14 @@ Not checked: No manual UI inspection in a real browser, desktop app or Android d
 Installs: None; no manifest or lockfile changes. Coder reported an out-of-scope local memory note in its CLI memory directory and task output under /tmp/claude-995; these were not committed. The /tmp entry was recorded for owner-confirmed cleanup, not deleted. Temporary test HOME/cache isolation was used except that Go read the existing shared module cache with downloads disabled.
 
 Move: new/ → review/; round 1. Awaiting review.
+
+## factory · review · 2026-11-24 22:55
+head: c722704961e3c128cebf8d140485328433cc0f15
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (base/merge-base 7c405d1b771e52fe87bd0934d6ff231ea0fb4542), all nine changed files. No findings. Browser predicate, conditional rendering with no placeholder, search exclusion, runtime initialization and locale cleanup checked.
+- Required Go gate passed: gofmt clean, go vet ./..., go test ./... (168 packages ok). nsh check passed. Required concurrent Console runner passed: 164 files, 0 failed, 352 seconds; six initial parallel failures passed the runner's isolated retries. Extra core Node tests passed: 313/313.
+- No installs, source edits, commits, or manifest/lockfile changes. Throwaway HOME/XDG and build caches used; the pinned shared Go module cache was read with downloads disabled.
+- Not manually checked in browser, desktop or Android/iOS. No visual layout measurement; no iOS-specific test or phone-width pull-to-reveal search test. Headless regression coverage includes browser secure/insecure, desktop, Android and tablet paths.
+- CLI background-task artifacts were reported outside the run directory in the shared temporary area and recorded for owner-confirmed cleanup; not deleted.
+- Move: review/ → ready/. Awaiting ship.
