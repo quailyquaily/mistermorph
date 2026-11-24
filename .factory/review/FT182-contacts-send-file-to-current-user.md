@@ -1,3 +1,7 @@
+---
+branch: factory/FT182-contacts-send-file-to-current-user
+round: 1
+---
 # Let contacts_send send a file to the person in the current conversation
 
 ## factory · 2026-11-24 22:26
@@ -15,3 +19,21 @@ Acceptance criteria:
 - `go test ./tools/builtin/... ./internal/channelruntime/...` pass, with new cases: a file to the current counterpart by contact_id and by chat_id is sent; a batch including the counterpart with a file is sent; a text-only send to the counterpart is still refused with the new message.
 - The existing tests that expect the block (`tools/builtin/contacts_send_test.go:127`, `:145`, the opt-in runtime test) still hold for text-only sends.
 - `go vet ./...` and `go test ./...` pass.
+
+## factory · plan · 2026-11-24 23:00
+Behaviour: A successfully parsed file bypasses current-conversation blocking for single and batch sends, by contact_id or chat_id, with or without a caption. Text-only sends remain blocked with guidance to reply normally or pass path. Invalid files fail existing validation; public-post opt-in remains required.
+
+Scope: contacts_send guard sites, error, description and docs, builtin delivery regressions and social-runtime regressions. No runtime forbidden-target changes, agent_send behaviour changes, new channel capabilities or UI changes.
+
+Decisions: use parsed file != nil, not the raw path, for the exemption. Preserve the counterpart-identifying error text. Unsupported social file delivery must reach its existing channel error, never bypass channel restrictions.
+
+Checking: real fake-API file delivery for contact_id/chat_id and batches, captions/no captions, invalid/empty path, text/base64 refusal, and social-author file guard bypass. Run focused packages, gofmt, vet and full suite.
+
+## factory · 2026-11-24 23:00
+Built e6d2dadbd20c1e3bd0a3a7c409058c89d0bca8e3 and pushed the item branch. Single and batch files can target the current counterpart; text-only sends remain blocked with actionable guidance. Updated tool description and English docs, added builtin and public-social regression coverage.
+
+Tests: focused `go test ./tools/builtin/... ./internal/channelruntime/...` passed. Configured gofmt check, `go vet ./...` and `go test ./...` passed; manager independently repeated the full gate with isolated HOME, XDG directories and Go caches, all passed.
+
+Installs: none beyond restoring pinned Go dependencies. No UI changes. Not checked: live channel delivery; fake API and runtime tests cover the changed behaviour. Bluesky/X files still have the same unsupported-channel limitation as any other recipient.
+
+Moved new/ → review/, round 1. Initial branch push needed command-local credential.useHttpPath=true; retry succeeded without changing user settings.
