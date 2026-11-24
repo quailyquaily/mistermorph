@@ -46,3 +46,13 @@ Tests: gofmt, go vet ./..., go test ./... and nsh check pass; independently reru
 UI checked: coder built and measured the real approval-card fixture in Chrome at 360, 390 and 1280 widths; no text spills after the fix, no sideways page scroll, and clicking opens the complete URL. Screenshots inspected by the coder. Not checked: a physical Android device, native desktop runtime, and the real backend-served Console; headless Android layout at 360 passed.
 
 Installs: none; no manifest or lockfile changes. No newly observed /tmp entries. Coder reported an out-of-scope write to its own tooling-memory note and index outside the factory directory; these are not included in the code commit. The code branch contains only this item's four files and no forbidden-path changes. Initial push credential-helper failure was resolved on the single retry using command-local credential.useHttpPath=true.
+
+## factory · review · 2026-11-24 16:25
+head: 7d5e01cfe08d4b2c4c4015f890b5ddff256e38e1
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (base a9421ae8), all four changed files and the surrounding approval-card integration. No findings.
+- Required gofmt/vet/Go tests pass (168 packages ok, 20 with no tests). nsh check passes. Required parallel Console runner passes: 165 files, 0 failed after its isolated retries of chat-voice, dialog-sheet, settings-page-sections and settings-page.
+- All 8 focused headless layout tests pass independently at phone and desktop widths. Removing the fix classes in a temporary copy makes 6 of 8 fail, confirming regression coverage.
+- Review did not repeat browser measurements; physical Android, native desktop and Android JVM tests were not checked. Headless Android-platform layout was checked at 360pt.
+- Installs: none. Worktree unchanged; no code commits. Coder reported harness task output outside the run directory under /tmp/claude-995; recorded for owner-confirmed cleanup, not deleted.
