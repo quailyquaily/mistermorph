@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	awarenessruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -15,7 +14,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
-	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/discordapi"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -141,18 +139,9 @@ func runDiscordWithAwareness(ctx context.Context, deps discordruntime.Dependenci
 
 func attachDiscordAwarenessTriggers(runOpts *discordruntime.RunOptions, awarenessOpts *awarenessruntime.RunOptions) {
 	awarenessOpts.TaskStore = runOpts.TaskStore
-	pokeRequests := make(chan awarenessruntime.PokeRequest)
-	awarenessOpts.PokeRequests = pokeRequests
-	runOpts.Poke = func(ctx context.Context, input awarenessdomain.PokeInput) error {
-		return awarenessruntime.Trigger(ctx, pokeRequests, input)
-	}
-	if awarenessOpts.CronEnabled {
-		cronRequests := make(chan awarenessruntime.CronRequest)
-		awarenessOpts.CronRequests = cronRequests
-		runOpts.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
-			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
-		}
-	}
+	triggers := awarenessruntime.AttachTriggers(awarenessOpts)
+	runOpts.Poke = triggers.Poke
+	runOpts.CronRun = triggers.CronRun
 }
 
 // newDiscordAwarenessNotifier sends heartbeat notifications to discord.allowed_channel_ids; with no
