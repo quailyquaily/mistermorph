@@ -728,7 +728,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
   return (
     <SettingsCard
       title="Model Routes"
-      meta="Where each kind of work sends its requests. Line weight is the share; dashed lines are fallbacks, in order. Select a route to change it."
+
       actions={
         !registered() ? (
           <Button

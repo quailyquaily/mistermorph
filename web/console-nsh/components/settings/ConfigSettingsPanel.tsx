@@ -559,7 +559,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
           <SettingsCard
             variant={props.embedded ? "plain" : "boxed"}
             title={showHeading() ? group().title || "" : ""}
-            meta={showHeading() ? group().note || "" : ""}
+
             actions={
               !registered() && (props.savePlacement ?? "header") === "header" && index() === 0 ? saveButton("plain") : undefined
             }

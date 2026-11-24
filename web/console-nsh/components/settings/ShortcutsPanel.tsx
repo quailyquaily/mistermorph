@@ -143,7 +143,6 @@ export function ShortcutsPanel() {
   }
 
   const changed = () => Object.keys(shortcutOverrides()).length > 0;
-  const envNote = () => t(currentShortcutEnv() === "web" ? "shortcuts_env_web" : "shortcuts_env_desktop");
   const groupBindings = (group: ShortcutGroup) =>
     effectiveShortcuts().filter((binding) => shortcutAction(binding.id)?.group === group);
 
@@ -151,7 +150,7 @@ export function ShortcutsPanel() {
     <View class="gap-4" testID="settings-shortcuts">
       <SettingsCard
         title={t("shortcuts_title")}
-        meta={envNote()}
+
         list
         actions={
           <Button

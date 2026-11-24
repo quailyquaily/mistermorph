@@ -237,17 +237,16 @@ export function DirtyDot(props: { label: string; testID?: string; class?: string
 }
 
 /**
- * A titled block (the Vue console's AppSection). The head is one 48pt strip: a mono caps label, the
- * meta beside it on one line (cut where it does not fit), plain actions at the far end, on a
- * hairline. `boxed` (the default) frames it in a hairline on the card's fill (`bg-card`, raised off
+ * A titled block (the Vue console's AppSection). The head is one 48pt strip: a mono caps label,
+ * optional status marks beside it (`metaLead`), plain actions at the far end, on a hairline. No
+ * description: the title says what the card is. `boxed` (the default) frames it in a hairline on the card's fill (`bg-card`, raised off
  * the paper) with a 16pt body; `plain` has no frame, the head's rule the only line (settings groups
  * inside a box). `literal` keeps the
  * title's case (a name the user gave); `list` trims the body's inset for a list of padded rows.
  */
 export function SettingsCard(props: {
   title?: string;
-  meta?: string;
-  /** Before the meta in the head (a count, "Restart required"). */
+  /** After the title in the head (a count, "Restart required"). */
   metaLead?: JSX.Element;
   actions?: JSX.Element;
   /** Before the label: one plain back button. */
@@ -265,7 +264,7 @@ export function SettingsCard(props: {
   const reveal = useRevealRow(() => props.title);
   const boxed = () => props.variant !== "plain";
   const pad = () => (isMobile() ? "px-3" : "px-4");
-  const hasHead = () => Boolean(props.title || props.meta || props.metaLead || props.actions || props.lead);
+  const hasHead = () => Boolean(props.title || props.metaLead || props.actions || props.lead);
   // A head-only box (nothing below the head) has no rule under its head. Children are not read to
   // find out: each read of props.children builds them again.
   const hasBody = () => !props.headOnly;
@@ -301,11 +300,6 @@ export function SettingsCard(props: {
           <View class="min-w-0 flex-1 flex-row items-center gap-2 overflow-hidden">
             <If when={props.metaLead}>
               <View class="min-w-0 shrink flex-row items-center">{props.metaLead}</View>
-            </If>
-            <If when={props.meta}>
-              <Text class="min-w-0 flex-1 text-xs leading-[17.4px] text-muted-foreground" style={{ numberOfLines: 1 }}>
-                {props.meta}
-              </Text>
             </If>
           </View>
           <If when={props.actions}>

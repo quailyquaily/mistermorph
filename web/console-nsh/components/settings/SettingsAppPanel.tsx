@@ -54,7 +54,7 @@ export function SettingsAppPanel() {
 
   return (
     <View class="gap-4" testID="settings-app">
-      <SettingsCard title={t("settings_app_title")} meta={t("settings_section_app_meta")}>
+      <SettingsCard title={t("settings_app_title")}>
         <If when={agent()} else={<Text class="text-sm text-muted-foreground">{t("settings_app_no_agent")}</Text>}>
           {(current) => (
             <View class="flex-row flex-wrap items-center gap-3.5">
@@ -484,7 +484,7 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
     <SettingsCard
       title={t("settings_auto_update_card_title")}
       // A browser has no app of ours to check: the server alone.
-      meta={t(shell ? "settings_auto_update_card_hint" : "settings_auto_update_card_hint_server")}
+
       list
       actions={
         <Button

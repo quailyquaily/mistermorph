@@ -49,9 +49,8 @@ export interface MCPSettingsPanelProps {
   /** The whole new list, to save. */
   onSave?: (servers: MCPServer[]) => void;
   onPaneChange?: (open: boolean) => void;
-  /** The card's head; "MCP" and its note when unset. A title is shown as written (`literal`). */
+  /** The card's head; "MCP" when unset. A title is shown as written (`literal`). */
   title?: string;
-  meta?: string;
   /**
    * Settings that share the card, above the servers (the Settings page's Load skills). With them,
    * the servers get a group head of their own (`serversTitle`), which holds the add button.
@@ -473,7 +472,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
       <View class="flex-1">
         <SettingsCard
           title={props.title ?? t("settings_mcp_title")}
-          meta={props.meta ?? t("settings_section_mcp_meta")}
+
           literal={props.title !== undefined}
           actions={props.serversTitle ? undefined : addButton()}
         >

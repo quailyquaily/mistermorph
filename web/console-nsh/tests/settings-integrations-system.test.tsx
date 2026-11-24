@@ -586,7 +586,6 @@ test("Updates: a browser has no shell: only the server's version and check", asy
   await app.waitFor("Installed: v0.9.0");
   expect(app.texts()).toContain("Server version");
   expect(app.texts()).not.toContain("Shell version");
-  expect(app.texts()).toContain("Check the server for new versions.");
   expect(app.shows("id:settings-update-shell")).toBe(false);
   expect(app.count("id:settings-update-check")).toBe(1);
   expect(app.texts().some((text) => text.includes("Desktop app") || text.includes("Android app") || text.includes("iOS app"))).toBe(false);

@@ -51,7 +51,7 @@ export function ConsolePasswordPanel(props: ConsolePasswordPanelProps) {
       title="Web Console sign-in"
       headOnly
       metaLead={<RestartTag />}
-      meta="Protects browser access to this Console. It is separate from the incoming Runtime API access token."
+
       actions={
         <Button
           variant="plain"

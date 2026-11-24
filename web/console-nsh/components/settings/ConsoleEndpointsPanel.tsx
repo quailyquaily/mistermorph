@@ -264,7 +264,7 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
           title={t("remote_agents_title")}
           list
           metaLead={<Text class="font-mono text-xs font-semibold text-foreground">{String((props.endpoints || []).length)}</Text>}
-          meta={t("remote_agents_note")}
+
           actions={
             <Button
               variant="plain"

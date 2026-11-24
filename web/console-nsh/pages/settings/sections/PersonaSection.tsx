@@ -50,7 +50,7 @@ export function PersonaSection(props: { s: SettingsStore }) {
       <If when={s.personaLoading()}>
         <LoadingLine label={t("settings_persona_title")} />
       </If>
-      <SettingsCard title={t("settings_persona_title")} meta={s.selectedSection()?.meta} bodyClass={isMobile() ? "gap-2" : "gap-[18px]"}>
+      <SettingsCard title={t("settings_persona_title")} bodyClass={isMobile() ? "gap-2" : "gap-[18px]"}>
         <SettingField label={t("settings_persona_avatar_title")}>
           <ImageUploadField
             previewUrl={s.personaAvatarURL()}

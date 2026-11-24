@@ -70,7 +70,6 @@ test("the page's own parts keep their names: Skills with Load skills, then MCP s
   await app.waitFor("id:settings-skills-enabled");
   expect(app.count("id:settings-skills-enabled")).toBe(1);
   expect(app.count("label:Load skills")).toBe(1);
-  expect(app.shows("text:Whether skills load, and external tools from local or remote MCP servers.")).toBe(true);
   expect(app.shows("text:When off, the agent loads no skills unless a task names one with $name.")).toBe(true);
   const texts = app.texts();
   const at = (text: string) => texts.indexOf(text);

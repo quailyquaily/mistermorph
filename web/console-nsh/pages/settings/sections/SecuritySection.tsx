@@ -22,7 +22,7 @@ export function SecuritySection(props: { s: SettingsStore }) {
   const busy = () => s.consoleLoading() || s.consoleSaving();
   return (
     <View class="gap-5" testID="settings-security">
-      <SettingsCard title={t("settings_console_guard_title")} meta={s.selectedSection()?.meta}>
+      <SettingsCard title={t("settings_console_guard_title")}>
         <SettingField label={t("settings_console_guard_allowed_url_prefixes_label")} note={t("settings_console_guard_allowed_url_prefixes_note")}>
           <TextField
             value={s.state.guard.url_fetch_allowed_url_prefixes_text}

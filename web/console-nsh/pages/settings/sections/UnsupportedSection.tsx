@@ -11,7 +11,7 @@ export function UnsupportedSection(props: { s: SettingsStore }) {
   return (
     <SettingsCard
       title={props.s.selectedSection()?.title}
-      meta={props.s.selectedSection()?.meta}
+
       literal={props.s.selectedSection()?.id === "mcp"}
       testID="settings-unsupported"
     >

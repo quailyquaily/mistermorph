@@ -29,7 +29,7 @@ export function SystemSection(props: { s: SettingsStore }) {
   );
   return (
     <View class="gap-4" testID="settings-system">
-      <SettingsCard title={s.selectedSection()?.title} meta={s.selectedSection()?.meta} list>
+      <SettingsCard title={s.selectedSection()?.title} list>
         <View>
           <SettingRow first title={t("settings_logs_title")} note={t("settings_logs_hint")}>
             <Button

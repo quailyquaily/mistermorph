@@ -90,7 +90,7 @@ export function SettingsCreditsPanel() {
         <InlineNotice type="error" text={error()} testID="settings-credits-error" />
       </If>
 
-      <SettingsCard title={t("settings_credits_contributors_title")} meta={t("settings_credits_contributors_meta")}>
+      <SettingsCard title={t("settings_credits_contributors_title")}>
         <If
           when={contributors().length}
           else={<Text class="text-xs leading-normal text-muted-foreground">{t("settings_credits_empty_contributors")}</Text>}
@@ -131,7 +131,7 @@ export function SettingsCreditsPanel() {
         </If>
       </SettingsCard>
 
-      <SettingsCard title={t("settings_credits_open_source_title")} meta={t("settings_credits_open_source_meta")} list>
+      <SettingsCard title={t("settings_credits_open_source_title")} list>
         <If
           when={openSource().length}
           else={<Text class="py-3 text-xs leading-normal text-muted-foreground">{t("settings_credits_empty_open_source")}</Text>}

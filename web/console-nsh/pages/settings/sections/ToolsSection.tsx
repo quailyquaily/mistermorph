@@ -88,7 +88,7 @@ export function ToolsSection(props: { s: SettingsStore }) {
   const hasAdvanced = (id: string) => Boolean((TOOL_ADVANCED_CONFIG_GROUPS as Record<string, unknown>)[id]);
   return (
     <View class="gap-4" testID="settings-tools">
-      <SettingsCard title={s.selectedSection()?.title} meta={s.selectedSection()?.meta}>
+      <SettingsCard title={s.selectedSection()?.title}>
         <If when={s.activeSaveKind() === "agent" && s.agentValidationVisible() && s.agentValidationError()}>
           <InlineNotice type="error" text={s.agentValidationError()} />
         </If>

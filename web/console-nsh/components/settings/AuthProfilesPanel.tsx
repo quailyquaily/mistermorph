@@ -173,7 +173,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
   return (
     <SettingsCard
       title="Auth profiles"
-      meta="Credentials and request limits used by authenticated HTTP tools."
+
       actions={
         <Button
           variant="plain"

@@ -49,7 +49,6 @@ test("Settings lists every action with the browser's keys, and the desktop app's
   expect(showsKeys(app, "nav-contacts", "Alt+Shift+2")).toBe(true);
   expect(showsKeys(app, "help-shortcuts", "Shift+/")).toBe(true);
   expect(app.texts()).toContain("Go to Contacts");
-  expect(app.texts()).toContain("For the Console in this browser. The desktop app keeps its own shortcuts.");
   expect(app.shows("id:shortcut-row-chat-newTopic >> text:Default")).toBe(true);
   // Alt+Shift with a digit types on some keyboards: the row says it acts outside text fields.
   expect(app.shows("id:shortcut-issue-nav-contacts")).toBe(true);
@@ -58,7 +57,6 @@ test("Settings lists every action with the browser's keys, and the desktop app's
   const desktop = await openShortcuts({ runtime: "desktop" });
   expect(showsKeys(desktop.app, "chat-newTopic", "Ctrl+N")).toBe(true);
   expect(showsKeys(desktop.app, "nav-contacts", "Ctrl+2")).toBe(true);
-  expect(desktop.app.texts()).toContain("For this app. The Console in a browser keeps its own shortcuts.");
 });
 
 test("on a Mac the keys show with Apple's symbols and Command", async () => {

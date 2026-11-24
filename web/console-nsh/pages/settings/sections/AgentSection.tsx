@@ -70,7 +70,7 @@ export function AgentSection(props: { s: SettingsStore }) {
     <View class="gap-4" testID="settings-agent">
       <SettingsCard
         title={t("settings_agent_block_title")}
-        meta={s.selectedSection()?.meta}
+
         actions={
           <DropdownMenu
             disabled={busy()}

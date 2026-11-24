@@ -44,7 +44,6 @@ export function McpSection(props: { s: SettingsStore; pane: PaneTarget }) {
     <View class="gap-5" testID="settings-mcp">
       <MCPSettingsPanel
         title={t("settings_skills_mcp_title")}
-        meta={t("settings_section_skills_mcp_meta")}
         before={
           <If when={s.skillsEnabledSupported()}>
             <LoadSkillsSetting s={s} />

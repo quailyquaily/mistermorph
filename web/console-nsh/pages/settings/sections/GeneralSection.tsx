@@ -27,7 +27,7 @@ export function GeneralSection(props: { s: SettingsStore }) {
   const s = props.s;
   return (
     <View class="gap-4" testID="settings-general">
-      <SettingsCard title={s.selectedSection()?.title} meta={s.selectedSection()?.meta} list>
+      <SettingsCard title={s.selectedSection()?.title} list>
         <View>
           <SettingRow first title={t("settings_language_title")} note={t("settings_language_hint")} copyClass={isMobile() ? "" : "max-w-40"}>
             <View class={isMobile() ? "self-stretch" : "min-w-[180px] flex-[3]"}>
