@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	awarenessruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -18,8 +16,8 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
-	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/jobtriggers"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/slackclient"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -183,17 +181,10 @@ func attachSlackAwarenessTriggers(slackOpts *slackruntime.RunOptions, awarenessO
 		return
 	}
 	awarenessOpts.TaskStore = slackOpts.TaskStore
-	pokeRequests := make(chan awarenessruntime.PokeRequest)
-	awarenessOpts.PokeRequests = pokeRequests
-	slackOpts.Server.Poke = func(ctx context.Context, input awarenessdomain.PokeInput) error {
-		return awarenessruntime.Trigger(ctx, pokeRequests, input)
-	}
-	if awarenessOpts.CronEnabled {
-		cronRequests := make(chan awarenessruntime.CronRequest)
-		awarenessOpts.CronRequests = cronRequests
-		slackOpts.Server.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
-			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
-		}
+	triggers := awarenessruntime.AttachTriggers(awarenessOpts)
+	slackOpts.Server.Poke = triggers.Poke
+	if triggers.CronRun != nil {
+		slackOpts.Server.CronRun = triggers.CronRun
 		// The jobs whose message triggers watch a chat of this runtime start through the same loop.
 		slackOpts.JobTriggers = jobtriggers.New(awarenessOpts.CronPath, slackOpts.Server.CronRun, slog.Default())
 	}
