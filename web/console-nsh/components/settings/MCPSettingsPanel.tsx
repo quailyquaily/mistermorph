@@ -519,9 +519,9 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
                     <Each of={servers()} key={(server) => String(server._key || server.name)}>
                       {(server, index) => (
                         <View
-                          class={`flex-row items-center gap-3 ${index() > 0 ? "border-t border-line-soft" : ""} ${
-                            paneOpen() && editingIndex() === index() ? "bg-blue/10" : ""
-                          }`}
+                          // Flush with the card's edges, as the Tools rows are: no inset and no fill, so the
+                          // open server is marked by its name in blue, not a band edge to edge.
+                          class={`flex-row items-center gap-4 ${index() > 0 ? "border-t border-line-soft" : ""}`}
                         >
                           <View
                             role="button"
@@ -529,9 +529,9 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
                             accessibilityState={{ selected: paneOpen() && editingIndex() === index(), disabled: busy() }}
                             disabled={busy()}
                             onPress={() => openEdit(index())}
-                            class="flex-1 gap-0.5 px-2 py-3 hover:bg-hover"
+                            class="group flex-1 gap-1 py-3"
                           >
-                            <Text class="text-sm font-semibold text-foreground">{server().name}</Text>
+                            <Text class={`text-sm font-medium leading-[18.9px] ${paneOpen() && editingIndex() === index() ? "text-blue" : "text-foreground group-hover:text-blue"}`}>{server().name}</Text>
                             <Text class="font-mono text-xs text-muted-foreground line-clamp-1">
                               {server().type === "http" ? server().url ?? "" : server().command ?? ""}
                             </Text>
@@ -539,14 +539,12 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
                               <Text class="text-xs text-muted-foreground">{t("settings_mcp_on_demand_hint", { name: server().name })}</Text>
                             </If>
                           </View>
-                          <View class="pr-2">
-                            <SettingSwitch
-                              checked={server().enable !== false}
-                              disabled={busy()}
-                              testID={`mcp-enable-${index()}`}
-                              onChange={(value) => setServerEnabled(index(), value)}
-                            />
-                          </View>
+                          <SettingSwitch
+                            checked={server().enable !== false}
+                            disabled={busy()}
+                            testID={`mcp-enable-${index()}`}
+                            onChange={(value) => setServerEnabled(index(), value)}
+                          />
                         </View>
                       )}
                     </Each>

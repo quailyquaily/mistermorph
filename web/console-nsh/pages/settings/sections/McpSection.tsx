@@ -4,7 +4,6 @@
 // column, each change saved from there.
 import { View } from "nsh";
 import { isMobile } from "../../../lib/shell";
-import { Icon } from "../../../components/ui";
 import { MCPSettingsPanel } from "../../../components/settings/MCPSettingsPanel";
 import type { PaneTarget } from "../../../components/settings/PaneTarget";
 import { GroupTitle, SettingToggleRow } from "../../../components/settings-page/parts";
@@ -21,11 +20,6 @@ function LoadSkillsSetting(props: { s: SettingsStore }) {
           first
           title={t("skills_enabled")}
           note={t("skills_enabled_note")}
-          leading={
-            <View class="mt-0.5">
-              <Icon name="PhMagicWand" size={16} color="subtle" />
-            </View>
-          }
           checked={s.skillsEnabled()}
           disabled={s.agentLoading() || s.agentSaving() || s.agentSettingsReadOnly()}
           onChange={(checked) => s.setSkillsEnabled(checked)}
