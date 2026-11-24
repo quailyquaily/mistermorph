@@ -48,3 +48,15 @@ Visual checks reported by coder: headless Chrome at 360, 390 and 1280 in light/d
 Process notes: coder wrote tooling memory notes outside the run directory (factory-build-tooling.md and MEMORY.md in its Claude project memory); no secrets included. Existing /tmp/claude-995 remains tracked as an outside-dir path, not deleted. Push initially needed per-command credential.useHttpPath=true; retry succeeded.
 
 Moved new/ → review/ for independent review.
+
+## factory · review · 2026-11-24 21:28
+head: b807c31f01acdbc7666b431fa931f62cd3e906b0
+verdict: pass
+
+Independent Claude Code review of origin/master (7c405d1b) ... HEAD: all 14 changed files and behavioural hunks checked against request and plan, including authentication/logout security surfaces. No findings.
+
+Validation: required gofmt/vet/go test command passed (168 packages); nsh check passed; Node library tests 313 passed. Initial Console runner exited 1 on a dialog-sheet animation timing test; that file subsequently passed twice alone. Manager reran the complete required scripts/test.sh with JOBS=4: 164 files, 0 failed (581s), including inventory, colour steps, image clipping and scanner/calendar checks. No remaining test failure. No installs or code changes during review.
+
+Limits: reviewer did not independently inspect the rendered header or real mobile/desktop devices; prior build's headless Chrome checks remain the visual evidence. Slow-request gallery-button disabling relies on shared helper tests and Button loading contract. Server-side logout revocation is unchanged and was not reverified.
+
+Process: Claude harness output under /tmp/claude-995 tracked for owner-approved cleaning, not deleted. Moved review/ → ready/; not merged into master.
