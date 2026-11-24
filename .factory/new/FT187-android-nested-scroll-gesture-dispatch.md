@@ -13,3 +13,7 @@ Acceptance:
 - Jobs deps supports horizontal and vertical finger scrolling when content overflows both axes. Preserve node clicks and existing desktop/browser scroll behaviour.
 - Check gesture ownership at boundaries and direction changes; preserve taps, text selection, and child interaction without stuck/cancelled gestures or unintended parent scrolling.
 - Add regression coverage for the native gesture-dispatch path where feasible. Browser tests or simulated nsh tests alone do not establish Android correctness. Record the exact runtime version and what was actually tested on an Android device/emulator; explicitly state missing native verification rather than claiming the bug is reproduced or fixed on-device.
+## factory · 2026-11-25 08:46
+Owner follow-up: "是的 代码块也有一样的问题，加到 ft187" (wide code blocks also exhibit the same scrolling failure in the mobile App).
+
+This confirms the code-block symptom as an owner-observed failure, not merely a prediction from source inspection. Keep wide Markdown code blocks as an explicit required regression case alongside tables, including horizontal finger scrolling inside a vertically scrollable conversation. The shared native root cause remains unverified on-device until tested.
