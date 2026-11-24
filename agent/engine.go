@@ -528,11 +528,11 @@ func sortedMapKeys(m map[string]any) []string {
 	return out
 }
 
-// lookupSubtaskTool finds a tool a subtask may be given. Tools hidden by tool search and
-// codemode are never handed to subtasks.
+// lookupSubtaskTool finds a tool a subtask may be given. Tools hidden by tool search, codemode and
+// tools bound to the parent run (tools.SubtaskExcluded) are never handed to subtasks.
 func (e *Engine) lookupSubtaskTool(name string) (tools.Tool, bool) {
 	tool, ok := e.registry.Get(name)
-	if name == codeModeToolName {
+	if name == codeModeToolName || (ok && tools.IsSubtaskExcluded(tool)) {
 		return nil, false
 	}
 	if !ok || e.toolSearch == nil {

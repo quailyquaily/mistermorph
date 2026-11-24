@@ -41,3 +41,16 @@ func IsCodeModeExcluded(tool Tool) bool {
 	excluded, ok := tool.(CodeModeExcluded)
 	return ok && excluded.CodeModeExcluded()
 }
+
+// SubtaskExcluded is an optional capability for tools bound to one run that its subtasks must not
+// get, such as the Console owner's tools that read other topics or switch the run's workspace: a
+// spawn that lists one runs without it. A wrapping tool must forward it.
+type SubtaskExcluded interface {
+	SubtaskExcluded() bool
+}
+
+// IsSubtaskExcluded reports whether tool is SubtaskExcluded and returns true.
+func IsSubtaskExcluded(tool Tool) bool {
+	excluded, ok := tool.(SubtaskExcluded)
+	return ok && excluded.SubtaskExcluded()
+}

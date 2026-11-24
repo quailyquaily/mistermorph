@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -55,6 +56,9 @@ type resumeState struct {
 	// WorkerNameSet is the name set the task's workers come from, so workers started after
 	// the pause keep it even if the preference changed meanwhile. Absent in older states.
 	WorkerNameSet string `json:"worker_name_set,omitempty"`
+	// Workspace keeps the workspace the run switched to (workspace_use) and those in which writes
+	// were approved, so the resumed run goes on there. Absent when the run never switched.
+	Workspace *pathroots.WorkspaceSwitchState `json:"workspace,omitempty"`
 }
 
 type pendingToolSnapshot struct {
