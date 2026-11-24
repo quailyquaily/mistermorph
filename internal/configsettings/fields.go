@@ -68,6 +68,8 @@ func AgentFields() []Field {
 		{Path: "tools.todo_update.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.plan_create.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.tool_search.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.config_get.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.config_set.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.codemode.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.codemode.timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.codemode.max_tool_calls", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &one},

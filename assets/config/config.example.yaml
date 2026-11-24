@@ -412,11 +412,30 @@ tools:
     # Hide MCP tools until the model finds them with tool_search, so each request carries fewer
     # tool definitions. Most built-in tools stay visible; deferred ones (memory_search,
     # memory_forget, journal_search, journal_read, Console's send_file and skill install tools,
-    # and contacts_send outside awareness runs) are found with tool_search. A found tool stays
+    # config_get, config_set, and contacts_send outside awareness runs) are found with tool_search. A found tool stays
     # visible for the rest of the conversation (/reset forgets it). A search may connect an
     # enabled on-demand server. tool_search is offered only when there is something to find;
     # otherwise nothing changes. Set false to send every MCP tool's definition with every
-    # request; ordinary runs then have no contacts_send.
+    # request; ordinary runs then have no contacts_send, config_get or config_set.
+    enabled: true
+  config_get:
+    # Let the agent read its own config (this one) with config_get, found with tool_search: the
+    # sections, and each key's value as written, type, default, apply mode and comment. Secrets
+    # (API keys, tokens, passwords, header and environment values, keys under secrets and
+    # auth_profiles) are never shown: they read "********" with whether they are set and where
+    # from. Needs tools.tool_search.
+    enabled: true
+  config_set:
+    # Let the agent change one key of its config with config_set, found with tool_search. Every
+    # call asks the user to approve it, showing the key, its current and new value (secrets
+    # masked), even with guard.enabled off; a denied call changes nothing. Only the owner in a
+    # private conversation can have a change made; group chats, contacts, subtasks, heartbeat and
+    # scheduled runs never can. guard, secrets, auth_profiles, console, server.auth_token, any
+    # endpoint or base URL, llm.profiles, llm.headers, mcp, owners, admins, deny_paths,
+    # injected_env_vars, elevation, coder bypass_approvals, logging.redact_keys, workspace_dir,
+    # file_cache_dir and file_state_dir stay for the user to change. A secret it sets goes to the system keyring and
+    # the config keeps a ${secret:...} reference. In agent.db its changes are recorded as the
+    # agent's (updated_by "agent"). Needs tools.tool_search.
     enabled: true
   codemode:
     # Offer the codemode tool: the model writes JavaScript that calls its tools, so it can chain

@@ -335,6 +335,9 @@ func Apply(v *viper.Viper) {
 	// On: MCP tools stay hidden until the model finds them. Without MCP tools to hide, tool_search
 	// is not offered, so nothing changes.
 	v.SetDefault("tools.tool_search.enabled", true)
+	// The agent's own config tools, found with tool_search (internal/configtools).
+	v.SetDefault("tools.config_get.enabled", true)
+	v.SetDefault("tools.config_set.enabled", true)
 	v.SetDefault("tools.codemode.enabled", true)
 	v.SetDefault("tools.codemode.timeout", 120*time.Second)
 	v.SetDefault("tools.codemode.max_tool_calls", 256)

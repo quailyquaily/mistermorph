@@ -6,6 +6,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/runtimetest"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/spf13/viper"
 )
@@ -85,5 +86,45 @@ func TestChannelCommandRuntimeOffersContactsSendThroughToolSearch(t *testing.T) 
 				t.Fatalf("discovery = %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The CLI's runtimes (run, chat, telegram, slack, ...) offer config_get and config_set through
+// tool_search; their awareness registry has config_get only.
+func TestChannelCommandRuntimeOffersConfigToolsThroughToolSearch(t *testing.T) {
+	stateDir := t.TempDir()
+	registryResolver := &registryRuntimeResolver{}
+	registryResolver.once.Do(func() {
+		registryResolver.cfg = registryConfig{
+			ContactsSend: toolsutil.StaticContactsSendConfig{ContactsDir: t.TempDir(), StateDir: stateDir},
+			Config: toolsutil.StaticConfigToolsConfig{
+				GetEnabled: true,
+				SetEnabled: true,
+				ToolSearch: true,
+				ConfigPath: configstore.DBConfigPath(stateDir),
+				StateDir:   stateDir,
+			},
+		}
+	})
+	if err := registryResolver.Prepare(context.Background()); err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	reader := viper.New()
+	reader.Set("file_state_dir", stateDir)
+	deps := depsutil.ApplyRuntimeConfig(
+		newChannelCommandRuntime().Dependencies(registryResolver, &guardRuntimeResolver{}),
+		toolsutil.RuntimeToolsRegisterConfig{ToolSearch: toolsutil.ToolSearchConfig{Enabled: true}},
+		reader,
+	)
+	got := runtimetest.DiscoverConfigTools(t, deps)
+	want := runtimetest.ConfigToolsDiscovery{SearchOffered: true, FoundGet: true, FoundSet: true, AwarenessGet: true}
+	if got != want {
+		t.Fatalf("discovery = %+v, want %+v", got, want)
+	}
+	// A run's triggered tools never add config_set, which an awareness run would then get.
+	reg := registryResolver.AwarenessRegistry()
+	registryResolver.RegisterTriggeredStaticTools(reg, map[string]bool{toolsutil.BuiltinAgentSend: true, toolsutil.BuiltinConfigSet: true})
+	if _, ok := reg.Get(toolsutil.BuiltinConfigSet); ok {
+		t.Fatal("triggered static tools added config_set")
 	}
 }

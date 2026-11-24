@@ -1,13 +1,17 @@
 package consolecmd
 
 import (
+	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/runtimetest"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+	"github.com/quailyquaily/mistermorph/internal/configtools"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/spf13/viper"
 )
@@ -82,5 +86,71 @@ func TestConsoleRuntimesOfferContactsSendThroughToolSearch(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// The Console's own chat runtime and the channel runtimes it manages offer config_get and
+// config_set through tool_search, on the config the Console's settings pages save; their awareness
+// registries (heartbeat, scheduled jobs) have config_get only.
+func TestConsoleRuntimesOfferConfigToolsThroughToolSearch(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	configPath := configstore.DBConfigPath(t.TempDir())
+	previous := viper.GetString("config")
+	viper.Set("config", configPath)
+	t.Cleanup(func() { viper.Set("config", previous) })
+	builds := map[string]func(t *testing.T, reader *viper.Viper) depsutil.CommonDependencies{
+		"console": func(t *testing.T, reader *viper.Viper) depsutil.CommonDependencies {
+			snapshot, err := buildConsoleLocalRuntimeConfigSnapshot(logger, nil, reader)
+			if err != nil {
+				t.Fatalf("buildConsoleLocalRuntimeConfigSnapshot() error = %v", err)
+			}
+			bundle, deps, err := buildConsoleLocalRuntimeBundle(logger, nil, snapshot)
+			if err != nil {
+				t.Fatalf("buildConsoleLocalRuntimeBundle() error = %v", err)
+			}
+			t.Cleanup(func() {
+				_ = bundle.taskRuntime.Close()
+				if bundle.mcpHost != nil {
+					_ = bundle.mcpHost.Close()
+				}
+			})
+			return deps
+		},
+		"managed channel runtimes": func(t *testing.T, reader *viper.Viper) depsutil.CommonDependencies {
+			deps, cleanup, err := buildManagedRuntimeDepsFromReader(logger, reader)
+			if err != nil {
+				t.Fatalf("buildManagedRuntimeDepsFromReader() error = %v", err)
+			}
+			t.Cleanup(cleanup)
+			return deps
+		},
+	}
+	for name, build := range builds {
+		t.Run(name, func(t *testing.T) {
+			reader := viper.New()
+			configdefaults.Apply(reader)
+			reader.Set("file_state_dir", t.TempDir())
+			reader.Set("file_cache_dir", t.TempDir())
+			reader.Set("skills.enabled", false)
+			reader.Set("llm.provider", "openai")
+			reader.Set("llm.endpoint", "https://example.test/v1")
+			reader.Set("llm.api_key", "test-key")
+			reader.Set("llm.model", "test-model")
+			deps := build(t, reader)
+			tool, ok := deps.Registry().Get(configtools.GetToolName)
+			if !ok {
+				t.Fatal("the base registry has no config_get")
+			}
+			got := runtimetest.DiscoverConfigTools(t, deps)
+			want := runtimetest.ConfigToolsDiscovery{SearchOffered: true, FoundGet: true, FoundSet: true, AwarenessGet: true}
+			if got != want {
+				t.Fatalf("discovery = %+v, want %+v", got, want)
+			}
+			// It reads the config the Console saves.
+			out, err := tool.Execute(context.Background(), map[string]any{})
+			if err != nil || !strings.Contains(out, `"config": "agent_db"`) {
+				t.Fatalf("config_get = %s, %v", out, err)
+			}
+		})
 	}
 }

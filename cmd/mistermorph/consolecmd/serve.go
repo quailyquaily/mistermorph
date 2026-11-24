@@ -137,9 +137,11 @@ type server struct {
 	agentSettingsConnectionTest func(context.Context, llmSettingsPayload, agentSettingsConnectionTestOptions) (agentSettingsTestResult, error)
 	reloadRuntimeConfigFunc     func() error
 	runtimeConfigPollerWG       sync.WaitGroup
-	webSockets                  consoleWebSocketHandlers
-	secretStore                 secref.OSStore
-	settingsWriteMu             sync.Mutex
+	// configSaved wakes the config poller now, after the agent saved a config change.
+	configSaved     chan struct{}
+	webSockets      consoleWebSocketHandlers
+	secretStore     secref.OSStore
+	settingsWriteMu sync.Mutex
 	// staticETags caches the ETags of embedded Console files (static_assets.go).
 	staticETags sync.Map
 	// stopServing ends serve as SIGTERM would; set while serve runs.
@@ -409,8 +411,10 @@ func newServer(cfg serveConfig) (*server, error) {
 		localRuntime:     localRuntime,
 		managed:          managed,
 		secretStore:      secref.NewOSStore(),
+		configSaved:      make(chan struct{}, 1),
 	}
 	localRuntime.skillEnabler = srv.enableSkill
+	localRuntime.configSaved = srv.noteConfigSaved
 	srv.agentLink = newAgentLinkSupervisor(srv)
 	srv.ensureEndpointStates()
 	return srv, nil
@@ -741,23 +745,37 @@ func (s *server) startRuntimeConfigPoller(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				nextFingerprint, err := fingerprintConfigPath(s.cfg.configPath)
-				if err != nil {
-					s.logger().Warn("console_runtime_config_poll_stat_failed", "error", err.Error())
-					continue
-				}
-				if nextFingerprint == lastFingerprint {
-					continue
-				}
-				lastFingerprint = nextFingerprint
-				if err := reloadRuntimeConfig(); err != nil {
-					s.logger().Warn("console_runtime_reload_failed", "error", err.Error())
-					continue
-				}
-				s.logger().Info("console_runtime_reloaded", "config_path", strings.TrimSpace(s.cfg.configPath))
+			case <-s.configSaved:
 			}
+			nextFingerprint, err := fingerprintConfigPath(s.cfg.configPath)
+			if err != nil {
+				s.logger().Warn("console_runtime_config_poll_stat_failed", "error", err.Error())
+				continue
+			}
+			if nextFingerprint == lastFingerprint {
+				continue
+			}
+			lastFingerprint = nextFingerprint
+			if err := reloadRuntimeConfig(); err != nil {
+				s.logger().Warn("console_runtime_reload_failed", "error", err.Error())
+				continue
+			}
+			s.logger().Info("console_runtime_reloaded", "config_path", strings.TrimSpace(s.cfg.configPath))
 		}
 	}()
+}
+
+// noteConfigSaved has the config poller reload the config now, as it would on its next tick: the
+// agent's config_set saved a change. It never blocks.
+func (s *server) noteConfigSaved(context.Context) error {
+	if s == nil || s.configSaved == nil {
+		return nil
+	}
+	select {
+	case s.configSaved <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 func (s *server) reloadRuntimeConfig() error {
