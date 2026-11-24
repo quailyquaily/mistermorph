@@ -50,3 +50,14 @@ UI: coder visually checked headless Chrome at 360×760, including queued/applied
 Installs/dependency changes: none.
 Outside-dir observation: an unrelated-named temporary measurement file appeared during the coder call; ownership by this run is unproven and it was recorded for owner inspection, not deleted. Coder also reports writing tooling notes to its own memory outside the permitted run directory; this is a process deviation, not part of the committed change.
 Push initially lacked repository-path credential context; command-local credential.useHttpPath fixed the retry. Code branch push succeeded. No base branch or tags changed.
+
+## factory · review · 2026-11-25 00:47
+head: 8bcaa036e2fad08c707309f1e2d6a871ce8bb2b5
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/chat/ActivityDetailPanel.tsx:300: a child_finished refusal, unsent draft and explicit parent-fallback button disappear when the next activity update marks the worker done, because the composer is rendered only for running workers. Verified probe: send "also add a title", receive child_finished, then mark worker done; fallback button and error disappear and the draft is no longer visible. Keep refused drafts and fallback visible after completion, and test this transition.
+- [P3] web/console-nsh/lib/core/chat-workers.js:215: bash run_in_subtask workers are classified as running subagents and offer a composer, but RunFunc children reject every steer as child_unsupported; the error incorrectly describes a coding CLI. Verified activity probe produces kind=subagent status=running for a long_shell worker. Mark external shell workers unavailable and explain their actual limitation.
+Validation: Claude Code reviewed origin/master...HEAD, all 43 changed files. Required gofmt/vet/Go tests passed (168 packages); targeted race checks passed; nsh check passed; final required Console test script passed all 166 files; core JS tests passed 315 tests. First Console run failed dialog-sheet timing under concurrent review load (including its solo retry); the isolated file passed twice and a second complete runner passed without competing review jobs. No P0/P1 findings remain; P2/P3 notes do not block factory promotion under the configured review rules.
+Installs/dependency changes: none. Worktree unchanged.
+Limits: no live-model run or visual UI inspection in this review; desktop, Android keyboard, terminal live steering and older-runtime compatibility not exercised. Bounded message-history trimming and approval-cancel in-memory history remain residual risks.
+Outside-dir observation: coder harness wrote background output beneath its existing temporary tasks folder; recorded for inspection, not deleted. Previous review worktree was removed during recovery. No code commits, base changes or tags in this run.
