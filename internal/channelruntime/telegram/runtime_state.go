@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
+
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
@@ -354,10 +356,7 @@ func (s *telegramRuntimeState) daemonRoutes() (daemonruntime.RoutesOptions, erro
 			}
 			mainRoute := bundle.TaskRuntime.BootstrapMainRoute
 			return map[string]any{
-				"llm": map[string]any{
-					"provider": strings.TrimSpace(mainRoute.ClientConfig.Provider),
-					"model":    bundle.TaskRuntime.BootstrapMainModel,
-				},
+				"llm": llmutil.OverviewLLM(mainRoute, bundle.TaskRuntime.BootstrapMainModel),
 				"channel": map[string]any{
 					"configured":          true,
 					"telegram_configured": true,

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/personautil"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -170,16 +171,12 @@ func (a *runtimeAPI) routes() daemonruntime.RoutesOptions {
 }
 
 func (a *runtimeAPI) overview(ctx context.Context) (map[string]any, error) {
-	provider, model := "", ""
+	llmOverview := map[string]any{"provider": "", "model": ""}
 	if route, err := a.rt.resolveRunMainRoute(ctx, a.snap, ""); err == nil {
-		provider = strings.TrimSpace(route.ClientConfig.Provider)
-		model = strings.TrimSpace(route.ClientConfig.Model)
+		llmOverview = llmutil.OverviewLLM(route, "")
 	}
 	return map[string]any{
-		"llm": map[string]any{
-			"provider": provider,
-			"model":    model,
-		},
+		"llm": llmOverview,
 		"channel": map[string]any{
 			"configured": false,
 			"running":    defaultIntegrationTaskTarget,

@@ -250,10 +250,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 					}
 					mainRoute := runtimeBundle.TaskRuntime.BootstrapMainRoute
 					return map[string]any{
-						"llm": map[string]any{
-							"provider": strings.TrimSpace(mainRoute.ClientConfig.Provider),
-							"model":    runtimeBundle.TaskRuntime.BootstrapMainModel,
-						},
+						"llm": llmutil.OverviewLLM(mainRoute, runtimeBundle.TaskRuntime.BootstrapMainModel),
 						"channel": map[string]any{
 							"configured":          true,
 							"telegram_configured": false,

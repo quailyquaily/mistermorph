@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
+
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/audience"
@@ -189,10 +191,7 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 					}
 					mainRoute := runtimeBundle.TaskRuntime.BootstrapMainRoute
 					return map[string]any{
-						"llm": map[string]any{
-							"provider": strings.TrimSpace(mainRoute.ClientConfig.Provider),
-							"model":    runtimeBundle.TaskRuntime.BootstrapMainModel,
-						},
+						"llm": llmutil.OverviewLLM(mainRoute, runtimeBundle.TaskRuntime.BootstrapMainModel),
 						"channel": map[string]any{
 							"configured":       true,
 							"telegram_running": false,

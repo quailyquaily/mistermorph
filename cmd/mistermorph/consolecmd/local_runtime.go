@@ -742,6 +742,18 @@ func (r *consoleLocalRuntime) applyPreparedGenerationLocked(generation *consoleL
 	return nil
 }
 
+// overviewLLMForGeneration is the main loop's model as GET /overview reports it: the resolved
+// route's details when the generation can resolve one, else the bundle's provider and model alone.
+func overviewLLMForGeneration(generation *consoleLocalRuntimeGeneration) map[string]any {
+	if generation != nil && generation.commonDeps.ResolveLLMRoute != nil {
+		if route, err := generation.commonDeps.ResolveLLMRoute(llmutil.RoutePurposeMainLoop); err == nil {
+			return llmutil.OverviewLLM(route, "")
+		}
+	}
+	provider, model := defaultLLMConfigForGeneration(generation)
+	return map[string]any{"provider": provider, "model": model}
+}
+
 func defaultLLMConfigForGeneration(generation *consoleLocalRuntimeGeneration) (string, string) {
 	if generation != nil && generation.commonDeps.ResolveLLMRoute != nil {
 		route, err := generation.commonDeps.ResolveLLMRoute(llmutil.RoutePurposeMainLoop)
@@ -1469,13 +1481,9 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			}
 			generation.acquire()
 			defer generation.release()
-			provider, model := defaultLLMConfigForGeneration(generation)
 			reader := generation.reader
 			return map[string]any{
-				"llm": map[string]any{
-					"provider": provider,
-					"model":    model,
-				},
+				"llm": overviewLLMForGeneration(generation),
 				"channel": map[string]any{
 					"configured":          true,
 					"telegram_configured": strings.TrimSpace(reader.GetString("telegram.bot_token")) != "",
