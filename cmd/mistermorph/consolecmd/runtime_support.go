@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -21,6 +22,13 @@ func buildConsoleRegistriesFromReader(ctx context.Context, logger *slog.Logger, 
 	cfg, err := toolsutil.StaticRegistryConfigFromReader(r)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	// The Console's reader does not carry the config path; config_get and config_set work on the
+	// config the Console's settings pages save.
+	if strings.TrimSpace(cfg.Config.ConfigPath) == "" {
+		if path, pathErr := resolveConsoleConfigPath(); pathErr == nil {
+			cfg.Config.ConfigPath = path
+		}
 	}
 	baseRegistry := tools.NewRegistry()
 	awarenessRegistry := tools.NewRegistry()

@@ -10,6 +10,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/runtimetest"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/spf13/viper"
 )
@@ -58,5 +59,38 @@ func TestGenerationDependenciesOfferContactsSendThroughToolSearch(t *testing.T) 
 				t.Fatalf("discovery = %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The channel runtimes' generations offer config_get and config_set through tool_search, and their
+// awareness registries never config_set.
+func TestGenerationDependenciesOfferConfigToolsThroughToolSearch(t *testing.T) {
+	for _, toolSearch := range []bool{true, false} {
+		reader := viper.New()
+		configdefaults.Apply(reader)
+		stateDir := t.TempDir()
+		reader.Set("file_state_dir", stateDir)
+		reader.Set("file_cache_dir", t.TempDir())
+		reader.Set("skills.enabled", false)
+		reader.Set("config", configstore.DBConfigPath(stateDir))
+		reader.Set("tools.tool_search.enabled", toolSearch)
+		base := depsutil.CommonDependencies{
+			Logger:             func() (*slog.Logger, error) { return slog.New(slog.NewTextHandler(io.Discard, nil)), nil },
+			AgentSettingsOwner: agentsettings.NewFileOwner(agentsettings.FileOwnerOptions{Reader: reader}),
+		}
+		deps, cleanup, err := depsutil.BuildGenerationDependencies(context.Background(), base, agentsettings.NewReaderSnapshot(reader))
+		if err != nil {
+			t.Fatalf("BuildGenerationDependencies() error = %v", err)
+		}
+		got := runtimetest.DiscoverConfigTools(t, deps)
+		cleanup()
+		want := runtimetest.ConfigToolsDiscovery{SearchOffered: true, FoundGet: true, FoundSet: true, AwarenessGet: true}
+		if !toolSearch {
+			want = runtimetest.ConfigToolsDiscovery{}
+			got.SearchOffered = false
+		}
+		if got != want {
+			t.Fatalf("tool search %v: discovery = %+v, want %+v", toolSearch, got, want)
+		}
 	}
 }

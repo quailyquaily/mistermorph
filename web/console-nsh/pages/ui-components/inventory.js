@@ -1,4 +1,4 @@
-// The UI component gallery's inventory (/ui-components): the console's reused UI components, by the
+// The UI component gallery's inventory (/__ui-components): the console's reused UI components, by the
 // file each is in. The gallery mounts one demo per component listed here (./demos, by `id`).
 //
 // A component belongs here when it is reused: it is exported, and at least two areas of the

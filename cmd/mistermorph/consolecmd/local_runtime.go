@@ -34,6 +34,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chattrace"
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/configtools"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
@@ -172,6 +173,9 @@ type consoleLocalRuntime struct {
 	seq                   atomic.Uint64
 	// skillEnabler writes skills.enabled/load after an install; set by the console server.
 	skillEnabler func(ctx context.Context, skillID string) error
+	// configSaved has the console reload the config now, after config_set saved a change; set by
+	// the console server.
+	configSaved configtools.Reloader
 	// taskLimiter bounds how many topics run a task at once (console.max_concurrency).
 	taskLimiter *runtimecore.ResizableLimiter
 }
@@ -2576,6 +2580,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	}
 	runCtx = agent.WithEventSinkContext(runCtx, eventSink)
 	runCtx = audience.NewContext(runCtx, audience.Owner())
+	runCtx = configtools.WithReloader(runCtx, r.configSaved)
 	// Insights appear as messages of their own before the reply; each frame carries all of them.
 	var insights []string
 	runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimit, func(_ context.Context, _ int, text string) error {

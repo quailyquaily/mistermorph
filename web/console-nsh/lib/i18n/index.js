@@ -835,6 +835,10 @@ const I18N = {
     chat_received_file_saved: "Saved {name}",
     chat_received_file_failed: "Download failed: {error}",
     chat_received_file_unavailable: "Saving files is not available in this version of the phone app.",
+    chat_received_file_preview: "Preview {name}",
+    chat_file_preview_too_large: "This text file is larger than 2 MiB, too large to preview. Download it instead.",
+    chat_file_preview_not_text: "This file is not UTF-8 text and cannot be previewed. Download it instead.",
+    chat_file_preview_failed: "This file cannot be previewed. Download it instead.",
     artifact_preview_type_web: "Web Artifact",
     artifact_preview_type_image: "Image Artifact",
     artifact_preview_action_expand: "Expand preview",
@@ -2191,7 +2195,7 @@ const I18N = {
     endpoint_switcher_filter_placeholder: "Filter agents",
     endpoint_switcher_empty: "No matching agents",
     msg_select_endpoint: "Please select endpoint",
-    // UI component gallery (/ui-components, pages/ui-components): a testing page.
+    // UI component gallery (/__ui-components, pages/ui-components): a testing page.
     uig_title: "UI components",
     uig_subtitle: "A testing page: the Console's reused UI components with synthetic data. Nothing here talks to an agent or changes settings.",
     uig_language: "Language",
@@ -3125,6 +3129,10 @@ const I18N = {
     chat_received_file_saved: "已保存 {name}",
     chat_received_file_failed: "下载失败：{error}",
     chat_received_file_unavailable: "此版本的手机 App 不支持保存文件。",
+    chat_received_file_preview: "预览 {name}",
+    chat_file_preview_too_large: "这个文本文件超过 2 MiB，无法预览。请下载查看。",
+    chat_file_preview_not_text: "这个文件不是 UTF-8 文本，无法预览。请下载查看。",
+    chat_file_preview_failed: "无法预览这个文件。请下载查看。",
     artifact_preview_type_web: "Web 产物",
     artifact_preview_type_image: "图片产物",
     artifact_preview_action_expand: "展开预览",
@@ -4476,7 +4484,7 @@ const I18N = {
     endpoint_switcher_filter_placeholder: "筛选 Agent",
     endpoint_switcher_empty: "没有匹配的 Agent",
     msg_select_endpoint: "请先选择 endpoint",
-    // UI component gallery (/ui-components, pages/ui-components): a testing page.
+    // UI component gallery (/__ui-components, pages/ui-components): a testing page.
     uig_title: "UI 组件",
     uig_subtitle: "测试页面：用合成数据展示 Console 中被复用的 UI 组件。这里的任何操作都不会访问 Agent 或修改设置。",
     uig_language: "语言",
@@ -5414,6 +5422,10 @@ const I18N = {
     chat_received_file_saved: "{name} を保存しました",
     chat_received_file_failed: "ダウンロードに失敗しました：{error}",
     chat_received_file_unavailable: "このバージョンのスマートフォンアプリではファイルを保存できません。",
+    chat_received_file_preview: "{name} をプレビュー",
+    chat_file_preview_too_large: "このテキストファイルは 2 MiB を超えているためプレビューできません。ダウンロードしてください。",
+    chat_file_preview_not_text: "このファイルは UTF-8 テキストではないためプレビューできません。ダウンロードしてください。",
+    chat_file_preview_failed: "このファイルはプレビューできません。ダウンロードしてください。",
     artifact_preview_type_web: "Web Artifact",
     artifact_preview_type_image: "Image Artifact",
     artifact_preview_action_expand: "プレビューを展開",
@@ -6770,7 +6782,7 @@ const I18N = {
     endpoint_switcher_filter_placeholder: "Agent を絞り込む",
     endpoint_switcher_empty: "一致する Agent はありません",
     msg_select_endpoint: "先に endpoint を選択してください",
-    // UI component gallery (/ui-components, pages/ui-components): a testing page.
+    // UI component gallery (/__ui-components, pages/ui-components): a testing page.
     uig_title: "UI コンポーネント",
     uig_subtitle: "テスト用ページ：Console で再利用されている UI コンポーネントを合成データで表示します。ここでの操作は Agent に届かず、設定も変更しません。",
     uig_language: "言語",

@@ -47,6 +47,9 @@ type engineLoopState struct {
 
 	pendingTool            *pendingToolSnapshot
 	approvedActionIdentity string
+	// approvalPreview is what the tool that is about to ask for approval says approving does
+	// (tools.ApprovalPreviewer), for the call whose signature it holds.
+	approvalPreview *pendingApprovalPreview
 
 	nextStep           int
 	deadlineConclusion bool
@@ -445,6 +448,9 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 				executed    bool
 				stepStart   time.Time
 				duration    time.Duration
+				// approved: the user approved this call (a resumed approval); it runs with
+				// tools.WithUserApproval.
+				approved bool
 			}
 
 			items := make([]toolExecItem, len(toolCalls))
@@ -498,10 +504,12 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 					if i == 0 && st.pendingTool != nil {
 						approvalIdentity = st.pendingTool.ApprovalIdentity
 					}
+					wasApproved := approvalIdentity != "" && approvalIdentity == st.approvedActionIdentity
 					obs, denied, requiresApproval, preCheckErr := e.guardPreCheck(ctx, st, step, &tc, approvalIdentity)
 					if preCheckErr != nil {
 						return nil, st.agentCtx, preCheckErr
 					}
+					items[i].approved = wasApproved && !denied && requiresApproval == nil
 					if requiresApproval != nil {
 						approvalIndex = i
 						approvalResult = *requiresApproval
@@ -704,7 +712,11 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 					e.onToolCallStart(st.agentCtx, items[i].tc)
 				}
 				go func(item toolExecItem) {
-					item.observation, item.err = e.executeTool(workerCtx, st, step, &item.tc)
+					itemCtx := workerCtx
+					if item.approved {
+						itemCtx = tools.WithUserApproval(itemCtx)
+					}
+					item.observation, item.err = e.executeTool(itemCtx, st, step, &item.tc)
 					item.executed = true
 					item.duration = time.Since(item.stepStart)
 					completed <- item
@@ -956,6 +968,12 @@ func formatChildSteerMessage(text string) string {
 		"Apply it to your current task; it takes precedence over the task where they conflict:\n\n" + text
 }
 
+// pendingApprovalPreview is a tool's description of one call's approval (tools.ApprovalPreviewer).
+type pendingApprovalPreview struct {
+	signature string
+	preview   tools.ApprovalPreview
+}
+
 // guardPreCheck runs the guard pre-tool decision serially. A non-nil approval
 // result tells the caller to finish earlier calls before persisting resume state.
 func (e *Engine) guardPreCheck(ctx context.Context, st *engineLoopState, step int, tc *ToolCall, approvalIdentity string) (observation string, denied bool, approval *guard.Result, err error) {
@@ -995,6 +1013,16 @@ func (e *Engine) guardDecide(ctx context.Context, st *engineLoopState, step int,
 			st.approvedActionIdentity = ""
 			return "", false, nil, nil
 		}
+		// A tool that describes its approval checks the call first: a refused call is not asked.
+		if tool, found := e.lookupTool(st, tc.Name); found {
+			if previewer, ok := tool.(tools.ApprovalPreviewer); ok {
+				preview, previewErr := previewer.ApprovalPreview(ctx, tc.Params)
+				if previewErr != nil {
+					return "Error: " + strings.TrimSpace(previewErr.Error()), true, nil, nil
+				}
+				st.approvalPreview = &pendingApprovalPreview{signature: toolCallSignature(*tc), preview: preview}
+			}
+		}
 		return "", false, &gr, nil
 	}
 	return "", false, nil, nil
@@ -1002,6 +1030,14 @@ func (e *Engine) guardDecide(ctx context.Context, st *engineLoopState, step int,
 
 func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, step int, pending pendingToolSnapshot, pre guard.Result) (*Final, error) {
 	pending.ApprovalIdentity = "tool_" + newRunID()
+	summary := fmt.Sprintf("ToolCallPre tool=%s", pending.ToolCall.Name)
+	if preview := st.approvalPreview; preview != nil && preview.signature == toolCallSignature(pending.ToolCall) {
+		if text := strings.TrimSpace(preview.preview.Summary); text != "" {
+			summary = text
+		}
+		pending.Display = preview.preview.Params
+	}
+	st.approvalPreview = nil
 	workers, workerSeed, workerNameSet := workersAllocated(ctx)
 	rs := resumeState{
 		WorkersAllocated:        workers,
@@ -1044,7 +1080,7 @@ func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, s
 		Identity:   pending.ApprovalIdentity,
 		ToolName:   pending.ToolCall.Name,
 		ToolParams: pending.ToolCall.Params,
-	}, pre, fmt.Sprintf("ToolCallPre tool=%s", pending.ToolCall.Name), resumeState)
+	}, pre, summary, resumeState)
 	if err != nil {
 		return nil, fmt.Errorf("request tool approval: %w", err)
 	}

@@ -1,4 +1,4 @@
-// The gallery's colours (/ui-components): every token of the console's colour scheme (theme.json),
+// The gallery's colours (/__ui-components): every token of the console's colour scheme (theme.json),
 // in sections by what it is for, each with its value in the light and the dark palette. The page
 // draws a swatch per token in the appearance shown, and the tints (./colorRules.js).
 import theme from "../../theme.json";
