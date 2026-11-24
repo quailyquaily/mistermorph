@@ -1,3 +1,7 @@
+---
+branch: factory/FT179-agent-config-tools
+round: 1
+---
 # Let the agent read and change its own config through deferred tools
 
 ## factory · 2026-11-24 20:12
@@ -31,3 +35,33 @@ Acceptance criteria:
 - `config_set` is absent from every awareness registry (test), and refused for non-owners.
 - A change shows in `morph config get` and in the config revision history with the agent as author, and the result states the apply mode.
 - `assets/config/config.example.yaml` documents anything new (for example a switch to turn the tools off).
+
+## factory · plan · 2026-11-24 20:49
+Behaviour:
+- Discover config_get/config_set only through tool_search. Read persisted YAML without resolving env or secret references. Empty path lists documented sections; section/key reads expose catalog metadata and embedded-example comments, including undocumented-in-catalog example keys.
+- Recursively redact sensitive paths (including nested routes, secrets, arbitrary secret references) into non-reversible set/source metadata. Never expose secret identifiers, environment values, resolved secrets, raw input errors or sensitive approval payloads.
+- Authorize config_set for positively established owners in private chat/task contexts, failing closed otherwise. Validate path, YAML and catalog constraints and deny forbidden descendants/ancestor replacement attacks before approval; require approval every invocation with safe old/new preview. Protect secrets, persist as ByAgent and reload managed config when available; return apply mode. Refused/denied writes leave config unchanged.
+- Awareness registries contain only the read tool, never the setter. First-run absent config gives documented unset/default entries. Store/reload failures produce safe actionable errors.
+Scope:
+- Shared config tooling/service, catalog/comment discovery, guard approval integration, runtime registry wiring and owner identity propagation; tests and English docs/example only as needed. No UI work; do not change current CLI's raw-get behavior, unrelated features, workflows or live config.
+Decisions:
+- Prefer existing configstore/configsettings/secref APIs and registry dependency injection over parallel config parsers/storage. No optional switch unless existing patterns warrant one.
+- Reject unknown/noncatalog writable fields and unsafe compound values rather than guessing. Fail closed if owner or approval context cannot be proven. Never use model-supplied ownership flags.
+- Redaction is recursive and conservative; preserve raw nonsecret ${VAR} values but expose only source category for secrets.
+Checking:
+- Exhaustive Sensitive catalog walk for literal/env/secret-reference direct and parent reads; nested route/list secrets, aliases, unset/empty first run and error leakage.
+- Guard forced approval every call including disabled guard, owner/group/unknown identity refusal, denylists and ancestor replacement, mask roundtrip, kind/enums, approve/deny atomicity, OS secret refs, author history, apply modes/reload.
+- Registry/deferred discovery and absence of config_set from every awareness construction path.
+- Mandatory gofmt, go vet ./..., go test ./... in isolated test HOME. No UI expected; live provider/chat and OS-keychain integration may remain untested and must be noted.
+
+## factory · 2026-11-24 20:49
+Built deferred config_get/config_set with catalog and embedded-example comments, recursive secret masking, private owner-only setters, forced safe approval previews, OS-store protection, agent-authored revisions and Console reload wiring. Awareness excludes config_set at registration and run time. Added tool enable switches, docs and regression tests.
+
+head: 50247f4f
+round: 1
+Decisions: fail closed on absent owner/approval/keyring context; reject noncatalog writes, mask strings and environment references; conservatively deny credential headers, owner/admin changes, endpoints and approval bypass settings in addition to the requested denylist. Deferred tools require tool_search enabled. Embedding users must supply an explicit config path.
+Installs: none.
+Verification: manager reran the complete required gate after the final commit under an isolated HOME: gofmt clean; go vet ./... passed; go test ./... passed (exit 0). No restricted paths changed; only this item's commit is present.
+Not checked: live model/channel approval flows, real OS keyring, and live running Console reload (wiring covered by tests). LINE/Lark approval UI availability remains unverified. No Console frontend changed.
+Push: initial credential-helper invocation lacked repository path; command-local credential.useHttpPath=true resolved it on the single retry. Code branch pushed successfully.
+Move: new/ → review/. Review should inspect the conservative denylist, owner identity and approval resume handling, secret redaction/storage, and runtime registration coverage.
