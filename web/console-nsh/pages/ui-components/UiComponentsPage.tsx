@@ -1,12 +1,13 @@
-// The UI component gallery (/ui-components): the console's colour scheme (every token of
+// The UI component gallery (/__ui-components): the console's colour scheme (every token of
 // theme.json, ./colors.ts) and its reused UI components (the ones more than one area of the
 // console uses; ./inventory.js says which) on one page, for looking at, pressing and reading in
 // each language and in the light and the dark appearance. It is a testing page: it has a route and no
 // entry in any navigation. The route is guarded as any workspace page is (a session, a finished
-// setup), and nothing on the page talks to the console or an agent: the demos mount the production
-// components with synthetic props and local state (./demo.tsx, ./demos), one per entry of the
-// inventory, and the language control is the
-// console's own (`localeState.setLanguage`, the one catalog in lib/i18n).
+// setup), and nothing on the page talks to the console or an agent, but for the way out: the demos
+// mount the production components with synthetic props and local state (./demo.tsx, ./demos), one
+// per entry of the inventory, the language control is the console's own (`localeState.setLanguage`,
+// the one catalog in lib/i18n), and the head's Logout is the console's own logout (lib/logout.ts),
+// which lands on the login page.
 // Only the demos near the visible part of the page are mounted (`DemoCard`): many of them draw on
 // every frame (spinners, beams, clocks), wherever on the page they are.
 // docs/console/ui-components.md describes it.
@@ -17,10 +18,11 @@ import { createSlidingSelection } from "../../components/motion/SlidingSelection
 import { EdgeScroll } from "../../components/motion/ScrollEdges";
 import { Button, EmptyState, Icon, Tabs, TextField, TipButton } from "../../components/ui";
 import { CARD_CORNERS } from "../../components/corners";
+import { createLogout } from "../../lib/logout";
 import { currentRoute } from "../../lib/router";
 import { localeState, themeState } from "../../lib/stores/index.js";
-import { COLOR_SECTIONS, COLOR_TOKENS, type ColorSchemeName, type ColorToken } from "./colors";
-import { galleryAction, galleryActionCount, t } from "./demo";
+import { COLOR_SECTIONS, COLOR_TOKENS, NSH_NAMES, TINT_HUES, TINT_STEPS, type ColorSchemeName, type ColorToken } from "./colors";
+import { galleryAction, galleryActionCount, t, Wide } from "./demo";
 import { DEMOS } from "./demos";
 import { GALLERY_ENTRIES, GALLERY_GROUPS, type GalleryEntry } from "./inventory.js";
 
@@ -36,9 +38,55 @@ function ColorSwatch(props: { color: ColorToken; scheme: ColorSchemeName }) {
       <View class="size-9 rounded-(--radius-control) border border-line-soft" style={{ backgroundColor: String(token(props.color.name as Parameters<typeof token>[0])) }} />
       <View class="min-w-0 flex-1">
         <Text class="font-mono text-xs text-foreground" style={{ numberOfLines: 1 }}>{props.color.name}</Text>
-        <Text class="font-mono text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>{props.color[props.scheme].toLowerCase()}</Text>
+        <Text class="font-mono text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>{swatchValue(props.color, props.scheme)}</Text>
       </View>
     </View>
+  );
+}
+
+/** A swatch's second line: its value, and for one of nsh's names the console's token to use. */
+function swatchValue(color: ColorToken, scheme: ColorSchemeName) {
+  const value = color[scheme].toLowerCase();
+  const ours = (NSH_NAMES as Record<string, string>)[color.name];
+  return ours ? `${value} · ${t("uig_color_use", { name: ours })}` : value;
+}
+
+/** A tint step's column head: its share, and what it is for. */
+function TintHead(props: { share: number; role: string }) {
+  return (
+    <View class="w-20 gap-0.5">
+      <Text class="font-mono text-xs text-foreground">{props.share}</Text>
+      <Text class="text-[10px] leading-[13px] text-muted-foreground">{t(props.role)}</Text>
+    </View>
+  );
+}
+
+/**
+ * The tints: a row per colour, its fills at each step and then its borders, drawn on the card as
+ * the console draws them (colorRules.js).
+ */
+function TintTable(props: { hues: string[] }) {
+  return (
+    <Wide>
+      <View class="gap-2">
+        <View class="flex-row items-start gap-2">
+          <View class="w-16" />
+          {TINT_STEPS.bg.map((step) => <TintHead share={step.share} role={step.role} />)}
+          <View class="w-2" />
+          {TINT_STEPS.border.map((step) => <TintHead share={step.share} role={step.role} />)}
+        </View>
+        <Each of={props.hues} key={(hue) => hue}>
+          {(hue) => (
+            <View class="flex-row items-center gap-2" testID={`uig-tint-${hue()}`}>
+              <Text class="w-16 font-mono text-xs text-foreground">{hue()}</Text>
+              {TINT_STEPS.bg.map((step) => <View class={`h-9 w-20 rounded-(--radius-control) bg-${hue()}/${step.share}`} />)}
+              <View class="w-2" />
+              {TINT_STEPS.border.map((step) => <View class={`h-9 w-20 rounded-(--radius-control) border border-${hue()}/${step.share}`} />)}
+            </View>
+          )}
+        </Each>
+      </View>
+    </Wide>
   );
 }
 
@@ -86,7 +134,7 @@ function SectionRow(props: {
         accessibilityLabel={props.label}
         testID={`uig-index-${props.id}`}
         class={`min-h-10 flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 pl-3.5 pr-[13px] transition-colors duration-180 ${
-          props.active ? "hover:bg-blue/3" : "hover:bg-hover-soft"
+          props.active ? "hover:bg-blue/4" : "hover:bg-hover-soft"
         }`}
       >
         <Text class="flex-1 text-sm leading-[18.2px] tracking-tight text-foreground line-clamp-2">{props.label}</Text>
@@ -150,7 +198,7 @@ function DemoCard(props: { entry: GalleryEntry; width: number; top: number; span
 }
 
 export function UiComponentsPage() {
-  // The address may name where to start: `/ui-components?group=chat&q=composer`. It is read once;
+  // The address may name where to start: `/__ui-components?group=chat&q=composer`. It is read once;
   // the controls below do not write it back.
   const query = untracked(() => currentRoute().query);
   const filter = signal(String(query.q ?? ""));
@@ -163,6 +211,7 @@ export function UiComponentsPage() {
     return !want || color.name.includes(want) || color.light.toLowerCase().includes(want) || color.dark.toLowerCase().includes(want);
   };
   const shownColors = computed(() => COLOR_TOKENS.filter(colorMatches));
+  const shownTints = computed(() => TINT_HUES.filter((hue) => hue.includes(filter().trim().toLowerCase())));
   const colorsVisible = () => group() === COLORS && shownColors().length > 0;
   const shown = computed(() => GALLERY_ENTRIES.filter((entry) => matchesFilter(entry, filter())));
   const inGroup = (id: string) => shown().filter((entry) => entry.group === id);
@@ -204,6 +253,8 @@ export function UiComponentsPage() {
   const room = () => Math.max(240, windowSize().width - (sidebar() ? SIDEBAR_WIDTH : 0) - pad() * 2);
   const columns = () => (room() >= 1560 ? 3 : room() >= 900 ? 2 : 1);
   const cardWidth = (wide: boolean) => (wide ? room() : Math.floor((room() - gap * (columns() - 1)) / columns()));
+  // The page's way out: log out and land on the login page (a page with no navigation has no other).
+  const logout = createLogout();
   const countLabel = () => {
     const count = shown().length;
     const total = GALLERY_ENTRIES.length;
@@ -211,8 +262,8 @@ export function UiComponentsPage() {
     return t("uig_count_filtered", { count, total });
   };
   return (
-    <View class="flex-1 bg-background" testID="ui-components-page">
-      <View class="gap-2.5 border-b border-line-soft bg-background py-3" style={{ paddingHorizontal: pad() }}>
+    <View class="flex-1 bg-paper" testID="ui-components-page">
+      <View class="gap-2.5 border-b border-line-soft bg-paper py-3" style={{ paddingHorizontal: pad() }}>
         <View class="flex-row flex-wrap items-center gap-x-4 gap-y-2">
           <View class="min-w-0 shrink grow gap-0.5">
             <Text class="text-xl leading-[24px] tracking-[-0.4px] text-foreground" role="header" testID="uig-title">{t("uig_title")}</Text>
@@ -241,6 +292,13 @@ export function UiComponentsPage() {
               onChange={(id) => localeState.setLanguage(id)}
             />
           </View>
+          <Button
+            variant="outlined-danger"
+            label={t("action_logout")}
+            loading={logout.busy()}
+            onPress={() => void logout.run()}
+            testID="uig-logout"
+          />
         </View>
         <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
           <TextField
@@ -332,6 +390,12 @@ export function UiComponentsPage() {
                     </If>
                   )}
                 </Each>
+                <If when={shownTints().length > 0}>
+                  <View class="gap-2.5" testID="uig-colors-tints">
+                    <Text class="font-mono text-[10px] uppercase tracking-[0.6px] text-muted-foreground">{t("uig_colors_tints")}</Text>
+                    <TintTable hues={shownTints()} />
+                  </View>
+                </If>
               </View>
             </View>
           </If>

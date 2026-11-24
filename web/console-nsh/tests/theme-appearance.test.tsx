@@ -31,7 +31,7 @@ const pages = (app: Awaited<ReturnType<typeof openConsole>>["app"]) =>
 
 const SETTINGS = { location: "/e/default/settings/general" };
 type App = Awaited<ReturnType<typeof openConsole>>["app"];
-/** The app frame's background (App.tsx: `bg-background`; its testID carries its bottom padding). */
+/** The app frame's background (App.tsx: `bg-paper`; its testID carries its bottom padding). */
 function ground(app: App): string {
   for (let bottom = 0; bottom <= 120; bottom++) {
     const style = app.viewStyle(`id:app-frame.bottom-${bottom}`);
@@ -45,7 +45,7 @@ test("the two palettes have the same tokens and differ", () => {
   expect(vars.dark.background.toLowerCase()).not.toBe(vars.light.background.toLowerCase());
   expect(vars.dark.foreground.toLowerCase()).not.toBe(vars.light.foreground.toLowerCase());
   // The status colours of the dark palette are the pastels themselves.
-  expect([vars.dark.warn, vars.dark.ok, vars.dark.danger, vars.dark["status-on"], vars.dark["status-pending"]].map((c) => c.toLowerCase())).toEqual([
+  expect([vars.dark.warn, vars.dark.ok, vars.dark.danger, vars.dark["info"], vars.dark["status-pending"]].map((c) => c.toLowerCase())).toEqual([
     "#ffc48a",
     "#6fd8ee",
     "#ff9f86",
@@ -69,14 +69,14 @@ test("text and status colours keep their contrast on both palettes", () => {
   for (const scheme of ["light", "dark"] as const) {
     const v = vars[scheme];
     for (const ground of [v.background, v.card]) {
-      for (const name of ["foreground", "subtle", "muted-foreground", "ink", "blue", "ok", "danger", "warn", "warn-dark", "status-on", "status-pending", "info"]) {
+      for (const name of ["foreground", "subtle", "muted-foreground", "ink", "blue", "ok", "danger", "warn", "warn-dark", "info", "status-pending"]) {
         expect(`${scheme} ${name} ${contrast(v[name], ground) >= 4.5}`).toBe(`${scheme} ${name} true`);
       }
     }
     // What is written on a filled button.
     expect(contrast(v["primary-foreground"], v.primary)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(v["destructive-foreground"], v.destructive)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(v["warn-foreground"], v.warn)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(v["on-accent"], v.destructive)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(v["on-accent"], v.warn)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(v["on-accent"], v.blue)).toBeGreaterThanOrEqual(4.5);
   }
 });

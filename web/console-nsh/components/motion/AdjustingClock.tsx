@@ -132,7 +132,7 @@ export function AdjustingClock(props: {
   const unit = size / 256;
   return (
     <View accessibilityElementsHidden testID={props.testID} onLayout={props.onLayout} style={{ width: size, height: size }}>
-      <Image
+      <Image class="overflow-hidden"
         src={FACE}
         accessibilityElementsHidden
         style={{ width: size, height: size, tintColor: token(props.color) as string }}

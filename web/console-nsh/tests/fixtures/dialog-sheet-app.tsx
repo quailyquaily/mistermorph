@@ -114,7 +114,7 @@ function action(kind: Kind, n: number, label: string, variant: "outlined" | "pri
 function Page() {
   const close = () => which.set(null);
   return (
-    <View class="flex-1 gap-1 bg-background p-2">
+    <View class="flex-1 gap-1 bg-paper p-2">
       <View class="flex-row flex-wrap gap-1">
         <Each of={[...KINDS]} key={(kind) => kind}>
           {(kind) => <Button size="xs" label={`open ${kind()}`} onPress={() => which.set(kind())} testID={`open-${kind()}`} />}

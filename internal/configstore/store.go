@@ -48,6 +48,8 @@ const (
 	ByImport  = "import"
 	ByInstall = "install"
 	ByLogin   = "login"
+	// ByAgent is the agent's own change, with config_set after the user approved it.
+	ByAgent = "agent"
 )
 
 const savedKey = "config_saved_at"

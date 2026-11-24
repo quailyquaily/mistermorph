@@ -7,6 +7,7 @@
 import { computed, effect, signal, Text, untracked, View } from "nsh";
 import { Button, Icon, Spinner } from "../ui";
 import { DialogShell, InlineNotice, t } from "./DialogShell";
+import { CARD_CORNERS } from "../corners";
 
 const TEST_CONNECTION_BENCHMARK_IDS = ["text_reply", "json_response", "tool_calling", "evaluate"];
 // Evaluate-only providers run just the judgment benchmark.
@@ -148,7 +149,7 @@ export function SetupConnectionTestDialogContent(props: SetupConnectionTestDialo
       </If>
 
       <If when={showBenchmarks()}>
-        <View class="rounded-(--radius) border border-line-faint">
+        <View class={`${CARD_CORNERS} border border-line-faint`}>
           <Each of={visibleBenchmarks()} key={(item) => `${item.id}:${item.running}`}>
             {(item, index) => (
               <View class={`gap-2 px-3 py-2.5 ${index() > 0 ? "border-t border-line-faint" : ""}`} testID={`connection-test-${item().id}`}>
@@ -196,7 +197,7 @@ export function SetupConnectionTestDialogContent(props: SetupConnectionTestDialo
                   </View>
                 </View>
                 <If when={!item().running && isRawExpanded(item())}>
-                  <View selectable class="rounded-(--radius) bg-muted px-2.5 py-2">
+                  <View selectable class={`${CARD_CORNERS} bg-muted px-2.5 py-2`}>
                     <Text class="font-mono text-xs text-foreground" testID={`connection-test-raw-${item().id}`}>
                       {rawResponseText(item())}
                     </Text>

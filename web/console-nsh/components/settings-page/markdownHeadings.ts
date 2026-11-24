@@ -1,11 +1,12 @@
 // The Vue console's soul editor (OverType's default theme) colours Markdown headings: the `#`
-// marker in the ink at 52%, the heading's text orange-red, both bold. The nsh Editor's Markdown
+// marker in the ink at 52%, the heading's text in a colour of its own (OverType's orange-red; here
+// the theme's blue, so it is a colour of the palette and reads as no warning), both bold. The nsh Editor's Markdown
 // highlighting has its own heading colour, so the persona editor lays these over it as decorations.
 import type { EditorDecoration } from "nsh/base";
 
-// OverType's `.syntax-marker` (rgba(13, 59, 102, 0.52)) and `h1`..`h6` (#f95738), measured in Vue.
+// OverType's `.syntax-marker` (rgba(13, 59, 102, 0.52)), measured in Vue.
 const MARKER_CLASS = "font-bold text-ink/52";
-const HEADING_CLASS = "font-bold text-[#f95738]";
+const HEADING_CLASS = "font-bold text-blue";
 
 /** Decorations for the ATX headings of `source` (not inside fenced code blocks). */
 export function markdownHeadingDecorations(source: string): EditorDecoration[] {

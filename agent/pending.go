@@ -14,6 +14,9 @@ type PendingOutput struct {
 type PendingApprovalTool struct {
 	Name   string
 	Params map[string]any
+	// Display is what the tool says an approval card lists instead of Params (nil when it says
+	// nothing): Params may hold a secret the card must not show.
+	Display map[string]any
 }
 
 // PendingApprovalToolFromResumeState exposes only the pending tool invocation,
@@ -28,8 +31,9 @@ func PendingApprovalToolFromResumeState(data []byte) (PendingApprovalTool, bool)
 		return PendingApprovalTool{}, false
 	}
 	return PendingApprovalTool{
-		Name:   name,
-		Params: state.PendingTool.ToolCall.Params,
+		Name:    name,
+		Params:  state.PendingTool.ToolCall.Params,
+		Display: state.PendingTool.Display,
 	}, true
 }
 

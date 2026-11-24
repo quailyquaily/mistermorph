@@ -60,7 +60,7 @@ export function AgentAvatar(props: { image: string | ImageAsset; size: number; d
       <View class="overflow-hidden rounded-full" style={{ width: props.size, height: props.size }}>
         <Image
           src={props.image}
-          class="rounded-full bg-card"
+          class="overflow-hidden rounded-full bg-card"
           accessibilityElementsHidden
           style={{ width: props.size, height: props.size, objectFit: "cover", opacity: props.dim ? 0.7 : 1 }}
         />
@@ -74,7 +74,7 @@ export function ConnectionMark(props: { online: boolean; class?: string }) {
   return (
     <View
       accessibilityElementsHidden
-      class={`size-2 rounded-[1px] border ${props.online ? "border-status-on bg-status-on" : "border-status-off"} ${props.class ?? ""}`}
+      class={`size-2 rounded-[1px] border ${props.online ? "border-info bg-info" : "border-status-off"} ${props.class ?? ""}`}
     />
   );
 }

@@ -11,11 +11,16 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
 
-// ApprovalToolParams returns the exact invocation bound to this approval record.
+// ApprovalToolParams returns what an approval card lists for this record: the invocation bound to
+// it, or what its tool described instead (tools.ApprovalPreviewer), when the invocation may hold a
+// secret.
 func ApprovalToolParams(rec guard.ApprovalRecord) map[string]any {
 	pending, ok := agent.PendingApprovalToolFromResumeState(rec.ResumeState)
 	if !ok || !strings.EqualFold(pending.Name, strings.TrimSpace(rec.ToolName)) {
 		return nil
+	}
+	if pending.Display != nil {
+		return pending.Display
 	}
 	return pending.Params
 }

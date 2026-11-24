@@ -18,6 +18,7 @@
 import { computed, effect, platform, signal, Text, View } from "nsh";
 import { Tooltip } from "nsh/base";
 import { drawnGlyph, type GlyphFadePlan, planGlyphFade, platformDrawsMasks, splitGlyphs } from "./glyphFade";
+import { CONTROL_CORNERS } from "../corners";
 
 type FadeTextProps = {
   /** The text (a string, so its length can be compared with what fits). */
@@ -44,7 +45,7 @@ export function FadeText(props: FadeTextProps) {
 
 function fullTextTip(props: FadeTextProps, cut: () => boolean) {
   return cut() && !props.noTooltip ? (
-    <Tooltip class="max-w-75 rounded-(--radius) border border-line-soft bg-card px-2 pb-1.25 pt-1">
+    <Tooltip class={`max-w-75 ${CONTROL_CORNERS} border border-line-soft bg-card px-2 pb-1.25 pt-1`}>
       <Text class="text-xs text-foreground">{props.text}</Text>
     </Tooltip>
   ) : undefined;

@@ -19,6 +19,7 @@ import { copyText, openExternal } from "../../lib/platform";
 import { CODE_PANEL, CODE_TOKEN_COLORS, expandTabs, highlightCode } from "./codeHighlight";
 import { t } from "./i18n";
 import { inlineCopyText, linkInlineCode } from "./inlineCopy";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 
 export function openChatLink(url: string) {
   const code = inlineCopyText(url);
@@ -63,7 +64,7 @@ function CodeBlock(props: { block: TextViewCodeBlock; copyLabel: string }) {
     timer = setTimeout(() => copied.set(false), 1400);
   };
   return (
-    <View class="group my-1.5 rounded-(--radius)" style={{ backgroundColor: CODE_PANEL.background }} testID="chat-code-block">
+    <View class={`group my-1.5 ${CARD_CORNERS}`} style={{ backgroundColor: CODE_PANEL.background }} testID="chat-code-block">
       <Scroll horizontal scrollbar={false}>
         <View selectable style={{ paddingTop: 38.9, paddingBottom: 15.1, paddingLeft: 15.7, paddingRight: 46.9 }}>
           <Text class="font-mono" style={{ fontSize: CODE_SIZE, lineHeight: CODE_LINE, color: CODE_PANEL.text }}>
@@ -80,9 +81,9 @@ function CodeBlock(props: { block: TextViewCodeBlock; copyLabel: string }) {
         onPress={copy}
         accessibilityLabel={props.copyLabel}
         testID="chat-code-copy"
-        class="absolute right-2.5 top-2.5 size-7 items-center justify-center rounded-(--radius) opacity-0 transition duration-150 group-hover:opacity-100 focus:opacity-100 hover:bg-[#34344b]"
+        class={`absolute right-2.5 top-2.5 size-7 items-center justify-center ${CONTROL_CORNERS} opacity-0 transition duration-150 group-hover:opacity-100 focus:opacity-100 hover:bg-[${CODE_PANEL.surface}]`}
       >
-        <Image
+        <Image class="overflow-hidden"
           src={copied() ? ICONS.PhCheck : ICONS.PhCopy}
           accessibilityElementsHidden
           style={{ width: 14, height: 14, tintColor: copied() ? CODE_PANEL.bright : CODE_PANEL.muted }}

@@ -29,6 +29,7 @@ import {
 import { Button, confirm } from "../ui";
 import { isMobile } from "../../lib/shell";
 import { SettingsCard } from "../settings-page/parts";
+import { CONTROL_CORNERS } from "../corners";
 
 const t = translate as unknown as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -236,7 +237,7 @@ function ShortcutRow(props: {
         </Text>
         <If when={props.recording}>
           <View android={{ accessibilityLiveRegion: "polite" }}>
-            <Text class="text-xs leading-[17.4px] text-blue-dark" testID={`shortcut-recording-${part}`}>
+            <Text class="text-xs leading-[17.4px] text-ink" testID={`shortcut-recording-${part}`}>
               {t("shortcuts_recording")}
             </Text>
           </View>
@@ -292,7 +293,7 @@ function ShortcutRow(props: {
       </View>
       <View class="flex-row flex-wrap items-center gap-2">
         <View
-          class={`min-h-8 min-w-16 items-center justify-center rounded-(--radius) border px-2.5 ${
+          class={`min-h-8 min-w-16 items-center justify-center ${CONTROL_CORNERS} border px-2.5 ${
             props.recording ? "border-blue bg-selection" : "border-line-soft bg-field"
           }`}
           accessibilityLabel={label() ? t("shortcuts_keys_label", { action: title(), keys: label() }) : t("shortcuts_none_label", { action: title() })}

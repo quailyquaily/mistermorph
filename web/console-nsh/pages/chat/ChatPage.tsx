@@ -29,6 +29,7 @@ import { createPaneStack } from "../../components/motion/PaneStack";
 import { ActivityDetailPanel } from "./ActivityDetailPanel";
 import { WorkspacePanel, WorkspaceSheet } from "./WorkspacePanel";
 import { useWorkbench } from "../../components/frame/Workbench";
+import { CARD_CORNERS } from "../../components/corners";
 
 function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (height: number) => void }) {
   const c = props.c;
@@ -271,7 +272,7 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
   // the window draws glass the conversation runs on behind it, with no fade to the paper.
   const glassJobBar = () => glassEnabled() && c.selectedTopicIsCron() && !c.selectedTopicIsAgent();
   const floatFade = () => {
-    const paper = String(token("background"));
+    const paper = String(token("paper"));
     const solid = Math.round(footRoom());
     return `linear-gradient(to top, ${paper} 0px, ${paper} ${solid}px, ${paper.slice(0, 7)}00 ${solid + COMPOSER_RADIUS}px)`;
   };
@@ -287,7 +288,7 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
             {/* Over the history's foot, fading from it to the page (what scrolls behind the footer
                 line stays readable); presses on the fade reach the history. */}
             <View
-              class={`absolute bottom-0 left-0 right-0 pt-6 ${glassFloat() || glassJobBar() ? "" : "bg-linear-to-b from-transparent to-background"}`}
+              class={`absolute bottom-0 left-0 right-0 pt-6 ${glassFloat() || glassJobBar() ? "" : "bg-linear-to-b from-transparent to-paper"}`}
               style={glassFloat() ? { pointerEvents: "box-none", backgroundImage: floatFade() } : { pointerEvents: "box-none" }}
               onLayout={({ bounds }) => composerRoom.set(bounds.size.height)}
               testID={glassFloat() || glassJobBar() ? "chat-composer-float.glass" : "chat-composer-float"}
@@ -417,7 +418,7 @@ export function ChatPage() {
         when={!c.chatReadonly()}
         else={
           <View class="flex-1 items-center justify-center p-6" testID="chat-readonly">
-            <View class="w-full max-w-md gap-2 rounded-(--radius) border border-line-faint bg-card p-5">
+            <View class={`w-full max-w-md gap-2 ${CARD_CORNERS} border border-line-faint bg-card p-5`}>
               <Kicker right={<Text class="font-mono text-xs uppercase text-muted-foreground">Read Only</Text>}>{c.readonlyKickerLeft()}</Kicker>
               <Text class="text-sm text-subtle">{c.readonlyReason()}</Text>
             </View>

@@ -62,7 +62,7 @@ function Strip(props: { id: string; equal?: boolean; labels: string[]; width: nu
 function Page() {
   return (
     <Scroll
-      class="flex-1 bg-background"
+      class="flex-1 bg-paper"
       contentClass="gap-4 p-4"
       testID="page"
       scrollEventThrottle={16}

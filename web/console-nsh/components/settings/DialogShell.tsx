@@ -5,6 +5,7 @@ import { Scroll, Text, View } from "nsh";
 import { Dialog } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { Modal, type ModalSize } from "../ui";
+import { CARD_CORNERS } from "../corners";
 
 /** `translate` typed: the JS default `vars = null` makes TS reject variables. */
 export const t = translate as unknown as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -70,7 +71,7 @@ export function InlineNotice(props: { type?: "error" | "warning" | "info" | "suc
     <View
       role={props.type === "error" ? "alert" : undefined}
       testID={props.testID}
-      class={`rounded-(--radius) border bg-card px-3 py-2 ${box()}`}
+      class={`${CARD_CORNERS} border bg-card px-3 py-2 ${box()}`}
     >
       <View selectable>
         <Text class={`text-sm ${text()}`}>{props.text}</Text>

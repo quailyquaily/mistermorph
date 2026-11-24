@@ -58,7 +58,7 @@ function CloseButton(props: { phone?: boolean; dark?: boolean; onPress: () => vo
     >
       {/* On the dark panel the terminal's light ink (no theme token is light on it). */}
       <If when={props.dark} else={<Icon name="PhX" size={props.phone ? 16 : 14} color="subtle" />}>
-        <Image
+        <Image class="overflow-hidden"
           src={ICONS.PhX}
           accessibilityElementsHidden
           style={{ width: props.phone ? 16 : 14, height: props.phone ? 16 : 14, tintColor: "#e8eef5d1" }}

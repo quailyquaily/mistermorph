@@ -25,6 +25,7 @@
 // open), Enter opens the selected card, Escape closes the panel.
 import { batch, cleanup, computed, createAnimatedValue, createMotion, effect, keymap, List, platform, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX, ListRef } from "nsh";
+import { shadowColor } from "../../components/solidLook";
 import {
   Blocks,
   gutterX,
@@ -87,7 +88,7 @@ type Memory = { id: string; description?: string; body?: string };
 const PANEL_WIDTH = 404;
 const PANEL_INSET = 12;
 const PANEL_AVATAR = 88;
-const PANEL_SHADOW = "0 1px 2px rgba(24, 46, 72, 0.05), 0 18px 40px rgba(24, 46, 72, 0.10)";
+const panelShadow = () => `0 1px 2px ${shadowColor(0.05)}, 0 18px 40px ${shadowColor(0.1)}`;
 /** The cards' least width and the gaps between them: a desktop's, a phone's. A phone keeps at least
  *  PHONE_COLUMNS cards a row: where they would be narrower than its least width they are the
  *  compact cards (ContactCard.tsx), COMPACT_GAP apart. */
@@ -910,7 +911,7 @@ export function ContactsPage(props: {
       </List>
       <View class="absolute inset-0 overflow-hidden" accessibilityElementsHidden style={{ pointerEvents: "none" }}>
         <View class="absolute left-0 top-0" style={{ transform: [{ translateY: scrollShift }] }}>
-          <selection.Highlight class="rounded-[16px] border border-blue/38 bg-selection" testID="contacts-selection" />
+          <selection.Highlight class="rounded-[16px] border border-blue/35 bg-selection" testID="contacts-selection" />
         </View>
       </View>
       </View>
@@ -1163,7 +1164,7 @@ export function ContactsPage(props: {
             >
               <View
                 class={`flex-1 overflow-hidden ${CONTINUOUS} border border-line-faint bg-dialog`}
-                style={{ borderRadius: POPUP_RADIUS, boxShadow: platform.os === "android" ? undefined : PANEL_SHADOW }}
+                style={{ borderRadius: POPUP_RADIUS, boxShadow: platform.os === "android" ? undefined : panelShadow() }}
               >
                 <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow" ref={contactMemory.ref} onScroll={contactMemory.onScroll}>
                   <View class="grow" style={bodyMotion.style}>
@@ -1179,7 +1180,7 @@ export function ContactsPage(props: {
             slides in over it. */}
         <If when={panes.shown(1, showEditorPane())}>
           <View
-            class="flex-1 bg-background"
+            class="flex-1 bg-paper"
             style={panes.style(1)}
             accessibilityElementsHidden={panes.hidden(1) || undefined}
             importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}

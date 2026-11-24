@@ -39,7 +39,7 @@ function Gallery() {
   }
 
   return (
-    <View class="gap-3 bg-background p-4">
+    <View class="gap-3 bg-paper p-4">
       <View class="self-start" onLayout={(event) => width.set(Math.round(event.bounds.size.width))}>
         <Button testID="save" label="Save" loading={saving()} onPress={() => void save()} />
       </View>

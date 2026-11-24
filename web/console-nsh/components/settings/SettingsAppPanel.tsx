@@ -61,7 +61,7 @@ export function SettingsAppPanel() {
               <Image
                 src={current().image || appLogo}
                 accessibilityElementsHidden
-                class="rounded-[14px] border border-line/70 bg-paper"
+                class="overflow-hidden rounded-[14px] border border-line/70 bg-paper"
                 style={{ width: 56, height: 56 }}
               />
               <View class="min-w-0 flex-1 gap-1">
@@ -419,7 +419,7 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
   };
   const stateTone = (which: UpdateTarget) => {
     const state = checks[which].state();
-    return state === "error" ? "text-danger" : state === "available" ? "text-blue-dark" : state === "current" ? "text-ok" : "text-muted-foreground";
+    return state === "error" ? "text-danger" : state === "available" ? "text-ink" : state === "current" ? "text-ok" : "text-muted-foreground";
   };
   const installed = (version: string) => t("settings_update_installed", { version: version ? displayVersion(version) : t("settings_update_version_unknown") });
   // The installed app's version, from its host only; "Unknown" when the host cannot tell.

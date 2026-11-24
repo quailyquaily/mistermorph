@@ -340,8 +340,8 @@ function FlowJobBox(props: {
             transitionDelay: props.look().wait,
             transitionTimingFunction: "ease",
           }}
-          hoverStyle={{ borderColor: String(token("focus")) }}
-          focusVisibleStyle={{ outlineWidth: 1.5, outlineColor: String(token("focus")), outlineOffset: 2, outlineStyle: "solid" }}
+          hoverStyle={{ borderColor: String(token("ring")) }}
+          focusVisibleStyle={{ outlineWidth: 1.5, outlineColor: String(token("ring")), outlineOffset: 2, outlineStyle: "solid" }}
         >
           <View class="w-2.5 items-center" accessibilityElementsHidden style={{ transform: [{ scale: pop() }] }}>
             <StatusMark state={props.look().mark} size={7} corner={2} />
@@ -1190,7 +1190,7 @@ export function TodoFlow(props: TodoFlowProps): JSX.Element {
       </Scroll>
       {/* Link mode says what to do next, over the picture's top; screen readers hear it as it comes. */}
       <If when={linking()}>
-        <View class="absolute left-0 right-0 top-0 bg-paper-dense" style={{ paddingHorizontal: padX(), paddingVertical: 2, pointerEvents: "none" }}>
+        <View class="absolute left-0 right-0 top-0 bg-paper/95" style={{ paddingHorizontal: padX(), paddingVertical: 2, pointerEvents: "none" }}>
           <Text role="alert" class="text-[13px] leading-[19px] text-muted-foreground" testID="todo-flow-hint">
             {t("todo_flow_link_hint", { job: linkingTitle() })}
           </Text>

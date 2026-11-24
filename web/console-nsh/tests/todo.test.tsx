@@ -708,12 +708,10 @@ test("the calendar shows a month of what is planned; a day lists its runs, and a
 
   const { app: jan } = await openTodo(historyApi(), { location: `${LOCATION}?view=calendar&month=2030-01` });
   await jan.waitFor("January 2030");
-  // The one-time job is written in its day. The repeating one is a hollow mark there, and is
-  // named once, with its cadence, above the grid.
+  // The one-time job is written in its day. The repeating one is a hollow mark there.
   await jan.waitFor(`${calendarDay("2030-01-02")} >> text:Report`);
   expect(jan.shows(`${calendarDay("2030-01-02")} >> text:Review`)).toBe(false);
   expect(jan.count(`${calendarDay("2030-01-02")} >> id:todo-calendar-mark-off`)).toBe(1);
-  expect(jan.texts()).toContain("Review  Every Monday and Wednesday at 9:15 AM");
   // The day's list, beside the grid, has both.
   await jan.press(calendarDay("2030-01-02"));
   await jan.waitFor("id:todo-day-detail");
@@ -777,9 +775,10 @@ test("a past month shows what ran, from the run history: the usual repeats as ma
     { location: `${LOCATION}?view=calendar&month=2020-01` },
   );
   await app.waitFor("January 2020");
-  // Both of Review's repeating schedules are in the strip, and Report after it.
-  await app.waitFor("Review  Every day at 9 AM · Every Saturday at 6 PM");
-  expect(app.texts()).toContain("Report  after Review");
+  // The 7th: Review by its daily schedule and the Report after it, as usual: two marks, no words.
+  await app.waitUntil(() => marks(app, "2020-01-07", "on") === 2);
+  // No strip names the repeating jobs above the grid.
+  expect(app.count("id:todo-calendar-repeating")).toBe(0);
   // The month's days were asked for, a full page at a time.
   const asked = proxied(calls, "GET", "/todo/runs/history");
   expect(asked.length).toBe(1);
@@ -787,9 +786,6 @@ test("a past month shows what ran, from the run history: the usual repeats as ma
   expect(query.get("limit")).toBe("500");
   expect(query.get("from")).toMatch(/^2019-12-2[78]T/);
   expect(query.get("to")).toMatch(/^2020-02-0[89]T/);
-
-  // The 7th: Review by its daily schedule and the Report after it, as usual: two marks, no words.
-  await app.waitUntil(() => marks(app, "2020-01-07", "on") === 2);
   expect(app.shows(`${calendarDay("2020-01-07")} >> text:Review`)).toBe(false);
   // The 11th, a Saturday: the run of the second schedule folds too.
   expect(marks(app, "2020-01-11", "on")).toBe(2);

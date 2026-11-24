@@ -137,7 +137,7 @@ function Page() {
     if (MEASURED.test(name)) frames.update((all) => ({ ...all, [name]: frame }));
   };
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-1 flex-row gap-1">
         <View class={isMobile() ? "flex-1" : "flex-[1.45]"}>
           <TodoCalendar

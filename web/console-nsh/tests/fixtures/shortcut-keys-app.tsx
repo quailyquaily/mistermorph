@@ -22,7 +22,7 @@ function Pane() {
 
 function Page() {
   return (
-    <View class="flex-1 bg-background p-4">
+    <View class="flex-1 bg-paper p-4">
       <ChatQuestionCard
         question={QUESTION}
         live

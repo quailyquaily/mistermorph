@@ -306,7 +306,7 @@ function WorkspaceTab(props: { c: ChatController }) {
                   class="mx-2 min-h-8 flex-row items-center gap-2 rounded-(--radius) pr-2 hover:bg-hover-soft selected:bg-selection"
                   style={{ paddingLeft: 8 + row().depth * 14 }}
                 >
-                  <Image src={workspaceTreeIcon(row().entry, row().expanded)} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
+                  <Image class="overflow-hidden" src={workspaceTreeIcon(row().entry, row().expanded)} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
                   <Text class="flex-1 text-sm leading-5 text-foreground line-clamp-1">{row().entry?.name}</Text>
                 </TipButton>
               )}

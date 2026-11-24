@@ -4,7 +4,7 @@ import type { JSX } from "nsh";
 import { Text, View } from "nsh";
 import { Collapsible, Switch } from "nsh/base";
 import { isMobile } from "../../lib/shell";
-import { Icon, type IconName, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tip, TipButton } from "../ui";
+import { Icon, type IconName, SWITCH_THUMB_CLASS, SWITCH_TRACK_CLASS, switchThumbStyle, Tip, TipButton } from "../ui";
 import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 import { useRevealRow } from "./reveal";
 
@@ -37,9 +37,10 @@ export function SettingSwitch(props: {
       onChange={({ checked }) => props.onChange?.(checked)}
       accessibilityLabel={props.accessibilityLabel}
       testID={props.testID}
-      class="disabled:opacity-45"
-      trackClass={`w-[34px] h-5 ${SWITCH_TRACK_CORNERS} border border-line bg-transparent p-0.5 transition-colors duration-180 hover:border-muted-foreground checked:border-primary checked:bg-primary`}
-      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card ring-1 ring-foreground/20 shadow-xs transition-transform duration-260 ease-[cubic-bezier(0.3,1.35,0.5,1)] checked:translate-x-3.5 checked:ring-primary/60`}
+      class="group disabled:opacity-50"
+      trackClass={SWITCH_TRACK_CLASS}
+      thumbClass={SWITCH_THUMB_CLASS}
+      thumbStyle={switchThumbStyle()}
     />
   );
 }
@@ -194,10 +195,10 @@ export function Fold(props: {
 }
 
 /**
- * The boxed fold's bar: a hairline box on the paper with the cards' corners (the settings cards
- * above and below it are boxes of the same radius).
+ * The boxed fold's bar: a hairline box on the card's fill with the cards' corners (the settings
+ * cards above and below it are boxes of the same radius and fill).
  */
-export const BOX_FOLD_BAR_CLASS = `min-h-[54px] flex-row items-center justify-between gap-3 ${CARD_CORNERS} border border-line-soft bg-paper px-5`;
+export const BOX_FOLD_BAR_CLASS = `min-h-[54px] flex-row items-center justify-between gap-3 ${CARD_CORNERS} border border-line-soft bg-card px-5`;
 
 /**
  * A boxed fold (`.settings-system-advanced`): a 54pt bar with its title at the left and a caret at
@@ -238,8 +239,9 @@ export function DirtyDot(props: { label: string; testID?: string; class?: string
 /**
  * A titled block (the Vue console's AppSection). The head is one 48pt strip: a mono caps label, the
  * meta beside it on one line (cut where it does not fit), plain actions at the far end, on a
- * hairline. `boxed` (the default) frames it in a hairline on the paper with a 16pt body; `plain`
- * has no frame, the head's rule the only line (settings groups inside a box). `literal` keeps the
+ * hairline. `boxed` (the default) frames it in a hairline on the card's fill (`bg-card`, raised off
+ * the paper) with a 16pt body; `plain` has no frame, the head's rule the only line (settings groups
+ * inside a box). `literal` keeps the
  * title's case (a name the user gave); `list` trims the body's inset for a list of padded rows.
  */
 export function SettingsCard(props: {
@@ -271,7 +273,7 @@ export function SettingsCard(props: {
     <View
       ref={reveal.ref}
       style={reveal.style()}
-      class={`min-w-0 ${boxed() ? `${CARD_CORNERS} border bg-paper/70` : "gap-4"} ${
+      class={`min-w-0 ${boxed() ? `${CARD_CORNERS} border bg-card` : "gap-4"} ${
         reveal.ringed() ? "border-blue ring-2 ring-blue" : "border-line-soft"
       } ${props.class ?? ""}`}
       testID={props.testID}
@@ -344,7 +346,7 @@ export function PlaceholderButton(props: { label: string; icon?: IconName; disab
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
       testID={props.testID}
-      class={`h-11 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/36 bg-outline-bg transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-outline-bg-hover disabled:opacity-50 ${
+      class={`h-11 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/35 bg-outline-bg transition-colors duration-180 ease-in-out hover:border-blue/60 hover:bg-outline-bg-hover disabled:opacity-50 ${
         props.class ?? ""
       }`}
     >

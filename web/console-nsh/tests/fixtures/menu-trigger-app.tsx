@@ -9,7 +9,7 @@ const opened = signal(false);
 
 function Gallery() {
   return (
-    <View class="flex-1 gap-2 bg-background p-2">
+    <View class="flex-1 gap-2 bg-paper p-2">
       <View class="flex-row items-center justify-end">
         <DropdownMenu
           disabled={disabled()}

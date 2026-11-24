@@ -115,8 +115,8 @@ for (const [name, width] of [
     await app.waitUntil(() => !!frames(app).databases);
     expectInside(frames(app).databases, frames(app).metrics, "databases in the metrics card");
     expectInside(frames(app).metrics, { x: 0, y: 0, w: width, h: 1e6 }, "metrics card on the page");
-    expect(app.shows("id:runtime-database-rows >> text:journal.db · journal_events")).toBe(true);
-    expect(app.shows("id:runtime-database-rows >> text:1,234,567 rows")).toBe(true);
+    expect(app.shows("id:runtime-db-journal.db >> text:journal_events")).toBe(true);
+    expect(app.shows("id:runtime-db-journal.db >> text:1,234,567 rows")).toBe(true);
     await app.press("id:runtime-unconfigured");
     await app.waitFor("id:runtime-unconfigured-list");
     await app.waitUntil(() => !!frames(app)["unconfigured-bluesky"]);

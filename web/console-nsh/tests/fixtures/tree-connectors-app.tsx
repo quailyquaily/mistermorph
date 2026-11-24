@@ -67,7 +67,7 @@ async function measure() {
 
 function Page() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-row flex-wrap gap-2 p-1">
         <Button testID="measure" size="xs" label="measure" onPress={() => void measure()} />
         <Button testID="drop-last" size="xs" label="drop" onPress={() => nodes.set(nodes().slice(0, -1))} />

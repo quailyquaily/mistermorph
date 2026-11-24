@@ -24,7 +24,7 @@ function Set(props: { name: string; onPress: () => void }) {
 }
 
 mount(() => (
-  <View class="flex-1 bg-background p-4 gap-2">
+  <View class="flex-1 bg-paper p-4 gap-2">
     <View class="flex-row gap-2">
       <Set name="set-idle" onPress={() => state.set("idle")} />
       <Set name="set-recording" onPress={() => state.set("recording")} />

@@ -343,7 +343,7 @@ function Fixture() {
   const Scenario = SCENARIOS[String(params.view || "")] ?? (() => <Text>unknown view</Text>);
   effect(() => untracked(() => report("ready")));
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <Scenario />
       <NoticeHost />
     </View>

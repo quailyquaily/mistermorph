@@ -3,6 +3,7 @@
 // row clear of it.
 import type { JSX } from "nsh";
 import { platform, safeArea, View } from "nsh";
+import { shadowColor } from "../solidLook";
 import { glassClass, glassEnabled, glassStyle } from "../../lib/glass";
 import { mobileBottomNavVisible, phoneWorkbenchOpen, systemInsets } from "../../lib/shell";
 import { mobilePopupFrame, type MobilePopupFrame } from "../../lib/mobilePopup";
@@ -26,7 +27,7 @@ export const BAR_SIDE = 12;
 export const BAR_INSET = 4;
 const BAR_BORDER = 0.5;
 /** The capsule's outer shadow (none on Android, where it would not follow the corners). */
-const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
+const barShadow = () => `0 6px 20px ${shadowColor(0.1)}, 0 1px 3px ${shadowColor(0.06)}`;
 /** A slot's width where the window has room for it (the compact capsule). */
 export const NAV_SLOT_MAX = 60;
 /** A slot's width where the window has room for it, expanded: room for its label. */
@@ -109,7 +110,7 @@ export function GlassCapsule(props: {
       style={{
         padding: BAR_INSET,
         ...glassStyle(),
-        boxShadow: platform.os === "android" ? undefined : BAR_SHADOW,
+        boxShadow: platform.os === "android" ? undefined : barShadow(),
         ...props.style,
       }}
     >

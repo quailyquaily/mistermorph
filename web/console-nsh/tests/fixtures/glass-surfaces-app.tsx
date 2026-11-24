@@ -54,7 +54,7 @@ function App() {
   const layout = (name: string) => (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) =>
     report(name, { x: event.bounds.origin.x, y: event.bounds.origin.y, w: event.bounds.size.width, h: event.bounds.size.height });
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-row gap-2">
         <Text testID="glass-on" onPress={() => forceGlass(true)}>on</Text>
         <Text testID="glass-off" onPress={() => forceGlass(false)}>off</Text>

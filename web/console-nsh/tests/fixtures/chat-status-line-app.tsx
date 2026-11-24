@@ -31,7 +31,7 @@ const LINES = [
 
 function Gallery() {
   return (
-    <View class="gap-4 bg-background p-4">
+    <View class="gap-4 bg-paper p-4">
       {LINES.map((line) => (
         <View testID={`line-${line.name}`} onLayout={track(`${line.name}-card`)}>
           <ChatStatusCard

@@ -574,7 +574,7 @@ export function AuditPage() {
         tooltip={hint(props.hint)}
         testID={props.testID}
         class={`flex-row items-center gap-2.5 rounded-(--radius) border border-transparent pb-[11px] pl-3.5 pr-[13px] pt-3 ${
-          props.selected ? "hover:bg-hover-faint" : "hover:bg-hover-soft"
+          props.selected ? "hover:bg-hover-soft" : "hover:bg-hover-soft"
         }`}
         style={ROW_TRANSITION}
         hoverStyle={ROW_HOVER}

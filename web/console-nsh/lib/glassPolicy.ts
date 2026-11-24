@@ -62,7 +62,7 @@ export function browserBackdropFilter(globals: BrowserGlobals): boolean {
 }
 
 /** The fills behind each surface: a page's paper, the navigation's card, the field's white. */
-const GLASS_FILL = { bar: "background", nav: "card", composer: "dialog" } as const;
+const GLASS_FILL = { bar: "paper", nav: "card", composer: "dialog" } as const;
 /** Each surface's fill where no glass is drawn. A bar has none of its own: nothing scrolls under it
  * there, and it lies on the page's paper as it always did. The composer keeps the field's fill, on
  * the conversation's fade to the paper. */

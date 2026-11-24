@@ -63,6 +63,9 @@ type pendingToolSnapshot struct {
 	ApprovalIdentity   string     `json:"approval_identity,omitempty"`
 	ToolCall           ToolCall   `json:"tool_call"`
 	RemainingToolCalls []ToolCall `json:"remaining_tool_calls,omitempty"`
+	// Display is what an approval card lists instead of ToolCall's parameters, when the tool
+	// described its approval (tools.ApprovalPreviewer).
+	Display map[string]any `json:"display,omitempty"`
 }
 
 type contextSnapshot struct {

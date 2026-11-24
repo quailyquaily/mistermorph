@@ -300,7 +300,7 @@ test("a recording under way keeps its stop when the route check fails; a new one
 // The mic's glyph carries a testID naming its icon, look and tint (tests/chat-voice-icon.test.tsx):
 // MIC, the primary button's white microphone; RED_MIC, the white microphone on red.
 const MIC = "id:chat-composer-voice-icon.PhMicrophone.primary.primary-foreground";
-const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.recording.destructive-foreground";
+const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.recording.on-accent";
 
 test("the mic button turns red while it records and back once the recording ends, is discarded or fails", async () => {
   let upload: unknown = { ok: true, status: 200, statusText: "OK", body: JSON.stringify({ text: "book a table" }) };

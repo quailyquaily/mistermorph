@@ -142,7 +142,7 @@ function show(name: string) {
 
 function App() {
   return (
-    <View class="flex-1 bg-background" onLayout={(event) => width.set(event.bounds.size.width)}>
+    <View class="flex-1 bg-paper" onLayout={(event) => width.set(event.bounds.size.width)}>
       <View class="h-8 flex-row gap-1">
         {Object.keys(CASES).map((name) => (
           <View testID={`case-${name}`} onPress={() => show(name)} class="h-8 w-12 bg-muted">

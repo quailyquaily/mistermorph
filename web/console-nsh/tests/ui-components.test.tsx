@@ -1,27 +1,37 @@
-// The UI component gallery (/ui-components, pages/ui-components): a testing page with a route and
+// The UI component gallery (/__ui-components, pages/ui-components): a testing page with a route and
 // no navigation entry, guarded as any page, showing the console's reused UI components from
-// synthetic data, in each language, without talking to the console or an agent.
+// synthetic data, in each language, without talking to the console or an agent; its head's Logout
+// (lib/logout.ts) is its way out, to the login page.
 import { expect, test } from "nsh/test";
 import { LANGUAGES } from "../components/LanguageSelector";
+import { createLogout } from "../lib/logout";
 import { NAV_ITEMS_META } from "../lib/navOrder";
 import { DEMOS } from "../pages/ui-components/demos";
 import { GALLERY_ENTRIES, GALLERY_GROUPS } from "../pages/ui-components/inventory.js";
+import { NSH_NAMES, TINT_HUES } from "../pages/ui-components/colorRules.js";
 import theme from "../theme.json";
-import { openConsole } from "./harness";
+import { MOBILE_LOCATION_KEY, openConsole } from "./harness";
 
-const PATH = "/ui-components";
+const PATH = "/__ui-components";
+/** The gallery's address before it moved: an unknown address now, with no redirect. */
+const OLD_PATH = "/ui-components";
+const AUTH_KEY = "mistermorph_console_auth_v1";
+/** A saved session, so a console that asks for a password opens the gallery at once. */
+const session = () => ({
+  [AUTH_KEY]: JSON.stringify({ token: "token-1", expiresAt: new Date(Date.now() + 86400000).toISOString(), account: "console" }),
+});
 
+type HostCalls = { host: { calls(): { name: string; data: any }[] } };
+/** What the app wrote to the address bar, in order. */
+const historyWrites = (app: HostCalls) => app.host.calls().filter((call) => call.name === "morph.history").map((call) => call.data as { op: string; url: string });
 /** The last location the app wrote to the address bar. */
-function lastLocation(app: { host: { calls(): { name: string; data: any }[] } }) {
-  /**
- * What was asked after the page loaded. The app's notification stream asks for a new ticket each
- * time it reconnects, on every page (the tests have no stream to connect to): that is the frame's,
- * not the gallery's.
- */
-const afterLoad = (calls: { method: string; path: string; uri?: string }[], loaded: number) =>
-  requests(calls.slice(loaded)).filter((request) => request !== "POST /stream/ticket");
-const writes = app.host.calls().filter((call) => call.name === "morph.history");
-  return String(writes.at(-1)?.data?.url || "");
+function lastLocation(app: HostCalls) {
+  return String(historyWrites(app).at(-1)?.url || "");
+}
+/** What the app last saved under `key` on the web (`morph.kv.set`; null when it removed it), or undefined when it did not write it. */
+function lastSaved(app: HostCalls, key: string) {
+  const sets = app.host.calls().filter((call) => call.name === "morph.kv.set" && call.data?.key === key);
+  return sets.length ? (sets.at(-1)!.data.value as string | null) : undefined;
 }
 const requests = (calls: { method: string; path: string; uri?: string }[]) => calls.map((call) => `${call.method} ${call.path}${call.uri ? `:${call.uri.split("?")[0]}` : ""}`);
 /** What the route guard and the frame ask on any page: nothing else may be asked here. */
@@ -83,6 +93,136 @@ test("an agent that is not set up yet gets its setup, not the gallery", async ()
   expect(app.shows("id:ui-components-page")).toBe(false);
 });
 
+test("the old address no longer opens the gallery: it is an unknown address, with no redirect", async () => {
+  const { app } = await openConsole({ location: OLD_PATH });
+  await app.waitFor(`text:${OLD_PATH}`);
+  expect(app.shows("id:ui-components-page")).toBe(false);
+  expect(app.shows("id:uig-title")).toBe(false);
+  expect(historyWrites(app).some((write) => write.url.startsWith(PATH))).toBe(false);
+  // The same without a session: the login page asks for the old address, not for the gallery.
+  const locked = await openConsole({ location: OLD_PATH, password: true });
+  await locked.app.waitFor("id:login-password");
+  expect(lastLocation(locked.app)).toBe(`/login?redirect=${encodeURIComponent(OLD_PATH)}`);
+  await locked.app.type("id:login-password", "secret");
+  await locked.app.press("role:button[Login]");
+  await locked.app.waitFor(`text:${OLD_PATH}`);
+  expect(locked.app.shows("id:ui-components-page")).toBe(false);
+});
+
+test("Logout in the head logs out and lands on the login page, in place of the gallery", async () => {
+  const { app, calls } = await openConsole({ location: PATH, password: true, kv: session() });
+  await app.waitFor("id:ui-components-page");
+  expect(app.enabled("id:uig-logout")).toBe(true);
+  // The console's own label.
+  expect(app.shows("id:uig-logout >> text:Logout")).toBe(true);
+  const loaded = calls.length;
+  await app.press("id:uig-logout");
+  await app.waitFor("id:login-password");
+  expect(app.shows("id:ui-components-page")).toBe(false);
+  // One change asked of the console: it ends the session (the login page reads its own config).
+  expect(afterLoad(calls, loaded).filter((request) => !request.startsWith("GET "))).toEqual(["POST /auth/logout"]);
+  const headers = calls.slice(loaded).find((call) => call.path === "/auth/logout")?.headers ?? {};
+  expect(headers.authorization || headers.Authorization).toBe("Bearer token-1");
+  // The session is gone from the device, and the login page took the gallery's place.
+  expect(lastSaved(app, AUTH_KEY)).toBe(null);
+  expect(historyWrites(app).at(-1)).toEqual({ op: "replace", url: "/login" });
+  // Back to the gallery's address: the guard asks for the password again.
+  await app.host.send("morph.pop", { location: PATH });
+  await app.waitFor("id:login-password");
+  expect(app.shows("id:ui-components-page")).toBe(false);
+  expect(lastLocation(app)).toBe(`/login?redirect=${encodeURIComponent(PATH)}`);
+  await app.type("id:login-password", "secret");
+  await app.press("role:button[Login]");
+  await app.waitFor("id:ui-components-page");
+  expect(lastLocation(app)).toBe(PATH);
+});
+
+test("a failed logout request still ends the session here and shows the login page", async () => {
+  const { app, calls } = await openConsole({
+    location: PATH,
+    password: true,
+    kv: session(),
+    api: { "POST /auth/logout": { status: 500, body: { error: "logout failed" } } },
+  });
+  await app.waitFor("id:ui-components-page");
+  await app.press("id:uig-logout");
+  await app.waitFor("id:login-password");
+  expect(calls.filter((call) => call.method === "POST" && call.path === "/auth/logout").length).toBe(1);
+  expect(lastSaved(app, AUTH_KEY)).toBe(null);
+  expect(historyWrites(app).at(-1)).toEqual({ op: "replace", url: "/login" });
+  expect(app.shows("id:ui-components-page")).toBe(false);
+});
+
+test("on the phone, Logout also empties the answers kept on the device", async () => {
+  // A first run of the phone app keeps the topics it was shown on the device.
+  const api = { "GET /proxy:/topics": { body: { items: [{ id: "topic-1", title: "Trip plans", created_at: "2026-11-24T10:00:00Z", updated_at: "2026-11-24T10:00:00Z" }] } } };
+  const first = await openConsole({ platform: "android", cacheFiles: true, password: true, kv: session(), location: "/e/default/chat", api });
+  await first.app.waitFor("Trip plans");
+  const files = (app: { storage(): Record<string, string> }) =>
+    Object.keys(app.storage()).filter((key) => key.startsWith("cachefs:") && !key.endsWith("index.json"));
+  await first.app.waitUntil(() => files(first.app).length >= 1, { timeout: 10000 });
+  // Opened again on the gallery, with that session and those answers.
+  const { app, calls } = await openConsole({
+    platform: "android",
+    cacheFiles: true,
+    password: true,
+    kv: { ...first.app.storage(), [MOBILE_LOCATION_KEY]: PATH },
+    location: PATH,
+    api,
+  });
+  await app.waitFor("id:ui-components-page");
+  expect(files(app).length).toBeGreaterThanOrEqual(1);
+  await app.press("id:uig-logout");
+  await app.waitFor("id:login-password");
+  expect(calls.filter((call) => call.method === "POST" && call.path === "/auth/logout").length).toBe(1);
+  await app.waitUntil(() => files(app).length === 0, { timeout: 10000 });
+  expect(app.storage()[AUTH_KEY]).toBeUndefined();
+  expect(app.shows("id:ui-components-page")).toBe(false);
+});
+
+test("the logout control is busy while the logout runs: disabled, a second press does nothing, free again after", async () => {
+  let runs = 0;
+  let release = () => {};
+  const control = createLogout(() => {
+    runs += 1;
+    return new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  });
+  expect(control.busy()).toBe(false);
+  const first = control.run();
+  expect(control.busy()).toBe(true);
+  await control.run();
+  expect(runs).toBe(1);
+  release();
+  await first;
+  expect(control.busy()).toBe(false);
+  // A logout that throws frees the control too.
+  const failing = createLogout(() => Promise.reject(new Error("offline")));
+  await expect(failing.run()).rejects.toThrow("offline");
+  expect(failing.busy()).toBe(false);
+});
+
+test("Logout fits the head beside the appearance and language controls: on a 360pt and a 390pt phone and on a desktop, light and dark", async () => {
+  const check = async (app: Awaited<ReturnType<typeof openConsole>>["app"]) => {
+    await app.waitFor("id:ui-components-page");
+    // No demo on the page: what is left of these texts is the head's.
+    await app.type("id:uig-filter", "no such component");
+    await app.waitFor("id:uig-empty");
+    for (const scheme of ["Dark", "Light"]) {
+      await app.press(`id:uig-appearance >> label:${scheme}`);
+      // Laid out inside the window (a text past its right edge is not listed) and not covered.
+      for (const text of ["UI components", "Light", "Dark", "English", "中文", "日本語", "Logout"]) expect(app.texts()).toContain(text);
+      expect(app.shows("id:uig-logout")).toBe(true);
+      expect(app.enabled("id:uig-logout")).toBe(true);
+      expect(app.shows("id:uig-appearance")).toBe(true);
+      expect(app.shows("id:uig-language")).toBe(true);
+    }
+  };
+  for (const width of [360, 390]) await check((await openConsole({ location: PATH, platform: "android", width, height: 780 })).app);
+  await check((await openConsole({ location: PATH })).app);
+});
+
 test("the public preview stub is a different address and stays what it was", async () => {
   const { app } = await openConsole({ location: "/__components" });
   await app.waitFor("text:/__components");
@@ -132,6 +272,12 @@ test("the colour scheme is on the page: every token with its value, in the appea
   expect(app.shows(`id:uig-index-colors >> text:${names.length}`)).toBe(true);
   for (const name of names) expect(app.count(`id:uig-color-${name}`)).toBe(1);
   expect(app.shows(`id:uig-color-primary >> text:${vars.light.primary.toLowerCase()}`)).toBe(true);
+  // nsh's names say which of the console's tokens to use; the console's own say only their value.
+  for (const [name, ours] of Object.entries(NSH_NAMES)) expect(app.shows(`id:uig-color-${name} >> text:${vars.light[name].toLowerCase()} · use ${ours}`)).toBe(true);
+  expect(app.count("id:uig-color-paper >> text:use")).toBe(0);
+  // The tints: a row per colour, its fills and borders at each step.
+  for (const hue of TINT_HUES) expect(app.count(`id:uig-tint-${hue}`)).toBe(1);
+  expect(app.shows("id:uig-colors-tints >> text:hover on a tint")).toBe(true);
   // Dark is the console's own appearance: the values are the dark palette's, and the choice is kept.
   await app.press("id:uig-appearance >> text:Dark");
   await app.waitFor(`id:uig-color-primary >> text:${vars.dark.primary.toLowerCase()}`);
@@ -141,8 +287,14 @@ test("the colour scheme is on the page: every token with its value, in the appea
   await app.waitFor("id:uig-color-primary", { state: "gone" });
   expect(app.count("id:uig-color-blue-light")).toBe(1);
   expect(app.count("id:uig-color-blue-lighter")).toBe(1);
+  expect(app.count("id:uig-colors-tints")).toBe(0);
   await app.press("id:uig-appearance >> text:Light");
   await app.waitFor(`id:uig-color-blue-light >> text:${vars.light["blue-light"].toLowerCase()}`);
+  // The tints by their colour's name.
+  await app.clear("id:uig-filter");
+  await app.type("id:uig-filter", "dang");
+  await app.waitFor("id:uig-tint-blue", { state: "gone" });
+  expect(app.count("id:uig-tint-danger")).toBe(1);
 });
 
 test("only the demos near the visible part of the page are mounted, and scrolling mounts the next ones", async () => {

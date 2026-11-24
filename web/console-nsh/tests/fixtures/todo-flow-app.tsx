@@ -121,7 +121,7 @@ function Page() {
       jobs.set(SETS[name]);
     });
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-row items-center">
         <Switch id="set-proto" label={() => "proto"} onPress={() => choose("proto")} />
         <Switch id="set-skip" label={() => "skip"} onPress={() => choose("skip")} />

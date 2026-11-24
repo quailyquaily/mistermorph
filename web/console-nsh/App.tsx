@@ -65,7 +65,7 @@ function App() {
     // the composer and the fields stay above it (dialogs make room themselves, in their own layer).
     // On Android the surface also runs under the status and navigation bars: the frame keeps the
     // pages out from under them.
-    <View class="flex-1 bg-background" style={frameStyle()} testID={frameTestID()}>
+    <View class="flex-1 bg-paper" style={frameStyle()} testID={frameTestID()}>
       <If when={route()}>
         <Shell shellless={inShellless()} standalone={inStandalone()}>
           <PageView />

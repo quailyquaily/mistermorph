@@ -12,7 +12,6 @@ import {
   nowIndex,
   phoneMarks,
   planOccurrences,
-  repeatingJobs,
 } from "./calendar-runs.js";
 
 const TZ = "UTC";
@@ -74,23 +73,6 @@ test("stored triggers are used, the page's own schedule standing for the first s
   // A task that carries its own triggers is taken as written.
   const own = jobWiring({ id: "y", cron: "0 10 * * *", triggers: [{ id: "trg-c", kind: "schedule", cron: "5 5 * * *" }] }, stored);
   assert.deepEqual(own.triggers.map((trigger) => trigger.cron), ["5 5 * * *"]);
-});
-
-test("the strip names each repeating job once, a chained job after the one that starts it", () => {
-  const twice = jobWiring({ id: "twice" }, {
-    triggers: [
-      { id: "a", kind: "schedule", cron: "0 9 * * *" },
-      { id: "b", kind: "schedule", cron: "0 18 * * *" },
-      { id: "c", kind: "schedule", at: "2026-12-01 10:00" },
-    ],
-  });
-  const off = jobWiring({ id: "off", enabled: false, cron: "0 1 * * *" });
-  const once = jobWiring({ id: "once", at: "2026-12-01 10:00" });
-  const strip = repeatingJobs([REPORT, DIGEST, NOTES, SWEEP, twice, off, once]);
-  assert.deepEqual(
-    strip.map((item) => `${item.jobId}:${item.triggers.map((trigger) => trigger.id).join("+")}:${item.after}`),
-    ["report:trg-schedule:", "digest::report", "sweep:trg-schedule:", "twice:a+b:"],
-  );
 });
 
 test("every schedule trigger of a job is planned, in the display zone's days", () => {

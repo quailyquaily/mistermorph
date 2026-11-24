@@ -59,7 +59,7 @@ export function SettingDialog(props: SettingDialogProps) {
     >
       {/* SettingDialog.css: a 44pt title bar, a 20pt body (16 on phones), and the actions in a 60pt
           strip on the paper, Cancel at the left and Save at the right. */}
-      <View class={`h-11 justify-center border-b border-dialog-line ${isMobile() ? "px-4" : "px-5"}`}>
+      <View class={`h-11 justify-center border-b border-line ${isMobile() ? "px-4" : "px-5"}`}>
         <Text class="text-base font-semibold leading-[19.2px] tracking-[-0.02em] text-foreground" role="header" style={{ numberOfLines: 1 }}>
           {props.title ?? ""}
         </Text>

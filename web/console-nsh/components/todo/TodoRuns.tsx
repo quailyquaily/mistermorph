@@ -204,7 +204,7 @@ export function TodoRuns(props: {
                   // Drawn from the right (its parts are written time first, as they are read out):
                   // the spine with the run's mark at the left edge (RunSpine, which swings out to
                   // a chained run), then what ran, the time at the right.
-                  class="relative flex-row-reverse gap-2.5 rounded-(--radius) px-1.5 hover:bg-hover-faint disabled:hover:bg-transparent"
+                  class="relative flex-row-reverse gap-2.5 rounded-(--radius) px-1.5 hover:bg-hover-soft disabled:hover:bg-transparent"
                 >
                   <Text class="shrink-0 pt-2 text-right font-mono text-xs leading-[16.2px] text-muted-foreground">{timeText(run().queued_at, today())}</Text>
                   <View class="min-w-0 flex-1 gap-0.5 pb-[9px] pt-[7px]">

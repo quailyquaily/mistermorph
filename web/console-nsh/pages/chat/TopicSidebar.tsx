@@ -351,7 +351,7 @@ export function TopicSidebar(props: {
               <If
                 when={c.isCronTopicID(row().topic?.id) && !row().topic?.icon}
                 else={
-                  <Image
+                  <Image class="overflow-hidden"
                     src={c.topicIcon(row().topic)}
                     accessibilityElementsHidden
                     style={{ width: 20, height: 20, tintColor: token("subtle") as string }}

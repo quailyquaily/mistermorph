@@ -578,7 +578,7 @@ function FixtureApp() {
   const location = initialLocation().split("?")[0];
   const Panel = PANELS[location] || All;
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <Scroll class="flex-1">
         <Panel />
       </Scroll>

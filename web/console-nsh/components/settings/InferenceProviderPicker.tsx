@@ -8,10 +8,10 @@ import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { inferenceProviderLogo } from "../../lib/core/inference-provider-logos.js";
 import { Icon, Modal, Tabs, TextField } from "../ui";
-import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
+import { CARD_CORNERS, CONTROL_CORNERS, cornersClass, fittingRadius, RADIUS } from "../corners";
 
 /** The picker's trigger: a select-like field (44pt at least) with the controls' continuous corners. */
-export const PROVIDER_TRIGGER_CLASS = `min-h-11 flex-row items-center gap-3 ${CONTROL_CORNERS} border border-input bg-field px-2 hover:border-ring disabled:opacity-60`;
+export const PROVIDER_TRIGGER_CLASS = `min-h-11 flex-row items-center gap-3 ${CONTROL_CORNERS} border border-input bg-field px-2 hover:border-ring disabled:opacity-50`;
 /** A provider's card in the dialog, as the secret picker's: the cards' continuous corners. Its border and fill come with its selection. */
 export const PROVIDER_OPTION_CLASS = `min-h-14 grow basis-48 flex-row items-center gap-3 ${CARD_CORNERS} border px-3 py-2 hover:bg-hover active:bg-selection`;
 
@@ -71,7 +71,7 @@ export function ProviderLogo(props: { item: ProviderItem | null; size?: number }
   const size = () => props.size ?? 28;
   return (
     <View
-      class="items-center justify-center overflow-hidden rounded-(--radius) border border-line-faint bg-card"
+      class={`items-center justify-center overflow-hidden ${cornersClass(fittingRadius(RADIUS.control, size()))} border border-line-faint bg-card`}
       style={{ width: size(), height: size() }}
       accessibilityElementsHidden
     >
@@ -79,7 +79,7 @@ export function ProviderLogo(props: { item: ProviderItem | null; size?: number }
         when={providerLogo(props.item).src}
         else={<Text class="font-mono text-xs font-medium text-subtle">{props.item ? fallbackLogoText(props.item) : "LLM"}</Text>}
       >
-        <Image src={providerLogo(props.item).src} style={{ width: size() * 0.72, height: size() * 0.72, objectFit: "contain" }} />
+        <Image class="overflow-hidden" src={providerLogo(props.item).src} style={{ width: size() * 0.72, height: size() * 0.72, objectFit: "contain" }} />
       </If>
     </View>
   );

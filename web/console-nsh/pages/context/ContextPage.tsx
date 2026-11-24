@@ -15,6 +15,7 @@ import { goBack } from "../../lib/platform";
 import { currentRoute, router } from "../../lib/router";
 import { onSystemBack } from "../../lib/systemBack";
 import { createPaneStack } from "../../components/motion/PaneStack";
+import { CARD_CORNERS } from "../../components/corners";
 
 const RING_RADIUS = 40;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -428,7 +429,7 @@ export function ContextPage() {
           {formatTokens(entry().tokens)} {t("context_inspector_tokens")}
         </Text>
       </View>
-      <Scroll horizontal class="rounded-(--radius) border border-line-faint bg-paper" contentClass="p-3">
+      <Scroll horizontal class={`${CARD_CORNERS} border border-line-faint bg-paper`} contentClass="p-3">
         <View selectable>
           <Text class="font-mono text-xs text-foreground" testID="context-text-body">
             {entry().part?.content || t("context_inspector_no_text")}

@@ -14,6 +14,7 @@ import { SettingSelect } from "../../../components/settings/SettingFields";
 import { TOOL_CHANNEL_ROWS, TOOL_CHANNELS, TOOL_GROUPS, type ToolChannel } from "../constants";
 import type { SettingsStore } from "../store";
 import { t } from "../i18n";
+import { CONTROL_CORNERS } from "../../../components/corners";
 
 // The channel tool matrix (`.settings-tool-matrix`): the table takes the card's width, the tool
 // names in the first column, a column per channel, headed by its mark; 8pt by 6pt cells on hairlines. On phones the
@@ -32,7 +33,7 @@ function ChannelHeading(props: { channel: ToolChannel }) {
       testID={`settings-tool-matrix-channel-${props.channel.id}`}
     >
       <If when={props.channel.logo} else={<Icon name={props.channel.icon!} size={16} color="subtle" />}>
-        <Image src={props.channel.logo!} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
+        <Image class="overflow-hidden" src={props.channel.logo!} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
       </If>
     </View>
   );
@@ -189,9 +190,9 @@ export function ToolsSection(props: { s: SettingsStore }) {
                                 onPress={() => void s.previewChannelToolSchema(channel(), row())}
                                 accessibilityLabel={`${t("settings_tool_schema_preview")}: ${row().id} · ${channel().title}`}
                                 testID={`settings-tool-matrix-${row().id}-${channel().id}`}
-                                class="size-[26px] items-center justify-center rounded-(--radius) border border-transparent hover:border-line-soft hover:bg-foreground/6"
+                                class={`size-[26px] items-center justify-center ${CONTROL_CORNERS} border border-transparent hover:border-line-soft hover:bg-foreground/6`}
                               >
-                                <Icon name="PhCheck" size={16} color="status-on" />
+                                <Icon name="PhCheck" size={16} color="info" />
                               </BaseButton>
                             </If>
                           </View>

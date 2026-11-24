@@ -716,6 +716,9 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if d.RegisterTriggeredStaticTools != nil && len(toolTriggers) > 0 {
 		d.RegisterTriggeredStaticTools(reg, toolTriggers)
 	}
+	// A heartbeat or scheduled run has nobody to approve a config change, whatever registry it
+	// fell back to.
+	reg.Remove(toolsutil.BuiltinConfigSet)
 	if len(opts.BashEnv) > 0 {
 		injected, err := cronstore.ResolveBashEnvRefsWithOptions(opts.BashEnv, cronstore.BashEnvResolveOptions{
 			Warnf: func(format string, args ...any) {

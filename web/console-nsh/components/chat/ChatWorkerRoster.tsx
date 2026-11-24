@@ -27,17 +27,17 @@ import { KindChip, NEON, StatusTag, TerminalText } from "./TerminalText";
 function stateTone(state: string) {
   switch (state) {
     case "done":
-      return "bg-status-on border-status-on";
+      return "bg-info border-info";
     case "failed":
     case "canceled":
-      return "bg-status-error border-status-error";
+      return "bg-danger border-danger";
     default:
       return "bg-status-pending border-status-pending";
   }
 }
 
 export function WorkerAvatar(props: { avatarStyle: string }) {
-  return <Image src={workerAvatarURL(props.avatarStyle)} accessibilityElementsHidden style={{ width: 20, height: 20 }} />;
+  return <Image class="overflow-hidden" src={workerAvatarURL(props.avatarStyle)} accessibilityElementsHidden style={{ width: 20, height: 20 }} />;
 }
 
 export function workerKindLabel(worker: any) {

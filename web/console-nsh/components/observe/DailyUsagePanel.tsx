@@ -22,6 +22,7 @@ import {
 } from "../../lib/core/daily-usage.js";
 import { ProgressBar, Tabs, TipButton } from "../ui";
 import { compactCost, compactNumber, exactCost as exactCostText, exactNumber, formatIntl, hint, ObserveSection, percentWhole, t } from "./parts";
+import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 
 type Metric = "cost" | "tokens" | "cache";
 
@@ -500,7 +501,7 @@ export function DailyUsagePanel() {
       <If when={focusedDay()}>
         {(day) => (
           <View
-            class={`border-l-2 border-blue bg-blue/5 px-2.5 py-1.5 ${phone() ? "gap-y-1" : "flex-row flex-wrap items-baseline gap-x-4.5 gap-y-1.5"}`}
+            class={`border-l-2 border-blue bg-blue/4 px-2.5 py-1.5 ${phone() ? "gap-y-1" : "flex-row flex-wrap items-baseline gap-x-4.5 gap-y-1.5"}`}
             style={{ minHeight: 22 }}
             testID="stats-daily-readout"
           >
@@ -591,7 +592,7 @@ export function DailyUsagePanel() {
             <If when={tooltip()}>
               {(tip) => (
                 <View
-                  class="gap-0.75 border border-line bg-card px-2.5 py-2 shadow-md"
+                  class={`${POPOVER_CORNERS} gap-0.75 border border-line bg-card px-2.5 py-2 shadow-md`}
                   style={{ minWidth: phone() ? 160 : 190, maxWidth: phone() ? 220 : 280 }}
                 >
                   <View class="mb-0.75 flex-row items-baseline justify-between gap-3 border-b border-dashed border-line-soft pb-1.25">
@@ -680,7 +681,7 @@ export function DailyUsagePanel() {
                 accessibilityLabel={segmentName(item().key)}
                 tooltip={hint(legendTitle(item()))}
                 testID={`stats-daily-legend-${item().key}`}
-                class={`min-h-6.5 flex-row items-center gap-1.75 border border-transparent px-2 py-0.5 transition-colors duration-150 selected:border-blue selected:bg-blue/8 ${
+                class={`${CONTROL_CORNERS} min-h-6.5 flex-row items-center gap-1.75 border border-transparent px-2 py-0.5 transition-colors duration-150 selected:border-blue selected:bg-blue/10 ${
                   isCache() ? "" : "hover:bg-blue/6"
                 } ${isolate() && isolate() !== item().key ? "opacity-45" : ""}`}
               >

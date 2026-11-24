@@ -200,7 +200,7 @@ test("another conversation ends the recording; the words go into the draft they 
 
 test("the mic button is red only while recording: a refused microphone leaves it primary", async () => {
   const MIC = "id:chat-composer-voice-icon.PhMicrophone.primary.primary-foreground";
-  const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.recording.destructive-foreground";
+  const RED_MIC = "id:chat-composer-voice-icon.PhMicrophone.recording.on-accent";
   const answers = [{ ok: false, error: "permission-denied" }, { ok: false, error: "permission-blocked" }, { ok: true }];
   const { app } = await openPhone(nativeHost({ "morph.voice.start": () => answers.shift() ?? { ok: true } }));
   // The refusal notices sit over the composer on the phone: the glyph is counted, not waited for

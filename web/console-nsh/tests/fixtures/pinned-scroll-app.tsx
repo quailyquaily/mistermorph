@@ -9,7 +9,7 @@ const state = signal({ offset: 0, view: 0, content: 0, pinned: true });
 
 function Page() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-row gap-2 p-1">
         <Button testID="grow" size="xs" label="grow" onPress={() => lines.update((n) => n + 10)} />
       </View>

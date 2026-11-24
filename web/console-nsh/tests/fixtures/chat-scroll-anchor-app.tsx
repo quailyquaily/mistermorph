@@ -176,7 +176,7 @@ const ctx: ChatRowContext = {
 
 function App() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="h-8 flex-row gap-1">
         {Object.keys(actions).map((name) => (
           <View testID={`do-${name}`} onPress={actions[name]} class="h-8 w-9 bg-muted">

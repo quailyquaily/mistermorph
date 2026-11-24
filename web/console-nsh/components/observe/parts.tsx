@@ -7,6 +7,7 @@ import { Tip } from "../ui";
 import { currentLocale, translate } from "../../lib/core/context.js";
 import { formatCompactCost, formatExactCost } from "../../lib/core/cost-format.js";
 import { formatNumber as intlNumber } from "../../lib/core/intl-format.js";
+import { CARD_CORNERS } from "../corners";
 
 /** The console's strings (lib/i18n), typed for TSX: `t("stats_title")`, `t("x", { count })`. */
 export const t = translate as unknown as (key: string, vars?: Record<string, unknown>) => string;
@@ -135,7 +136,7 @@ export function ObserveSection(props: {
     <View
       // Vue's boxed AppSection: paper at 70%, the page's grid faintly through it (unless the caller
       // gives it a fill of its own).
-      class={`${boxed() ? `rounded-(--radius) border border-line-soft ${/(^|\s)bg-/.test(props.class ?? "") ? "" : "bg-paper/70"}` : ""} ${props.class ?? ""}`}
+      class={`${boxed() ? `${CARD_CORNERS} border border-line-soft ${/(^|\s)bg-/.test(props.class ?? "") ? "" : "bg-paper/70"}` : ""} ${props.class ?? ""}`}
       style={{ ...props.style, rowGap: boxed() ? 0 : gap() }}
       testID={props.testID}
     >
@@ -182,13 +183,13 @@ export function AuditBadge(props: { badge: AuditBadgeSpec; label: string; testID
   const tone = () => {
     switch (props.badge.type) {
       case "danger":
-        return { frame: "text-danger", text: "text-danger", fill: "bg-danger/15" };
+        return { frame: "text-danger", text: "text-danger", fill: "bg-danger/12" };
       case "warning":
-        return { frame: "text-warn", text: "text-warn-dark", fill: "bg-warn/15" };
+        return { frame: "text-warn", text: "text-warn-dark", fill: "bg-warn/12" };
       case "success":
-        return { frame: "text-ok", text: "text-ok", fill: "bg-ok/15" };
+        return { frame: "text-ok", text: "text-ok", fill: "bg-ok/12" };
       case "primary":
-        return { frame: "text-blue", text: "text-ink", fill: "bg-blue/15" };
+        return { frame: "text-blue", text: "text-ink", fill: "bg-blue/12" };
       default:
         return { frame: "text-muted-foreground", text: "text-foreground", fill: "bg-foreground/10" };
     }

@@ -24,18 +24,14 @@ const COLOURS = [
   "card",
   "foreground",
   "danger",
-  "danger-disabled-text",
-  "danger-disabled-line",
   "close",
   "close-hover",
   "outline-bg",
   "outline-bg-hover",
-  "outline-disabled-bg",
-  "outline-line",
-  "outline-disabled-text",
+  "line",
   "ink",
   "destructive",
-  "destructive-foreground",
+  "on-accent",
 ];
 
 const frames = signal<Record<string, Frame>>({});
@@ -56,7 +52,7 @@ function report() {
 }
 
 mount(() => (
-  <View class="flex-1 gap-2 bg-background p-2">
+  <View class="flex-1 gap-2 bg-paper p-2">
     <View class="flex-row gap-2">
       <BaseButton testID="set-dark" onPress={() => setColorScheme("dark")}>
         <Text>dark</Text>

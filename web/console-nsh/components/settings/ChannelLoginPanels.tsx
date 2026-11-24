@@ -10,6 +10,7 @@ import { openExternal } from "../../lib/platform";
 import { create as createQRCode } from "../../lib/vendor/qrcode.js";
 import { Button, TextField } from "../ui";
 import { t } from "./DialogShell";
+import { CARD_CORNERS } from "../corners";
 
 /** How the panels reach the runtime: `endpointApiFetch` from lib/core/context.js. */
 export type ChannelRequest = (endpointRef: string, path: string, options?: { method?: string; body?: unknown }) => Promise<any>;
@@ -77,7 +78,7 @@ function QRCode(props: { text: string; size?: number; label?: string }) {
 /** The bound account row: its label and id, and the panel's actions. */
 function BoundRow(props: { label: string; id: string; children?: JSX.Element }) {
   return (
-    <View class="min-h-11 flex-row flex-wrap items-center justify-between gap-2 rounded-(--radius) border border-line-faint py-1.5 pl-3 pr-1.5">
+    <View class={`min-h-11 flex-row flex-wrap items-center justify-between gap-2 ${CARD_CORNERS} border border-line-faint py-1.5 pl-3 pr-1.5`}>
       <View class="shrink gap-0.5">
         <Text class="text-xs text-muted-foreground">{props.label}</Text>
         <If when={props.id}>
@@ -302,7 +303,7 @@ export function WeChatLoginPanel(props: WeChatLoginPanelProps) {
           </If>
         }
       >
-        <View class="items-center gap-2.5 rounded-(--radius) border border-line-faint p-4">
+        <View class={`items-center gap-2.5 ${CARD_CORNERS} border border-line-faint p-4`}>
           <If when={qrURL()}>
             <QRCode text={qrURL()} label={t("settings_wechat_login_qr_alt")} />
           </If>
@@ -484,7 +485,7 @@ export function XLoginPanel(props: XLoginPanelProps) {
           </If>
         }
       >
-        <View class="items-center gap-2.5 rounded-(--radius) border border-line-faint p-4">
+        <View class={`items-center gap-2.5 ${CARD_CORNERS} border border-line-faint p-4`}>
           <Text class="text-center text-xs text-foreground">
             {t("settings_x_login_waiting")}
           </Text>

@@ -20,7 +20,7 @@ const record = (name: string, frame: PartFrame) => frames.update((all) => ({ ...
 
 function Page() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-row items-center gap-2">
         <Button testID="before" accessibilityLabel="Before" class="size-6" onPress={() => before.update((n) => n + 1)} />
         <Text testID="out-kind">kind={kind()}</Text>

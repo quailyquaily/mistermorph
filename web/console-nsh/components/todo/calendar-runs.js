@@ -99,34 +99,6 @@ export function triggerRepeats(trigger) {
   return trigger?.kind === "schedule" && !!trigger.cron && !trigger.at;
 }
 
-/**
- * The repeating jobs, each once, for the strip above the grid: an enabled job with a repeating
- * schedule (`{ jobId, triggers }`, its repeating triggers), followed by the enabled jobs chained off
- * it (`{ jobId, after }`, the job whose runs start it).
- */
-export function repeatingJobs(jobs) {
-  const list = (Array.isArray(jobs) ? jobs : []).filter((job) => job?.id && job.enabled);
-  const out = [];
-  const seen = new Set();
-  const addDependents = (fromId, depth) => {
-    if (depth > MAX_PLAN_DEPTH) return;
-    for (const job of list) {
-      if (seen.has(job.id) || !job.uses.includes(fromId)) continue;
-      seen.add(job.id);
-      out.push({ jobId: job.id, triggers: [], after: fromId });
-      addDependents(job.id, depth + 1);
-    }
-  };
-  for (const job of list) {
-    const triggers = job.triggers.filter(triggerRepeats);
-    if (triggers.length === 0 || seen.has(job.id)) continue;
-    seen.add(job.id);
-    out.push({ jobId: job.id, triggers, after: "" });
-    addDependents(job.id, 1);
-  }
-  return out;
-}
-
 const HOUR_MS = 60 * MINUTE_MS;
 
 function wallFromUTC(pseudo) {

@@ -319,7 +319,7 @@ export function PopoverPicker(props: {
   );
 
   return (
-    <If when={!props.disabled} else={<View class="opacity-45">{anchorView()}</View>}>
+    <If when={!props.disabled} else={<View class="opacity-50">{anchorView()}</View>}>
      <If when={!sheet()} else={sheetPicker()}>
       <Popover
         open={open()}

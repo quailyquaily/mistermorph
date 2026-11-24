@@ -195,7 +195,7 @@ export function voiceButtonLook(state: "idle" | "recording" | "transcribing" | u
   tint: TokenName;
   busy: boolean;
 } {
-  if (state === "recording") return { look: "recording", variant: "danger", tint: "destructive-foreground", busy: false };
+  if (state === "recording") return { look: "recording", variant: "danger", tint: "on-accent", busy: false };
   if (state === "transcribing") return { look: "busy", variant: "plain", tint: busyLook("primary").text, busy: true };
   return { look: "primary", variant: "primary", tint: "primary-foreground", busy: false };
 }
@@ -271,7 +271,7 @@ export function ChatComposer(props: ChatComposerProps) {
   // A profile's mark, in the menu and on the picker: its model vendor's logo, else a chip.
   const profileGlyph = (profile: ComposerProfileItem | null | undefined) => (
     <If when={profile?.image} else={<Icon name="PhCpu" size={14} color="subtle" />}>
-      <Image src={profile?.image ?? ""} accessibilityElementsHidden style={{ width: 14, height: 14 }} />
+      <Image class="overflow-hidden" src={profile?.image ?? ""} accessibilityElementsHidden style={{ width: 14, height: 14 }} />
     </If>
   );
   const profileTitle = () => {
@@ -567,7 +567,7 @@ export function ChatComposer(props: ChatComposerProps) {
       else={
         // Uploading, it is a busy plain button (BusyBeam, busyLook).
         <View
-          class={`${circleButtonClass()} ${props.uploading ? "" : "opacity-45"}`}
+          class={`${circleButtonClass()} ${props.uploading ? "" : "opacity-50"}`}
           accessibilityLabel={props.addLabel}
           accessibilityState={{ busy: !!props.uploading }}
           testID="chat-composer-add"
@@ -607,8 +607,6 @@ export function ChatComposer(props: ChatComposerProps) {
   // the stop square. While a message is being sent it is a busy primary button (BusyBeam, busyLook).
   const sendBusy = () => !!props.sending && !props.stopMode;
   const sendEmpty = () => !props.stopMode && value().trim() === "" && !(props.fileItems ?? []).length;
-  /** Ready but held back (the parent says it cannot send now): the primary circle's disabled look. */
-  const sendBlocked = () => !props.stopMode && !sendBusy() && !!props.sendDisabled;
   // On touch screens a tap on Send lowers the keyboard, as messaging apps do, so the reply is not
   // under it; the draft stays the parent's to clear or keep. The parent is told, so that it does not
   // give the field the focus back after the send, whatever the window's width (a tablet lays the
@@ -629,10 +627,11 @@ export function ChatComposer(props: ChatComposerProps) {
     <CircleButton
       onPress={send}
       disabled={props.stopMode ? false : props.sendDisabled || sendBusy()}
+      busy={sendBusy()}
       title={props.sendLabel ?? ""}
       testID="chat-composer-send"
       variant={sendBusy() ? "plain" : sendEmpty() ? "outlined" : "primary"}
-      // Ready, it is the solid primary circle (its finish, and its pale look while it cannot send).
+      // Ready, it is the solid primary circle (its finish; faded while it cannot send).
       class={sendBusy() ? `border ${busyLook("primary").box}` : ""}
     >
       {/* The glyphs; while the drum turns (VoiceOrSend) it carries them instead. */}
@@ -640,11 +639,11 @@ export function ChatComposer(props: ChatComposerProps) {
         <Image
           src={ICONS.PhPaperPlaneTilt}
           accessibilityElementsHidden
-          class="absolute transition duration-[260ms]"
+          class="overflow-hidden absolute transition duration-[260ms]"
           style={{
             width: 14,
             height: 14,
-            tintColor: token(sendBusy() ? busyLook("primary").text : sendEmpty() ? "muted-foreground" : circleIconColor("primary", sendBlocked())) as string,
+            tintColor: token(sendBusy() ? busyLook("primary").text : sendEmpty() ? "muted-foreground" : circleIconColor("primary")) as string,
             opacity: props.stopMode ? 0 : 1,
             scale: props.stopMode ? 0.6 : 1,
             translate: sendEmpty() ? [-1.5, 1.5] : [0, 0],
@@ -653,7 +652,7 @@ export function ChatComposer(props: ChatComposerProps) {
         <Image
           src={ICONS.PhStop}
           accessibilityElementsHidden
-          class="absolute transition duration-[260ms]"
+          class="overflow-hidden absolute transition duration-[260ms]"
           style={{
             width: 14,
             height: 14,
@@ -674,18 +673,17 @@ export function ChatComposer(props: ChatComposerProps) {
   // primary button Send is while sending (BusyBeam, busyLook). The glyph's testID names its look
   // and tint, for tests (no headless image query).
   const voiceLook = () => voiceButtonLook(props.voiceState);
-  // While the composer is disabled the solid mic is pale, its glyph in the fill's disabled text.
-  const voiceTint = (): TokenName => (props.disabled && !voiceLook().busy ? circleIconColor(voiceLook().variant, true) : voiceLook().tint);
+  const voiceTint = (): TokenName => voiceLook().tint;
   const voiceControl = () => (
     <CircleButton
       onPress={() => props.onVoice?.()}
       disabled={props.disabled || props.voiceState === "transcribing"}
+      busy={voiceLook().busy}
       selected={props.voiceState === "recording"}
       title={props.voiceLabel ?? ""}
       hitSlop={VOICE_HIT_SLOP}
       testID="chat-composer-voice"
       variant={voiceLook().variant}
-      // Its solid looks carry their own pale disabled colours (CircleButton), the glyph with them.
       class={voiceLook().busy ? `border ${busyLook("primary").box}` : ""}
     >
       <View style={{ opacity: drumTurning() ? 0 : 1 }}>
@@ -842,7 +840,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <Icon name="PhMicrophone" size={14} color={voiceLook().tint} />
             </View>
             <View class="absolute inset-0 items-center justify-center" style={chamber(-1)}>
-              <Image src={ICONS.PhPaperPlaneTilt} accessibilityElementsHidden style={{ width: 14, height: 14, tintColor: token("primary-foreground") as string }} />
+              <Image class="overflow-hidden" src={ICONS.PhPaperPlaneTilt} accessibilityElementsHidden style={{ width: 14, height: 14, tintColor: token("primary-foreground") as string }} />
             </View>
           </View>
         </If>

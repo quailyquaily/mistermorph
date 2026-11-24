@@ -25,6 +25,7 @@ import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
 import { ChatComposer } from "../chat/ChatComposer";
 import { TodoViewRule, todoViewRuleColor, todoViewSagCenter, TodoViewTabs } from "./TodoViewTabs";
+import { CARD_CORNERS } from "../corners";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -115,7 +116,7 @@ function IndexItem(props: {
       onPress={() => props.onPress()}
       accessibilityLabel={props.run ? `${props.title}, ${props.runLabel}` : props.title}
       testID={props.testID}
-      class="relative flex-row rounded-(--radius) hover:bg-hover-faint"
+      class="relative flex-row rounded-(--radius) hover:bg-hover-soft"
       style={ROW_TRANSITION}
       hoverStyle={ROW_HOVER}
     >
@@ -309,7 +310,7 @@ export function TodoIndex(props: {
                         onPress={state.addTask}
                         accessibilityLabel={t("todo_action_add")}
                         testID="todo-empty-add"
-                        class="flex-row items-center gap-2.5 rounded-(--radius) border border-dashed border-line-soft px-3.5 pb-[11px] pt-3 hover:bg-hover-soft"
+                        class={`flex-row items-center gap-2.5 ${CARD_CORNERS} border border-dashed border-line-soft px-3.5 pb-[11px] pt-3 hover:bg-hover-soft`}
                         style={ROW_TRANSITION}
                         hoverStyle={ROW_HOVER}
                       >

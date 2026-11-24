@@ -1,15 +1,24 @@
 // A file attached to the composer or to a sent message, shown in a dialog: an image, a PDF (in a
 // web view, where the Vue console used an iframe), or text; with previous and next when several.
 // What it shows and where from is components/chat/filePreview.ts: an attachment not sent yet shows
-// from the device (an image), anything else from the agent; a file it cannot show says so.
+// from the device (an image), anything else from the agent; a file it cannot show says so. A file
+// the agent sent (a received file's card opens it) that cannot show says why and offers its
+// download, as does one shown as a PDF; the download is the card's own: busy, saved and failed
+// show here and on the card alike.
 import { Image, Scroll, Text, View, WebView } from "nsh";
 import { Button, Modal } from "../../components/ui";
 import { t } from "../../components/chat/i18n";
 import type { ChatController } from "./chatController";
+import { CARD_CORNERS } from "../../components/corners";
 
 export function FilePreviewDialog(props: { c: ChatController }) {
   const c = props.c;
   const state = () => c.filePreview();
+  const download = () => c.previewedReceivedFileState();
+  // A file the agent sent offers its download when it cannot show, and beside a PDF, which not
+  // every platform's web view draws.
+  const downloadOffered = () =>
+    !!c.previewedReceivedFile() && !state().loading && ((!state().kind && !!state().error) || (state().kind === "pdf" && !!state().url));
   return (
     <Modal
       open={state().open}
@@ -26,14 +35,14 @@ export function FilePreviewDialog(props: { c: ChatController }) {
         </If>
         <If when={!state().loading && state().kind === "image" && state().url}>
           <Scroll style={{ maxHeight: 560 }}>
-            <Image src={state().url} accessibilityLabel={state().name} class="w-full" style={{ height: 480, objectFit: "contain" }} testID="chat-file-preview-image" />
+            <Image src={state().url} accessibilityLabel={state().name} class="overflow-hidden w-full" style={{ height: 480, objectFit: "contain" }} testID="chat-file-preview-image" />
           </Scroll>
         </If>
         <If when={!state().loading && state().kind === "pdf" && state().url}>
           <WebView src={state().url} accessibilityLabel={state().name} class="w-full" style={{ height: 560 }} testID="chat-file-preview-pdf" />
         </If>
         <If when={!state().loading && state().kind === "text"}>
-          <Scroll class="rounded-(--radius) border border-line-faint bg-paper" style={{ maxHeight: 560 }}>
+          <Scroll class={`${CARD_CORNERS} border border-line-faint bg-paper`} style={{ maxHeight: 560 }}>
             <View selectable class="p-3">
               <Text class="font-mono text-xs text-foreground" testID="chat-file-preview-text">
                 {state().text}
@@ -45,6 +54,22 @@ export function FilePreviewDialog(props: { c: ChatController }) {
           <Text role="alert" class="text-sm text-danger" testID="chat-file-preview-error">
             {state().error}
           </Text>
+        </If>
+        <If when={downloadOffered()}>
+          <Button
+            variant="outlined"
+            size="sm"
+            label={t(download()?.saved ? "msg_save_success" : "chat_workspace_action_download")}
+            loading={!!download()?.busy}
+            accessibilityLabel={t(download()?.saved ? "chat_received_file_saved" : "chat_received_file_download", { name: state().name })}
+            testID={`chat-file-preview-download.${download()?.busy ? "busy" : download()?.saved ? "saved" : "idle"}`}
+            onPress={() => c.downloadPreviewedFile()}
+          />
+          <If when={download()?.error}>
+            <Text role="alert" class="text-xs text-danger">
+              {download()?.error}
+            </Text>
+          </If>
         </If>
         <If when={state().items.length > 1}>
           <View class="flex-row justify-between" accessibilityLabel={t("chat_composer_file_preview_navigation")}>

@@ -2,7 +2,7 @@
 import { expect, test } from "nsh/test";
 import { localEndpoint, openConsole } from "./harness";
 import {
-  databaseRows,
+  databaseGroups,
   formatCount,
   parseDatabaseMetrics,
   RUNTIME_FOLD_TOGGLE_CLASS,
@@ -219,30 +219,36 @@ function overviewWithDatabases(databases: unknown) {
   return { ...OVERVIEW, runtime: { ...OVERVIEW.runtime, databases } };
 }
 
-test("Runtime metrics list each database's size and the rows of its named tables", async () => {
+test("Runtime metrics group the databases by file: each file's size, then its tables' rows under it", async () => {
   const { app } = await openConsole({
     location: "/e/default/settings/runtime",
     api: { "GET /proxy:/overview": { body: overviewWithDatabases(DATABASES) } },
   });
   await app.waitFor("id:runtime-database-rows");
-  const row = (label: string, value: string) => {
-    expect(app.shows(`id:runtime-database-rows >> text:${label}`)).toBe(true);
-    expect(app.shows(`id:runtime-database-rows >> text:${value}`)).toBe(true);
+  /** In the group of `file`: a line showing `label` and `value`. */
+  const row = (file: string, label: string, value: string) => {
+    expect(app.shows(`id:runtime-db-${file} >> text:${label}`)).toBe(true);
+    expect(app.shows(`id:runtime-db-${file} >> text:${value}`)).toBe(true);
   };
   expect(app.shows("id:runtime-databases >> text:DATABASES") || app.shows("id:runtime-databases >> text:Databases")).toBe(true);
-  // Sizes read as sizes; a count says which table's rows it is, with its thousands grouped.
-  row("agent.db size", "3.00 MiB");
-  row("agent.db · contacts", "1 row");
+  // Each file is named once, its size beside it; its tables under it by name, thousands grouped.
+  expect(app.count("id:runtime-database-rows >> text:agent.db")).toBe(1);
+  row("agent.db", "agent.db", "3.00 MiB");
+  row("agent.db", "contacts", "1 row");
   // An empty table is 0 rows; one that could not be counted says so, never 0.
-  row("agent.db · jobs", "0 rows");
-  row("agent.db · topic_contexts", "Row count unavailable");
-  row("journal.db size", "0 B");
-  row("journal.db · journal_events", "1,234,567 rows");
-  // A database not created yet and one that cannot be read are each one line, without counts.
-  row("memory.db", "Not created yet");
-  row("usage.db", "Unavailable");
-  expect(app.shows("id:runtime-database-rows >> text:memory.db · memories")).toBe(false);
-  expect(app.shows("id:runtime-database-rows >> text:usage.db · llm_requests")).toBe(false);
+  row("agent.db", "jobs", "0 rows");
+  row("agent.db", "topic_contexts", "Row count unavailable");
+  row("journal.db", "journal.db", "0 B");
+  row("journal.db", "journal_events", "1,234,567 rows");
+  // The file is not repeated on its tables' lines, but a screen reader hears it on each.
+  expect(app.shows("id:runtime-database-rows >> text:agent.db · contacts")).toBe(false);
+  expect(app.count("label:agent.db · contacts: 1 row")).toBe(1);
+  expect(app.count("label:agent.db size: 3.00 MiB")).toBe(1);
+  // A database not created yet and one that cannot be read are each one line, without tables.
+  row("memory.db", "memory.db", "Not created yet");
+  row("usage.db", "usage.db", "Unavailable");
+  expect(app.shows("id:runtime-db-memory.db >> text:memories")).toBe(false);
+  expect(app.shows("id:runtime-db-usage.db >> text:llm_requests")).toBe(false);
   expect(app.count("id:runtime-databases-unreported")).toBe(0);
   // The process metrics are still there.
   expect(app.shows("id:runtime-metrics >> text:Goroutines")).toBe(true);
@@ -302,12 +308,16 @@ test("database metrics: unknown is never zero, and not reported is not empty", (
     { file: "a.db", status: "ok", sizeBytes: null, tables: [{ name: "t", rows: null }, { name: "u", rows: null }] },
     { file: "b.db", status: "missing", sizeBytes: null, tables: [] },
   ]);
-  // A database that is there but unreadable keeps its size line; its counts say they are unavailable.
-  expect(
-    databaseRows([{ file: "usage.db", status: "unavailable", sizeBytes: 2048, tables: [{ name: "llm_requests", rows: null }] }]).map(
-      (row) => `${row.label} = ${row.value}`,
-    ),
-  ).toEqual(["usage.db size = 2.00 KiB", "usage.db · llm_requests = Row count unavailable"]);
-  expect(databaseRows([{ file: "x.db", status: "ok", sizeBytes: null, tables: [] }]).map((row) => row.value)).toEqual(["Unavailable"]);
+  // A database that is there but unreadable keeps its size; its counts say they are unavailable.
+  const [unreadable] = databaseGroups([{ file: "usage.db", status: "unavailable", sizeBytes: 2048, tables: [{ name: "llm_requests", rows: null }] }]);
+  expect([unreadable.file, unreadable.value, unreadable.label]).toEqual(["usage.db", "2.00 KiB", "usage.db size"]);
+  expect(unreadable.tables.map((table) => `${table.name} = ${table.value} (${table.label})`)).toEqual([
+    "llm_requests = Row count unavailable (usage.db · llm_requests)",
+  ]);
+  expect(databaseGroups([{ file: "x.db", status: "ok", sizeBytes: null, tables: [] }]).map((group) => group.value)).toEqual(["Unavailable"]);
+  // A missing one is its state alone, its tables left out.
+  expect(databaseGroups([{ file: "m.db", status: "missing", sizeBytes: null, tables: [{ name: "t", rows: null }] }])).toEqual([
+    { file: "m.db", value: "Not created yet", state: true, label: "m.db", tables: [] },
+  ]);
   expect([0, 7, 999, 1000, 12345, 1234567].map(formatCount)).toEqual(["0", "7", "999", "1,000", "12,345", "1,234,567"]);
 });

@@ -55,14 +55,48 @@ check `rt.Err()` before creating registries, engines, or bots.
 | MCP tools from `mcp.servers` | Yes | Yes | Yes |
 | Skills, Guard, prompt blocks, and LLM routes | Yes | Yes | Yes |
 | Elevated commands (`elevated` on `bash`/`powershell`; off by default, see [Elevated commands](#elevated-commands)) | Yes | Yes (the dialog shows on the bot's machine) | Yes (the dialog shows on the bot's machine) |
+| Create and edit jobs (`job_manage`) | Yes | Yes | Yes |
+| Run jobs: on schedule, by poke, by message trigger (see [Jobs](#jobs)) | Only while `RunJobs` or a bot runs | Yes, while `Run` runs | Yes, while `Run` runs |
 
 The Integration package does not currently expose LINE or Lark bot constructors. Use the CLI for those channel runtimes.
 
-`PreparedRun` owns the LLM, image, inspector, and MCP resources created while preparing that run. Always call `PreparedRun.Cleanup`; repeated calls are safe. Telegram and Slack runners connect MCP servers with the context passed to `Run` and close those connections when `Run` exits. `BotRunner.Close` cancels an active run.
+`PreparedRun` owns the LLM, image, inspector, and MCP resources created while preparing that run. Always call `PreparedRun.Cleanup`; repeated calls are safe. Telegram and Slack runners connect MCP servers with the context passed to `Run` and close those connections when `Run` exits. With jobs on, the job loop (see [Jobs](#jobs)) connects the MCP servers once more for its runs and closes them when it stops. `BotRunner.Close` cancels an active run.
 
 Integration uses its configured logger without changing the host process's default `slog` logger.
 
 Set `workspace_dir` to an existing project directory when direct integration runs need a default workspace. `NewChecked` validates it, and `RunTask`, `NewRunEngine`, and registries returned by `NewRegistry` use the same directory. An empty value preserves the existing file-cache fallback.
+
+## Jobs
+
+Jobs that `job_manage` creates are kept in the state folder (`agent.db` beside `cron.yaml`), as the CLI keeps them. A runtime runs them in one job loop: the awareness loop of the CLI commands, which runs due jobs, the heartbeat, and the jobs started by hand, by `POST /poke/{job_id}` and by message triggers. No `mistermorph` process is needed.
+
+The loop runs only while the runtime has an owner. Each of these is one:
+
+- a channel bot's `Run` (`NewTelegramBot`, `NewSlackBot`, `NewDiscordBot`, `NewMixinBot`, `NewWeChatBot`, `NewWhatsAppBot`), for as long as it runs;
+- `ServeRuntimeAPI`, for as long as it serves;
+- `RunJobs(ctx)`, until `ctx` ends: call it when the program runs no bot and no runtime API, or whenever its jobs must run regardless of them.
+
+```go
+go func() {
+	if err := rt.RunJobs(ctx); err != nil {
+		log.Printf("jobs: %v", err)
+	}
+}()
+```
+
+A runtime has one loop however many owners it has, so two bots do not run a job twice. The first owner starts it; when the last one returns, the loop stops, waits for the runs it started and only then lets that owner return. The next owner starts a new loop. Keep at least one owner running for as long as jobs should run. As in the CLI, a recurring job's occurrence that falls while no loop runs is skipped; a one-time job whose time has passed runs when the next loop starts.
+
+With the loop running:
+
+- Telegram and Slack bots start the jobs whose message triggers watch one of their chats. Discord, WeChat and WhatsApp bots take no message triggers, and Mixin takes no triggers at all, but each still keeps the loop running.
+- The runtime API and the bots' daemon APIs (`<channel>.serve_listen`) start a job with a poke trigger on `POST /poke/{job_id}`, and wake the agent on `POST /poke`.
+- Runs are recorded under the `integration` task target (`<tasks dir>/integration`), each job in its own topic (`_cron_<job id>`): `ServeRuntimeAPI` lists them, and jobs that use another job read its output from there.
+- The heartbeat follows `heartbeat.enabled` and `heartbeat.interval`, as in the CLI; its alerts go to the log only.
+- If the loop fails (for example, no model resolves for its route), every owner stops and returns the error, as a CLI command stops when its awareness loop fails.
+
+Jobs are off, and no loop or trigger starts, when `tools.job_manage.enabled` is false, when `BuiltinToolNames` leaves out `job_manage`, or when `cron.enabled` is false. `RunJobs` then returns nil at once.
+
+Another process running jobs on the same state folder (a `mistermorph` command, another embedded runtime) shares the scheduler lock of the job list: one of them schedules at a time, so a scheduled run starts only once.
 
 ## Tool search and codemode for embedder tools
 

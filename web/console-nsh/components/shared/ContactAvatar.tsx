@@ -153,7 +153,7 @@ export function ContactAvatar(props: ContactAvatarProps) {
         else={initial()}
       >
         {(src) => (
-          <Image
+          <Image class="overflow-hidden"
             src={src()}
             onError={handleImageError}
             style={{ width: dimension(), height: dimension(), objectFit: "cover" }}

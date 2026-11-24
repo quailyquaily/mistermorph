@@ -38,7 +38,7 @@ function Page() {
     dialog.set(null);
   };
   return (
-    <View class="flex-1 gap-2 bg-background p-2 pt-12">
+    <View class="flex-1 gap-2 bg-paper p-2 pt-12">
       <View class="flex-row gap-2">
         <Button size="xs" label="workspace sheet" onPress={() => sheet.set("workspace")} testID="open-workspace-sheet" />
         <Button size="xs" label="side pane" onPress={() => sheet.set("side")} testID="open-side-pane" />

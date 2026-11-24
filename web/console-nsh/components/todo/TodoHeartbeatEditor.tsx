@@ -11,6 +11,7 @@ import { Button, Icon, ProgressBar, Toggle } from "../ui";
 import { TodoCard } from "./TodoCard";
 import { TodoInput } from "./TodoFields";
 import type { HeartbeatWorkflow, TodoState } from "./todo-state";
+import { CARD_CORNERS } from "../corners";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -20,7 +21,7 @@ function WorkflowCard(props: { state: TodoState; item: () => HeartbeatWorkflow; 
   const key = () => props.item()._key;
   return (
     <View
-      class={`gap-2 rounded-(--radius) border border-line-soft bg-card p-3 ${props.item().enabled ? "" : "opacity-60"}`}
+      class={`gap-2 ${CARD_CORNERS} border border-line-soft bg-card p-3 ${props.item().enabled ? "" : "opacity-60"}`}
       testID={`todo-heartbeat-workflow-${props.index()}`}
     >
       <View class="flex-row items-center gap-2">

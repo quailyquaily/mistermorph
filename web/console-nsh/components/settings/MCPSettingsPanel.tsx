@@ -10,6 +10,7 @@ import { Button, Icon, Skeleton, Tabs, TextField } from "../ui";
 import { GroupTitle, SettingSwitch, SettingsCard, SettingToggleRow } from "../settings-page/parts";
 import { t } from "./DialogShell";
 import { type PaneTarget, SettingsPane, usePaneTarget } from "./PaneTarget";
+import { CARD_CORNERS } from "../corners";
 
 export interface MCPPair {
   _key?: string;
@@ -477,7 +478,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
           actions={props.serversTitle ? undefined : addButton()}
         >
           <If when={props.readOnly}>
-            <View class="rounded-(--radius) border border-warn bg-card px-3 py-2.5">
+            <View class={`${CARD_CORNERS} border border-warn bg-card px-3 py-2.5`}>
               <Text class="text-xs text-foreground">{props.readOnlyMessage ?? ""}</Text>
             </View>
           </If>
@@ -492,7 +493,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
               </View>
             </If>
             <If when={!props.readOnly && props.validationError}>
-              <View class="rounded-(--radius) border border-danger bg-card px-3 py-2.5">
+              <View class={`${CARD_CORNERS} border border-danger bg-card px-3 py-2.5`}>
                 <Text class="text-xs text-danger" testID="mcp-validation-error">
                   {props.validationError ?? ""}
                 </Text>
@@ -520,7 +521,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
                       {(server, index) => (
                         <View
                           class={`flex-row items-center gap-3 ${index() > 0 ? "border-t border-line-soft" : ""} ${
-                            paneOpen() && editingIndex() === index() ? "bg-blue/9" : ""
+                            paneOpen() && editingIndex() === index() ? "bg-blue/10" : ""
                           }`}
                         >
                           <View

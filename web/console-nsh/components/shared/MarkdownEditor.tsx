@@ -219,7 +219,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
     <View class={`gap-1.5 ${props.class ?? ""}`} testID={props.testID}>
       <View
         class={`overflow-hidden ${CONTROL_CORNERS} border bg-card transition-colors duration-200 ${focused() ? "border-ring" : "border-input"} ${
-          props.disabled ? "opacity-60" : ""
+          props.disabled ? "opacity-50" : ""
         }`}
         style={heightStyle(props.height)}
       >
@@ -494,7 +494,7 @@ function PickerButton(props: {
         tooltip={
           <Tip text={props.title} />
         }
-        class={`size-9 items-center justify-center ${TOOLBAR_CORNERS} transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-45`}
+        class={`size-9 items-center justify-center ${TOOLBAR_CORNERS} transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-50`}
       >
         <Icon name={props.icon} size={18} color="subtle" />
       </TipButton>
@@ -694,7 +694,7 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
                         class="-mb-px flex-1 items-center border-b-2 border-transparent py-2 hover:bg-hover selected:border-blue"
                       >
                         <If when={CHANNEL_LOGOS[tab().id]} else={<Text class="text-xs text-subtle">{tab().title}</Text>}>
-                          <Image src={CHANNEL_LOGOS[tab().id]} style={{ width: 18, height: 18 }} />
+                          <Image class="overflow-hidden" src={CHANNEL_LOGOS[tab().id]} style={{ width: 18, height: 18 }} />
                         </If>
                       </BaseButton>
                     )}
@@ -708,7 +708,7 @@ export function AppMarkdownEditor(props: AppMarkdownEditorProps) {
                   when={item.channel && CHANNEL_LOGOS[item.channel]}
                   else={<Text class="text-xs font-semibold text-blue">{Array.from(item.title)[0]?.toUpperCase() || "?"}</Text>}
                 >
-                  <Image src={CHANNEL_LOGOS[item.channel || ""]} style={{ width: 18, height: 18 }} />
+                  <Image class="overflow-hidden" src={CHANNEL_LOGOS[item.channel || ""]} style={{ width: 18, height: 18 }} />
                 </If>
               </View>
             )}

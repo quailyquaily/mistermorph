@@ -14,7 +14,7 @@ import { CALENDAR_DAY_CLASS, DateField } from "../shared/DateField";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, BusyBeam, busyLook, DropdownMenu, Icon, MENU_POPUP_STYLE, type MenuEntry, SWITCH_THUMB_CORNERS, SWITCH_TRACK_CORNERS, Tabs, Tip, TipButton } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, MENU_POPUP_STYLE, type MenuEntry, SWITCH_THUMB_CLASS, SWITCH_TRACK_CLASS, switchThumbStyle, Tabs, Tip, TipButton } from "../ui";
 import { CONTROL_CORNERS, POPOVER_CORNERS } from "../corners";
 import * as model from "./todo-model.js";
 import { TodoJobButton } from "../chat/TodoJobBar";
@@ -30,7 +30,7 @@ const t = translate as (key: string, vars?: Record<string, unknown> | null) => s
 
 // The preview and the bash environment are boxed (`.todo-task-preview`): line-soft 76 % on paper
 // 94 %, 4pt corners, 11/12/12 padding; their labels are 14pt semibold blue.
-const INSET_BOX = "rounded-[4px] border border-line-soft/75 bg-paper-dense px-3 pb-3 pt-[11px]";
+const INSET_BOX = "rounded-[4px] border border-line-soft/75 bg-paper/95 px-3 pb-3 pt-[11px]";
 const INSET_LABEL = "text-sm font-semibold leading-[18.9px] text-blue";
 
 
@@ -74,8 +74,8 @@ function WeekdayChip(props: { day: number; selected: boolean; disabled: boolean;
       disabled={props.disabled}
       accessibilityLabel={model.weekdayLabel(props.day) as string}
       testID={`todo-weekday-${props.day}`}
-      class={`h-11 flex-1 items-center justify-center ${CONTROL_CORNERS} border px-1.5 disabled:opacity-60 ${
-        props.selected ? "border-blue/55 bg-blue/12" : "border-line/70 bg-paper-dense hover:border-blue/40 hover:bg-hover"
+      class={`h-11 flex-1 items-center justify-center ${CONTROL_CORNERS} border px-1.5 disabled:opacity-50 ${
+        props.selected ? "border-blue/60 bg-blue/12" : "border-line/70 bg-paper/95 hover:border-blue/45 hover:bg-hover"
       }`}
       style={{ transitionProperty: "colors", transitionDuration: 160, transitionTimingFunction: "ease" }}
     >
@@ -189,14 +189,9 @@ function EnabledSwitch(props: { checked: boolean; disabled: boolean; onChange: (
       tooltip={props.label ? undefined : <Tip text={t("todo_field_enabled")} />}
       testID={props.testID ?? "todo-enabled"}
       class="group flex-row items-center disabled:opacity-50"
-      trackClass={`h-5 w-[34px] ${SWITCH_TRACK_CORNERS} border border-line p-[2px] transition duration-180 group-hover:border-muted-foreground checked:border-ink checked:bg-ink`}
-      thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card checked:translate-x-3.5`}
-      thumbStyle={{
-        boxShadow: "0 0 0 1px rgba(24, 24, 50, 0.22), 0 1px 1px rgba(24, 24, 50, 0.1)",
-        transitionProperty: "transform",
-        transitionDuration: 260,
-        transitionTimingFunction: "cubic-bezier(0.3, 1.35, 0.5, 1)",
-      }}
+      trackClass={SWITCH_TRACK_CLASS}
+      thumbClass={SWITCH_THUMB_CLASS}
+      thumbStyle={switchThumbStyle()}
     />
   );
 }
@@ -797,7 +792,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
             <BaseButton
               onPress={() => state.openJob(use().job_id)}
               accessibilityLabel={state.jobTitle(use().job_id)}
-              class="min-h-11 min-w-0 flex-1 justify-center rounded-(--radius) px-1 hover:bg-hover-faint"
+              class="min-h-11 min-w-0 flex-1 justify-center rounded-(--radius) px-1 hover:bg-hover-soft"
             >
               <Text class="text-sm leading-[21px] text-foreground" style={{ numberOfLines: 1 }}>
                 {state.jobTitle(use().job_id)}
@@ -856,7 +851,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
             onPress={() => state.openJob(entry().id)}
             accessibilityLabel={entry().title}
             testID={`todo-used-by-${entry().id}`}
-            class="min-h-11 flex-row items-center gap-3 rounded-(--radius) px-1 hover:bg-hover-faint"
+            class="min-h-11 flex-row items-center gap-3 rounded-(--radius) px-1 hover:bg-hover-soft"
           >
             <Text class="min-w-0 flex-1 text-sm leading-[21px] text-foreground" style={{ numberOfLines: 1 }}>
               {entry().title}

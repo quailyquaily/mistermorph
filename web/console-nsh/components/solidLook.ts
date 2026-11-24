@@ -26,6 +26,8 @@
 // into an inner box that takes the presses, and the button never gets them; Android solid controls
 // go without the shadows (fill, hairline and press only).
 import { platform, token } from "nsh";
+import theme from "../theme.json";
+import { withAlpha } from "./motion/color";
 
 type TokenName = Parameters<typeof token>[0];
 
@@ -37,18 +39,19 @@ export type SolidState = "rest" | "hover" | "pressed" | "focus";
 /** Each tone's tokens: its fill at rest, on hover and pressed, its hairline and what is written on it. */
 export const SOLID_TONES: Record<SolidTone, { fill: TokenName; hover: TokenName; press: TokenName; line: TokenName; text: TokenName }> = {
   primary: { fill: "primary", hover: "primary-hover", press: "primary-press", line: "primary-line", text: "primary-foreground" },
-  danger: { fill: "destructive", hover: "danger-hover", press: "danger-press", line: "danger-line", text: "destructive-foreground" },
-  warn: { fill: "warn", hover: "warn-hover", press: "warn-press", line: "warn-line", text: "warn-foreground" },
+  danger: { fill: "danger", hover: "danger-hover", press: "danger-press", line: "danger-line", text: "on-accent" },
+  warn: { fill: "warn", hover: "warn-hover", press: "warn-press", line: "warn-line", text: "on-accent" },
 };
 
 // The classes, spelled out (one string per tone) so each reads as the tokens above.
 const SOLID_BOX: Record<SolidTone, string> = {
-  primary: "bg-primary border-[0.5px] border-primary-line hover:bg-primary-hover active:bg-primary-press",
-  danger: "bg-destructive border-[0.5px] border-danger-line hover:bg-danger-hover active:bg-danger-press",
-  warn: "bg-warn border-[0.5px] border-warn-line hover:bg-warn-hover active:bg-warn-press",
+  primary: "bg-primary border-[0.5px] border-primary-line hover:bg-primary-hover active:bg-primary-press disabled:bg-primary",
+  danger: "bg-danger border-[0.5px] border-danger-line hover:bg-danger-hover active:bg-danger-press disabled:bg-danger",
+  warn: "bg-warn border-[0.5px] border-warn-line hover:bg-warn-hover active:bg-warn-press disabled:bg-warn",
 };
 
-/** A solid control's fill and hairline, with its hover and pressed fills (the disabled look is the control's own). */
+/** A solid control's fill and hairline, with its hover and pressed fills; disabled, the fill at rest
+ * (nsh's `hover:` reaches a disabled control: `disabled:` wins over it), which the control fades. */
 export function solidBox(tone: SolidTone): string {
   return SOLID_BOX[tone];
 }
@@ -82,6 +85,19 @@ export function solidShadow(tone: SolidTone, state: SolidState, read: (name: Tok
     case "focus":
       return `inset 0 0 0 ${SOLID_HAIRLINE_COVER + SOLID_FOCUS_RING}px ${String(read(SOLID_TONES[tone].text))}, 0 1px 2px ${shadow}`;
   }
+}
+
+// Every drop shadow takes its colour from `solid-shadow`: a navy share on the light palette, a deeper
+// black on the dark one, where a light share would vanish against the paper.
+const LIGHT_SHADOW_ALPHA = parseInt(theme.cssVars.light["solid-shadow"].slice(7, 9), 16) / 255;
+
+/**
+ * A drop shadow's colour: `alpha` is its share on the light palette; the dark palette's is as much
+ * deeper as its `solid-shadow` is (`read`: a stand-in for `token` in tests). Read it while drawing,
+ * so it follows the appearance.
+ */
+export function shadowColor(alpha: number, read: (name: TokenName) => unknown = token): string {
+  return withAlpha(String(read("solid-shadow")), alpha / LIGHT_SHADOW_ALPHA);
 }
 
 /** False on Android (see above): its solid controls draw no shadows. */

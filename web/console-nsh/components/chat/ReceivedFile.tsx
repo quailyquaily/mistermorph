@@ -2,17 +2,23 @@
 // an image preview for raster images. Ported from web/console/src/components/ReceivedFile.js. Its
 // preview and download state lives in a ReceivedFiles store, keyed by file, since rows recycle.
 //
+// A file the chat's file preview dialog can show (an image, a PDF, UTF-8 text:
+// lib/core/received-files.js `canOpenReceivedFile`) also has a preview icon button beside the
+// download, and pressing its name or its inline image opens the dialog on it (`onPreview`). Any
+// other file (an archive, a binary) keeps the download alone.
+//
 // The download is the host's save (lib/platform.ts `saveFile`): a browser download, the desktop's
 // save dialog, the phone app's picker for a new document. While it runs the button is busy (and
 // takes no presses); once the file is written the glyph turns to a check for a moment; backing out
 // of the picker leaves the row as it was; a failure says why under the row, and the button tries again.
 import { effect, Image, platform, Text, untracked, View } from "nsh";
-import { Button, type ButtonSize } from "../ui";
-import { canPreviewReceivedFile, receivedFileURL } from "../../lib/core/received-files.js";
+import { Button, TipButton, type ButtonSize } from "../ui";
+import { canOpenReceivedFile, canPreviewReceivedFile, receivedFileURL } from "../../lib/core/received-files.js";
 import { t } from "./i18n";
 import { SAVE_UNAVAILABLE } from "../../lib/platform";
 import { keyedState } from "./rowState";
 import { fetchConsoleBlob, saveConsoleFile } from "./files";
+import { CARD_CORNERS } from "../corners";
 
 /** How long the check shows after a save. */
 export const SAVED_MS = 2000;
@@ -42,6 +48,11 @@ interface FileState {
 }
 
 const EMPTY: FileState = { previewURL: "", error: "", busy: false, requested: false, saved: false };
+
+/** The ReceivedFiles key of a file the agent sent: its card's and the preview dialog's. */
+export function receivedFileKey(topicID: unknown, taskID: unknown, fileID: unknown) {
+  return `${topicID}|${taskID}|${fileID}`;
+}
 
 /** What a failed save says: why, or that this app cannot save files at all. */
 function saveError(error: unknown) {
@@ -125,11 +136,17 @@ export function ReceivedFile(props: {
   files: ReceivedFiles;
   downloadLabel: string;
   errorLabel: string;
+  /** Opens the file preview dialog on this file; without it the card offers no preview. */
+  onPreview?: (file: ReceivedFileInfo) => void;
 }) {
-  const key = () => `${props.topicID}|${props.taskID}|${props.file?.id}`;
+  const key = () => receivedFileKey(props.topicID, props.taskID, props.file?.id);
   const state = () => props.files.state(key());
   const name = () => String(props.file?.name || "").trim() || "download";
   const size = () => receivedFileButtonSize(!platform.desktop);
+  const previewable = () => !!props.onPreview && canOpenReceivedFile(props.file);
+  const openPreview = () => {
+    if (previewable()) props.onPreview?.(props.file);
+  };
 
   effect(() => {
     const k = key();
@@ -140,10 +157,42 @@ export function ReceivedFile(props: {
     untracked(() => void props.files.preview(k, file, topicID, taskID, label));
   });
 
+  const receivedImage = () => (
+    <Image
+      src={state().previewURL}
+      accessibilityLabel={props.file?.name}
+      onError={() => props.files.failPreview(key(), props.errorLabel)}
+      class="overflow-hidden max-h-80 w-full rounded-(--radius)"
+      style={{ height: 240, objectFit: "contain" }}
+    />
+  );
+
   return (
-    <View class="gap-2 rounded-(--radius) border border-line-faint bg-card p-3" accessibilityLabel={props.file?.name}>
+    <View class={`gap-2 ${CARD_CORNERS} border border-line-faint bg-card p-3`} accessibilityLabel={props.file?.name}>
       <View class="flex-row items-center gap-2">
-        <Text class="flex-1 text-sm text-foreground line-clamp-1">{props.file?.name}</Text>
+        <If
+          when={previewable()}
+          else={<Text class="flex-1 text-sm text-foreground line-clamp-1">{props.file?.name}</Text>}
+        >
+          <Text
+            role="button"
+            onPress={openPreview}
+            testID="chat-received-file-name"
+            class="flex-1 min-w-0 text-sm text-foreground line-clamp-1 hover:underline"
+          >
+            {props.file?.name}
+          </Text>
+          <Button
+            variant="plain"
+            size={size()}
+            iconOnly
+            icon="PhEye"
+            title={t("chat_composer_file_preview")}
+            accessibilityLabel={t("chat_received_file_preview", { name: name() })}
+            testID={`chat-received-file-preview.${size()}`}
+            onPress={openPreview}
+          />
+        </If>
         <Button
           variant="plain"
           size={size()}
@@ -158,13 +207,11 @@ export function ReceivedFile(props: {
         />
       </View>
       <If when={state().previewURL}>
-        <Image
-          src={state().previewURL}
-          accessibilityLabel={props.file?.name}
-          onError={() => props.files.failPreview(key(), props.errorLabel)}
-          class="max-h-80 w-full rounded-(--radius)"
-          style={{ height: 240, objectFit: "contain" }}
-        />
+        <If when={previewable()} else={receivedImage()}>
+          <TipButton onPress={openPreview} accessibilityLabel={t("chat_received_file_preview", { name: name() })} testID="chat-received-file-image" class="w-full">
+            {receivedImage()}
+          </TipButton>
+        </If>
       </If>
       <If when={state().error}>
         <Text role="alert" class="text-xs text-danger">

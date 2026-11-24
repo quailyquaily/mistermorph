@@ -33,7 +33,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `components/Shell.tsx` | Sidebar, mobile bottom nav, notice stack |
 | `components/frame/PageStack.tsx` | The page host: a layer per page instance and the slide between two (docs/console/page-transitions.md) |
 | `pages/<area>/` | One folder per screen; `pages/routes.tsx` maps routes to pages |
-| `pages/ui-components/` | The UI component gallery, a testing page at `/ui-components` with no navigation entry: every component from synthetic data (docs/console/ui-components.md). A new component goes in its `inventory.js` |
+| `pages/ui-components/` | The UI component gallery, a testing page at `/__ui-components` with no navigation entry (its head's Logout is the way out, lib/logout.ts): every component from synthetic data (docs/console/ui-components.md). A new component goes in its `inventory.js` |
 | `tests/harness.ts` | `openConsole({ location, api })`: the app with a fake host and a stubbed console API |
 
 ## Rules (nsh is not Vue)
@@ -92,8 +92,13 @@ Headless tests prove behaviour, not the look.
 ## Traps found while matching the Vue console
 
 - `leading-[1.4]` (a unitless line height) does not render as size × 1.4: write points, `leading-[19.6px]`.
-- Opacity modifiers on the app's own colour tokens (`bg-paper/70`) do nothing: add a token to
-  `theme.json` (`paper-soft`, `card-soft`) instead.
+- (Up to an earlier nsh; 0.6.0 applies them on web, desktop and Android.) Opacity modifiers on
+  the app's own colour tokens (`bg-paper/70`) did nothing. Tints of a colour keep to the steps in
+  `scripts/color-steps.test.mjs`.
+- An `Image` counts its source's natural size (a Phosphor icon's 256pt) in the content of a scroll
+  view around it, though it is drawn at the size it is given: an 18pt icon near the end of a short
+  list makes the list scroll over empty room. Give every `Image` `overflow-hidden`
+  (`scripts/image-clip.test.mjs` checks the sources).
 - `style={{ display: "flex" }}` turns a View into a row.
 - (Up to nsh 0.5.0; 0.5.1 disposes it, `tests/list-empty-slot.test.tsx`.) A `List`'s `empty` slot
   given as a function rendered in a scope nsh never disposed: the

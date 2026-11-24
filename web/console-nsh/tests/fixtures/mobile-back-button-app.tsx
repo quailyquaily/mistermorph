@@ -74,7 +74,7 @@ function Probe(props: { name: string; children?: JSX.Element; class?: string }) 
 
 function Page() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <Text class="text-[6px]">{JSON.stringify(frames())}</Text>
       <Text class="text-[6px]">{`presses:${presses().join(",")}`}</Text>
       <Probe name="mobile-bar">

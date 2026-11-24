@@ -19,7 +19,7 @@ probeTabStrips((frame) => {
 
 function FixtureApp() {
   return (
-    <View class="flex-1 gap-2 bg-background p-3">
+    <View class="flex-1 gap-2 bg-paper p-3">
       <Button testID="open-picker" accessibilityLabel="Open picker" class="h-8 self-start px-3" onPress={() => open.set(true)}>
         <Text>open</Text>
       </Button>

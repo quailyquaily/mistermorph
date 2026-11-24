@@ -152,7 +152,7 @@ export function ChannelMark(props: { channel: unknown; size: number }) {
       when={channelLogo(key())}
       else={<Icon name={key() === "console" ? "PhTerminalWindow" : "PhLink"} size={props.size} color="muted-foreground" />}
     >
-      {(logo) => <Image src={logo()} style={{ width: props.size, height: props.size }} accessibilityElementsHidden />}
+      {(logo) => <Image class="overflow-hidden" src={logo()} style={{ width: props.size, height: props.size }} accessibilityElementsHidden />}
     </If>
   );
 }

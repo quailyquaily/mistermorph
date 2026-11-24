@@ -22,6 +22,7 @@ import {
   todoJobButtonLook,
 } from "../components/chat/TodoJobBar";
 import { BAR_INSET, MOBILE_NAV_HEIGHT, mobileNavSlots, NAV_SLOT_MAX } from "../components/frame/mobileBar";
+import { DISABLED_OPACITY } from "../components/ui";
 
 type Frame = { x: number; y: number; w: number; h: number };
 type Report = {
@@ -37,11 +38,11 @@ const VIEW = "chat-todo-job-view-icon";
 const GLYPHS = {
   start: `id:${TOGGLE}.PhPlay.primary.primary-foreground`,
   starting: `id:${TOGGLE}.PhPlay.busy.ink`,
-  startOff: `id:${TOGGLE}.PhPlay.disabled.on-disabled`,
+  startOff: `id:${TOGGLE}.PhPlay.disabled.primary-foreground`,
   stop: `id:${TOGGLE}.PhStop.stop.danger`,
   stopping: `id:${TOGGLE}.PhStop.busy.danger`,
   view: `id:${VIEW}.PhListChecks.quiet.muted-foreground`,
-  viewOff: `id:${VIEW}.PhListChecks.disabled.plain-disabled-text`,
+  viewOff: `id:${VIEW}.PhListChecks.disabled.muted-foreground`,
 };
 const TOGGLE_GLYPHS = [GLYPHS.start, GLYPHS.starting, GLYPHS.startOff, GLYPHS.stop, GLYPHS.stopping];
 
@@ -100,10 +101,11 @@ test("Start is the primary button, Stop a solid red one, View Job the navigation
   expect(classes(view.box)).toContain("focus:bg-hover");
 });
 
-test("busy and disabled looks: the beam's soft fill while starting, Stop kept red while stopping, pale when they cannot act", () => {
+test("busy and disabled looks: the beam's soft fill while starting, Stop kept red while stopping, faded when they cannot act", () => {
   expect(todoJobButtonLook("start", { busy: true })).toMatchObject({ look: "busy", glyph: "PhPlay", icon: "ink", beam: "primary" });
-  expect(todoJobButtonLook("start", { disabled: true })).toMatchObject({ look: "disabled", icon: "on-disabled" });
-  expect(classes(todoJobButtonLook("start", { disabled: true }).box)).toContain("bg-primary-disabled");
+  expect(todoJobButtonLook("start", { disabled: true })).toMatchObject({ look: "disabled", icon: "primary-foreground" });
+  expect(classes(todoJobButtonLook("start", { disabled: true }).box)).toContain("bg-primary");
+  expect(classes(todoJobButtonLook("start", { disabled: true }).box)).toContain(DISABLED_OPACITY);
   // Busy wins over disabled (a run on its way is disabled too).
   expect(todoJobButtonLook("start", { busy: true, disabled: true }).look).toBe("busy");
   const stopping = todoJobButtonLook("stop", { busy: true, disabled: true });
@@ -112,8 +114,11 @@ test("busy and disabled looks: the beam's soft fill while starting, Stop kept re
   expect(classes(stopping.tint)).toContain("bg-danger/12");
   // No hover or focus deepening while it cannot act.
   expect(classes(stopping.tint).some((c) => c.includes(":"))).toBe(false);
-  expect(todoJobButtonLook("stop", { disabled: true })).toMatchObject({ look: "disabled", icon: "danger-disabled-text" });
-  expect(todoJobButtonLook("view", { disabled: true })).toMatchObject({ look: "disabled", icon: "plain-disabled-text" });
+  expect(todoJobButtonLook("stop", { disabled: true })).toMatchObject({ look: "disabled", icon: "danger" });
+  expect(classes(todoJobButtonLook("stop", { disabled: true }).box)).toContain(DISABLED_OPACITY);
+  expect(classes(todoJobButtonLook("stop", { busy: true, disabled: true }).box)).not.toContain(DISABLED_OPACITY);
+  expect(todoJobButtonLook("view", { disabled: true })).toMatchObject({ look: "disabled", icon: "muted-foreground" });
+  expect(classes(todoJobButtonLook("view", { disabled: true }).box)).toContain(DISABLED_OPACITY);
 });
 
 test("the buttons are the navigation's slots: as tall and wide, with its 24pt glyphs", () => {

@@ -6,6 +6,7 @@ import { openExternal } from "../../lib/platform";
 import { Button, Icon, Tip } from "../ui";
 import { LoadingLine, SettingsCard } from "../settings-page/parts";
 import { InlineNotice, t } from "./DialogShell";
+import { CARD_CORNERS } from "../corners";
 
 interface CreditItem {
   id?: string;
@@ -104,7 +105,7 @@ export function SettingsCreditsPanel() {
                   role="link"
                   accessibilityLabel={`${t("settings_credits_open_profile")}: ${item().name ?? ""}`}
                   onPress={() => item().link && openExternal(String(item().link))}
-                  class="min-h-29 min-w-0 items-center justify-center gap-2 rounded-(--radius) border border-line/70 bg-paper/96 px-3 py-3.5 transition-colors duration-160 hover:border-blue/30 hover:bg-hover focus:border-blue/30 focus:bg-hover"
+                  class={`min-h-29 min-w-0 items-center justify-center gap-2 ${CARD_CORNERS} border border-line/70 bg-paper/96 px-3 py-3.5 transition-colors duration-160 hover:border-blue/35 hover:bg-hover focus:border-blue/35 focus:bg-hover`}
                 >
                   <View class="absolute right-2.5 top-2.5">
                     <Icon name="PhArrowSquareOut" size={12} color="muted-foreground" />
@@ -114,7 +115,7 @@ export function SettingsCreditsPanel() {
                       when={contributorAvatarURL(item(), brokenAvatars())}
                       else={<Text class="font-mono text-xs font-semibold tracking-[0.04em] text-subtle">{contributorInitials(item().name)}</Text>}
                     >
-                      <Image
+                      <Image class="overflow-hidden"
                         src={contributorAvatarURL(item(), brokenAvatars())}
                         accessibilityLabel={item().name}
                         onError={() => markBroken(item().id)}

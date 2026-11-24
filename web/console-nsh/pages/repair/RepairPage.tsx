@@ -11,6 +11,7 @@ import { fetchConsoleSetupIntegrity, invalidateConsoleSetupReadiness, setupStage
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { InlineNotice } from "../setup/InlineNotice";
 import { RawTextEditorDialog } from "./RawTextEditorDialog";
+import { CARD_CORNERS } from "../../components/corners";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -286,7 +287,7 @@ export function RepairPage() {
                       <View class="flex-1 flex-row items-center">
                         <Text class="shrink text-xs text-subtle line-clamp-1">{item().name}</Text>
                         <If when={fieldLabel(item())}>
-                          <View class="ml-2.5 bg-primary/9 px-1.5 py-0.75">
+                          <View class="ml-2.5 bg-primary/10 px-1.5 py-0.75">
                             <Text class="font-mono text-xs text-primary">{fieldLabel(item())}</Text>
                           </View>
                         </If>
@@ -297,7 +298,7 @@ export function RepairPage() {
                     <View selectable>
                       <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{item().path}</Text>
                     </View>
-                    <View selectable class="border border-line-soft bg-line-soft/30 px-3 py-2.5">
+                    <View selectable class={`${CARD_CORNERS} border border-line-soft bg-line-soft/30 px-3 py-2.5`}>
                       <Text class="font-mono text-base leading-normal text-subtle">{item().error}</Text>
                     </View>
                     <View class={phone() ? "gap-2.5" : "flex-row flex-wrap justify-end gap-2.5"}>

@@ -9,6 +9,7 @@ import { Button, TextField, Toggle } from "../ui";
 import { SettingsCard } from "../settings-page/parts";
 import { SettingChoices, SettingField, SettingFieldGrid, SettingSelect } from "./SettingFields";
 import { jsonTextError, SettingJson } from "./SettingJson";
+import { CARD_CORNERS } from "../corners";
 
 /** An auth profile as the runtime reports it. */
 export interface AuthProfile {
@@ -187,7 +188,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
     >
       <View class="gap-4" testID={props.testID}>
         <If when={error()}>
-          <View class="rounded-(--radius) border border-danger bg-card px-3 py-2" role="alert">
+          <View class={`${CARD_CORNERS} border border-danger bg-card px-3 py-2`} role="alert">
             <Text class="text-sm text-danger">{error()}</Text>
           </View>
         </If>
@@ -196,7 +197,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
             const key = untracked(() => profile()._key);
             const label = (text: string) => `${text} ${index() + 1}`;
             return (
-              <View class="gap-3 rounded-(--radius) border border-line-faint p-3">
+              <View class={`gap-3 ${CARD_CORNERS} border border-line-faint p-3`}>
                 <SettingFieldGrid>
                   <SettingField label="Name">
                     <TextField

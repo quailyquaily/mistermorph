@@ -21,6 +21,7 @@ import { onSystemBack, openParentPage } from "../../lib/systemBack";
 import type { IconName } from "../../components/icons";
 import { BackButton, Button, Icon, Page, PageTitle, ProgressBar, SelectField, Skeleton, TextField, Tip, TipButton } from "../../components/ui";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../../components/corners";
 
 const LIMIT_OPTIONS = [100, 300, 1000];
 const LEVEL_OPTIONS = ["", "issues", "error", "warn", "info", "debug"];
@@ -474,7 +475,7 @@ export function LogsPage() {
         </BaseButton>
         <If when={isOpen()}>
           <View
-            class="items-start gap-3 border-t border-dashed border-line-soft bg-background pb-3.5 pt-3"
+            class="items-start gap-3 border-t border-dashed border-line-soft bg-paper pb-3.5 pt-3"
             style={{ paddingLeft: compact() ? 10 : 16 + TIME_W + LEVEL_W + 32, paddingRight: compact() ? 10 : 16 }}
           >
             <If when={!props.entry.event}>
@@ -510,7 +511,7 @@ export function LogsPage() {
               </If>
             </View>
             <If when={rawOpen()[props.entry.id]}>
-              <View class="w-full border border-line-soft bg-card px-3 py-2.5" selectable>
+              <View class={`${CARD_CORNERS} w-full border border-line-soft bg-card px-3 py-2.5`} selectable>
                 <Text class="font-mono text-xs leading-[19.2px] text-foreground">{props.entry.line}</Text>
               </View>
             </If>
@@ -527,7 +528,7 @@ export function LogsPage() {
         onPress={() => props.onPress()}
         selected={props.selected}
         accessibilityLabel={props.label}
-        class={`group flex-row items-center gap-1.5 border bg-card px-2.5 hover:border-blue/50 selected:border-blue/50 ${compact() ? "h-9" : "h-7"} border-line-soft`}
+        class={`${CONTROL_CORNERS} group flex-row items-center gap-1.5 border bg-card px-2.5 hover:border-blue/45 selected:border-blue/45 ${compact() ? "h-9" : "h-7"} border-line-soft`}
         style={{ transitionProperty: "colors", transitionDuration: 180 }}
       >
         <Icon name={props.icon} size={13} color={props.selected ? "blue" : "subtle"} />
@@ -634,7 +635,7 @@ export function LogsPage() {
           <ProgressBar indeterminate label={t("runtime_loading")} />
         </If>
         <If when={hasNewer()}>
-          <View class="flex-row items-center justify-between gap-3 rounded-(--radius) border border-blue/40 bg-blue/5 py-1.5 pl-3.5 pr-1.5">
+          <View class={`flex-row items-center justify-between gap-3 ${CARD_CORNERS} border border-blue/45 bg-blue/4 py-1.5 pl-3.5 pr-1.5`}>
             <Text class="text-xs text-subtle">{t("logs_new_available")}</Text>
             <Button variant="outlined" size="sm" label={t("logs_latest")} disabled={loading() || loadingOlder()} onPress={resumeFollowing} />
           </View>
@@ -669,7 +670,7 @@ export function LogsPage() {
                 accessibilityLabel={t(loadingOlder() ? "runtime_loading" : "logs_load_older")}
                 tooltip={<Tip text={t(loadingOlder() ? "runtime_loading" : "logs_load_older")} />}
                 testID="logs-older"
-                class="h-6.5 flex-row items-center rounded-(--radius) px-3 hover:bg-hover disabled:opacity-60"
+                class="h-6.5 flex-row items-center rounded-(--radius) px-3 hover:bg-hover disabled:opacity-50"
               >
                 <Icon name="PhCaretUp" size={13} color="muted-foreground" />
               </TipButton>
@@ -747,7 +748,7 @@ export function LogsPage() {
                 accessibilityLabel={String(value)}
                 testID={`logs-limit-${value}`}
                 class={`group items-center justify-center border px-2 ${compact() ? "h-8" : "h-6.5"} min-w-11 ${index > 0 ? "-ml-px" : ""} ${
-                  limit() === value ? "z-1 border-blue/55 bg-blue/10" : "border-line-soft"
+                  limit() === value ? "z-1 border-blue/60 bg-blue/10" : "border-line-soft"
                 }`}
               >
                 <Text

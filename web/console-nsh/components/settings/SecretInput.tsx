@@ -174,7 +174,7 @@ function KindTag(props: { icon: IconName; label: string; tooltip?: string; warn?
       tooltip={
         props.tooltip ? (
           <Tooltip class="max-w-xs bg-foreground px-2 py-1">
-            <Text class="text-xs text-background">{props.tooltip}</Text>
+            <Text class="text-xs text-paper">{props.tooltip}</Text>
           </Tooltip>
         ) : undefined
       }

@@ -17,6 +17,7 @@ import { t } from "./i18n";
 import { keyedState } from "./rowState";
 import { createPartProbe, type PartLayoutListener } from "../shared/partProbe";
 import { saveEndpointFile } from "./files";
+import { CARD_CORNERS } from "../corners";
 
 const PREVIEW_RENEW_MARGIN_MS = 60 * 1000;
 const PREVIEW_RENEW_FALLBACK_MS = 4 * 60 * 1000;
@@ -348,7 +349,7 @@ export function ArtifactPreviewCard(props: {
               <Image
                 src={state().entryURL}
                 accessibilityLabel={displayPath()}
-                class="h-full w-full"
+                class="overflow-hidden h-full w-full"
                 style={{ objectFit: "contain" }}
                 testID={part(tall, "image")}
                 onLoad={loaded}
@@ -388,7 +389,7 @@ export function ArtifactPreviewCard(props: {
   );
 
   return (
-    <View class="gap-2 rounded-(--radius) border border-line-faint bg-card p-3" testID="chat-artifact">
+    <View class={`gap-2 ${CARD_CORNERS} border border-line-faint bg-card p-3`} testID="chat-artifact">
       <View class="flex-row items-center gap-2">
         <Text class="text-sm font-semibold text-foreground">{label()}</Text>
         <If when={name()}>
@@ -435,7 +436,7 @@ export function ArtifactPreviewCard(props: {
         </Text>
       </If>
       <If when={((state().expanded && state().entryURL) || state().loading) && !state().fullscreen}>
-        <View class="overflow-hidden rounded-(--radius) border border-line-faint">{frame(false)}</View>
+        <View class={`overflow-hidden ${CARD_CORNERS} border border-line-faint`}>{frame(false)}</View>
       </If>
       {/* Full screen: the page fills the dialog below its title bar, edge to edge (`flush`, no body
           padding); the panel keeps its place inside the system's insets, and its close button. */}

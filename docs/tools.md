@@ -12,6 +12,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `agent_send` is exposed only while at least one active Contact is `kind: agent`.
   - `contacts_list` lists the contacts (in `agent.db`) whenever a contacts folder is configured.
   - `todo_list` lists the TODO list (the jobs in `agent.db`) whenever the runtime has a state folder. It only reads, so it does not depend on `tools.job_manage.enabled`.
+  - `config_get`, `config_set`: the agent's own config, as deferred tools found with `tool_search` (registered only while `tools.tool_search.enabled` is on and the runtime knows its config). Awareness runs (heartbeat, cron) get `config_get` only. See [`config_get` and `config_set`](#config_get-and-config_set).
 - `engine-scoped` tools:
   - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner and parent tool lookup. See [`spawn`](#spawn).
   - `list_model_profiles`: registered next to `spawn` when more than one model profile can run a subtask. See [`list_model_profiles`](#list_model_profiles).
@@ -456,6 +457,25 @@ Notes:
 - Registered whenever the runtime has a state folder, with or without `job_manage`. With `BuiltinToolNames` set, it must be named there.
 - A list that cannot be read (for example a damaged `agent.db`, or a `cron.yaml` whose import failed) is an error, never an empty result.
 
+## `config_get` and `config_set`
+
+The agent's own config, where `morph config` keeps it: `agent.db` in the state folder, or the file `--config` names. Both are deferred: they are not in a request until `tool_search` finds them (for example the query `config settings`). `tools.config_get.enabled` and `tools.config_set.enabled` (both default on) switch them off; with `tools.tool_search.enabled` off neither is registered. An embedding program gets them only when it sets the `config` key to its config file.
+
+`config_get` reads values and structure together:
+
+- No `path`: the top-level sections, each with a one-line description.
+- A section (`llm`, `tools.bash`, `telegram`): every key under it. A key (`llm.model`): that key. A path inside a value the config sets (`llm.profiles.cheap`, `mcp.servers.0`) works too.
+- Each key has its value as written (`${VAR}` and secret references are not expanded), `type`, `default`, `allowed_values`, `min`/`max`, `apply_mode`, `sensitive`, `settable` (with `not_settable_reason`), `env_override` and `comment`. Types, defaults and apply modes come from the field registry (`internal/configsettings/fields.go`); comments come from the embedded `config.example.yaml`, so its keys outside the registry are listed with their comment too. What the config sets outside both is listed as well.
+- Secrets are never returned. Every `Sensitive` field, anything under `secrets` and `auth_profiles`, keys named like credentials (`api_key`, `*_token`, `*_secret`, `password`, ...), header and environment values, `${secret:...}` and `${aws-sm:...}` references anywhere, and any value that holds a secret's value (a copy, or a YAML alias) read `********`; a secret key also says `secret: {set, source}` with `source` one of `literal`, `env`, `secret_store`, `aws_secrets_manager`, `template` or `env_override`. Environment variable names and secret ids of secret keys are not shown.
+
+`config_set` sets one key (`path`, `value` read as YAML like `morph config set`) or removes it (`unset: true`):
+
+- It always asks for approval, through the guard's forced approvals (`guard/forced.go`), even with `guard.enabled` off; without an approval store it is denied. The approval shows the key, its current value and the new one, secrets masked (the approval card lists these instead of the call's parameters, and logs and tool events withhold the value). A denied approval changes nothing. Codemode scripts cannot call it.
+- Only the owner in a private conversation: refused in group chats, for contacts, in subtasks, in runs that do not say who they talk to (`morph run`, the runtime API), and never registered for heartbeat and scheduled runs.
+- Refused before asking: keys outside the field registry; `guard`, `secrets`, `auth_profiles`, `console`, `server.auth_token`, `llm.endpoint` and every other `endpoint`/`base_url`/`service_url`, `llm.profiles`, `llm.headers`, `mcp`, `*.owners`, `admins`, `tools.*.deny_paths`, `tools.*.injected_env_vars`, `tools.*.elevation`, `tools.coder.bypass_approvals`, `logging.redact_keys`, `workspace_dir`, `file_cache_dir`, `file_state_dir` (and anything that holds one of them); keys an environment variable sets; values of the wrong kind, outside the allowed values or range; a route that names a missing profile; values that hold the `********` mask, a `${secret:...}` reference, or a `${...}` reference anywhere but as the whole value of a secret key; credential, header or endpoint keys inside a structured value.
+- A secret key's plain-text value goes to the system keyring (`configsettings.ProtectSecrets`) and the config keeps a `${secret:...}` reference; without a keyring (or with `MISTER_MORPH_DISABLE_KEYRING`) only a whole `${ENV_NAME}` or `${aws-sm:...}` reference is accepted. A replaced keyring entry is deleted.
+- The change is saved like a Console settings change, as the agent's (`updated_by = 'agent'` in `agent.db`); the Console reloads its runtimes right away, the channel runtimes on their next config check. The result has `apply_mode` (`immediate`, `next_generation`, `runtime_restart` or `process_restart`) and an `apply_note` saying what the user still has to do.
+
 ## `contacts_list`
 
 Purpose: list the agent's contacts: people and agents it can reach.
@@ -505,7 +525,7 @@ Constraints:
 - Group chats (Telegram groups, Slack channels, Discord servers, LINE and Lark groups, Mixin groups) and Bluesky/X public mentions are the exception: there `contacts_send` is not offered to `tool_search` and cannot be called unless the message names `$contacts_send`.
 - Finding it changes nothing about a send: the same recipient checks, current-conversation block, guard rules, credentials, cooldowns and delivery records apply as in awareness runs.
 - Explicit `$contacts_send` opt-in can expose it for the current task even when `tools.contacts_send.enabled=false`; it does not bypass selected tool allowlists, guard rules, credentials, or runtime prerequisites.
-- Failures: an unknown contact, a contact without a reachable route, a `chat_id` the contact cannot receive in, and a send to the person of the current conversation fail with an error and send nothing. When the channel rejects a delivery (for example a missing channel credential or a blocked bot), the result's `outcome` has `accepted: false` and an `error`.
+- Failures: an unknown contact, a contact without a reachable route, a `chat_id` the contact cannot receive in, and a text message (no `path`) to the person of the current conversation, by `contact_id` or `chat_id`, fail with an error and send nothing. The current-conversation error says why (the text would repeat the task's own reply) and what to do instead: answer in the conversation, or pass `path` to send a file. A file may go to that person (see [Sending a file](#sending-a-file)). When the channel rejects a delivery (for example a missing channel credential or a blocked bot), the result's `outcome` has `accepted: false` and an `error`.
 - `contacts_send` always uses topic `chat.message` (caller does not pass `topic`).
 - Telegram text messages render Markdown (bold, italic, code, links) as Telegram HTML, as Telegram channel replies do. If Telegram rejects the markup, the text is sent again as plain text. Write plain Markdown, not Telegram MarkdownV2 escapes. File captions stay plain text.
 - If cross-session forwarding is needed in group chat (for example, explicit "DM someone"), trigger it via explicit task/command, not by routing ordinary group replies to `contacts_send`.
@@ -536,6 +556,7 @@ Pass `path` to send one file. The destination is chosen exactly as for text; the
 
 - Where the file may come from: `file_cache_dir` and the task's workspace directory (the attached workspace, or the default `workspace_dir`). `file_cache_dir/...` and `workspace_dir/...` aliases pick a root; a relative path is looked up in `file_cache_dir`, then in the workspace; an absolute path must lie inside one of them after resolving symlinks. `file_state_dir` is never allowed, even inside a workspace. A file produced elsewhere must be copied into `file_cache_dir` first.
 - Rejected before anything is sent: an empty or non-string `path`, `filename` without `path`, `path` with `message_base64`, a non-string `message_text`, a directory, a missing file, a file outside both roots, a symlink that escapes them, a file over 20 MiB to a chat channel, and a file over the Agent Link route's limit (64 MiB streamed, 2 MiB otherwise).
+- A file may go to the person of the current conversation (the user of a direct chat, the chat itself by `chat_id`, a Bluesky or X post's author), alone or in a batch, with or without a caption; a text message to them stays refused. An invalid or empty `path` fails as above and never turns a text message into an allowed one. The file goes through the same roots, size limits, channel support, cooldowns, delivery records and audit as any other file; Bluesky and X direct messages cannot carry files, so a file to a post's author fails there.
 - One file per call. `message_text` is optional; when given it is a caption:
 
 | Channel | File | Caption |
@@ -703,7 +724,7 @@ Result (the tool's observation):
 Rules:
 
 - Every call goes through the same checks as a direct call: visibility, `tool_repeat_limit`, guard pre-check and output redaction, hooks, events and audit. A guard deny rejects the call's promise; a call that needs approval stops the script with `requires_direct_call`. The script is never rerun automatically.
-- Scripts cannot call `codemode`, `tool_search`, `plan_create`, `message_react`, `bash`, `powershell`, `skill_install`, tools that end the run, or tools that implement `tools.CodeModeExcluded` and return true (for example an embedder's tool that asks the user before it acts).
+- Scripts cannot call `codemode`, `tool_search`, `plan_create`, `message_react`, `bash`, `powershell`, `skill_install`, `config_set`, tools that end the run, or tools that implement `tools.CodeModeExcluded` and return true (for example an embedder's tool that asks the user before it acts).
 - With tool search, a script can call MCP tools the model already sees, and tools its own `searchTools` found (a `server` search connects that server). Those stay invisible to the model and are not remembered by the conversation.
 - Read-only (parallel-safe) calls run concurrently up to `max_parallel_calls`; any other call runs alone, in issue order.
 - When the script ends, calls it issued but that have not started are dropped (`not_started`); started calls finish within the deadline. A timeout or cancellation cancels them.

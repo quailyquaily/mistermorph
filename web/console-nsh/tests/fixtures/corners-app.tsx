@@ -59,7 +59,7 @@ function Gallery() {
   const provider = signal("openai");
   const since = signal("2026-11-04");
   return (
-    <View class="flex-1 gap-3 bg-background p-4">
+    <View class="flex-1 gap-3 bg-paper p-4">
       <View class="flex-row items-start gap-2">
         {SIZES.map((size) => (
           <Button testID={`button-${size}`} size={size} label={size} onLayout={track(`button-${size}`)} />
@@ -125,7 +125,7 @@ function Gallery() {
           testID="since"
           onChange={({ value }) => since.set(typeof value === "string" ? value.slice(0, 10) : "")}
           offset={4}
-          popupClass={`${POPOVER_CORNERS} border border-border bg-popover p-3 shadow-md`}
+          popupClass={`${POPOVER_CORNERS} border border-line bg-popover p-3 shadow-md`}
           headerClass="flex-row items-center justify-between pb-2"
           rowClass="flex-row justify-between"
           itemClass={CALENDAR_DAY_CLASS}

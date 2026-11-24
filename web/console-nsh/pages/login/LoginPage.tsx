@@ -167,7 +167,7 @@ export function LoginPage() {
       <View class="w-full gap-4" style={{ maxWidth: 400 }} onLayout={probe ? (event) => probe("column", event.bounds) : undefined}>
         {/* The brand: the mark and the name in tracked mono caps. */}
         <View class="flex-row items-center gap-3 px-0.5">
-          <Image src={loginLogo} style={{ width: 32, height: 32 }} />
+          <Image class="overflow-hidden" src={loginLogo} style={{ width: 32, height: 32 }} />
           <Text class="font-mono text-base font-semibold uppercase leading-[20.8px] tracking-[0.14em] text-foreground" role="header">
             Mister Morph
           </Text>

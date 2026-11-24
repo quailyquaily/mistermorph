@@ -3,8 +3,9 @@
 // details and SKILL.md (read from GitHub at the commit the store pins), and Install or Update, which
 // start the same review in chat as Add skill. On a phone the panel slides in over the grid.
 import { batch, computed, effect, LayoutAnimation, reduceMotion, signal, Text, untracked, View } from "nsh";
+import { shadowColor } from "../../components/solidLook";
 import { Button as BaseButton, Sheet } from "nsh/base";
-import { CARD_CORNERS } from "../../components/corners";
+import { CARD_CORNERS, CONTROL_CORNERS } from "../../components/corners";
 import { Blocks, gutterX, gutterY, Note, ROW_TRANSITION, SearchField, t, WorkspaceTitle } from "../../components/knowledge/parts";
 import { EdgeScroll, MOTION_SLOW } from "../../components/motion";
 import { BackButton, bindPaneEscape, Button, circleButtonClass, Icon, Page } from "../../components/ui";
@@ -313,7 +314,7 @@ export function SkillStorePage() {
                       <View class="flex-1 flex-row gap-1 overflow-hidden">
                         <Each of={skill().tags.slice(0, CARD_TAGS)}>
                           {(item) => (
-                            <View class="rounded-(--radius) bg-light-2 px-1.5 py-px">
+                            <View class="rounded-(--radius) bg-muted px-1.5 py-px">
                               <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
                                 {item()}
                               </Text>
@@ -336,7 +337,7 @@ export function SkillStorePage() {
         {/* The panel: a white sheet 440pt wide beside the grid, 4pt off it, fading in as the grid narrows. */}
         <If when={!isMobile() && selected()}>
           <View class="ml-1 w-[440px] pb-2 pl-2" accessibilityLabel={selected()?.name}>
-            <View class="flex-1 overflow-hidden rounded-lg bg-card" style={{ boxShadow: "0 1px 4px rgba(24, 24, 50, 0.07)" }}>
+            <View class={`flex-1 overflow-hidden ${CARD_CORNERS} bg-card`} style={{ boxShadow: `0 1px 4px ${shadowColor(0.07)}` }}>
               {detail()}
             </View>
           </View>
@@ -368,11 +369,11 @@ export function SkillStoreSheet(props: { open: boolean; onClose: () => void; chi
       onOpenChange={({ open: next }) => {
         if (!next) props.onClose();
       }}
-      backdropClass="bg-black/24"
+      backdropClass="bg-scrim"
       popupClass="h-full w-[92%] max-w-[440px]"
       popupStyle={rightSheetPopupStyle(SHEET_GAPS)}
     >
-      <View class="flex-1 overflow-hidden rounded-lg bg-card" style={{ boxShadow: "0 1px 4px rgba(24, 24, 50, 0.07)" }}>
+      <View class={`flex-1 overflow-hidden ${CARD_CORNERS} bg-card`} style={{ boxShadow: `0 1px 4px ${shadowColor(0.07)}` }}>
         {props.children}
       </View>
     </Sheet>
@@ -387,8 +388,8 @@ function TagChip(props: { label: string; active: boolean; onPress: () => void })
       selected={props.active}
       accessibilityLabel={props.label}
       testID={`store-tag:${props.label}`}
-      class={`h-[26px] justify-center rounded-(--radius) border px-2.5 ${
-        props.active ? "border-blue bg-blue/8" : "border-line hover:border-muted-foreground"
+      class={`h-[26px] justify-center ${CONTROL_CORNERS} border px-2.5 ${
+        props.active ? "border-blue bg-blue/10" : "border-line hover:border-muted-foreground"
       }`}
       style={{ transitionProperty: "colors", transitionDuration: 120, transitionTimingFunction: "ease" }}
     >

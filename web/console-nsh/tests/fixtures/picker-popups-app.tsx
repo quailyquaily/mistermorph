@@ -60,7 +60,7 @@ const trigger = (label: string) => () => (
 
 function App() {
   return (
-    <View class="flex-1 bg-background p-3">
+    <View class="flex-1 bg-paper p-3">
       <View class="flex-row gap-2">
         <Text testID="ready" class="text-xs">ready</Text>
         <View testID="elsewhere" class="size-6" onMouseEnter={() => {}} />
