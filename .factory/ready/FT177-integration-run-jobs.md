@@ -48,3 +48,12 @@ Built at 6026785c (three focused commits). One shared context-owned awareness lo
 Verification: manager independently passed gofmt check, go vet ./..., go test ./... with an isolated HOME and Go caches. Coder also passed targeted lifecycle/API race tests and awareness race tests. No new tools, installs, manifest changes or config keys. No UI changes. Not checked: live platform traffic and cross-process scheduler locking.
 
 Execution caveats for owner/reviewer: coder reports a broad pkill pattern for integration.test terminated its own background run and may have affected concurrent unrelated integration tests; no such impact was confirmed. It also wrote CLI memory notes outside the run directory, contrary to the task boundary. These actions were not required for the implementation and must not be repeated. Harness-managed /tmp paths were recorded for later owner-approved cleanup; none were deleted.
+
+## factory · review · 2026-11-24 16:05
+head: 6026785c96211e2b2cc317b77a7bba765fd6b4ea
+verdict: pass
+notes:
+- Claude Code reviewed all 17 changed files against origin/master...HEAD and the request/plan; no confirmed introduced findings, including no P0/P1. Runtime lifecycle, shared trigger wiring, CLI preservation and authenticated poke paths were covered.
+- Required formatting check, go vet ./... and go test ./... passed with isolated HOME/XDG/build cache (168 packages). Targeted integration lifecycle race tests (count=3) and awareness AttachTriggers race tests passed. Manager checked clean worktree, unchanged branch head and test logs with exit status 0. No code edits or commits during review, no installs.
+- Not verified: live Telegram/Slack traffic, a message traversing a live bot into the dispatcher, and scheduling across separate processes sharing state. Slow MCP connection/shutdown blocking was not measured. Existing embedders now acquire the configured job/heartbeat loop while bots or ServeRuntimeAPI are alive, as documented; job runs appear under the integration task target.
+- Harness-managed temporary output outside the run directory was recorded for later owner-approved cleanup; nothing in /tmp was deleted. Prior build execution caveats remain recorded above; no new boundary violations were reported in this review.
