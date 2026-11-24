@@ -62,3 +62,15 @@ notes:
 Scheduled ship did not merge this item. Merge conflict: web/console-nsh/components/chat/ChatSkillInstallPreview.tsx.
 Base head before attempted merge: d357de53ea8c4dbd0fd105db4efd4d93ab0d93c6. Published base after this batch: 1c4ba732 (v0.3.133).
 Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.
+
+## factory · review · 2026-11-25 07:45
+head: ad896049e33bd9bff4796b4fc19421727e2d3088
+verdict: pass
+notes:
+- Merged current master 1c4ba732 into the item branch in ad896049, resolving ChatSkillInstallPreview.tsx conflicts by preserving both the shared corners and FT178 layout probes/wrapping. Updated this item's fixture to the current bg-paper convention. Branch pushed; no base or tag changes.
+- Claude Code separately reviewed origin/master...HEAD, all four changed files, against the request and plan. No findings. Current corners and send_file preview integration preserved; full source link, short inline values, folds, empty and expired states checked.
+- Required gofmt/vet/Go gate passed again during read-only review: 169 packages ok, 20 without tests. nsh check passed. Focused layout tests: 8 passed at phone/desktop widths, including headless Android at 360pt. Removing the fix classes in a scratch copy causes 6 of 8 tests to fail, confirming regression detection.
+- Required parallel Console runner passed on the identical committed tree during merge verification: 166 files, 0 failed, 347 seconds. Five initial parallel failures passed the runner's isolated retries. Full runner was reused, not repeated during read-only review. Manager checked logs, clean worktree, unchanged reviewed head and diff whitespace.
+- Not checked: repeat real-browser measurements, real backend Console, native desktop, physical Android or Android JVM tests (no JDK). Headless layout does not replace real renderer verification.
+- Installs: none; pinned nsh cache copied into isolated test HOME and shared Go modules read offline. No personal memory writes reported. Harness output and working-directory tracking were observed outside the run directory in the shared temporary area; recorded for owner-confirmed cleanup, not deleted.
+- Move: review/ → ready/. Awaiting ship.
