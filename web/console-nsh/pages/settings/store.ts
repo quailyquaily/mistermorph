@@ -7,7 +7,6 @@
 import { batch, computed, effect, signal, untracked } from "nsh";
 import {
   apiFetch,
-  authState,
   currentLocale,
   endpointApiFetch,
   endpointState,
@@ -17,7 +16,6 @@ import {
   runtimeEndpointByRef,
 } from "../../lib/core/context.js";
 import { useNotice } from "../../lib/core/notices.js";
-import { cacheClear } from "../../lib/core/resource-cache.js";
 import { captureUnsavedScopes, mergeConfigUpdates, restoreUnsavedScopes } from "../../lib/core/settings-save.js";
 import { inferenceProviderLogo } from "../../lib/core/inference-provider-logos.js";
 import { hasLLMFieldValue, isLLMFieldEnvManaged, llmFieldEnvRawValue, llmFieldValue } from "../../lib/core/llm-env-managed.js";
@@ -62,7 +60,7 @@ import { reactiveRecord } from "../../lib/stores/reactive-record.js";
 import { DEFAULT_WORKER_NAME_SET, normalizeWorkerNameSet } from "../../lib/core/worker-identity.js";
 import { hasFeature, isDesktop, restartDesktopApp } from "../../lib/platform";
 import { shortcutsEligible } from "../../lib/shortcutPolicy";
-import { navigate } from "../../lib/router";
+import { createLogout } from "../../lib/logout";
 import { createDeviceAuthFlow } from "./device-auth";
 import { t } from "./i18n";
 import {
@@ -400,7 +398,10 @@ type ConfigUpdate = { config_changes: Record<string, unknown>; reset: string[]; 
 export function createSettingsStore() {
   const notice = useNotice();
 
-  const loggingOut = signal(false);
+  // Log out (Settings › General): the console's one logout (lib/logout.ts), busy while it runs.
+  const logoutControl = createLogout();
+  const loggingOut = logoutControl.busy;
+  const logout = logoutControl.run;
 
   /* --- endpoint --- */
   const settingsEndpointRef = computed(() => trimText(endpointState.selectedRef) || LOCAL_CONSOLE_ENDPOINT_REF);
@@ -3232,21 +3233,6 @@ export function createSettingsStore() {
           systemSaving.set(false);
         }
       });
-    }
-  }
-
-  async function logout() {
-    loggingOut.set(true);
-    try {
-      await apiFetch("/auth/logout", { method: "POST" });
-    } catch (error) {
-      console.warn("settings: logout", (error as Error)?.message);
-    } finally {
-      authState.clear();
-      // Logged out: nothing this account was shown stays on the device.
-      cacheClear();
-      await navigate("/login", { replace: true, force: true });
-      loggingOut.set(false);
     }
   }
 

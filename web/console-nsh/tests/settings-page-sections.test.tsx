@@ -241,6 +241,27 @@ test("System keeps the server's settings; language, notifications and Log out ar
   expect(app.shows("id:settings-app")).toBe(true);
 });
 
+test("Log out in General is the console's logout: the session ends here too, even when the request fails, and the login page replaces Settings", async () => {
+  for (const failed of [false, true]) {
+    const expiresAt = new Date(Date.now() + 86400000).toISOString();
+    const { app, calls } = await openConsole({
+      location: "/e/default/settings/general",
+      password: true,
+      kv: { mistermorph_console_auth_v1: JSON.stringify({ token: "token-1", expiresAt, account: "console" }) },
+      api: failed ? { "POST /auth/logout": { status: 500, body: { error: "logout failed" } } } : {},
+    });
+    await app.waitFor("id:settings-logout");
+    expect(app.enabled("id:settings-logout")).toBe(true);
+    await app.press("id:settings-logout");
+    await app.waitFor("id:login-password");
+    expect(calls.filter((call) => call.method === "POST" && call.path === "/auth/logout").length).toBe(1);
+    const saved = app.host.calls().filter((call) => call.name === "morph.kv.set" && (call.data as { key?: string })?.key === "mistermorph_console_auth_v1");
+    expect((saved.at(-1)?.data as { value?: unknown })?.value).toBe(null);
+    const history = app.host.calls().filter((call) => call.name === "morph.history");
+    expect(history.at(-1)?.data).toEqual({ op: "replace", url: "/login" });
+  }
+});
+
 test("search lists matching settings and opens the one chosen", async () => {
   const { app } = await openConsole({
     location: "/e/default/settings",

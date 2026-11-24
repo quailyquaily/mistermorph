@@ -4,21 +4,26 @@ A testing page of the Console that shows its colour scheme and lists its reused 
 ones more than one area of the Console uses), for looking at them, pressing them and reading them
 in each language and in the light and dark appearance, on a desktop window and on a phone.
 
-- **Address:** `/ui-components` (under the Console's base path, for example
-  `http://127.0.0.1:9080/ui-components`).
+- **Address:** `/__ui-components` (under the Console's base path, for example
+  `http://127.0.0.1:9080/__ui-components`), beside the other underscore testing pages
+  (`/__boot-preview`, `/__components`). The former address, `/ui-components`, is now an unknown
+  address like any other; it does not redirect.
 - **No entry:** nothing in the sidebar, the phone's bottom navigation, its More sheet or any menu
   leads to it. Type the address.
+- **Way out:** the page has no navigation, so its head has a Logout button: it logs out and shows
+  the login page (see below).
 - **Access:** the route is not public. It passes the same guard as every workspace page: a valid
   session (or the login page first, which returns to the gallery), no blocking setup problem, and a
   finished setup. The older public `/__components` address is a different, empty stub and is
   unchanged.
-- **Optional start:** `/ui-components?group=<section id>&q=<text>` opens one section and/or with the
+- **Optional start:** `/__ui-components?group=<section id>&q=<text>` opens one section and/or with the
   filter filled in (`group` is one of the ids in `GALLERY_GROUPS`, such as `controls`, `overlays`,
   `motion`, `settings`). The query is read once; the page does not write it back.
 
 ## What is on the page
 
-- A head with the appearance control (Light or Dark), the language control, a filter (by
+- A head with the appearance control (Light or Dark), the language control, the Logout button, a
+  filter (by
   component name or file path, and by a colour token's name or value), the count of matching
   components, and the last local action.
 - The colour scheme, a section of its own (`Colors` in the index, `?group=colors`; `All` shows
@@ -106,6 +111,12 @@ ask nothing. Known limits, stated plainly:
   address, `ImageUploadField` opens the device's file picker, and the notice demo uses the
   Console's real notice stack (in memory only).
 - Changing the language here changes the Console's language, as the control is the Console's own.
+- Logout is the Console's own logout, the one Settings › General uses (`logOut` in
+  `lib/logout.ts`; the gallery does not load the Settings page's state for it): `POST
+  /auth/logout`, then, even when that request fails, the session and the kept answers are cleared
+  on the device and the login page replaces the gallery in the history, so going back does not show
+  the gallery again without logging in. The button is disabled while the logout runs. It is the one
+  request the page makes after it has loaded, and only when pressed.
 
 ## Buttons: text or a glyph, never both
 
@@ -132,7 +143,10 @@ it has no example with both.
 ## Tests
 
 - `tests/ui-components.test.tsx`: the direct address and its guard (session, login redirect and
-  return, setup), no navigation entry on desktop or phone, every inventory entry on the page,
+  return, setup), the old `/ui-components` address showing the unknown page, the start parameters,
+  Logout (the request, the session and the kept answers cleared, the login page in place of the
+  gallery, going back, a failed request, the button busy while it runs, the button inside the head
+  at 360pt and 390pt and on a desktop), no navigation entry on desktop or phone, every inventory entry on the page,
   the index, the filter, the empty state and its reset, the three languages changing in place,
   working local controls and overlays, the phone layout, and that no request is made after the
   page has loaded.

@@ -1,12 +1,13 @@
-// The UI component gallery (/ui-components): the console's colour scheme (every token of
+// The UI component gallery (/__ui-components): the console's colour scheme (every token of
 // theme.json, ./colors.ts) and its reused UI components (the ones more than one area of the
 // console uses; ./inventory.js says which) on one page, for looking at, pressing and reading in
 // each language and in the light and the dark appearance. It is a testing page: it has a route and no
 // entry in any navigation. The route is guarded as any workspace page is (a session, a finished
-// setup), and nothing on the page talks to the console or an agent: the demos mount the production
-// components with synthetic props and local state (./demo.tsx, ./demos), one per entry of the
-// inventory, and the language control is the
-// console's own (`localeState.setLanguage`, the one catalog in lib/i18n).
+// setup), and nothing on the page talks to the console or an agent, but for the way out: the demos
+// mount the production components with synthetic props and local state (./demo.tsx, ./demos), one
+// per entry of the inventory, the language control is the console's own (`localeState.setLanguage`,
+// the one catalog in lib/i18n), and the head's Logout is the console's own logout (lib/logout.ts),
+// which lands on the login page.
 // Only the demos near the visible part of the page are mounted (`DemoCard`): many of them draw on
 // every frame (spinners, beams, clocks), wherever on the page they are.
 // docs/console/ui-components.md describes it.
@@ -17,6 +18,7 @@ import { createSlidingSelection } from "../../components/motion/SlidingSelection
 import { EdgeScroll } from "../../components/motion/ScrollEdges";
 import { Button, EmptyState, Icon, Tabs, TextField, TipButton } from "../../components/ui";
 import { CARD_CORNERS } from "../../components/corners";
+import { createLogout } from "../../lib/logout";
 import { currentRoute } from "../../lib/router";
 import { localeState, themeState } from "../../lib/stores/index.js";
 import { COLOR_SECTIONS, COLOR_TOKENS, NSH_NAMES, TINT_HUES, TINT_STEPS, type ColorSchemeName, type ColorToken } from "./colors";
@@ -196,7 +198,7 @@ function DemoCard(props: { entry: GalleryEntry; width: number; top: number; span
 }
 
 export function UiComponentsPage() {
-  // The address may name where to start: `/ui-components?group=chat&q=composer`. It is read once;
+  // The address may name where to start: `/__ui-components?group=chat&q=composer`. It is read once;
   // the controls below do not write it back.
   const query = untracked(() => currentRoute().query);
   const filter = signal(String(query.q ?? ""));
@@ -251,6 +253,8 @@ export function UiComponentsPage() {
   const room = () => Math.max(240, windowSize().width - (sidebar() ? SIDEBAR_WIDTH : 0) - pad() * 2);
   const columns = () => (room() >= 1560 ? 3 : room() >= 900 ? 2 : 1);
   const cardWidth = (wide: boolean) => (wide ? room() : Math.floor((room() - gap * (columns() - 1)) / columns()));
+  // The page's way out: log out and land on the login page (a page with no navigation has no other).
+  const logout = createLogout();
   const countLabel = () => {
     const count = shown().length;
     const total = GALLERY_ENTRIES.length;
@@ -288,6 +292,13 @@ export function UiComponentsPage() {
               onChange={(id) => localeState.setLanguage(id)}
             />
           </View>
+          <Button
+            variant="outlined-danger"
+            label={t("action_logout")}
+            loading={logout.busy()}
+            onPress={() => void logout.run()}
+            testID="uig-logout"
+          />
         </View>
         <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
           <TextField
