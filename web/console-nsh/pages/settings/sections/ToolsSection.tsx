@@ -191,7 +191,7 @@ export function ToolsSection(props: { s: SettingsStore }) {
                                 testID={`settings-tool-matrix-${row().id}-${channel().id}`}
                                 class="size-[26px] items-center justify-center rounded-(--radius) border border-transparent hover:border-line-soft hover:bg-foreground/6"
                               >
-                                <Icon name="PhCheck" size={16} color="status-on" />
+                                <Icon name="PhCheck" size={16} color="info" />
                               </BaseButton>
                             </If>
                           </View>

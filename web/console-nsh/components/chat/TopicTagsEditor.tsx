@@ -110,7 +110,7 @@ export function TopicTagsEditor(props: {
     <View class="gap-1">
       <View
         class={`min-h-8 flex-row flex-wrap items-center gap-1 ${CONTROL_CORNERS} border border-input bg-field px-1.5 py-1 ${
-          props.disabled ? "opacity-60" : ""
+          props.disabled ? "opacity-50" : ""
         }`}
         focusable={false}
         onPress={() => focusField()}
@@ -181,7 +181,7 @@ export function TopicTagsEditor(props: {
         </If>
       </View>
       <If when={open()}>
-        <View role="listbox" accessibilityLabel={t("chat_topic_tags_suggestions")} class={`${POPOVER_CORNERS} border border-border bg-popover py-1 shadow-md`}>
+        <View role="listbox" accessibilityLabel={t("chat_topic_tags_suggestions")} class={`${POPOVER_CORNERS} border border-line bg-popover py-1 shadow-md`}>
           <Each of={suggestions()} key={(tag) => tag}>
             {(tag, index) => (
               <View

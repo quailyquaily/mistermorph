@@ -75,7 +75,7 @@ export interface ModelRoutesPanelProps {
 
 const SHARE_STEP = 5;
 const STEP_BUTTON =
-  "size-[22px] items-center justify-center rounded-(--radius) border border-input bg-field transition-colors duration-120 hover:border-blue disabled:opacity-40";
+  "size-[22px] items-center justify-center rounded-(--radius) border border-input bg-field transition-colors duration-120 hover:border-blue disabled:opacity-50";
 
 interface Purpose {
   key: string;
@@ -929,7 +929,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
                 onPress={() => props.onAddProfile?.()}
                 accessibilityLabel="Add profile"
                 tooltip={<Tip text="Add profile" />}
-                class="min-h-10 flex-row items-center justify-center rounded-(--radius) border border-dashed border-input px-2.5 py-1.5 transition-colors duration-120 hover:border-blue disabled:opacity-55"
+                class="min-h-10 flex-row items-center justify-center rounded-(--radius) border border-dashed border-input px-2.5 py-1.5 transition-colors duration-120 hover:border-blue disabled:opacity-50"
               >
                 <Icon name="PhPlus" size={14} color="subtle" />
               </TipButton>

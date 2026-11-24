@@ -17,7 +17,7 @@ function timeText(raw: unknown) {
 }
 
 function dotClass(direction: string) {
-  return direction === "pending" ? "border-status-pending" : direction === "reply" ? "bg-status-on border-status-on" : "border-status-on";
+  return direction === "pending" ? "border-status-pending" : direction === "reply" ? "bg-info border-info" : "border-info";
 }
 
 export function ChatAgentLinkExchange(props: {

@@ -271,7 +271,7 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
   // the window draws glass the conversation runs on behind it, with no fade to the paper.
   const glassJobBar = () => glassEnabled() && c.selectedTopicIsCron() && !c.selectedTopicIsAgent();
   const floatFade = () => {
-    const paper = String(token("background"));
+    const paper = String(token("paper"));
     const solid = Math.round(footRoom());
     return `linear-gradient(to top, ${paper} 0px, ${paper} ${solid}px, ${paper.slice(0, 7)}00 ${solid + COMPOSER_RADIUS}px)`;
   };
@@ -287,7 +287,7 @@ function ChatMain(props: { c: ChatController; underBar?: boolean }) {
             {/* Over the history's foot, fading from it to the page (what scrolls behind the footer
                 line stays readable); presses on the fade reach the history. */}
             <View
-              class={`absolute bottom-0 left-0 right-0 pt-6 ${glassFloat() || glassJobBar() ? "" : "bg-linear-to-b from-transparent to-background"}`}
+              class={`absolute bottom-0 left-0 right-0 pt-6 ${glassFloat() || glassJobBar() ? "" : "bg-linear-to-b from-transparent to-paper"}`}
               style={glassFloat() ? { pointerEvents: "box-none", backgroundImage: floatFade() } : { pointerEvents: "box-none" }}
               onLayout={({ bounds }) => composerRoom.set(bounds.size.height)}
               testID={glassFloat() || glassJobBar() ? "chat-composer-float.glass" : "chat-composer-float"}

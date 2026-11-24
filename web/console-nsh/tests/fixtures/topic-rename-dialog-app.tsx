@@ -18,7 +18,7 @@ function Page() {
   const record = (part: string, bounds: Bounds) =>
     frames.update((all) => ({ ...all, [part]: { w: Math.round(bounds.size.width * 10) / 10, h: Math.round(bounds.size.height * 10) / 10 } }));
   return (
-    <View class="flex-1 gap-2 bg-background p-4">
+    <View class="flex-1 gap-2 bg-paper p-4">
       <Button testID="fixture-suggest" variant="outlined" size="xs" label="Suggest" onPress={() => void rename.regenerate()} />
       <Text class="text-[6px]">{JSON.stringify(frames())}</Text>
       <TopicRenameDialog rename={rename} regenerateDisabled={false} onPartLayout={record} />

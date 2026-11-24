@@ -34,7 +34,7 @@ export function Shell(props: { shellless: boolean; standalone: boolean; children
   return (
     // Plain paper: no grid behind the pages (design/ui-refresh.html, "no background patterns").
     <View
-      class="flex-1 bg-background"
+      class="flex-1 bg-paper"
       onTouchStartCapture={(event) => notePress(event.pageX, event.pageY)}
     >
       {/* The browser tab's icon: the selected agent's avatar (web only). */}

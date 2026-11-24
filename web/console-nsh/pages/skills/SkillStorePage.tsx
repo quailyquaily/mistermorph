@@ -313,7 +313,7 @@ export function SkillStorePage() {
                       <View class="flex-1 flex-row gap-1 overflow-hidden">
                         <Each of={skill().tags.slice(0, CARD_TAGS)}>
                           {(item) => (
-                            <View class="rounded-(--radius) bg-light-2 px-1.5 py-px">
+                            <View class="rounded-(--radius) bg-muted px-1.5 py-px">
                               <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
                                 {item()}
                               </Text>
@@ -388,7 +388,7 @@ function TagChip(props: { label: string; active: boolean; onPress: () => void })
       accessibilityLabel={props.label}
       testID={`store-tag:${props.label}`}
       class={`h-[26px] justify-center rounded-(--radius) border px-2.5 ${
-        props.active ? "border-blue bg-blue/8" : "border-line hover:border-muted-foreground"
+        props.active ? "border-blue bg-blue/10" : "border-line hover:border-muted-foreground"
       }`}
       style={{ transitionProperty: "colors", transitionDuration: 120, transitionTimingFunction: "ease" }}
     >

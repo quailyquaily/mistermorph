@@ -11,7 +11,7 @@ import { Icon, Modal, Tabs, TextField } from "../ui";
 import { CARD_CORNERS, CONTROL_CORNERS } from "../corners";
 
 /** The picker's trigger: a select-like field (44pt at least) with the controls' continuous corners. */
-export const PROVIDER_TRIGGER_CLASS = `min-h-11 flex-row items-center gap-3 ${CONTROL_CORNERS} border border-input bg-field px-2 hover:border-ring disabled:opacity-60`;
+export const PROVIDER_TRIGGER_CLASS = `min-h-11 flex-row items-center gap-3 ${CONTROL_CORNERS} border border-input bg-field px-2 hover:border-ring disabled:opacity-50`;
 /** A provider's card in the dialog, as the secret picker's: the cards' continuous corners. Its border and fill come with its selection. */
 export const PROVIDER_OPTION_CLASS = `min-h-14 grow basis-48 flex-row items-center gap-3 ${CARD_CORNERS} border px-3 py-2 hover:bg-hover active:bg-selection`;
 

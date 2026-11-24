@@ -115,7 +115,7 @@ function IndexItem(props: {
       onPress={() => props.onPress()}
       accessibilityLabel={props.run ? `${props.title}, ${props.runLabel}` : props.title}
       testID={props.testID}
-      class="relative flex-row rounded-(--radius) hover:bg-hover-faint"
+      class="relative flex-row rounded-(--radius) hover:bg-hover-soft"
       style={ROW_TRANSITION}
       hoverStyle={ROW_HOVER}
     >

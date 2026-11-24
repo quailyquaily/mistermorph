@@ -74,7 +74,7 @@ const c = {
 
 function Page() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="h-[200px] flex-row" testID="contacts-column">
         <IndexColumn
           title="Contacts"

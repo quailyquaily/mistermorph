@@ -33,7 +33,7 @@ const pill = (label: string) => (
 
 function Page() {
   return (
-    <View class="flex-1 gap-2 bg-background p-2">
+    <View class="flex-1 gap-2 bg-paper p-2">
       <View class="flex-row flex-wrap items-center gap-2">
         <DropdownMenu label="Topic" items={COMMANDS} testID="menu" trigger={<MenuIconTrigger label="Topic menu" testID="menu" />} />
         <DropdownMenu

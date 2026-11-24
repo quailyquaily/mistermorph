@@ -5,9 +5,8 @@
 // It is the list's page turned into a month (TodoIndex): the same head, days on hairlines, the
 // list's status square as the only mark. And it says each thing once:
 // - A repeating run that went as usual is not news, so in a cell it is a mark beside the day
-//   number (filled: ran; hollow: planned), and the strip above the grid names each repeating job
-//   once, with its cadence. A cell's text is only what differs: a run started some other way, and
-//   a repeating run that failed, was stopped or was skipped. "Show in days" writes them all out.
+//   number (filled: ran; hollow: planned). A cell's text is only what differs: a run started some
+//   other way, and a repeating run that failed, was stopped or was skipped.
 // - The chosen day lists every run in full (TodoDayList): beside the grid on a desktop, where the
 //   page draws it from `onDay`; under the grid on a phone, where the cells are marks only.
 // - A cell is one button: it chooses its day. The day's list is where a run opens its job.
@@ -35,7 +34,6 @@ import {
   nowIndex,
   phoneMarks,
   planOccurrences,
-  repeatingJobs,
   triggerRepeats,
 } from "./calendar-runs.js";
 import { TODO_HEAD_HEIGHT } from "./TodoIndex";
@@ -138,16 +136,6 @@ interface Cell {
   lines: { row: Row; inset: boolean }[];
   more: number;
 }
-
-/**
- * Where the calendar's first row under its head is centred, from the page's top: the strip (its
- * hairline, 5pt, a 32pt button) or, without one, about where the weekdays stand. The day's list
- * beside the grid puts its title on that line.
- */
-export const CALENDAR_SIDE_TOP = TODO_HEAD_HEIGHT + 22 - 12;
-
-// Folded or written out, for the session: the choice outlives the page, not the app.
-const foldedCells = signal(true);
 
 export interface TodoCalendarProps {
   tasks: TodoTask[];
@@ -267,7 +255,6 @@ export function TodoCalendar(props: TodoCalendarProps) {
   });
   const rowsFor = (date: string) => rowsByDate().get(date) || NO_ROWS;
   const isEmpty = computed(() => !props.tasksLoading && !history.loading() && rowsByDate().size === 0);
-  const strip = computed(() => repeatingJobs(jobs()) as { jobId: string; triggers: Trigger[]; after: string }[]);
 
   /* ---------- words ---------- */
 
@@ -483,7 +470,7 @@ export function TodoCalendar(props: TodoCalendarProps) {
     const room = gridWidth() / 7 - 16 - 22;
     return Math.max(1, Math.min(MAX_MARKS, Math.floor((room + 3) / 8)));
   };
-  const cellOf = (date: string) => cellView(rowsFor(date), { folded: foldedCells(), maxMarks: maxMarks() }) as Cell;
+  const cellOf = (date: string) => cellView(rowsFor(date), { maxMarks: maxMarks() }) as Cell;
   const windowHeight = () => windowSize().height;
 
   const dayLabel = (day: CalendarDay) => {
@@ -497,7 +484,7 @@ export function TodoCalendar(props: TodoCalendarProps) {
   // A day stands on a hairline; today's is the warm one. The chosen day is tinted, as a selected row.
   const dayClass = (day: CalendarDay) =>
     `border-t ${day.key === todayKey() ? "border-warn" : "border-line-soft"} ${
-      day.key === selectedDate() ? "bg-selection" : "hover:bg-hover-faint"
+      day.key === selectedDate() ? "bg-selection" : "hover:bg-hover-soft"
     }`;
   const lineClass = (row: Row) =>
     row.state === "failed" ? "text-danger" : row.state === "planned" || row.state === "skipped" ? "text-muted-foreground" : "text-foreground";
@@ -591,7 +578,7 @@ export function TodoCalendar(props: TodoCalendarProps) {
     );
   };
 
-  // Where the grid's text starts: a cell's inset, which the head, the strip and the weekdays share.
+  // Where the grid's text starts: a cell's inset, which the head and the weekdays share.
   const INSET = 8;
   const headWidth = signal(0);
   const headProbe = parts.probe(() => "head") as { ref?: (value: ViewRef) => void; onLayout?: () => void };
@@ -653,46 +640,6 @@ export function TodoCalendar(props: TodoCalendarProps) {
       </View>
 
       <View style={{ paddingHorizontal: props.mobile ? 12 : gutterX(), paddingBottom: props.mobile ? 0 : gutterY() }} class={props.mobile ? "" : "grow"}>
-        {/* The repeating jobs, each named once: the cells then only mark them. A phone's cells are
-            marks alone, with nothing to unfold, and its list below names every run. */}
-        <If when={!props.mobile && strip().length > 0}>
-          <View
-            class="flex-row items-center gap-[18px] border-y border-line-soft py-[5px]"
-            style={{ paddingHorizontal: INSET }}
-            testID="todo-calendar-repeating"
-          >
-            <Text class="font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[1.32px] text-muted-foreground">
-              {t("todo_calendar_repeating")}
-            </Text>
-            <View class="min-w-0 flex-1 flex-row flex-wrap items-center gap-x-[18px] gap-y-1">
-              <Each of={strip()} key={(item) => item.jobId}>
-                {(item) => (
-                  <View class="flex-row items-center gap-1.5" testID={`todo-calendar-repeating-${item().jobId}`}>
-                    <StatusMark state="on" size={6} corner={2} />
-                    <Text class="text-[13px] leading-[19px] text-foreground" style={{ numberOfLines: 1 }}>
-                      {jobTitle(item().jobId)}
-                      <Text class="text-muted-foreground">
-                        {`  ${
-                          item().after
-                            ? t("todo_calendar_after", { job: jobTitle(item().after) })
-                            : item().triggers.map(cadence).join(" · ")
-                        }`}
-                      </Text>
-                    </Text>
-                  </View>
-                )}
-              </Each>
-            </View>
-            <Button
-              variant="plain"
-              size="xs"
-              label={foldedCells() ? t("todo_calendar_unfold") : t("todo_calendar_fold")}
-              testID="todo-calendar-fold"
-              onPress={() => foldedCells.set(!untracked(foldedCells))}
-            />
-          </View>
-        </If>
-
         {/* Reading what ran: a hairline that moves, in room that is always there. */}
         <View class="h-0.5">
           <If when={history.loading()}>
@@ -751,7 +698,7 @@ export function TodoCalendar(props: TodoCalendarProps) {
             {/* Nothing ran and nothing is planned on these days: the note over the grid, which shows through blurred. */}
             <If when={isEmpty()}>
               <View
-                class="absolute inset-0 items-center justify-center gap-[5px] bg-paper-soft p-6 backdrop-blur-[3px]"
+                class="absolute inset-0 items-center justify-center gap-[5px] bg-paper/70 p-6 backdrop-blur-[3px]"
                 style={{ pointerEvents: "none" }}
               >
                 <Text class="text-center text-base font-semibold text-foreground">{t("todo_calendar_empty")}</Text>

@@ -60,7 +60,7 @@ export function SettingsSaveBar(props: {
           class="w-full max-w-160 flex-row items-center gap-3 rounded-(--radius) border border-line bg-card px-3.5 py-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.1)]"
           style={motion.style}
         >
-          <View class={`size-[7px] rounded-[1px] ${props.failed ? "bg-status-error" : "bg-status-pending"}`} accessibilityElementsHidden />
+          <View class={`size-[7px] rounded-[1px] ${props.failed ? "bg-danger" : "bg-status-pending"}`} accessibilityElementsHidden />
           <View class="min-w-0 flex-1 flex-row flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <If
               when={props.failed}
@@ -114,7 +114,7 @@ export function SettingsRestartBanner(props: {
       <View
         testID="settings-restart-banner"
         class="flex-row flex-wrap items-center gap-3 border border-warn/45 px-3.5 py-2.5 shadow-[0_2px_8px_rgba(24,24,50,0.08)]"
-        style={{ position: "sticky", top: 8 + (props.topInset ?? 0), zIndex: 5, backgroundColor: `color-mix(in srgb, ${token("warn")} 10%, ${token("background")})` }}
+        style={{ position: "sticky", top: 8 + (props.topInset ?? 0), zIndex: 5, backgroundColor: `color-mix(in srgb, ${token("warn")} 10%, ${token("paper")})` }}
       >
         <View class={props.restarting ? "animate-spin" : ""} style={{ animationDuration: 800 }}>
           <Icon name="PhArrowClockwise" size={18} color="warn" />

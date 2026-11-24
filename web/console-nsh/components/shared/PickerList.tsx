@@ -170,7 +170,7 @@ export function PickerList(props: {
         accessibilityLabel={item().title}
         testID={item().testID ?? props.part(`option-${item().value}`)}
         onPress={() => choose(item())}
-        class={`${CONTINUOUS} px-3 py-2 transition-colors duration-[120ms] hover:bg-hover selected:bg-selection disabled:opacity-70 ${
+        class={`${CONTINUOUS} px-3 py-2 transition-colors duration-[120ms] hover:bg-hover selected:bg-selection disabled:opacity-50 ${
           active() === index() ? "bg-hover" : ""
         } ${props.rowClass ?? ""}`}
         style={{ borderRadius: props.rowRadius ?? PAPER_ROW_RADIUS }}

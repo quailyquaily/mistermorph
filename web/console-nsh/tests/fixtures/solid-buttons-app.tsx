@@ -15,7 +15,7 @@ function Gallery() {
   const presses = signal(0);
   const press = () => presses.update((n) => n + 1);
   return (
-    <View class="gap-3 bg-background p-4">
+    <View class="gap-3 bg-paper p-4">
       <View class="flex-row gap-2">
         <Button testID="set-dark" variant="outlined" size="xs" label="Dark" onPress={() => setColorScheme("dark")} />
         <Button testID="set-light" variant="outlined" size="xs" label="Light" onPress={() => setColorScheme("light")} />

@@ -44,7 +44,7 @@ function Set(props: { name: State }) {
 }
 
 mount(() => (
-  <View class="flex-1 gap-2 bg-background p-2">
+  <View class="flex-1 gap-2 bg-paper p-2">
     <View class="flex-row flex-wrap gap-1">
       <Set name="idle" />
       <Set name="running" />

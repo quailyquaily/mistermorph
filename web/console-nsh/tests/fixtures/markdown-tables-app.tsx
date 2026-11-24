@@ -53,7 +53,7 @@ function Case(props: { name: string; source: string; streaming?: boolean }) {
 
 function Page() {
   return (
-    <Scroll class="flex-1 bg-background" testID="tables-scroll" onScroll={(event) => offset.set(Math.round(event.offset.y))}>
+    <Scroll class="flex-1 bg-paper" testID="tables-scroll" onScroll={(event) => offset.set(Math.round(event.offset.y))}>
       <View class="gap-4 p-3" onLayout={report("column")}>
         <View testID="tables-grow" class="h-6 w-16 bg-muted" onPress={() => stream.update((source) => source + STREAM_MORE)}>
           <Text class="text-xs">grow</Text>

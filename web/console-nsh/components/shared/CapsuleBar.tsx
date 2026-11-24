@@ -18,7 +18,7 @@ import { computed, effect, Text, untracked, View } from "nsh";
 import { BAR_INSET, GlassCapsule, MOBILE_NAV_EXPANDED_HEIGHT, MOBILE_NAV_HEIGHT, mobileNavSlots, NAV_SLOT_MAX } from "../frame/mobileBar";
 import { motionMs } from "../motion/tokens";
 import type { IconName } from "../icons";
-import { BusyBeam, busyLook, type ButtonVariant, Icon, Tip, TipButton } from "../ui";
+import { BusyBeam, busyLook, type ButtonVariant, DISABLED_OPACITY, Icon, Tip, TipButton } from "../ui";
 import { solidBox, solidStateStyles, type SolidTone } from "../solidLook";
 
 type TokenName = Parameters<typeof token>[0];
@@ -263,9 +263,9 @@ export function capsuleButtonLook(variant: "primary" | "danger" | "quiet", glyph
       look: state.disabled ? "disabled" : "quiet",
       glyph,
       filled: false,
-      box: "hover:bg-hover focus:bg-hover disabled:bg-transparent",
+      box: `hover:bg-hover focus:bg-hover disabled:bg-transparent ${state.disabled ? DISABLED_OPACITY : ""}`,
       press: "group-active:bg-press",
-      icon: state.disabled ? "plain-disabled-text" : "muted-foreground",
+      icon: "muted-foreground",
       beam: "plain",
     };
   }
@@ -274,11 +274,11 @@ export function capsuleButtonLook(variant: "primary" | "danger" | "quiet", glyph
       look: state.busy ? "busy" : state.disabled ? "disabled" : "danger",
       glyph,
       filled: true,
-      // While busy or disabled the fill stays (the beam rides the hairline); the glyph pales when it cannot act.
-      box: `bg-card border-[0.5px] ${state.disabled && !state.busy ? "border-danger-disabled-line" : "border-danger/35"}`,
+      // While busy the fill stays (the beam rides the hairline); disabled, the whole stop fades.
+      box: `bg-card border-[0.5px] border-danger/35 ${state.disabled && !state.busy ? DISABLED_OPACITY : ""}`,
       tint: `bg-danger/12 ${state.disabled || state.busy ? "" : "group-hover:bg-danger/18 group-focus:bg-danger/18"}`,
       press: "group-active:bg-press",
-      icon: state.disabled && !state.busy ? "danger-disabled-text" : "danger",
+      icon: "danger",
       beam: "danger",
     };
   }
@@ -292,9 +292,9 @@ export function capsuleButtonLook(variant: "primary" | "danger" | "quiet", glyph
       look: "disabled",
       glyph,
       filled: true,
-      box: "bg-primary-disabled border-[0.5px] border-primary-disabled-line",
+      box: `${solidBox("primary")} ${DISABLED_OPACITY}`,
       press: "",
-      icon: "on-disabled",
+      icon: "primary-foreground",
       beam: "primary",
     };
   }

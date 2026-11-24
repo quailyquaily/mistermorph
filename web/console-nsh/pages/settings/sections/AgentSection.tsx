@@ -37,7 +37,7 @@ function ProfileRow(props: { s: SettingsStore; profile: LLMProfile }) {
       accessibilityLabel={props.profile.name || t("settings_agent_profile_placeholder")}
       testID={`settings-profile-${props.profile.name || props.profile._key}`}
       class={`flex-row items-center gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-120 ${
-        active() ? "bg-blue/9" : "hover:bg-blue/5"
+        active() ? "bg-blue/10" : "hover:bg-blue/6"
       }`}
     >
       <View
@@ -45,7 +45,7 @@ function ProfileRow(props: { s: SettingsStore; profile: LLMProfile }) {
       >
         <ProviderLogo item={provider()} size={28} />
         <If when={s.profileIsInUse(props.profile)}>
-          <View class="absolute -bottom-[3px] -right-[3px] size-[11px] rounded-[1px] border-2 border-card bg-status-on" />
+          <View class="absolute -bottom-[3px] -right-[3px] size-[11px] rounded-[1px] border-2 border-card bg-info" />
         </If>
       </View>
       <View class="flex-1 gap-0.5">

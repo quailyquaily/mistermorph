@@ -17,7 +17,7 @@ export function RunningMark(props: {
   color: string;
   /** A square with no fill (an "off" mark). */
   hollow?: boolean;
-  /** The ring's colour (default the theme's status-on blue). */
+  /** The ring's colour (default the theme's info blue). */
   ringColor?: string;
   /** The square's side: 7 (default) or 8. */
   size?: number;
@@ -75,7 +75,7 @@ export function RunningMark(props: {
         class="absolute"
         style={{ left: -inset, top: -inset, width: BOX, height: BOX, pointerEvents: "none" }}
         draw={(cx) => {
-          const blue = withAlpha(props.ringColor ?? String(token("status-on")));
+          const blue = withAlpha(props.ringColor ?? String(token("info")));
           const settled = withAlpha(props.color);
           const fill = props.hollow ? withAlpha(settled, 0) : settled;
           const center = BOX / 2;

@@ -22,7 +22,7 @@ const BARE = "id:chat-conversation-pane";
 const LIST = "id:chat-topic-sidebar";
 
 test("a sliding pane's paper is the frame's, opaque in every theme", () => {
-  expect(PANE_PAPER).toBe("bg-background");
+  expect(PANE_PAPER).toBe("bg-paper");
   // No tint: a `/NN` fill is a glass bar's, see-through.
   expect(PANE_PAPER).not.toContain("/");
   const vars = (theme as { cssVars: Record<string, Record<string, string>> }).cssVars;
@@ -42,26 +42,26 @@ async function openPanes(reducedMotion = false) {
 
 test("both panes keep their paper while one slides over the other, in and back out", async () => {
   const app = await openPanes();
-  expect(read(app, "paper=")).toBe("bg-background,bg-background,bg-background");
+  expect(read(app, "paper=")).toBe("bg-paper,bg-paper,bg-paper");
   // Mid-push: the list still there underneath, the item above it (the list is the one restacked).
   await app.press("id:open");
   expect(app.count("id:pane.0.out")).toBe(1);
   expect(app.count("id:pane.1")).toBe(1);
   expect(read(app, "plays=")).toBe("390>0 0>-117");
-  expect(read(app, "paper=")).toBe("bg-background,bg-background,bg-background");
+  expect(read(app, "paper=")).toBe("bg-paper,bg-paper,bg-paper");
   expect(read(app, "z=")).toBe("-1,0,0");
   await app.press("id:finish");
   await app.waitUntil(() => app.count("id:pane.0.out") === 0);
-  expect(read(app, "paper=")).toBe("bg-background,bg-background,bg-background");
+  expect(read(app, "paper=")).toBe("bg-paper,bg-paper,bg-paper");
   // Mid-pop: the item goes out over the list.
   await app.press("id:back");
   expect(app.count("id:pane.1.out")).toBe(1);
   expect(app.count("id:pane.0")).toBe(1);
-  expect(read(app, "paper=")).toBe("bg-background,bg-background,bg-background");
+  expect(read(app, "paper=")).toBe("bg-paper,bg-paper,bg-paper");
   expect(read(app, "z=")).toBe("0,1,0");
   // Turned round part-way, still.
   await app.press("id:open");
-  expect(read(app, "paper=")).toBe("bg-background,bg-background,bg-background");
+  expect(read(app, "paper=")).toBe("bg-paper,bg-paper,bg-paper");
   await app.press("id:finish");
   await app.waitUntil(() => app.count("id:pane.0.out") === 0);
   // Side by side (a wide window): the panes add no fill.
@@ -74,7 +74,7 @@ test("with reduced motion the panes switch at once, on the same paper", async ()
   await app.press("id:open");
   expect(app.count("id:pane.0")).toBe(0);
   expect(read(app, "plays=")).toBe("");
-  expect(read(app, "paper=")).toBe("bg-background,bg-background,bg-background");
+  expect(read(app, "paper=")).toBe("bg-paper,bg-paper,bg-paper");
 });
 
 for (const platform of [undefined, "android"] as const) {

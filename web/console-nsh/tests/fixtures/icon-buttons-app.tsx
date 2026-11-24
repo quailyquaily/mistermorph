@@ -19,7 +19,7 @@ const AGENTS = [
 
 function Gallery() {
   return (
-    <View class="flex-1 gap-3 bg-background p-4">
+    <View class="flex-1 gap-3 bg-paper p-4">
       <View class="flex-row gap-2">
         <Button testID="text" variant="outlined" label="Rename" onPress={press("text")} />
         <Button testID="both" variant="outlined" icon="PhArrowClockwise" label="Refresh" onPress={press("both")} />

@@ -27,7 +27,7 @@ const display = () => workspacePathDisplay(PATHS[pathKey()], HOME);
 
 function Page() {
   return (
-    <View class="flex-1 bg-background p-2">
+    <View class="flex-1 bg-paper p-2">
       <View class="flex-row flex-wrap gap-1">
         <Each of={Object.keys(PATHS)} key={(k) => k}>
           {(k) => <Button testID={`path-${k()}`} size="xs" label={k()} onPress={() => pathKey.set(k())} />}

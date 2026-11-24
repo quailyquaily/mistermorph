@@ -92,8 +92,9 @@ Headless tests prove behaviour, not the look.
 ## Traps found while matching the Vue console
 
 - `leading-[1.4]` (a unitless line height) does not render as size × 1.4: write points, `leading-[19.6px]`.
-- Opacity modifiers on the app's own colour tokens (`bg-paper/70`) do nothing: add a token to
-  `theme.json` (`paper-soft`, `card-soft`) instead.
+- (Up to an earlier nsh; 0.6.0 applies them on web, desktop and Android.) Opacity modifiers on
+  the app's own colour tokens (`bg-paper/70`) did nothing. Tints of a colour keep to the steps in
+  `scripts/color-steps.test.mjs`.
 - `style={{ display: "flex" }}` turns a View into a row.
 - (Up to nsh 0.5.0; 0.5.1 disposes it, `tests/list-empty-slot.test.tsx`.) A `List`'s `empty` slot
   given as a function rendered in a scope nsh never disposed: the

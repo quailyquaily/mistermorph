@@ -193,7 +193,7 @@ function FieldRow(props: { name: keyof typeof PLACEHOLDERS; readonly?: boolean; 
 put("tokens", Object.fromEntries(["background", "field", "line", "input", "muted-foreground"].map((name) => [name, String(token(name as "line"))])));
 
 mount(() => (
-  <View class="gap-3 bg-background p-4">
+  <View class="gap-3 bg-paper p-4">
     <FieldRow name="live" />
     <FieldRow name="readonly" readonly />
     <FieldRow name="tools" tools />

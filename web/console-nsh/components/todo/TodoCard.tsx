@@ -37,7 +37,7 @@ export function TodoCard(props: {
     <View
       testID={props.testID}
       accessibilityLabel={props.accessibilityLabel}
-      class={`${props.panel ? "rounded-lg bg-card" : "rounded-(--radius) border border-line-soft bg-paper-soft"} ${
+      class={`${props.panel ? "rounded-lg bg-card" : "rounded-(--radius) border border-line-soft bg-paper/70"} ${
         props.fill ? "flex-1" : ""
       } ${props.class ?? ""}`}
       style={props.panel ? { boxShadow: PANEL_SHADOW } : undefined}

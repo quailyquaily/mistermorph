@@ -117,7 +117,7 @@ export function TodoDayList(props: {
         // A row of the list's Today column (TodoRuns): the same spine and mark at the left edge
         // (RunSpine, which swings out to a chained run), what ran, and the time at the right
         // (drawn from the right; written time first).
-        class={`relative flex-row-reverse gap-2.5 rounded-(--radius) px-1.5 ${item().open ? "hover:bg-hover-faint" : ""}`}
+        class={`relative flex-row-reverse gap-2.5 rounded-(--radius) px-1.5 ${item().open ? "hover:bg-hover-soft" : ""}`}
         style={ROW_TRANSITION}
         hoverStyle={ROW_HOVER}
       >

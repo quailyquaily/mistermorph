@@ -51,6 +51,17 @@ if [ "$all" -eq 1 ]; then
     cat "$logs/ui-components-inventory.log"
   fi
 fi
+# And the colours' tints against their steps (scripts/color-steps.test.mjs).
+if [ "$all" -eq 1 ]; then
+  if node --test scripts/color-steps.test.mjs >"$logs/color-steps.log" 2>&1; then
+    echo "ok    scripts/color-steps.test.mjs"
+  else
+    failed=$((failed + 1))
+    echo
+    echo "---- scripts/color-steps.test.mjs"
+    cat "$logs/color-steps.log"
+  fi
+fi
 # And the QR scanner's page (lib/qrScannerPage.js), which runs in a web view no test here opens:
 # against a browser made of fakes.
 if [ "$all" -eq 1 ]; then

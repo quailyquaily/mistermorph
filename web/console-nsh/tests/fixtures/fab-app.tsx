@@ -19,7 +19,7 @@ const track = (name: string) => (part: string, frame: PartFrame) => {
 
 function Gallery() {
   return (
-    <View class="flex-1 bg-background p-6">
+    <View class="flex-1 bg-paper p-6">
       <View class="flex-row flex-wrap gap-6">
         <View class="relative h-24 w-40 border border-line-faint">
           <Fab label="Add" onPress={() => presses.set(presses() + 1)} testID="fab" onPartLayout={track("plain")} />

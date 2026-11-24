@@ -749,7 +749,7 @@ export function SkillsPage() {
                     </If>
                     <If when={selectedUpdate()}>
                       {(entry) => (
-                        <View class="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius) border border-blue/30 bg-blue/6 px-2.5 py-2">
+                        <View class="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius) border border-blue/35 bg-blue/6 px-2.5 py-2">
                           <Text class="text-xs text-subtle">{t("skills_update_note", { version: entry().version })}</Text>
                           <Button
                             variant="outlined"
@@ -938,7 +938,7 @@ export function SkillsPage() {
                           {/* Plain text, never HTML or rendered Markdown: 14pt mono on the paper, scrolling past 70% of the window. */}
                           <Scroll
                             scrollbar={SCROLLBAR}
-                            class="grow-0 rounded-(--radius) border border-line-soft bg-background"
+                            class="grow-0 rounded-(--radius) border border-line-soft bg-paper"
                             style={{ maxHeight: previewMaxHeight(), flexGrow: 0 }}
                             contentClass="px-3.5 py-3"
                           >

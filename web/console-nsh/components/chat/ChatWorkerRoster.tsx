@@ -27,10 +27,10 @@ import { KindChip, NEON, StatusTag, TerminalText } from "./TerminalText";
 function stateTone(state: string) {
   switch (state) {
     case "done":
-      return "bg-status-on border-status-on";
+      return "bg-info border-info";
     case "failed":
     case "canceled":
-      return "bg-status-error border-status-error";
+      return "bg-danger border-danger";
     default:
       return "bg-status-pending border-status-pending";
   }

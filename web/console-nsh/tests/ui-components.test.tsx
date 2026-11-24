@@ -6,6 +6,7 @@ import { LANGUAGES } from "../components/LanguageSelector";
 import { NAV_ITEMS_META } from "../lib/navOrder";
 import { DEMOS } from "../pages/ui-components/demos";
 import { GALLERY_ENTRIES, GALLERY_GROUPS } from "../pages/ui-components/inventory.js";
+import { NSH_NAMES, TINT_HUES } from "../pages/ui-components/colorRules.js";
 import theme from "../theme.json";
 import { openConsole } from "./harness";
 
@@ -132,6 +133,12 @@ test("the colour scheme is on the page: every token with its value, in the appea
   expect(app.shows(`id:uig-index-colors >> text:${names.length}`)).toBe(true);
   for (const name of names) expect(app.count(`id:uig-color-${name}`)).toBe(1);
   expect(app.shows(`id:uig-color-primary >> text:${vars.light.primary.toLowerCase()}`)).toBe(true);
+  // nsh's names say which of the console's tokens to use; the console's own say only their value.
+  for (const [name, ours] of Object.entries(NSH_NAMES)) expect(app.shows(`id:uig-color-${name} >> text:${vars.light[name].toLowerCase()} · use ${ours}`)).toBe(true);
+  expect(app.count("id:uig-color-paper >> text:use")).toBe(0);
+  // The tints: a row per colour, its fills and borders at each step.
+  for (const hue of TINT_HUES) expect(app.count(`id:uig-tint-${hue}`)).toBe(1);
+  expect(app.shows("id:uig-colors-tints >> text:hover on a tint")).toBe(true);
   // Dark is the console's own appearance: the values are the dark palette's, and the choice is kept.
   await app.press("id:uig-appearance >> text:Dark");
   await app.waitFor(`id:uig-color-primary >> text:${vars.dark.primary.toLowerCase()}`);
@@ -141,8 +148,14 @@ test("the colour scheme is on the page: every token with its value, in the appea
   await app.waitFor("id:uig-color-primary", { state: "gone" });
   expect(app.count("id:uig-color-blue-light")).toBe(1);
   expect(app.count("id:uig-color-blue-lighter")).toBe(1);
+  expect(app.count("id:uig-colors-tints")).toBe(0);
   await app.press("id:uig-appearance >> text:Light");
   await app.waitFor(`id:uig-color-blue-light >> text:${vars.light["blue-light"].toLowerCase()}`);
+  // The tints by their colour's name.
+  await app.clear("id:uig-filter");
+  await app.type("id:uig-filter", "dang");
+  await app.waitFor("id:uig-tint-blue", { state: "gone" });
+  expect(app.count("id:uig-tint-danger")).toBe(1);
 });
 
 test("only the demos near the visible part of the page are mounted, and scrolling mounts the next ones", async () => {

@@ -37,7 +37,7 @@ export function SettingSwitch(props: {
       onChange={({ checked }) => props.onChange?.(checked)}
       accessibilityLabel={props.accessibilityLabel}
       testID={props.testID}
-      class="disabled:opacity-45"
+      class="disabled:opacity-50"
       trackClass={`w-[34px] h-5 ${SWITCH_TRACK_CORNERS} border border-line bg-transparent p-0.5 transition-colors duration-180 hover:border-muted-foreground checked:border-primary checked:bg-primary`}
       thumbClass={`size-3.5 ${SWITCH_THUMB_CORNERS} bg-card ring-1 ring-foreground/20 shadow-xs transition-transform duration-260 ease-[cubic-bezier(0.3,1.35,0.5,1)] checked:translate-x-3.5 checked:ring-primary/60`}
     />
@@ -344,7 +344,7 @@ export function PlaceholderButton(props: { label: string; icon?: IconName; disab
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
       testID={props.testID}
-      class={`h-11 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/36 bg-outline-bg transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-outline-bg-hover disabled:opacity-50 ${
+      class={`h-11 flex-row items-center justify-center gap-2 ${CONTROL_CORNERS} border border-dashed border-blue/35 bg-outline-bg transition-colors duration-180 ease-in-out hover:border-blue/60 hover:bg-outline-bg-hover disabled:opacity-50 ${
         props.class ?? ""
       }`}
     >

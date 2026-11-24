@@ -60,7 +60,7 @@ function frameStyle() {
 
 function Gallery() {
   return (
-    <View class="flex-1 bg-background" style={frameStyle()}>
+    <View class="flex-1 bg-paper" style={frameStyle()}>
       <Measured name="page" class="flex-1">
         {/* The wide window's panel row, 314pt wide with its toggle's 38pt box at the right. */}
         <View class="w-[314px] bg-card">

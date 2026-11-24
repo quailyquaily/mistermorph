@@ -75,7 +75,7 @@ export function InsecureBanner() {
           class="flex-1"
           tooltip={
             <Tooltip class="max-w-96 bg-foreground px-2 py-1">
-              <Text class="text-xs text-background">{text()}</Text>
+              <Text class="text-xs text-paper">{text()}</Text>
             </Tooltip>
           }
           accessibilityLabel={text()}

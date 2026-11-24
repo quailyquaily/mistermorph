@@ -219,7 +219,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
     <View class={`gap-1.5 ${props.class ?? ""}`} testID={props.testID}>
       <View
         class={`overflow-hidden ${CONTROL_CORNERS} border bg-card transition-colors duration-200 ${focused() ? "border-ring" : "border-input"} ${
-          props.disabled ? "opacity-60" : ""
+          props.disabled ? "opacity-50" : ""
         }`}
         style={heightStyle(props.height)}
       >
@@ -494,7 +494,7 @@ function PickerButton(props: {
         tooltip={
           <Tip text={props.title} />
         }
-        class={`size-9 items-center justify-center ${TOOLBAR_CORNERS} transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-45`}
+        class={`size-9 items-center justify-center ${TOOLBAR_CORNERS} transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-50`}
       >
         <Icon name={props.icon} size={18} color="subtle" />
       </TipButton>

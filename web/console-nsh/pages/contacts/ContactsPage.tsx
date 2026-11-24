@@ -910,7 +910,7 @@ export function ContactsPage(props: {
       </List>
       <View class="absolute inset-0 overflow-hidden" accessibilityElementsHidden style={{ pointerEvents: "none" }}>
         <View class="absolute left-0 top-0" style={{ transform: [{ translateY: scrollShift }] }}>
-          <selection.Highlight class="rounded-[16px] border border-blue/38 bg-selection" testID="contacts-selection" />
+          <selection.Highlight class="rounded-[16px] border border-blue/35 bg-selection" testID="contacts-selection" />
         </View>
       </View>
       </View>
@@ -1179,7 +1179,7 @@ export function ContactsPage(props: {
             slides in over it. */}
         <If when={panes.shown(1, showEditorPane())}>
           <View
-            class="flex-1 bg-background"
+            class="flex-1 bg-paper"
             style={panes.style(1)}
             accessibilityElementsHidden={panes.hidden(1) || undefined}
             importantForAccessibility={panes.hidden(1) ? "no-hide-descendants" : undefined}

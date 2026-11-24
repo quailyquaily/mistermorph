@@ -11,7 +11,7 @@ const frames = signal<Record<string, PartFrame>>({});
 
 function FixtureApp() {
   return (
-    <View class="flex-1 bg-background px-3">
+    <View class="flex-1 bg-paper px-3">
       <RuntimePanel onPartLayout={(name, frame) => frames.update((all) => ({ ...all, [name]: frame }))} />
       <Text testID="frames">{JSON.stringify(frames())}</Text>
     </View>

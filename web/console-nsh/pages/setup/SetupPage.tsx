@@ -25,14 +25,14 @@ import { DEFAULT_AVATAR_MARKUP } from "./default-avatar";
 import { InlineNotice } from "./InlineNotice";
 import { t, useSetup, type LLMFormField, type SetupStage, type SetupState, type SoulCard } from "./setup-state";
 
-type Token = "warn" | "warn-dark" | "ok" | "blue-dark";
+type Token = "warn" | "warn-dark" | "ok" | "ink";
 
 /** Each step's accent, as the Vue sheet tinted it. */
 const STAGE_ACCENT: Record<SetupStage, Token> = {
   llm: "warn",
   persona: "ok",
   soul: "warn-dark",
-  done: "blue-dark",
+  done: "ink",
 };
 
 const NARROW = 620;
@@ -89,7 +89,7 @@ function AuthActionButton(props: {
       accessibilityLabel={props.title}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
-      class={`min-h-9.5 min-w-9.5 flex-row items-center justify-center rounded-(--radius) border px-3 active:opacity-80 disabled:opacity-45 ${tone().box}`}
+      class={`min-h-9.5 min-w-9.5 flex-row items-center justify-center rounded-(--radius) border px-3 active:opacity-80 disabled:opacity-50 ${tone().box}`}
     >
       <If when={props.needsLogin} else={<Icon name={icon()} size={16} color={tone().color} />}>
         <Text class="text-sm font-medium text-blue">{props.loginLabel}</Text>

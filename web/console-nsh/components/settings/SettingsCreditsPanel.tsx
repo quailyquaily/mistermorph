@@ -104,7 +104,7 @@ export function SettingsCreditsPanel() {
                   role="link"
                   accessibilityLabel={`${t("settings_credits_open_profile")}: ${item().name ?? ""}`}
                   onPress={() => item().link && openExternal(String(item().link))}
-                  class="min-h-29 min-w-0 items-center justify-center gap-2 rounded-(--radius) border border-line/70 bg-paper/96 px-3 py-3.5 transition-colors duration-160 hover:border-blue/30 hover:bg-hover focus:border-blue/30 focus:bg-hover"
+                  class="min-h-29 min-w-0 items-center justify-center gap-2 rounded-(--radius) border border-line/70 bg-paper/96 px-3 py-3.5 transition-colors duration-160 hover:border-blue/35 hover:bg-hover focus:border-blue/35 focus:bg-hover"
                 >
                   <View class="absolute right-2.5 top-2.5">
                     <Icon name="PhArrowSquareOut" size={12} color="muted-foreground" />

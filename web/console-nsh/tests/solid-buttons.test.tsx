@@ -9,7 +9,7 @@
 import { expect, open, test } from "nsh/test";
 import theme from "../theme.json";
 import { SOLID_FOCUS_RING, SOLID_HAIRLINE_COVER, SOLID_SHEEN, SOLID_TONES, solidBox, solidShadow, type SolidTone } from "../components/solidLook";
-import { buttonVariantFinish, circleButtonClass, circleIconColor, type ButtonVariant } from "../components/ui";
+import { buttonVariantFinish, circleButtonClass, circleIconColor, DISABLED_OPACITY, type ButtonVariant } from "../components/ui";
 import { CAPSULE_FOCUS_RING, capsuleButtonLook } from "../components/shared/CapsuleBar";
 
 type Scheme = "light" | "dark";
@@ -133,36 +133,38 @@ test("primary, danger and highlight share one finish in their own colours; the o
     const finish = buttonVariantFinish(variant as ButtonVariant);
     expect(finish.solid).toBe(tone);
     // The tone's fills, hairline, hover and pressed fills; the press deepens the fill itself (no
-    // light layer over it), and the disabled look is the variant's own pale one.
+    // light layer over it), and disabled holds the fill at rest (faded by DISABLED_OPACITY).
     for (const c of classes(solidBox(tone))) expect(classes(finish.box)).toContain(c);
     expect(classes(solidBox(tone))).toContain(`active:bg-${SOLID_TONES[tone].press}`);
     expect(classes(solidBox(tone))).toContain(`hover:bg-${SOLID_TONES[tone].hover}`);
     expect(classes(solidBox(tone))).toContain(`border-${SOLID_TONES[tone].line}`);
     expect(finish.press).toBe("");
-    expect(classes(finish.box).filter((c) => c.startsWith("disabled:bg-")).length).toBe(1);
+    expect(classes(finish.box).filter((c) => c.startsWith("disabled:"))).toEqual([`disabled:bg-${SOLID_TONES[tone].fill}`]);
     expect(classes(finish.box).some((c) => /press-light/.test(c))).toBe(false);
   }
   for (const variant of ["outlined", "plain", "ghost-danger", "outlined-danger"] as const) expect(buttonVariantFinish(variant).solid).toBeUndefined();
 });
 
-test("filled round buttons take the same fills and a pale look while disabled; the capsule's primary is solid, its danger a pale stop", () => {
+test("filled round buttons take the same fills and no disabled colours of their own; the capsule's primary is solid, its danger a pale stop", () => {
   const primary = classes(circleButtonClass({ variant: "primary" }));
   for (const c of classes(solidBox("primary"))) expect(primary).toContain(c);
-  expect(primary).toContain("disabled:bg-primary-disabled");
   const danger = classes(circleButtonClass({ variant: "danger" }));
   for (const c of classes(solidBox("danger"))) expect(danger).toContain(c);
-  expect(danger).toContain("disabled:bg-outline-disabled-bg");
-  expect([circleIconColor("primary"), circleIconColor("primary", true)]).toEqual(["primary-foreground", "on-disabled"]);
-  expect([circleIconColor("danger"), circleIconColor("danger", true)]).toEqual(["destructive-foreground", "danger-disabled-text"]);
+  expect(primary.filter((c) => c.startsWith("disabled:"))).toEqual(["disabled:bg-primary"]);
+  expect(danger.filter((c) => c.startsWith("disabled:"))).toEqual(["disabled:bg-danger"]);
+  expect([circleIconColor("primary"), circleIconColor("danger")]).toEqual(["primary-foreground", "on-accent"]);
   // The others are not filled.
-  for (const variant of ["plain", "outlined", "close", "outlined-danger"] as const) expect(classes(circleButtonClass({ variant })).some((c) => c === "bg-primary" || c === "bg-destructive")).toBe(false);
+  for (const variant of ["plain", "outlined", "close", "outlined-danger"] as const) expect(classes(circleButtonClass({ variant })).some((c) => c === "bg-primary" || c === "bg-danger")).toBe(false);
 
   const start = capsuleButtonLook("primary", "PhPlay");
   expect(start.solid).toBe("primary");
   for (const c of classes(solidBox("primary"))) expect(classes(start.box)).toContain(c);
   expect(start.ring).toBe("group-focus-visible:border-primary-foreground");
-  // Disabled and busy keep their own looks, without the finish.
-  expect(capsuleButtonLook("primary", "PhPlay", { disabled: true }).solid).toBeUndefined();
+  // Disabled is the primary fill faded, and busy its own soft look, both without the finish.
+  const startOff = capsuleButtonLook("primary", "PhPlay", { disabled: true });
+  expect(startOff.solid).toBeUndefined();
+  expect(classes(startOff.box)).toContain(DISABLED_OPACITY);
+  expect(startOff.icon).toBe("primary-foreground");
   expect(capsuleButtonLook("primary", "PhPlay", { busy: true }).solid).toBeUndefined();
   // Stop is a pale red tint over the card, not a solid destructive fill: no finish, the quiet ring.
   const stop = capsuleButtonLook("danger", "PhStop");
@@ -181,22 +183,27 @@ async function openSolid(platform: "linux" | "android" = "linux") {
 type App = Awaited<ReturnType<typeof openSolid>>;
 const bg = (app: App, id: string) => app.viewStyle(`id:${id}`)?.backgroundColor;
 const scheme = (app: App) => app.texts().find((text) => text.startsWith("scheme="));
+/** Whether a control is drawn at the disabled opacity. */
+const dimmed = (app: App, id: string) => app.viewStyle(`id:${id}`)?.opacity === 0.5;
 
 async function checkLooks(app: App, s: Scheme) {
   expect(scheme(app)).toBe(`scheme=${reported(s, "background")}`);
-  const variants: [ButtonVariant, SolidTone, string][] = [
-    ["primary", "primary", "primary-disabled"],
-    ["danger", "danger", "outline-disabled-bg"],
-    ["highlight", "warn", "warn-disabled"],
+  const variants: [ButtonVariant, SolidTone][] = [
+    ["primary", "primary"],
+    ["danger", "danger"],
+    ["highlight", "warn"],
   ];
-  for (const [variant, tone, disabled] of variants) {
+  for (const [variant, tone] of variants) {
     const t = SOLID_TONES[tone];
     expect(`${s} ${variant} ${bg(app, `rest-${variant}`)}`).toBe(`${s} ${variant} ${reported(s, t.fill)}`);
     expect(bg(app, `icon-${variant}`)).toBe(reported(s, t.fill));
-    // Disabled: its own pale fill, never the solid one, even under the pointer.
-    expect(bg(app, `disabled-${variant}`)).toBe(reported(s, disabled));
+    // Disabled: the fill at rest, faded, and so under the pointer too (no hover step).
+    expect(bg(app, `disabled-${variant}`)).toBe(reported(s, t.fill));
+    expect(dimmed(app, `disabled-${variant}`)).toBe(true);
     await app.hover(`id:disabled-${variant}`);
-    expect(bg(app, `disabled-${variant}`)).toBe(reported(s, disabled));
+    expect(bg(app, `disabled-${variant}`)).toBe(reported(s, t.fill));
+    // Loading is not faded.
+    expect(dimmed(app, `loading-${variant}`)).toBe(false);
     // Loading: the soft tint the beam rides, not the solid fill.
     expect(bg(app, `loading-${variant}`)).not.toBe(reported(s, t.fill));
     // Selected: the toggles' soft blue, and it stays so under the pointer.
@@ -210,13 +217,16 @@ async function checkLooks(app: App, s: Scheme) {
     expect(bg(app, `rest-${variant}`)).toBe(reported(s, t.fill));
   }
   expect(bg(app, "circle-primary")).toBe(reported(s, "primary"));
-  expect(bg(app, "circle-primary-disabled")).toBe(reported(s, "primary-disabled"));
-  expect(bg(app, "circle-danger")).toBe(reported(s, "destructive"));
-  expect(bg(app, "circle-danger-disabled")).toBe(reported(s, "outline-disabled-bg"));
+  expect(bg(app, "circle-primary-disabled")).toBe(reported(s, "primary"));
+  expect(dimmed(app, "circle-primary-disabled")).toBe(true);
+  expect(bg(app, "circle-danger")).toBe(reported(s, "danger"));
+  expect(bg(app, "circle-danger-disabled")).toBe(reported(s, "danger"));
+  expect(dimmed(app, "circle-danger-disabled")).toBe(true);
   await app.hover("id:circle-danger");
   expect(bg(app, "circle-danger")).toBe(reported(s, "danger-hover"));
   expect(bg(app, "capsule-primary")).toBe(reported(s, "primary"));
-  expect(bg(app, "capsule-primary-disabled")).toBe(reported(s, "primary-disabled"));
+  expect(bg(app, "capsule-primary-disabled")).toBe(reported(s, "primary"));
+  expect(dimmed(app, "capsule-primary-disabled")).toBe(true);
   await app.hover("id:capsule-primary");
   expect(bg(app, "capsule-primary")).toBe(reported(s, "primary-hover"));
   await app.hover("id:out-presses");
@@ -246,7 +256,7 @@ test("Android draws the fills and hairlines without the shadows, and its solid b
   const app = await openSolid("android");
   expect(app.texts()).toContain("shadows=false");
   expect(bg(app, "rest-primary")).toBe(reported("light", "primary"));
-  expect(bg(app, "circle-danger")).toBe(reported("light", "destructive"));
+  expect(bg(app, "circle-danger")).toBe(reported("light", "danger"));
   for (const id of ["rest-primary", "rest-danger", "rest-highlight", "circle-primary", "capsule-primary"]) await app.press(`id:${id}`);
   expect(app.texts()).toContain("presses=5");
 });

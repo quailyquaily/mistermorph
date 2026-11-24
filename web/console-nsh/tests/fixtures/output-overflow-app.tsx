@@ -94,7 +94,7 @@ function Show(props: { id: string; label: string; onPress: () => void }) {
 
 function Page() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-row gap-2 p-1">
         <Show id="show-activity" label="activity" onPress={() => detail.set({ itemID: "r1", kind: "activity" })} />
         <Show id="show-worker" label="worker" onPress={() => detail.set({ itemID: "r1", kind: "worker", workerID: "w1" })} />

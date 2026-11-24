@@ -62,7 +62,7 @@ function Control(props: { id: string; onPress: () => void }) {
 function Page() {
   const state = () => previews.state(KEY);
   return (
-    <View class="flex-1 gap-2 bg-background p-3">
+    <View class="flex-1 gap-2 bg-paper p-3">
       <View class="flex-row flex-wrap gap-1">
         <Control id="ticket-ok" onPress={() => settle(true)} />
         <Control id="ticket-fail" onPress={() => settle(false)} />

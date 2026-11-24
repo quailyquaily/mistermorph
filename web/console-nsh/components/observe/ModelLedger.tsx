@@ -53,13 +53,13 @@ function LedgerTable(props: { group: LedgerGroup; models: Totals[]; scope: strin
           : "font-semibold text-foreground";
   return (
     <View class="border-y border-line-soft" testID={`stats-ledger-${props.scope}-${props.group.key}`}>
-      <View class="flex-row items-center gap-2 border-b border-line-soft bg-blue/5 px-3" style={{ height: HEAD_HEIGHT }}>
+      <View class="flex-row items-center gap-2 border-b border-line-soft bg-blue/4 px-3" style={{ height: HEAD_HEIGHT }}>
         <Icon name={props.group.icon} size={14} color="ink" />
         <Text class="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-foreground">{props.group.label}</Text>
       </View>
       <View class="flex-row">
         <View class="border-r border-line-soft" style={{ width: stubWidth() }}>
-          <View class="justify-end border-b border-line-soft bg-blue/5 px-3 pb-2.5" style={{ height: HEAD_HEIGHT }}>
+          <View class="justify-end border-b border-line-soft bg-blue/4 px-3 pb-2.5" style={{ height: HEAD_HEIGHT }}>
             <Text class={LABEL}>{t("stats_model")}</Text>
           </View>
           <Each of={props.models} key={(model) => String(model.model)}>
@@ -86,7 +86,7 @@ function LedgerTable(props: { group: LedgerGroup; models: Totals[]; scope: strin
         </View>
         <Scroll horizontal scrollbar={SCROLLBAR} class="flex-1" onLayout={({ bounds }) => viewport.set(bounds.size.width)}>
           <View style={{ width: Math.max(figuresWidth(), viewport()) }}>
-            <View class="flex-row border-b border-line-soft bg-blue/5" style={{ height: HEAD_HEIGHT }}>
+            <View class="flex-row border-b border-line-soft bg-blue/4" style={{ height: HEAD_HEIGHT }}>
               <If when={props.group.showRequests}>
                 <HeadCell label={t("stats_requests")} width={REQUESTS_WIDTH} />
               </If>

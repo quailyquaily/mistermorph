@@ -295,7 +295,7 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
                   disabled={busy()}
                   onPress={() => edit(endpoint())}
                   class={`gap-1 px-2 py-2.5 hover:bg-hover ${index() > 0 ? "border-t border-line-soft" : ""} ${
-                    editorOpen() && editingName() === endpoint().name ? "bg-blue/9" : ""
+                    editorOpen() && editingName() === endpoint().name ? "bg-blue/10" : ""
                   }`}
                 >
                   <View class="flex-row items-center justify-between gap-3">

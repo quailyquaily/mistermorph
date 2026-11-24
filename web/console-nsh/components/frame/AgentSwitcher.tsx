@@ -74,7 +74,7 @@ export function ConnectionMark(props: { online: boolean; class?: string }) {
   return (
     <View
       accessibilityElementsHidden
-      class={`size-2 rounded-[1px] border ${props.online ? "border-status-on bg-status-on" : "border-status-off"} ${props.class ?? ""}`}
+      class={`size-2 rounded-[1px] border ${props.online ? "border-info bg-info" : "border-status-off"} ${props.class ?? ""}`}
     />
   );
 }

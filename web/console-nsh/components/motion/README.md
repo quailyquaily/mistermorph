@@ -39,14 +39,14 @@ starts with a comment on why it is built the way it is; keep that when changing 
 
 ## Theme tokens (theme.json)
 
-- Surfaces: `bg-background` is the page paper (`#f6faff`, Vue `--q-bg-paper`); `bg-sidebar` (index
+- Surfaces: `bg-paper` is the page paper (`#f6faff`, Vue `--q-bg-paper`); `bg-sidebar` (index
   columns of a page: Topics, TODO, Audit, Settings index) is the same paper; `bg-nav` is the app
-  sidebar's light ground (`#edf3f8`, Vue `--q-bg-light`); `bg-muted` / `bg-light-2` is
+  sidebar's light ground (`#edf3f8`, Vue `--q-bg-light`); `bg-muted` is
   `#e5edf5` (Vue `--q-bg-light-2`); `bg-card` `#fbfdff` (Vue `--q-bg-white`).
 - Row states: `bg-hover-soft` (accent 6 %, a row's hover), `bg-selection` (accent 10 %, the selected
   row), `bg-selection-strong` (13 %, the selected row hovered), `bg-hover` (10 %, a plain button's
   hover), `bg-segment` (blue 16 % over paper, an active tab).
-- `border-focus` / `outline` colour `focus` (accent 55 %): the one focus ring.
+- `border-ring` / `outline` colour `ring`: the one focus ring.
 - `bg-press` (`#0000000d`): the press overlay on light buttons. The solid buttons (primary,
   danger, highlight; filled round and capsule buttons) deepen their own fill instead
   (`<tone>-press`), with their hairline (`<tone>-line`), hover fill (`<tone>-hover`), lit edge
@@ -55,8 +55,8 @@ starts with a comment on why it is built the way it is; keep that when changing 
 ## Additions (follow-up)
 
 - `Button`: `align` (`start` default, `center`, `end`, `stretch`, `auto`); `selected` is the
-  ui-kit's toggle-on (ink on accent 10 %); disabled looks per variant from the morph theme (primary
-  `#879db6` with white 72 %, plain not dimmed, outlined/danger on white 50 %).
+  ui-kit's toggle-on (ink on accent 10 %); disabled, every variant is its own look at half
+  opacity (`DISABLED_OPACITY`, the one dimming of every disabled control).
 - `Toggle`: `hideLabel` (the track alone; `label` stays its accessible name).
 - `Section`: `variant="head" | "boxed" | "pane"` (Vue AppSection), `lead`, `literal`, `list`,
   `flush`, `padding`, `fill`, `meta` as text or a node. `plain` / `card` are unchanged.
@@ -68,4 +68,4 @@ starts with a comment on why it is built the way it is; keep that when changing 
 - `FadeText`: one unbroken line, cut mid-word under the fade (not at the last word that fits).
   `onGlyphFade` reports how Android draws the fade (for tests).
 - Line heights: give points (`leading-[22.8px]`), not multiples (`leading-[1.14]`); opacity
-  modifiers on theme colours (`bg-paper/70`) are not resolved: use a token (`bg-paper-soft`).
+  modifiers on theme colours (`bg-paper/70`) are not resolved: use a token (`bg-paper/70`).

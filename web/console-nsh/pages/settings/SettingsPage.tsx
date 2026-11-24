@@ -121,7 +121,7 @@ function SectionItem(props: {
       class={`flex-row items-center gap-2.5 rounded-(--radius) border border-transparent transition-colors duration-180 ${
         props.mobile ? "min-h-11 px-3 py-2.5" : "min-h-10 py-2 pl-3.5 pr-[13px]"
       } ${
-        props.selected ? "hover:bg-blue/3" : "hover:bg-hover-soft"
+        props.selected ? "hover:bg-blue/4" : "hover:bg-hover-soft"
       }`}
     >
       <Icon

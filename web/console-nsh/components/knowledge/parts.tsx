@@ -437,7 +437,7 @@ export function IndexRow(props: {
     isMobile() ? (props.meta ? "leading-[16.2px]" : "leading-[19.5px]") : props.meta ? "leading-[15.1px]" : "leading-[18.2px]";
   // The selected row hovered deepens its fill to 13 %: over the gliding highlight a 3 % layer, on
   // a row that draws its own fill the stronger fill itself.
-  const hover = () => (props.active ? (props.sliding ? "hover:bg-hover-faint" : "hover:bg-selection-strong") : "hover:bg-hover-soft");
+  const hover = () => (props.active ? (props.sliding ? "hover:bg-hover-soft" : "hover:bg-selection-strong") : "hover:bg-hover-soft");
   return (
     <BaseButton
       testID={props.testID}
@@ -514,7 +514,7 @@ export function DetailCard(props: {
 }) {
   const literal = () => props.literal !== false;
   return (
-    <View testID={props.testID} class={`${CARD_CORNERS} border border-line-soft bg-paper-soft ${props.class ?? ""}`}>
+    <View testID={props.testID} class={`${CARD_CORNERS} border border-line-soft bg-paper/70 ${props.class ?? ""}`}>
       <View class="h-12 flex-row items-center gap-2.5 border-b border-line-soft px-4">
         <View selectable class="shrink" style={{ minWidth: 0 }}>
           <FadeText

@@ -193,7 +193,7 @@ export function ImageUploadField(props: ImageUploadFieldProps) {
         accessibilityLabel={previewTitle()}
         disabled={props.disabled || props.busy}
         onPress={openPreviewDialog}
-        class="items-center justify-center overflow-hidden rounded-[8px] border border-transparent transition-colors duration-120 hover:border-blue/45 hover:shadow-[0_0_0_3px_rgba(66,111,158,0.12)] disabled:opacity-70"
+        class="items-center justify-center overflow-hidden rounded-[8px] border border-transparent transition-colors duration-120 hover:border-blue/45 hover:shadow-[0_0_0_3px_rgba(66,111,158,0.12)] disabled:opacity-50"
         style={{ width: props.previewSize ?? 96, height: props.previewSize ?? 96 }}
         testID="image-upload-preview"
       >

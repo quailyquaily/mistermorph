@@ -286,7 +286,7 @@ export function RepairPage() {
                       <View class="flex-1 flex-row items-center">
                         <Text class="shrink text-xs text-subtle line-clamp-1">{item().name}</Text>
                         <If when={fieldLabel(item())}>
-                          <View class="ml-2.5 bg-primary/9 px-1.5 py-0.75">
+                          <View class="ml-2.5 bg-primary/10 px-1.5 py-0.75">
                             <Text class="font-mono text-xs text-primary">{fieldLabel(item())}</Text>
                           </View>
                         </If>

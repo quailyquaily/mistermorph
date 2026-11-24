@@ -236,7 +236,7 @@ function ShortcutRow(props: {
         </Text>
         <If when={props.recording}>
           <View android={{ accessibilityLiveRegion: "polite" }}>
-            <Text class="text-xs leading-[17.4px] text-blue-dark" testID={`shortcut-recording-${part}`}>
+            <Text class="text-xs leading-[17.4px] text-ink" testID={`shortcut-recording-${part}`}>
               {t("shortcuts_recording")}
             </Text>
           </View>

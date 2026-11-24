@@ -77,7 +77,7 @@ function frameStyle() {
 
 function Gallery() {
   return (
-    <View class="flex-1 bg-background" style={frameStyle()}>
+    <View class="flex-1 bg-paper" style={frameStyle()}>
       <Measured name="page" class="flex-1">
         <Text testID="state">{`closed=${closed().join(",") || "none"}`}</Text>
         <Text>{JSON.stringify(frames())}</Text>

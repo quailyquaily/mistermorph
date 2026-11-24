@@ -95,48 +95,15 @@ test("today shows both, and its running job is written, never folded", async () 
   expect(app.texts().includes("Running")).toBe(false);
 });
 
-test("the strip names each repeating job once, from the jobs' schedules, and unfolds the cells and folds them again", async () => {
+test("no strip above the grid and no unfolding: the repeats that went as usual stay marks in the cells", async () => {
   const app = await openCalendar();
-  expect(app.texts()).toContain("REPEATING");
-  const strip = app.texts().slice(app.texts().indexOf("REPEATING") + 1, app.texts().indexOf("Show in days"));
-  expect(strip).toEqual([
-    "Morning report  Every Monday, Tuesday, Wednesday, Thursday, and Friday at 9 AM",
-    // A chained job repeats with the job that starts it.
-    "Team digest  after Morning report",
-    "Sweep  Every 30 minutes",
-    // A job with two repeating schedules is named once, with both. A job only a poke starts is not there.
-    "Backup  Every day at 6 AM · Every Saturday at 6 PM",
-  ]);
-  expect(app.count("id:todo-calendar-repeating-backup")).toBe(1);
-  expect(app.shows("id:todo-calendar-repeating-notes")).toBe(false);
-
-  await app.press("id:todo-calendar-fold");
-  await app.waitFor("label:Fold");
-  // Unfolded: every run is written, and nothing is a mark.
-  expect(marks(app, 24, "off") + marks(app, 24, "on")).toBe(0);
-  for (const text of ["Morning report", "Team digest", "Sweep ×48", "Backup"]) expect(writes(app, 24, text)).toBe(true);
-  expect(writes(app, 20, "Sweep ×48")).toBe(true);
-  // Five lines to a cell, the rest behind a count (with one more run, today has six rows).
-  expect(writes(app, 23, "+1 more")).toBe(false);
-  await app.press("id:fx-live");
-  await app.waitFor(`${day(23)} >> text:+1 more`);
-  // A full day is as tall as its lines: they do not run out of the cell.
-  await app.wait(100);
-  const all = frames(app);
-  expect(all["lines-2026-11-23"].h).toBe(95);
-  expect(all["lines-2026-11-23"].y + 95 <= all["day-2026-11-23"].y + all["day-2026-11-23"].h - 8).toBe(true);
-  // The week is as tall as its tallest day.
-  expect(all["day-2026-11-24"].h).toBe(all["day-2026-11-23"].h);
-
-  await app.press("id:todo-calendar-fold");
-  await app.waitFor("label:Show in days");
+  expect(app.texts()).not.toContain("REPEATING");
+  expect(app.count("id:todo-calendar-repeating")).toBe(0);
+  expect(app.count("id:todo-calendar-fold")).toBe(0);
+  expect(app.count("label:Show in days")).toBe(0);
+  // Today's usual repeats are marks; what differs is written.
   expect(marks(app, 24, "off")).toBe(4);
   expect(writes(app, 24, "Sweep ×48")).toBe(false);
-  expect(writes(app, 23, "+1 more")).toBe(false);
-
-  // No repeating job: no strip.
-  await app.press("id:fx-none");
-  await app.waitFor("id:todo-calendar-repeating", { state: "gone" });
 });
 
 test("the chosen day lists every run in full, a chained run under the run that started it, and a run opens its job", async () => {

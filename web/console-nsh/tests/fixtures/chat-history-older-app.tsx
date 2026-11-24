@@ -22,7 +22,7 @@ const LONG_LABEL = "Load the older messages of this conversation from the histor
 
 function App() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="h-8 flex-row gap-1">
         <View testID="do-loading" onPress={() => loading.set(!loading())} class="h-8 w-16 bg-muted">
           <Text class="text-[10px]">loading</Text>

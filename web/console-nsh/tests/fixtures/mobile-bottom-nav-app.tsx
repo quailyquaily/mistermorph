@@ -56,7 +56,7 @@ function sample(name: string, progress: ReturnType<typeof createAnimatedValue>, 
 
 function Page() {
   return (
-    <View class="relative flex-1 bg-background">
+    <View class="relative flex-1 bg-paper">
       <Text>{JSON.stringify(frames())}</Text>
       <Button
         size="xs"

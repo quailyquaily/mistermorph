@@ -37,18 +37,19 @@ export type SolidState = "rest" | "hover" | "pressed" | "focus";
 /** Each tone's tokens: its fill at rest, on hover and pressed, its hairline and what is written on it. */
 export const SOLID_TONES: Record<SolidTone, { fill: TokenName; hover: TokenName; press: TokenName; line: TokenName; text: TokenName }> = {
   primary: { fill: "primary", hover: "primary-hover", press: "primary-press", line: "primary-line", text: "primary-foreground" },
-  danger: { fill: "destructive", hover: "danger-hover", press: "danger-press", line: "danger-line", text: "destructive-foreground" },
-  warn: { fill: "warn", hover: "warn-hover", press: "warn-press", line: "warn-line", text: "warn-foreground" },
+  danger: { fill: "danger", hover: "danger-hover", press: "danger-press", line: "danger-line", text: "on-accent" },
+  warn: { fill: "warn", hover: "warn-hover", press: "warn-press", line: "warn-line", text: "on-accent" },
 };
 
 // The classes, spelled out (one string per tone) so each reads as the tokens above.
 const SOLID_BOX: Record<SolidTone, string> = {
-  primary: "bg-primary border-[0.5px] border-primary-line hover:bg-primary-hover active:bg-primary-press",
-  danger: "bg-destructive border-[0.5px] border-danger-line hover:bg-danger-hover active:bg-danger-press",
-  warn: "bg-warn border-[0.5px] border-warn-line hover:bg-warn-hover active:bg-warn-press",
+  primary: "bg-primary border-[0.5px] border-primary-line hover:bg-primary-hover active:bg-primary-press disabled:bg-primary",
+  danger: "bg-danger border-[0.5px] border-danger-line hover:bg-danger-hover active:bg-danger-press disabled:bg-danger",
+  warn: "bg-warn border-[0.5px] border-warn-line hover:bg-warn-hover active:bg-warn-press disabled:bg-warn",
 };
 
-/** A solid control's fill and hairline, with its hover and pressed fills (the disabled look is the control's own). */
+/** A solid control's fill and hairline, with its hover and pressed fills; disabled, the fill at rest
+ * (nsh's `hover:` reaches a disabled control: `disabled:` wins over it), which the control fades. */
 export function solidBox(tone: SolidTone): string {
   return SOLID_BOX[tone];
 }

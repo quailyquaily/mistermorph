@@ -84,7 +84,7 @@ function Index() {
 
 function Page() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <View class="flex-row items-center">
         <ModeButton mode="list" />
         <ModeButton mode="empty" />

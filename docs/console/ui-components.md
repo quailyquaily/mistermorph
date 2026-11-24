@@ -25,7 +25,13 @@ in each language and in the light and dark appearance, on a desktop window and o
   the components): every token of `theme.json`
   that both palettes have, in sections by what it is for (surfaces, text, primary and accent,
   status, lines and states, charts; `pages/ui-components/colors.ts`). Each is a swatch drawn in the
-  token as the app draws it now, with its name and its value in the appearance shown. The
+  token as the app draws it now, with its name and its value in the appearance shown. A key that
+  only nsh's own components read (shadcn's names: `background`, `border`, `destructive`, the
+  `*-foreground` that equal `foreground`) also names the Console's token of the same colour, which
+  the Console's code uses instead. Then the tints: a row per colour (blue, primary, info, ok, warn,
+  danger) with its fills and borders at each step a share may take, each step with what it is for
+  (`pages/ui-components/colorRules.js`; `scripts/color-steps.test.mjs` holds the sources to both
+  rules). The filter shows a colour's row by its name. The
   appearance control is the Console's own setting (`themeState.setScheme`), as the language control
   is: the choice is kept on the device.
 - A section index: a sidebar beside the page on a window wider than 900pt (a row per section with

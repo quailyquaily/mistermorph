@@ -197,7 +197,7 @@ function SidebarEdge() {
       style={{ cursor: "col-resize" }}
     >
       <View
-        class={`w-0.5 transition-colors duration-160 group-hover:bg-edge group-focus:bg-edge ${sidebarDragWidth() !== null ? "bg-edge" : ""}`}
+        class={`w-0.5 transition-colors duration-160 group-hover:bg-blue-light/70 group-focus:bg-blue-light/70 ${sidebarDragWidth() !== null ? "bg-blue-light/70" : ""}`}
       />
     </View>
   );

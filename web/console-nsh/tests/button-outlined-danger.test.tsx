@@ -88,13 +88,13 @@ test("its look: the outlined box with a red hairline and red text, the red tint 
   const look = report().looks[VARIANT];
   const outlined = report().looks.outlined;
   const box = classes(look.box);
-  // The outlined box: its translucent fill and 1pt hairline, its disabled fill, its shadow-bearing shape.
+  // The outlined box: its translucent fill and 1pt hairline, its shadow-bearing shape.
   expect(box).toContain("bg-outline-bg");
   expect(box).toContain("border");
-  expect(box).toContain("disabled:bg-outline-disabled-bg");
-  expectAll(classes(outlined.box), ["bg-outline-bg", "border", "disabled:bg-outline-disabled-bg"]);
+  expectAll(classes(outlined.box), ["bg-outline-bg", "border"]);
   // In red, not the neutral hairline or its neutral hover.
   expect(box.some((c) => c.startsWith("border-danger"))).toBe(true);
+  expect(box).not.toContain("border-line");
   expect(box.some((c) => c.includes("outline-line"))).toBe(false);
   expect(box).toContain("hover:bg-close");
   expect(box.some((c) => c.startsWith("hover:border-danger"))).toBe(true);
@@ -104,17 +104,16 @@ test("its look: the outlined box with a red hairline and red text, the red tint 
   expect(look.press).toBe("group-active:bg-danger/4");
   expect(classes(look.selectedBox)).toContain("bg-danger/12");
   expect(look.selectedBox).not.toContain("bg-selection");
-  // Text and glyph: red; pale red when disabled (the danger button's), not a plain opacity.
+  // Text and glyph: red, and red while disabled too (the whole button fades, DISABLED_OPACITY).
   expect(look.text).toBe("danger");
   expect(look.selectedText).toBe("danger");
-  expect(look.textClass).toBe("text-danger group-disabled:text-danger-disabled-text");
-  expect(look.disabledText).toBe("danger-disabled-text");
-  expect(box).toContain("disabled:border-danger-disabled-line");
-  expect(`${look.box} ${look.textClass}`).not.toContain("opacity");
-  // Loading: the red beam, as the danger button's, on the disabled look (as outlined keeps).
+  expect(look.textClass).toBe("text-danger group-disabled:text-danger");
+  // Disabled holds the box at rest (the button fades as a whole).
+  expect(box.filter((c) => c.startsWith("disabled:"))).toEqual(["disabled:bg-outline-bg", "disabled:border-danger/45"]);
+  // Loading: the red beam, as the danger button's, on its own box (as outlined keeps), red text.
   expect(look.beam).toBe("red");
   expect(look.beam).toBe(report().looks.danger.beam);
-  expect(look.loading).toEqual({ box: "", text: "danger-disabled-text" });
+  expect(look.loading).toEqual({ box: "", text: "danger" });
 });
 
 test("the other variants are as they were: no focus look of their own, the blue selection, their own colours", async () => {
@@ -127,16 +126,16 @@ test("the other variants are as they were: no focus look of their own, the blue 
     expect(looks[variant].selectedText).toBe("ink");
   }
   expect(looks.outlined.box).toBe(
-    "bg-outline-bg border border-outline-line hover:bg-outline-bg-hover hover:border-outline-line-hover disabled:bg-outline-disabled-bg disabled:border-outline-disabled-line",
+    "bg-outline-bg border border-line hover:bg-outline-bg-hover hover:border-outline-line-hover disabled:bg-outline-bg disabled:border-line",
   );
   expect(looks.outlined.text).toBe("foreground");
   expect(looks.outlined.beam).toBe("blue");
   expect(looks["ghost-danger"]).toMatchObject({ box: "hover:bg-close disabled:bg-transparent", text: "danger", press: "group-active:bg-press", beam: "red" });
-  expect(looks.danger).toMatchObject({ text: "destructive-foreground", beam: "red", loading: { box: "bg-danger/10 border-[0.5px] border-danger/35", text: "danger" } });
+  expect(looks.danger).toMatchObject({ text: "on-accent", beam: "red", loading: { box: "bg-danger/10 border-[0.5px] border-danger/35", text: "danger" } });
 });
 
 for (const size of SIZES) {
-  test(`${size}: text and icon buttons in red, the outlined button's size, pale red when disabled or loading, red when selected`, async () => {
+  test(`${size}: text and icon buttons in red, the outlined button's size, faded when disabled, red when loading or selected`, async () => {
     const { app, report } = await openVariants();
     const colours = report().colours;
     const text = (id: string) => app.spanStyle(`id:${id} >> text:Delete`);
@@ -151,17 +150,19 @@ for (const size of SIZES) {
     expect(app.count(`id:icon-${VARIANT}-${size} >> text:Delete`)).toBe(0);
     expect(report().frames[`icon-${VARIANT}-${size}`]).toEqual(report().frames[`icon-outlined-${size}`]);
 
-    // Disabled: its own pale red, and no press.
-    expect(text(`off-${VARIANT}-${size}`).color).toBe(colours["danger-disabled-text"]);
-    expect(app.count(`id:off-icon-${VARIANT}-${size}-glyph.danger-disabled-text`)).toBe(1);
+    // Disabled: the red button faded, and no press.
+    expect(text(`off-${VARIANT}-${size}`).color).toBe(colours.danger);
+    expect(app.count(`id:off-icon-${VARIANT}-${size}-glyph.danger`)).toBe(1);
+    expect(app.viewStyle(`id:off-${VARIANT}-${size}`)?.opacity).toBe(0.5);
     expect(app.enabled(`id:off-${VARIANT}-${size}`)).toBe(false);
     await expect(app.press(`id:off-${VARIANT}-${size}`)).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
 
-    // Loading: the beam runs round it, the label stays (pale red), presses are blocked, the size kept.
+    // Loading: the beam runs round it, the label stays (red, not faded), presses are blocked, the size kept.
     expect(app.shows(`id:busy-${VARIANT}-${size}-loading`)).toBe(true);
     expect(app.shows(`id:busy-icon-${VARIANT}-${size}-loading`)).toBe(true);
-    expect(text(`busy-${VARIANT}-${size}`).color).toBe(colours["danger-disabled-text"]);
-    expect(app.count(`id:busy-icon-${VARIANT}-${size}-glyph.danger-disabled-text`)).toBe(1);
+    expect(text(`busy-${VARIANT}-${size}`).color).toBe(colours.danger);
+    expect(app.count(`id:busy-icon-${VARIANT}-${size}-glyph.danger`)).toBe(1);
+    expect(app.viewStyle(`id:busy-${VARIANT}-${size}`)?.opacity).toBe(1);
     expect(app.enabled(`id:busy-${VARIANT}-${size}`)).toBe(false);
     await expect(app.press(`id:busy-${VARIANT}-${size}`)).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
     expect(report().frames[`busy-${VARIANT}-${size}`]).toEqual(report().frames[`text-${VARIANT}-${size}`]);
@@ -211,37 +212,34 @@ for (const colorScheme of ["light", "dark"] as const) {
       expect(contrast(c("danger"), tint(ring, "active:bg-"))).toBeGreaterThanOrEqual(PRESS_FLOOR[colorScheme]);
       // The hairline: at least as strong as the outlined button's, stronger on hover and focus.
       const line = over(c("danger"), idle, dangerAlpha(look.box, "border-"));
-      const neutral = over(c("outline-line"), idle);
+      const neutral = over(c("line"), idle);
       expect(contrast(line, idle)).toBeGreaterThanOrEqual(contrast(neutral, idle));
       const hoverLine = over(c("danger"), hover, dangerAlpha(look.box, "hover:border-"));
       expect(contrast(hoverLine, hover)).toBeGreaterThan(contrast(over(c("danger"), hover, dangerAlpha(look.box, "border-")), hover));
       expect(dangerAlpha(look.focus, "focus:border-")).toBe(dangerAlpha(look.box, "hover:border-"));
-      // Disabled is paler: less contrast than the enabled red, yet still a red, not grey.
-      const disabled = over(c("outline-disabled-bg"), under);
-      const disabledText = over(c("danger-disabled-text"), disabled);
-      expect(contrast(disabledText, disabled)).toBeLessThan(contrast(c("danger"), idle));
-      expect(contrast(disabledText, disabled)).toBeGreaterThan(1.3);
     }
   });
 }
 
-test("CircleButton outlined-danger: a red ring and red glyph, the red tint on hover, focus, press and selected, pale red when disabled", async () => {
+test("CircleButton outlined-danger: a red ring and red glyph, the red tint on hover, focus, press and selected, faded when disabled", async () => {
   const { app, report } = await openVariants();
   const ring = classes(report().circles[VARIANT]);
-  expectAll(ring, ["border", "bg-transparent", "hover:bg-close", "focus:bg-close", "active:bg-danger/14", "selected:bg-danger/12", "disabled:border-danger-disabled-line", "rounded-full"]);
+  expectAll(ring, ["border", "bg-transparent", "hover:bg-close", "focus:bg-close", "active:bg-danger/12", "selected:bg-danger/12", "rounded-full"]);
+  expect(ring.filter((c) => c.startsWith("disabled:"))).toEqual(["disabled:bg-transparent", "disabled:border-danger/45"]);
   expect(ring.some((c) => c.startsWith("border-danger/"))).toBe(true);
   expect(ring.some((c) => c.includes("line-soft"))).toBe(false);
   // The other round variants keep their looks (danger has the solid finish, solidLook.ts).
   expect(report().circles.outlined).toContain("border border-line-soft bg-transparent hover:bg-hover active:bg-press");
-  expect(report().circles.danger).toContain("bg-destructive border-[0.5px] border-danger-line hover:bg-danger-hover active:bg-danger-press");
+  expect(report().circles.danger).toContain("bg-danger border-[0.5px] border-danger-line hover:bg-danger-hover active:bg-danger-press");
 
   expect(app.count(`id:circle-${VARIANT}-glyph.danger`)).toBe(1);
   expect(app.count(`id:circle-${VARIANT}-sm-glyph.danger`)).toBe(1);
   expect(app.count(`id:circle-${VARIANT}-on-glyph.danger`)).toBe(1);
-  expect(app.count(`id:circle-${VARIANT}-off-glyph.danger-disabled-text`)).toBe(1);
+  expect(app.count(`id:circle-${VARIANT}-off-glyph.danger`)).toBe(1);
+  expect(app.viewStyle(`id:circle-${VARIANT}-off`)?.opacity).toBe(0.5);
   // Other variants' glyphs keep their colours, disabled or not.
   expect(app.count("id:circle-outlined-off-glyph.subtle")).toBe(1);
-  expect(app.count("id:circle-danger-glyph.destructive-foreground")).toBe(1);
+  expect(app.count("id:circle-danger-glyph.on-accent")).toBe(1);
   // The circle sizes: 38 and 32.
   expect(report().frames[`circle-${VARIANT}`]).toEqual({ w: 38, h: 38 });
   expect(report().frames[`circle-${VARIANT}-sm`]).toEqual({ w: 32, h: 32 });

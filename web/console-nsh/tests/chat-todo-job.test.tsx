@@ -409,8 +409,8 @@ test("an item that is gone says so; both buttons stay, disabled", async () => {
   const { app } = await openConsole({ location: `/e/default/chat/${TOPIC}`, api: live.api });
   await app.waitFor("The job “Daily digest” no longer exists.");
   expect(app.count("label:Start")).toBe(1);
-  expect(app.count("id:chat-todo-job-toggle-icon.PhPlay.disabled.on-disabled")).toBe(1);
-  expect(app.count("id:chat-todo-job-view-icon.PhListChecks.disabled.plain-disabled-text")).toBe(1);
+  expect(app.count("id:chat-todo-job-toggle-icon.PhPlay.disabled.primary-foreground")).toBe(1);
+  expect(app.count("id:chat-todo-job-view-icon.PhListChecks.disabled.muted-foreground")).toBe(1);
   expect(app.count("label:Stop")).toBe(0);
   expect(app.enabled("id:chat-todo-job-toggle")).toBe(false);
   expect(app.enabled("id:chat-todo-job-view")).toBe(false);

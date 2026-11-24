@@ -106,7 +106,7 @@ export function StatusMark(props: {
   corner?: number;
   /** The settled square's colour in place of the state's own (a mark on a dark panel). */
   color?: string;
-  /** The ring's colour (default the theme's status-on blue). */
+  /** The ring's colour (default the theme's info blue). */
   ringColor?: string;
   class?: string;
   testID?: string;
@@ -119,11 +119,11 @@ export function StatusMark(props: {
         // Something that ended well: the success colour, where "on" only says it is switched on.
         return "ok";
       case "error":
-        return "status-error";
+        return "danger";
       case "off":
         return "status-off";
       default:
-        return "status-on";
+        return "info";
     }
   };
   return (
@@ -300,15 +300,15 @@ export type ButtonSize = "md" | "sm" | "xs" | "xxs";
 // on a hairline that darkens on hover; plain is bare text that takes a soft blue fill on hover.
 // outlined-danger is the outlined box drawn in the danger colour: the quieter of two destructive
 // buttons (`danger`, solid, is the confirming press), offered beside other actions.
-// Disabled looks are the morph theme's (`body[data-theme=morph] .touchable.*[disabled]`): never a
-// plain opacity, each variant fades to its own paler colours.
+// Disabled is one rule for every variant and control: the look at rest at DISABLED_OPACITY, so a
+// disabled button reads as the same button, unavailable (loading, also unpressable, keeps its own
+// look). Each box's `disabled:` classes only hold it at rest: nsh's `hover:` reaches disabled controls.
 const BUTTON_VARIANTS: Record<
   ButtonVariant,
   {
     box: string;
     text: TokenName;
     textClass: string;
-    disabledText: TokenName;
     press: string;
     /** A solid variant's tone (solidLook.ts): its shadows by state. Its `box` holds the tone's fills. */
     solid?: SolidTone;
@@ -318,10 +318,10 @@ const BUTTON_VARIANTS: Record<
     beam: BeamTone;
     /** The box while loading, in place of `box` and its disabled look: filled variants turn soft (a
      * tint of their colour, a hairline and text in it); plain ones gain a faint hairline for the
-     * beam to ride. Without it the variant's disabled look stays (outlined). */
+     * beam to ride. Without it the variant's own box stays (outlined). */
     loadingBox?: string;
-    /** The text and icon colour on `loadingBox`. */
-    loadingText?: TokenName;
+    /** The text and icon colour while loading (on `loadingBox`, if it has one). */
+    loadingText: TokenName;
     /** A box without a border: the faint hairline drawn for the beam to ride while loading, not
      * laid out, so the button keeps its size. */
     loadingTrack?: TokenName;
@@ -334,10 +334,9 @@ const BUTTON_VARIANTS: Record<
   }
 > = {
   primary: {
-    box: `${solidBox("primary")} disabled:bg-primary-disabled disabled:border-primary-disabled-line`,
+    box: solidBox("primary"),
     text: "primary-foreground",
-    textClass: "text-primary-foreground group-disabled:text-on-disabled",
-    disabledText: "on-disabled",
+    textClass: "text-primary-foreground",
     // Pressed, the fill itself deepens (the box's `active:`): no layer over it.
     press: "",
     solid: "primary",
@@ -346,12 +345,12 @@ const BUTTON_VARIANTS: Record<
     loadingText: "ink",
   },
   outlined: {
-    box: "bg-outline-bg border border-outline-line hover:bg-outline-bg-hover hover:border-outline-line-hover disabled:bg-outline-disabled-bg disabled:border-outline-disabled-line",
+    box: "bg-outline-bg border border-line hover:bg-outline-bg-hover hover:border-outline-line-hover disabled:bg-outline-bg disabled:border-line",
     text: "foreground",
-    textClass: "text-foreground group-disabled:text-outline-disabled-text",
-    disabledText: "outline-disabled-text",
+    textClass: "text-foreground",
     press: "group-active:bg-press",
     beam: "blue",
+    loadingText: "muted-foreground",
     shadow: [
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
@@ -360,18 +359,17 @@ const BUTTON_VARIANTS: Record<
   plain: {
     box: "hover:bg-hover disabled:bg-transparent",
     text: "subtle",
-    textClass: "text-subtle group-hover:text-foreground group-disabled:text-plain-disabled-text",
-    disabledText: "plain-disabled-text",
+    textClass: "text-subtle group-hover:text-foreground group-disabled:text-subtle",
     press: "group-active:bg-press",
     beam: "blue",
     loadingBox: "bg-transparent",
+    loadingText: "muted-foreground",
     loadingTrack: "line-faint",
   },
   danger: {
-    box: `${solidBox("danger")} disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line`,
-    text: "destructive-foreground",
-    textClass: "text-destructive-foreground group-disabled:text-danger-disabled-text",
-    disabledText: "danger-disabled-text",
+    box: solidBox("danger"),
+    text: "on-accent",
+    textClass: "text-on-accent",
     press: "",
     solid: "danger",
     beam: "red",
@@ -379,43 +377,41 @@ const BUTTON_VARIANTS: Record<
     loadingText: "danger",
   },
   highlight: {
-    box: `${solidBox("warn")} disabled:bg-warn-disabled disabled:border-warn-disabled-line`,
-    text: "warn-foreground",
-    textClass: "text-warn-foreground group-disabled:text-on-disabled",
-    disabledText: "on-disabled",
+    box: solidBox("warn"),
+    text: "on-accent",
+    textClass: "text-on-accent",
     press: "",
     solid: "warn",
     beam: "amber",
-    loadingBox: "bg-warn/12 border-[0.5px] border-warn/40",
+    loadingBox: "bg-warn/10 border-[0.5px] border-warn/35",
     loadingText: "warn-dark",
   },
   "ghost-danger": {
     box: "hover:bg-close disabled:bg-transparent",
     text: "danger",
-    textClass: "text-danger group-disabled:text-plain-disabled-text",
-    disabledText: "plain-disabled-text",
+    textClass: "text-danger group-disabled:text-danger",
     press: "group-active:bg-press",
     beam: "red",
     loadingBox: "bg-transparent",
-    loadingTrack: "danger-disabled-line",
+    loadingText: "muted-foreground",
+    loadingTrack: "close-hover",
   },
   // The outlined box (its translucent fill, 1pt hairline, corners, shadow and sizes) in the danger
   // colour: a red hairline and red text. Hover and keyboard focus take the soft red tint of the
   // close strip and a deeper hairline (not the neutral white); a press deepens the tint a little;
   // selected is a deeper tint with red text. The tints stay light enough for the red text to keep
   // 4.5:1 at rest, hovered, focused and selected, in either appearance (a press, a moment, may dip
-  // a little under it in the light one, to no less than 4.35:1). Disabled fades to the danger
-  // button's own pale reds; loading keeps that disabled look, as outlined does, with the red beam
-  // riding the hairline.
+  // a little under it in the light one, to no less than 4.35:1). Loading keeps the box, as outlined
+  // does, with the red beam riding the hairline.
   "outlined-danger": {
-    box: "bg-outline-bg border border-danger/45 hover:bg-close hover:border-danger/70 disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line",
+    box: "bg-outline-bg border border-danger/45 hover:bg-close hover:border-danger/60 disabled:bg-outline-bg disabled:border-danger/45",
     text: "danger",
-    textClass: "text-danger group-disabled:text-danger-disabled-text",
-    disabledText: "danger-disabled-text",
+    textClass: "text-danger group-disabled:text-danger",
+    loadingText: "danger",
     press: "group-active:bg-danger/4",
-    focus: "focus:bg-close focus:border-danger/70",
+    focus: "focus:bg-close focus:border-danger/60",
     // Hover and focus keep the deeper tint on a selected button (their own lighter one would read as off).
-    selectedBox: "bg-danger/12 border-danger/70 hover:bg-danger/12 focus:bg-danger/12",
+    selectedBox: "bg-danger/12 border-danger/60 hover:bg-danger/12 focus:bg-danger/12",
     selectedText: "danger",
     beam: "red",
     shadow: [
@@ -432,7 +428,6 @@ export function buttonVariantLook(variant: ButtonVariant = "primary") {
     box: v.box,
     text: v.text,
     textClass: v.textClass,
-    disabledText: v.disabledText,
     press: v.press,
     focus: v.focus ?? "",
     selectedBox: v.selectedBox ?? "bg-selection",
@@ -515,7 +510,7 @@ const wrapBox = (box: string) => `${box.replace(/(^|\s)h-/, "$1min-h-")} py-2`;
 
 const ALIGN_SELF = { start: "self-start", center: "self-center", end: "self-end", stretch: "self-stretch", auto: "self-auto" } as const;
 
-const LOADING_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink", danger: "text-danger", "warn-dark": "text-warn-dark" };
+const LOADING_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink", danger: "text-danger", "warn-dark": "text-warn-dark", "muted-foreground": "text-muted-foreground" };
 /** A selected button's text colour classes. */
 const SELECTED_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink", danger: "text-danger" };
 
@@ -541,7 +536,7 @@ export function BusyBeam(props: {
         length={props.short ? 40 : 64}
         tone={variant().beam}
         track={variant().loadingTrack ? String(token(variant().loadingTrack!)) : undefined}
-        border={props.border ?? (variant().loadingTrack ? 0 : variant().loadingText ? 0.5 : 1)}
+        border={props.border ?? (variant().loadingTrack ? 0 : variant().loadingBox ? 0.5 : 1)}
         radius={props.radius ?? RADIUS.control}
         testID={props.testID}
       />
@@ -555,14 +550,17 @@ export function BusyBeam(props: {
 export const CIRCLE_BUTTON_SIZES = { md: 38, sm: 32 } as const;
 export type CircleButtonSize = keyof typeof CIRCLE_BUTTON_SIZES;
 /** `plain`: bare, the plain button's fill on hover and press; `outlined`: a hairline ring; `primary`:
- * filled ink, and `danger`: filled red, the solid buttons' finish (solidLook.ts) and their pale
- * disabled looks; `close`: a dialog's close button, the soft red tint of the close strip it
- * replaced, deeper on hover; `outlined-danger`: the outlined-danger button's red ring and red
- * glyph, the red tint on hover, focus and press, the danger button's pale reds when disabled. */
+ * filled ink, and `danger`: filled red, the solid buttons' finish (solidLook.ts); `close`: a
+ * dialog's close button, the soft red tint of the close strip it replaced, deeper on hover;
+ * `outlined-danger`: the outlined-danger button's red ring and red glyph, the red tint on hover,
+ * focus and press. Disabled, each is its own look at DISABLED_OPACITY (CircleButton). */
 export type CircleButtonVariant = "plain" | "outlined" | "primary" | "danger" | "close" | "outlined-danger";
 
 /** Every CircleButton variant, in the order the gallery shows them. */
 export const CIRCLE_BUTTON_VARIANT_NAMES: readonly CircleButtonVariant[] = ["plain", "outlined", "primary", "danger", "close", "outlined-danger"];
+
+/** How every disabled control looks: its enabled look, faded to this. */
+export const DISABLED_OPACITY = "opacity-50";
 
 /** The fill of a head's round button while it is on (the Topics head's view toggles, the Contacts head's tabs): a blue tint under a blue icon. */
 export const CIRCLE_BUTTON_ON_FILL = "bg-blue/12";
@@ -575,26 +573,26 @@ export function circleButtonClass(options: { size?: CircleButtonSize; variant?: 
   const side = options.size === "sm" ? "size-8" : "size-[38px]";
   const look =
     options.variant === "primary"
-      ? `${solidBox("primary")} disabled:bg-primary-disabled disabled:border-primary-disabled-line`
+      ? solidBox("primary")
       : options.variant === "danger"
-        ? `${solidBox("danger")} disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line`
+        ? solidBox("danger")
         : options.variant === "close"
           ? "bg-close hover:bg-close-hover focus:bg-close-hover active:bg-close-hover"
         : options.variant === "outlined"
           ? "border border-line-soft bg-transparent hover:bg-hover active:bg-press"
         : options.variant === "outlined-danger"
-          ? "border border-danger/45 bg-transparent hover:bg-close hover:border-danger/70 focus:bg-close focus:border-danger/70 active:bg-danger/14 selected:bg-danger/12 selected:border-danger/70 disabled:bg-transparent disabled:border-danger-disabled-line"
+          ? "border border-danger/45 bg-transparent hover:bg-close hover:border-danger/60 focus:bg-close focus:border-danger/60 active:bg-danger/12 selected:bg-danger/12 selected:border-danger/60 disabled:bg-transparent disabled:border-danger/45"
           : // The plain button's look (BUTTON_VARIANTS.plain): a fill on hover, a deeper one pressed.
             "hover:bg-hover active:bg-press";
   return `relative ${side} items-center justify-center rounded-full transition-colors duration-[180ms] ${look}`;
 }
 
-/** The glyph's colour on a round button's fill: what is written on that fill (its disabled text's
- * while disabled), else the plain glyphs' (an outlined-danger one's is red, pale while disabled). */
-export function circleIconColor(variant?: CircleButtonVariant, disabled = false): TokenName {
-  if (variant === "primary") return disabled ? "on-disabled" : "primary-foreground";
-  if (variant === "danger") return disabled ? "danger-disabled-text" : "destructive-foreground";
-  if (variant === "outlined-danger") return disabled ? "danger-disabled-text" : "danger";
+/** The glyph's colour on a round button's fill: what is written on that fill, else the plain
+ * glyphs' (an outlined-danger one's is red). */
+export function circleIconColor(variant?: CircleButtonVariant): TokenName {
+  if (variant === "primary") return "primary-foreground";
+  if (variant === "danger") return "on-accent";
+  if (variant === "outlined-danger") return "danger";
   return "subtle";
 }
 
@@ -617,13 +615,15 @@ export function CircleButton(props: {
   variant?: CircleButtonVariant;
   selected?: boolean;
   disabled?: boolean;
+  /** Busy: it takes no press (give `disabled` too) but keeps its look, for the beam it carries. */
+  busy?: boolean;
   hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
   onPress?: () => void;
   class?: string;
   testID?: string;
   children?: JSX.Element;
 }) {
-  const circleGlyph = () => props.iconColor ?? circleIconColor(props.variant, !!props.disabled);
+  const circleGlyph = () => props.iconColor ?? circleIconColor(props.variant);
   return (
     <TipButton
       onPress={() => props.onPress?.()}
@@ -633,7 +633,7 @@ export function CircleButton(props: {
       tooltip={<Tip text={props.title} />}
       hitSlop={props.hitSlop as any}
       testID={props.testID}
-      class={`${circleButtonClass({ size: props.size, variant: props.variant })} ${props.class ?? ""}`}
+      class={`${circleButtonClass({ size: props.size, variant: props.variant })} ${props.disabled && !props.busy ? DISABLED_OPACITY : ""} ${props.class ?? ""}`}
       // A filled one's finish (solidLook.ts): its shadows by state; the fills are in its classes.
       style={solidStateStyles(circleSolidTone(props.variant)).style}
       hoverStyle={solidStateStyles(circleSolidTone(props.variant)).hoverStyle}
@@ -664,7 +664,7 @@ export function CircleButton(props: {
  */
 export function busyLook(variant: ButtonVariant = "primary"): { box: string; text: TokenName } {
   const v = BUTTON_VARIANTS[variant];
-  return { box: v.loadingBox ?? "", text: v.loadingText ?? v.disabledText };
+  return { box: v.loadingBox ?? "", text: v.loadingText };
 }
 
 /** The console's button: one command, any input. */
@@ -688,14 +688,14 @@ export function Button(props: ButtonProps) {
   const states = () => solidStateStyles(solid());
   const size = () => BUTTON_SIZES[props.size ?? "sm"];
   const enabled = () => !props.disabled && !props.loading;
-  // Loading is disabled: presses are blocked. Filled variants turn soft (their own tint, hairline
-  // and text) so the beam reads on them; outlined keeps its disabled look; plain ones keep their
-  // disabled text with a faint hairline drawn for the beam. The button's size never changes.
+  // Loading is disabled (presses are blocked) without fading: filled variants turn soft (their own
+  // tint, hairline and text) so the beam reads on them; outlined keeps its box; plain ones take
+  // muted text with a faint hairline drawn for the beam. The button's size never changes.
   const loadingFill = () => (props.loading ? variant().loadingBox : undefined);
   const loadingText = () => (props.loading ? variant().loadingText : undefined);
   const selectedText = () => variant().selectedText ?? "ink";
   const iconColor = (): TokenName =>
-    loadingText() ?? (props.disabled || props.loading ? variant().disabledText : props.selected ? selectedText() : variant().text);
+    loadingText() ?? (props.selected && enabled() ? selectedText() : variant().text);
   const textClass = () =>
     loadingText() ? LOADING_TEXT_CLASS[loadingText()!] : props.selected && enabled() ? SELECTED_TEXT_CLASS[selectedText()] : variant().textClass;
   // A glyph is the whole face: the label is then the button's name, not drawn (ButtonProps.icon).
@@ -714,7 +714,7 @@ export function Button(props: ButtonProps) {
       tooltip={tip() ? <Tip text={tip()!} /> : undefined}
       class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} ${size().corners} border-transparent ${loadingFill() ?? (variant().solid && props.selected ? SELECTED_SOLID_BOX : variant().box)} ${variant().focus ?? ""} ${
         square() && !props.block ? `${size().square} px-0` : props.wrap && !glyphFace() ? wrapBox(size().box) : size().box
-      } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? (variant().selectedBox ?? "bg-selection") : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
+      } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? (variant().selectedBox ?? "bg-selection") : ""} ${props.disabled && !props.loading ? DISABLED_OPACITY : ""} ${actions?.equal() ? "flex-1 min-w-0" : ""} ${props.class ?? ""}`}
       onLayout={props.onLayout}
       // Only the colours ease: a shadow changes at once (solidLook.ts), and nsh zeroes the easing
       // under reduced motion.
@@ -970,7 +970,7 @@ export function CheckboxField(props: {
       disabled={props.disabled}
       onChange={({ checked }) => props.onChange?.(checked)}
       accessibilityLabel={props.label}
-      class={`flex-row items-center gap-2 disabled:opacity-45 ${props.class ?? ""}`}
+      class={`flex-row items-center gap-2 disabled:opacity-50 ${props.class ?? ""}`}
       indicatorClass="size-4 items-center justify-center rounded-(--radius) border border-input bg-field checked:bg-blue checked:border-blue"
       indicator={<Icon name="PhCheck" size={12} color="on-accent" />}
     >
@@ -1279,7 +1279,7 @@ export function DropdownMenu(props: {
           ],
     );
   return (
-    <If when={!props.disabled} else={<View class="opacity-45">{props.trigger}</View>}>
+    <If when={!props.disabled} else={<View class="opacity-50">{props.trigger}</View>}>
     <PopupList
       open={popupSheets() && isOpen()}
       onClose={() => setOpen(false)}
@@ -1486,7 +1486,7 @@ export function Badge(props: { tone?: Tone; label?: string; children?: JSX.Eleme
   const cls = () => {
     switch (props.tone) {
       case "info":
-        return { box: "border-blue-lighter bg-selection", text: "text-blue-dark" };
+        return { box: "border-blue-lighter bg-selection", text: "text-ink" };
       case "ok":
         return { box: "border-ok bg-card", text: "text-ok" };
       case "warn":
@@ -1631,7 +1631,7 @@ function SectionVue(props: {
       style={props.style}
       class={`min-w-0 ${props.fill ? "flex-1" : ""} ${
         props.variant === "boxed"
-          ? `${CARD_CORNERS} border border-line-soft bg-paper-soft`
+          ? `${CARD_CORNERS} border border-line-soft bg-paper/70`
           : props.variant === "pane"
             ? `${windowSize().width <= 720 ? "" : "border-l border-line-soft"}`
             : "gap-4"
@@ -2387,7 +2387,7 @@ export function DialogLayer(props: {
       // Found in tests as `<testID>-scrim`.
       testID={props.testID ? `${props.testID}-scrim` : undefined}
       // On phones the backdrop of More and the agent switcher.
-      class={`absolute inset-0 ${narrow() ? "bg-scrim" : "bg-dialog-scrim"}`}
+      class={`absolute inset-0 ${narrow() ? "bg-scrim" : "bg-scrim"}`}
       style={{ opacity: scrim }}
       // Android hands a touch that nothing in the panel takes (its padding, a label) to the views
       // behind it, so the scrim hears presses on the panel too: only those outside it close.
@@ -2408,7 +2408,7 @@ export function DialogLayer(props: {
       }}
       // On phones the paper of More and the agent switcher: their hairline and shadow, as tall as
       // the window leaves it (lib/mobilePopup.ts); what does not fit scrolls inside it.
-      class={`overflow-hidden ${CONTINUOUS} border bg-dialog ${narrow() ? "w-full border-line-faint" : "max-h-[90%] border-dialog-line"} ${props.panelClass}`}
+      class={`overflow-hidden ${CONTINUOUS} border bg-dialog ${narrow() ? "w-full border-line-faint" : "max-h-[90%] border-line"} ${props.panelClass}`}
       style={{
         ...(props.panelStyle ?? {}),
         ...(narrow() ? { maxHeight: popupFrame().maxHeight } : {}),
@@ -2563,7 +2563,7 @@ export function Modal(props: {
       panelStyle={props.width ? { maxWidth: props.width } : undefined}
       probe={props.probe}
     >
-      <View class="min-h-11 flex-row items-stretch border-b border-dialog-line">
+      <View class="min-h-11 flex-row items-stretch border-b border-line">
         <View class="flex-1 justify-center gap-0.5 py-2 pl-3 pr-2">
           <If when={props.title}>
             <Text class="text-base font-semibold leading-[19.2px] tracking-[-0.32px] text-foreground" role="header" style={{ numberOfLines: 1 }}>
@@ -3046,7 +3046,7 @@ export function Fab(props: {
         accessibilityLabel={props.label}
         testID={props.testID}
         tooltip={<Tip text={props.label} placement="left" />}
-        class={`size-13 items-center justify-center ${CONTROL_CORNERS} border border-primary-line bg-primary transition duration-120 active:translate-y-px disabled:opacity-55`}
+        class={`size-13 items-center justify-center ${CONTROL_CORNERS} border border-primary-line bg-primary transition duration-120 active:translate-y-px disabled:opacity-50`}
         style={{ boxShadow: "0 6px 16px rgba(20, 29, 48, 0.2), 0 1px 3px rgba(20, 29, 48, 0.12)", transitionTimingFunction: MOTION_EASE_CSS }}
         activeStyle={{ boxShadow: "0 2px 6px rgba(20, 29, 48, 0.18)" }}
       >

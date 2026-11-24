@@ -720,7 +720,7 @@ export function MemoriesPage() {
                           <Each of={day().events} key={(event) => String(event.seq ?? event.id)}>
                             {(event, index) => (
                               <View
-                                class={`flex-row items-start gap-4 px-4 py-3 ${index() === 0 ? "" : "border-t border-line-soft"} ${sourcesOf() ? "bg-warn/8" : ""}`}
+                                class={`flex-row items-start gap-4 px-4 py-3 ${index() === 0 ? "" : "border-t border-line-soft"} ${sourcesOf() ? "bg-warn/10" : ""}`}
                                 testID={`journal-event:${event().id}`}
                               >
                                 <Text class="w-[72px] pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">{event().clock}</Text>
@@ -936,7 +936,7 @@ function SectionCard(props: { title: string; meta?: string; literal?: boolean; c
  * Sources banner of the journal. An amber mark and a mono caps label in brackets. */
 function Banner(props: { label: string; text: string; children?: JSX.Element }) {
   return (
-    <View role="alert" class="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-(--radius) border border-warn/45 bg-paper-soft px-3 py-2">
+    <View role="alert" class="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-(--radius) border border-warn/45 bg-paper/70 px-3 py-2">
       <View class="size-[7px] rounded-[1px] bg-status-pending" />
       <Text class="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-status-pending">
         <Text class="opacity-45">[</Text>
@@ -1022,7 +1022,7 @@ function MemoryRow(props: {
         <View class={`gap-3.5 bg-hover-soft pb-4 pr-4 pt-1 ${stacked() ? "pl-4" : "pl-[136px]"}`}>
           <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
             <Text class="text-xs font-medium text-muted-foreground">{t("memories_who_may_hear")}</Text>
-            <View class="h-8 flex-row border border-line-soft bg-background p-0.5" accessibilityLabel={t("memories_field_visibility")}>
+            <View class="h-8 flex-row border border-line-soft bg-paper p-0.5" accessibilityLabel={t("memories_field_visibility")}>
               <Each of={[...VISIBILITIES]}>
                 {(value) => (
                   <BaseButton
@@ -1094,7 +1094,7 @@ function SinceField(props: { value: string; onChange: (value: string) => void })
       testID="journal-since"
       onChange={({ value }) => props.onChange(typeof value === "string" ? value.slice(0, 10) : "")}
       offset={4}
-      popupClass={`${POPOVER_CORNERS} border border-border bg-popover p-3 shadow-md`}
+      popupClass={`${POPOVER_CORNERS} border border-line bg-popover p-3 shadow-md`}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"

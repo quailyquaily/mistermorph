@@ -156,7 +156,7 @@ function ChannelTile(props: { s: SettingsStore; item: { id: string; titleKey: st
           <View
             accessibilityLabel={t("settings_channel_state_running")}
             testID={`settings-channel-${props.item.id}-running`}
-            class="absolute right-3 top-3 size-[7px] rounded-[1px] bg-status-on"
+            class="absolute right-3 top-3 size-[7px] rounded-[1px] bg-info"
           />
         </If>
         <If when={props.item.dirty}>

@@ -8,7 +8,7 @@ import { ContactsPage } from "../../pages/contacts/ContactsPage";
 
 function FixtureApp() {
   return (
-    <View class="flex-1 bg-background">
+    <View class="flex-1 bg-paper">
       <ContactsPage onPartLayout={(name, frame) => host.post("morph.fixture.event", { name, frame })} />
     </View>
   );

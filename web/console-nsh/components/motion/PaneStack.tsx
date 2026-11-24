@@ -39,7 +39,7 @@ import { currentX, FILL, nativeSlide, pageSlideMs, slideFrames, type SlideDriver
 const LEVELS = 4;
 
 /** The fill of a pane that slides: the frame's paper (App.tsx), opaque in every theme. */
-export const PANE_PAPER = "bg-background";
+export const PANE_PAPER = "bg-paper";
 
 export interface PaneStack {
   /** Whether the pane of `level` is drawn: `wanted` (the page's own condition), or while it goes out. */

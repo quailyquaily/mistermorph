@@ -500,7 +500,7 @@ export function DailyUsagePanel() {
       <If when={focusedDay()}>
         {(day) => (
           <View
-            class={`border-l-2 border-blue bg-blue/5 px-2.5 py-1.5 ${phone() ? "gap-y-1" : "flex-row flex-wrap items-baseline gap-x-4.5 gap-y-1.5"}`}
+            class={`border-l-2 border-blue bg-blue/4 px-2.5 py-1.5 ${phone() ? "gap-y-1" : "flex-row flex-wrap items-baseline gap-x-4.5 gap-y-1.5"}`}
             style={{ minHeight: 22 }}
             testID="stats-daily-readout"
           >
@@ -680,7 +680,7 @@ export function DailyUsagePanel() {
                 accessibilityLabel={segmentName(item().key)}
                 tooltip={hint(legendTitle(item()))}
                 testID={`stats-daily-legend-${item().key}`}
-                class={`min-h-6.5 flex-row items-center gap-1.75 border border-transparent px-2 py-0.5 transition-colors duration-150 selected:border-blue selected:bg-blue/8 ${
+                class={`min-h-6.5 flex-row items-center gap-1.75 border border-transparent px-2 py-0.5 transition-colors duration-150 selected:border-blue selected:bg-blue/10 ${
                   isCache() ? "" : "hover:bg-blue/6"
                 } ${isolate() && isolate() !== item().key ? "opacity-45" : ""}`}
               >

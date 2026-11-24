@@ -520,7 +520,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
                       {(server, index) => (
                         <View
                           class={`flex-row items-center gap-3 ${index() > 0 ? "border-t border-line-soft" : ""} ${
-                            paneOpen() && editingIndex() === index() ? "bg-blue/9" : ""
+                            paneOpen() && editingIndex() === index() ? "bg-blue/10" : ""
                           }`}
                         >
                           <View

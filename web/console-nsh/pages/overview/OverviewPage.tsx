@@ -603,7 +603,7 @@ export function OverviewPage() {
           <View
             class={`size-2.25 rounded-[1px] border ${
               props.row.connected
-                ? "border-status-on bg-status-on"
+                ? "border-info bg-info"
                 : props.row.pending
                   ? "border-dashed border-status-pending"
                   : "border-status-off"
@@ -790,7 +790,7 @@ export function OverviewPage() {
         >
           {/* The console: a pale ring 5px clear of the avatar and an accent ring 9px out. */}
           <View class="-m-2.25 rounded-full border border-primary p-0.5">
-            <View class="rounded-full border border-primary/30 p-1.25">
+            <View class="rounded-full border border-primary/35 p-1.25">
               <Portrait row={props.row} size={80} />
             </View>
           </View>

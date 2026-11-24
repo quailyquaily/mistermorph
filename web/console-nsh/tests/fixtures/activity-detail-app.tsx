@@ -32,7 +32,7 @@ const item = () =>
 
 function Gallery() {
   return (
-    <View class="flex-1 flex-row bg-background">
+    <View class="flex-1 flex-row bg-paper">
       <View class="w-[120px] gap-2 p-2">
         <Button testID="add-step" size="xs" label="add" onPress={() => steps.update((list) => [...list.map((s) => ({ ...s, status: "completed" })), { step: `Step ${list.length + 1}`, status: "in_progress" }])} />
         <Button testID="drop-reply" size="xs" label="drop" onPress={() => gone.set(true)} />

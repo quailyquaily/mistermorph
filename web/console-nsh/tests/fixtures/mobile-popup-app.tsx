@@ -102,7 +102,7 @@ const CALENDAR = {
 function Page() {
   const close = () => which.set(null);
   return (
-    <View class="flex-1 gap-1 bg-background p-2">
+    <View class="flex-1 gap-1 bg-paper p-2">
       <View class="flex-row flex-wrap gap-1">
         <Button size="xs" label="keyboard" onPress={() => standInKeyboard(300)} testID="keyboard-up" />
         <Button size="xs" label="no keyboard" onPress={() => standInKeyboard(null)} testID="keyboard-down" />

@@ -77,7 +77,7 @@ test("a browser is asked for backdrop-filter, by its prefixed name too", () => {
 });
 
 test("the surfaces share one tint, and are opaque without glass", () => {
-  expect(glassFill("bar", true)).toBe(`bg-background/${GLASS_TINT}`);
+  expect(glassFill("bar", true)).toBe(`bg-paper/${GLASS_TINT}`);
   expect(glassFill("nav", true)).toBe(`bg-card/${GLASS_TINT}`);
   expect(glassFill("composer", true)).toBe(`bg-dialog/${GLASS_TINT}`);
   // The tint keeps most of the fill, so text on it stays readable over busy content.
@@ -149,12 +149,12 @@ test("with glass the surfaces take the tint and the blur, and only their backdro
   const { app, read } = await openSurfaces();
   const on = await setGlass(app, read, true);
   expect(on.style).toEqual({ backdropFilter: `blur(${GLASS_BLUR}px)` });
-  expect(on.bar).toBe(`bg-background/${GLASS_TINT}`);
+  expect(on.bar).toBe(`bg-paper/${GLASS_TINT}`);
   expect(on.nav).toBe(`bg-card/${GLASS_TINT}`);
   expect(on.composer).toBe(`bg-dialog/${GLASS_TINT}`);
   expect(on.composerFrame.split(" ")).toContain(`bg-dialog/${GLASS_TINT}`);
   // A bar is above the scroller pulled under it.
-  expect(on.barClass.split(" ")).toEqual(["relative", "z-10", `bg-background/${GLASS_TINT}`]);
+  expect(on.barClass.split(" ")).toEqual(["relative", "z-10", `bg-paper/${GLASS_TINT}`]);
   // No surface dims or blurs what it holds: no `opacity`, no `filter` on the surface itself.
   for (const classes of [on.bar, on.nav, on.composer, on.barClass, on.composerFrame]) {
     expect(/(^| )opacity-|(^| )blur|backdrop-opacity/.test(classes)).toBe(false);
