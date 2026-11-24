@@ -65,3 +65,14 @@ Verification: manager reran the complete required gate after the final commit un
 Not checked: live model/channel approval flows, real OS keyring, and live running Console reload (wiring covered by tests). LINE/Lark approval UI availability remains unverified. No Console frontend changed.
 Push: initial credential-helper invocation lacked repository path; command-local credential.useHttpPath=true resolved it on the single retry. Code branch pushed successfully.
 Move: new/ → review/. Review should inspect the conservative denylist, owner identity and approval resume handling, secret redaction/storage, and runtime registration coverage.
+
+## factory · review · 2026-11-24 21:00
+head: 50247f4f57865697236f0e32068e35d355840682
+verdict: pass
+notes:
+- Claude Code reviewed all 37 changed files against origin/master (7c405d1b), the item request and plan, using the review-code skill and security-review reference. No qualifying findings; no code changes or commits.
+- Required gate passed in isolated HOME/XDG/GOCACHE with offline read-only module cache: gofmt clean; go vet ./... clean; go test ./... exit 0 (169 packages ok).
+- Temporary isolated probes passed for recursive masking and aliases, tool_search/forced-approval/resume with in-memory keyring, owner and denylist enforcement, mask rejection, and first-run file/database storage. Branch merges cleanly with base.
+- Residual risks: nonsecret config_get values are readable to all audiences; unrecognised credentials embedded in MCP args, URLs or unusual keys are not guaranteed masked. Secret setter arguments remain in pending approval storage, though approval presentation/log output is masked. Command-line overrides still take precedence over persisted settings.
+- Not checked: live channel approval UI (including LINE/Lark), real OS keyring, live Console runtime reload. No frontend changed. Installs: none. Runtime-owned temporary output was observed outside the run directory and recorded for owner-confirmed cleanup.
+- Move: review/ → ready/.
