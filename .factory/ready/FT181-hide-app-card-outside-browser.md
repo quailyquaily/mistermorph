@@ -55,3 +55,15 @@ notes:
 Scheduled ship did not merge this item. Merge conflict: web/console-nsh/tests/settings-page-sections.test.tsx.
 Base head before attempted merge: 018bbcd8cc6f1452f02990bd38e0d8522d95a863. Published base after this batch: 1c4ba732 (v0.3.133).
 Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.
+
+## factory · review · 2026-11-25 08:09
+head: 7c95825b2f47ac68750bfd488fe34c366bd68d9a
+verdict: pass
+notes:
+- Merged current master (1c4ba732) into the item branch and pushed merge commit 7c95825b. Resolved the settings-page-sections.test.tsx conflict by retaining both App visibility/search tests and master's logout test; no unrelated fixes. No forbidden paths changed against master.
+- Claude Code separately reviewed all nine files in origin/master...HEAD against the request and plan. No findings. Browser/runtime predicate, empty rendering, search exclusion, runtime boot, translations and merge resolution checked; worktree unchanged during review.
+- Fresh review checks passed: configured gofmt/vet/Go gate (169 packages ok), nsh check, required concurrent Console runner (165 files, 0 failed, 341 seconds). Four parallel failures passed the runner's isolated retries; both changed test files passed initially. Repair checks also passed, and the manager independently reran the Go gate successfully.
+- No installs or dependency changes. Scripted tests used isolated HOME/XDG/build caches; pinned shared Go modules were read offline and nsh's cached TypeScript copied into isolation.
+- Not checked: real browser/desktop/Android/iOS UI, physical no-gap layout measurement, iOS regression case, phone-width pull-to-reveal search or separate core Node suite.
+- Temporary-area observations outside the run directory were recorded for owner-confirmed cleanup, not deleted; attribution to this run is unproven. No personal CLI memory writes reported.
+- Move: review/ → ready/. Awaiting ship; master and tags unchanged by this review run.
