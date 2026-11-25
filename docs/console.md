@@ -195,7 +195,21 @@ workspace. Short work in a known workspace may run in Solo itself with `workspac
   successful tool calls: the workspace (shell tools, `workspace_use`, and `read_file`/
   `write_file` on a file really inside it, symlinks resolved), the
   threads it started, the topics it read (both open when pressed), the memory and the
-  journal (`result.solo_sources`).
+  journal (`result.solo_sources`). A topic the reply read that Solo started as a thread
+  (the topic's stored `started_from`), in this reply or an earlier one, shows as that
+  thread; topic chips are ordinary topics only.
+- **Chip details.** Pressing a workspace, memory or journal chip opens a dialog over the
+  conversation with what the reply did with it: each kind of use (chose the workspace,
+  read or wrote files, ran shell commands, worked with a coding agent; searched, saved
+  to or removed from the memory; searched or read the journal) with the number of
+  successful tool calls. Each source in `result.solo_sources` keeps these as `uses`
+  (`action`, `count`) and nothing else: no arguments, output, commands, file paths,
+  file content or search text. A reply from before uses were kept names its source and
+  says its details were not recorded.
+- **Back to Solo.** On the phone layout, Back from a topic opened from Solo (a thread or
+  topic chip, or a card's Open thread) returns to Solo: the bar's arrow, Android's Back
+  and the iPhone's edge swipe. A topic opened any other way goes back to the topic
+  list. The desktop layout has no such Back.
 - **Context.** Solo keeps summaries and links; a thread's full working context stays in
   the thread, and what is said there stays there. Each Solo run's prompt lists the
   recent threads with their topic IDs, workspaces, states and summaries, whatever the
