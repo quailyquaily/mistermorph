@@ -2,13 +2,9 @@ package consolecmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -16,13 +12,11 @@ import (
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
-	"github.com/quailyquaily/mistermorph/internal/memorytools"
 	"github.com/quailyquaily/mistermorph/internal/ownertools"
 	"github.com/quailyquaily/mistermorph/internal/pagination"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
-	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
-	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
 // Solo is the owner's one pinned conversation with the agent (daemonruntime.ConsoleSoloTopicID).
@@ -34,14 +28,9 @@ import (
 // tool calls.
 
 const (
-	// soloPromptThreads is how many recent work threads a Solo run is told about.
-	soloPromptThreads = 10
-	// soloRecordScan is how many of Solo's newest tasks are read for its thread records.
-	soloRecordScan = 200
-	// soloSummaryRunes and soloPromptSummaryRunes cut a thread's reply for Solo and its prompt.
-	soloSummaryRunes       = 1500
-	soloPromptSummaryRunes = 300
-	soloCardSummaryRunes   = 600
+	// soloSummaryRunes and soloCardSummaryRunes cut a thread's reply for its summary and its card.
+	soloSummaryRunes     = 1500
+	soloCardSummaryRunes = 600
 )
 
 // consoleSoloTopics is the topic reader of the Console's routes: the store, with Solo made on the
@@ -243,27 +232,6 @@ func soloRecordResult(rec daemonruntime.SoloThread, text string) map[string]any 
 	}
 }
 
-// soloThreadOf reads a Solo record's thread from its task's result.
-func soloThreadOf(info daemonruntime.TaskInfo) (daemonruntime.SoloThread, bool) {
-	result, ok := info.Result.(map[string]any)
-	if !ok {
-		return daemonruntime.SoloThread{}, false
-	}
-	value, ok := result[daemonruntime.SoloThreadResultKey]
-	if !ok || value == nil {
-		return daemonruntime.SoloThread{}, false
-	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return daemonruntime.SoloThread{}, false
-	}
-	var rec daemonruntime.SoloThread
-	if json.Unmarshal(raw, &rec) != nil || strings.TrimSpace(rec.TaskID) == "" {
-		return daemonruntime.SoloThread{}, false
-	}
-	return rec, true
-}
-
 func soloCardText(rec daemonruntime.SoloThread) string {
 	verb := "Started work thread"
 	if rec.Continued {
@@ -315,7 +283,7 @@ func (r *consoleLocalRuntime) syncSoloThread(taskID string) {
 	if !ok || card == nil || card.TopicID != daemonruntime.ConsoleSoloTopicID {
 		return
 	}
-	rec, ok := soloThreadOf(*card)
+	rec, ok := solo.ThreadOf(*card)
 	if !ok {
 		return
 	}
@@ -333,7 +301,7 @@ func (r *consoleLocalRuntime) syncSoloThread(taskID string) {
 				finished = task.FinishedAt.UTC()
 			}
 			rec.FinishedAt = finished.Format(time.RFC3339)
-			rec.Summary = cutRunes(soloThreadOutcome(task, found), soloCardSummaryRunes)
+			rec.Summary = solo.CutRunes(soloThreadOutcome(task, found), soloCardSummaryRunes)
 		}
 		if err := r.store.Update(cardID, func(info *daemonruntime.TaskInfo) {
 			info.Result = soloRecordResult(rec, soloCardText(rec))
@@ -384,7 +352,7 @@ func (r *consoleLocalRuntime) postSoloSummaryLocked(rec daemonruntime.SoloThread
 	}
 	outcome := soloThreadOutcome(task, found)
 	rec.Kind = daemonruntime.SoloRecordSummary
-	rec.Summary = cutRunes(outcome, soloSummaryRunes)
+	rec.Summary = solo.CutRunes(outcome, soloSummaryRunes)
 	var head string
 	switch rec.State {
 	case daemonruntime.SoloThreadDone:
@@ -394,32 +362,23 @@ func (r *consoleLocalRuntime) postSoloSummaryLocked(rec daemonruntime.SoloThread
 	default:
 		head = fmt.Sprintf("Work thread %q failed", rec.Title)
 	}
-	text := fmt.Sprintf("%s (topic %s, workspace %s).\n\n%s", head, rec.TopicID, rec.Workspace, rec.Summary)
+	// The reply goes into Solo's history, which a later Solo run reads as its own: quoted as data.
+	text := fmt.Sprintf("%s (topic %s, workspace %s).", head, rec.TopicID, rec.Workspace)
+	if quoted := solo.QuoteReply(rec.Summary); quoted != "" {
+		text += "\n\n" + quoted
+	}
 	info := soloRecordInfo(summaryID, rec, text, time.Now())
 	if err := r.store.UpsertWithTrigger(info, daemonruntime.TaskTrigger{Source: "ui", Event: "solo_thread_summary", Ref: rec.TopicID}, ""); err != nil {
 		r.currentLogger().Warn("console_solo_summary_write_failed", "task_id", rec.TaskID, "error", err.Error())
 	}
 }
 
-// soloThreadRecords are Solo's thread cards, newest first.
+// soloThreadRecords are Solo's thread cards, newest first (all of them when limit is 0).
 func (r *consoleLocalRuntime) soloThreadRecords(limit int) []daemonruntime.SoloThread {
 	if r == nil || r.store == nil {
 		return nil
 	}
-	tasks := r.store.List(daemonruntime.TaskListOptions{TopicID: daemonruntime.ConsoleSoloTopicID, Limit: soloRecordScan})
-	var out []daemonruntime.SoloThread
-	for _, task := range tasks {
-		if daemonruntime.SoloThreadTaskIDFromCard(task.ID) == "" {
-			continue
-		}
-		if rec, ok := soloThreadOf(task); ok {
-			out = append(out, rec)
-			if limit > 0 && len(out) == limit {
-				break
-			}
-		}
-	}
-	return out
+	return solo.ThreadRecords(r.store, limit)
 }
 
 // reconcileSoloThreads catches up on the threads whose end Solo missed: their task ended (or was
@@ -433,213 +392,7 @@ func (r *consoleLocalRuntime) reconcileSoloThreads() {
 	}
 }
 
-// soloPromptBlock tells a Solo run what Solo is and what its recent work threads came to, so the
-// threads stay known however far back they were started and whatever compaction kept.
+// soloPromptBlock is a Console Solo run's Solo block (solo.PromptBlock).
 func (r *consoleLocalRuntime) soloPromptBlock() agent.PromptBlock {
-	var b strings.Builder
-	b.WriteString("## Solo\n\n")
-	b.WriteString("This is Solo, the owner's one conversation with you. For each message decide: answer here; recall what you need (memory_search, journal_search and journal_read, topic_search and topic_read for earlier work in other topics); or work. ")
-	b.WriteString("Work that needs a project folder or will take more than a short while goes into a work thread with work_thread: a topic of its own, with its workspace, running in the background while Solo stays free. Give it a short title and a complete task (the thread does not see this conversation), then answer briefly; do not wait for it. ")
-	b.WriteString("Give an earlier thread more work by passing its topic_id. Short work in a known workspace may run here with workspace_use. ")
-	b.WriteString("When it is not clear which workspace a piece of work belongs to, ask the user (ask_user, or in your reply) instead of guessing; never invent a path. ")
-	b.WriteString("A thread's card shows its state here and its summary comes here when it ends; the user can open a thread and go on there.\n")
-	records := r.soloThreadRecords(soloPromptThreads)
-	if len(records) > 0 {
-		b.WriteString("\nRecent work threads, newest first:\n")
-		for _, rec := range records {
-			fmt.Fprintf(&b, "- %q, topic %s, workspace %s: %s", rec.Title, rec.TopicID, rec.Workspace, rec.State)
-			if summary := strings.Join(strings.Fields(rec.Summary), " "); summary != "" {
-				fmt.Fprintf(&b, " — %s", cutRunes(summary, soloPromptSummaryRunes))
-			}
-			b.WriteString("\n")
-		}
-	}
-	return agent.PromptBlock{Content: b.String()}
-}
-
-func cutRunes(text string, max int) string {
-	text = strings.TrimSpace(text)
-	runes := []rune(text)
-	if len(runes) <= max {
-		return text
-	}
-	return strings.TrimSpace(string(runes[:max])) + "…"
-}
-
-// soloSourceCollector gathers, from a Solo run's finished tool calls, the workspace it used and
-// the threads and sources it touched: only what its calls actually did, never a guess.
-type soloSourceCollector struct {
-	mu      sync.Mutex
-	runID   string
-	home    string
-	items   []daemonruntime.SoloSource
-	seen    map[string]bool
-	threads map[string]bool
-}
-
-func newSoloSourceCollector(runID string) *soloSourceCollector {
-	return &soloSourceCollector{runID: strings.TrimSpace(runID), home: workspace.HostHomeDir(), seen: map[string]bool{}, threads: map[string]bool{}}
-}
-
-// soloWorkspaceTools are the calls that work in the run's workspace.
-var soloWorkspaceTools = map[string]bool{
-	"read_file": true, "write_file": true, "bash": true, "powershell": true, "coder": true,
-}
-
-// soloPathTools name the file they touch in a path argument; they count as workspace use only when
-// that path resolves inside the workspace.
-var soloPathTools = map[string]bool{"read_file": true, "write_file": true}
-
-// soloPathInWorkspace reports whether the file a read_file/write_file call named is inside
-// workspace dir. The path is resolved by the tools' own resolvers with the workspace as the only
-// root, so what they would refuse there (file_cache_dir/ and file_state_dir/ aliases, paths that
-// leave the workspace) never counts. Then the file's real place counts: a symlink in the workspace
-// that points outside it is not the workspace, and a path through a link to the workspace is.
-func soloPathInWorkspace(tool string, rawPath string, dir string) bool {
-	if strings.TrimSpace(rawPath) == "" {
-		return false
-	}
-	base, err := filepath.Abs(pathutil.ExpandHomePath(strings.TrimSpace(dir)))
-	if err != nil {
-		return false
-	}
-	roots := pathroots.New(base, "", "")
-	var path string
-	if tool == "write_file" {
-		_, path, err = builtin.ResolveWritePath(roots, rawPath)
-	} else {
-		path, err = builtin.ResolveReadPath(roots, rawPath)
-	}
-	if err != nil {
-		return false
-	}
-	realBase, err := filepath.EvalSymlinks(base)
-	if err != nil {
-		realBase = base
-	}
-	realPath, err := evalSymlinksOfExisting(path)
-	if err != nil {
-		return false
-	}
-	return pathutil.IsWithinDir(realBase, realPath)
-}
-
-// evalSymlinksOfExisting resolves the symlinks of path's longest existing prefix (a file
-// write_file creates need not exist yet) and joins the rest back on. A dangling link is followed
-// to where it points, as a write through it would create its target there.
-func evalSymlinksOfExisting(path string) (string, error) {
-	for hops := 0; hops < 40; hops++ {
-		rest := ""
-		for {
-			real, err := filepath.EvalSymlinks(path)
-			if err == nil {
-				return filepath.Join(real, rest), nil
-			}
-			if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
-				target, rerr := os.Readlink(path)
-				if rerr != nil {
-					return "", rerr
-				}
-				if !filepath.IsAbs(target) {
-					target = filepath.Join(filepath.Dir(path), target)
-				}
-				path = filepath.Join(target, rest)
-				break
-			}
-			parent := filepath.Dir(path)
-			if parent == path {
-				return "", err
-			}
-			rest = filepath.Join(filepath.Base(path), rest)
-			path = parent
-		}
-	}
-	return "", fmt.Errorf("too many links: %s", path)
-}
-
-func (c *soloSourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
-	if c == nil || event.Kind != agent.EventKindToolDone || strings.TrimSpace(event.Error) != "" || event.Worker != nil {
-		return
-	}
-	if runID := strings.TrimSpace(event.RunID); runID != "" && runID != c.runID {
-		return
-	}
-	name := strings.TrimSpace(event.ToolName)
-	switch {
-	case name == ownertools.WorkspaceUseName:
-		var out struct {
-			Dir     string `json:"workspace_dir"`
-			Display string `json:"display"`
-		}
-		if json.Unmarshal([]byte(strings.TrimSpace(event.Text)), &out) == nil && strings.TrimSpace(out.Dir) != "" {
-			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: out.Dir, Label: out.Display})
-		}
-	case soloWorkspaceTools[name]:
-		dir, ok := pathroots.WorkspaceDirFromContext(ctx)
-		if !ok || strings.TrimSpace(dir) == "" {
-			return
-		}
-		if soloPathTools[name] {
-			path, _ := event.Args["path"].(string)
-			if !soloPathInWorkspace(name, path, dir) {
-				return
-			}
-		}
-		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: dir, Label: ownertools.DisplayPath(dir, c.home)})
-	case name == ownertools.TopicReadName:
-		var out struct {
-			Topic struct {
-				ID    string `json:"id"`
-				Title string `json:"title"`
-			} `json:"topic"`
-		}
-		if json.Unmarshal([]byte(strings.TrimSpace(event.Text)), &out) == nil && strings.TrimSpace(out.Topic.ID) != "" {
-			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceTopic, ID: out.Topic.ID, Label: out.Topic.Title})
-		}
-	case name == ownertools.WorkThreadName:
-		var out struct {
-			TopicID   string `json:"topic_id"`
-			Title     string `json:"title"`
-			Workspace string `json:"workspace"`
-		}
-		if json.Unmarshal([]byte(strings.TrimSpace(event.Text)), &out) == nil && strings.TrimSpace(out.TopicID) != "" {
-			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceThread, ID: out.TopicID, Label: out.Title})
-		}
-	case name == memorytools.SearchName || name == memorytools.SaveName || name == memorytools.ForgetName:
-		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceMemory})
-	case name == memorytools.JournalSearchName || name == memorytools.JournalReadName:
-		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceJournal})
-	}
-}
-
-func (c *soloSourceCollector) add(source daemonruntime.SoloSource) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	key := source.Kind + "\x00" + source.ID
-	if c.seen[key] {
-		return
-	}
-	c.seen[key] = true
-	if source.Kind == daemonruntime.SoloSourceThread {
-		c.threads[source.ID] = true
-	}
-	c.items = append(c.items, source)
-}
-
-// Sources is what the run used, in the order it first used each; a topic the run started a thread
-// in shows once, as the thread.
-func (c *soloSourceCollector) Sources() []daemonruntime.SoloSource {
-	if c == nil {
-		return nil
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := make([]daemonruntime.SoloSource, 0, len(c.items))
-	for _, item := range c.items {
-		if item.Kind == daemonruntime.SoloSourceTopic && c.threads[item.ID] {
-			continue
-		}
-		out = append(out, item)
-	}
-	return out
+	return solo.PromptBlock(solo.PromptConsole, r.soloThreadRecords(solo.PromptThreads))
 }

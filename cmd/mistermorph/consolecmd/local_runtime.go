@@ -55,6 +55,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
+	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/streaming"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
@@ -2518,9 +2519,9 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		}
 	}
 	// A Solo reply shows what its run used: the workspace, the threads and the sources (solo.go).
-	var soloSources *soloSourceCollector
+	var soloSources *solo.SourceCollector
 	if consoleSoloRun(job) {
-		soloSources = newSoloSourceCollector(job.TaskID)
+		soloSources = solo.NewSourceCollector(job.TaskID)
 	}
 	eventSink := agent.EventSinkFunc(func(ctx context.Context, event agent.Event) {
 		trace.HandleEvent(ctx, event)
