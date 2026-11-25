@@ -74,3 +74,6 @@ notes:
 - Not checked: repeat real-browser measurements, real backend Console, native desktop, physical Android or Android JVM tests (no JDK). Headless layout does not replace real renderer verification.
 - Installs: none; pinned nsh cache copied into isolated test HOME and shared Go modules read offline. No personal memory writes reported. Harness output and working-directory tracking were observed outside the run directory in the shared temporary area; recorded for owner-confirmed cleanup, not deleted.
 - Move: review/ → ready/. Awaiting ship.
+
+## factory · 2026-11-25 15:19
+Shipped in v0.3.134 by the owner's word ("ship the items at ready/"). Merge commit 100e31b6 on master; tag v0.3.134. No linked issues or PRs. Branch factory/FT178-skill-install-preview-mobile-overflow kept (ship has no clean action).

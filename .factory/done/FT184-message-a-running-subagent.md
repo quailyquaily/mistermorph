@@ -82,3 +82,6 @@ Claude Code reviewed all 43 changed files in origin/master...HEAD against the re
 Validation: manager independently passed gofmt, go vet ./... and go test ./... in isolated HOME; coder independently passed those checks (169 packages), nsh check, 315 core JS tests, and the full required Console script (167 files, 0 failed). Two Console files failed under concurrent execution and passed the runner's isolated retry. Worktree clean; diff whitespace check passed.
 Installs: none. Not checked: live-model operation, visual UI, desktop, Android keyboard, live terminal steering or older runtimes. Message-history retention remains bounded to 64 messages.
 Outside-dir observation: coder harness background output was recorded for owner inspection, not deleted; a mistaken redirect to an existing temporary directory failed without writing. No base branch or tags changed. Moved review/ → ready/.
+
+## factory · 2026-11-25 15:19
+Shipped in v0.3.134 by the owner's word ("ship the items at ready/"). Merge commit 5216a323 on master; tag v0.3.134. No linked issues or PRs. Branch factory/FT184-message-a-running-subagent kept (ship has no clean action).

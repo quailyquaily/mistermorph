@@ -91,3 +91,7 @@ Validation: gofmt and go vet ./... pass. Initial go test ./... hit an unrelated 
 Not checked: live model tool discovery/use, manual approval cards, Settings matrix in a browser, Android JVM tests (no JDK). Residual uncertainties: symlink replacement after selection, workspace-list topic-title trust marking, inherited deny_paths folder semantics, and current-topic search matches. No claim of manual UI verification.
 
 Installs: none. Test HOME/XDG directories were isolated; shared Go module cache was reused offline and pinned nsh cache copied in (cache-isolation deviation). No new top-level /tmp entries observed; existing outside records retained. Previous review worktree removed during recovery. Review temporary artifacts removed at end. Moved review/ → ready/; not merged into master.
+
+## factory · 2026-11-25 15:19
+Shipped in v0.3.134 by the owner's word ("ship the items at ready/"). Merge commit d65f941f on master; tag v0.3.134. No linked issues or PRs. Branch factory/FT185-agent-tools-across-topics-and-workspaces kept (ship has no clean action).
+The merge conflicted with FT184 in docs/console.md: both added a section at the same place. Both were kept, FT184's "Messages to running subagents" first, then this item's "Other topics and workspaces".

@@ -56,3 +56,7 @@ notes:
 - Temporary review tools: cjdk 0.5.0, Temurin JDK 17.0.21.1+2, Maven R8 8.5.35, Robolectric Android 15; real nsh v0.6.0 runtime assets downloaded as test data. All temporary tools removed at run end, no system-wide installs.
 - Written outside dir: JVM perf data and Claude tool-output scratch paths in the shared temporary area, recorded for owner-approved clean only. Shared Go build cache reused. No memory/settings edits reported; worktree clean.
 - Moved review/ → ready/. No linked issue or PR to comment on.
+
+## factory · 2026-11-25 15:19
+Shipped in v0.3.134 by the owner's word ("ship the items at ready/"). Merge commit 7eac7239 on master; tag v0.3.134. No linked issues or PRs. Branch factory/FT187-android-nested-scroll-gesture-dispatch kept (ship has no clean action).
+Its JVM tests (scripts/android-host.sh test) ran on the merged master with a temporary Temurin JDK 17, fetched into the ship run's temp folder and removed with it: 55 passed.

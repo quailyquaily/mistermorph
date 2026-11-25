@@ -67,3 +67,6 @@ notes:
 - Not checked: real browser/desktop/Android/iOS UI, physical no-gap layout measurement, iOS regression case, phone-width pull-to-reveal search or separate core Node suite.
 - Temporary-area observations outside the run directory were recorded for owner-confirmed cleanup, not deleted; attribution to this run is unproven. No personal CLI memory writes reported.
 - Move: review/ → ready/. Awaiting ship; master and tags unchanged by this review run.
+
+## factory · 2026-11-25 15:19
+Shipped in v0.3.134 by the owner's word ("ship the items at ready/"). Merge commit 64be86ef on master; tag v0.3.134. No linked issues or PRs. Branch factory/FT181-hide-app-card-outside-browser kept (ship has no clean action).
