@@ -73,3 +73,21 @@ Installs: none. Shared Go module cache reused offline and nsh cache copied into 
 Scheduled ship did not merge this item. Merge conflict: assets/config/config.example.yaml, tools/tool.go.
 Base head before attempted merge: 1c4ba7323ef05881cd1784a97d8ea2757a427bca. Published base after this batch: 1c4ba732 (v0.3.133).
 Merge aborted without code changes. Back to review/; next review must merge the current master, resolve conflicts, test and review the new head.
+
+
+## factory · review · 2026-11-25 09:52
+head: 9c8ea436a19317059471efbcf1bd5bbd76da5f85
+verdict: pass
+notes:
+- [P2] cmd/mistermorph/consolecmd/local_runtime.go:2937: /home/morph/morta/Codework artifact references still resolve through the topic attachment rather than the selected run workspace. Verified: switch from topic-ws to other, approve and write /home/morph/morta/Codework/report.html, then emit an artifact with dir_name=/home/morph/morta/Codework; the Console serves topic-ws/report.html containing OLD instead of other/report.html. Route references through the run-selected workspace, or direct switched-workspace artifacts through send_file/file_cache_dir.
+- [P3] internal/ownertools/workspaces.go:428-437: user-named paths adjacent to Chinese text/full-width punctuation are rejected. Verified /Users/me/proj is not recognized in “请在 /Users/me/proj，修复测试”, “打开/Users/me/proj 目录”, or “切换到 /Users/me/proj。”, but is recognized with ASCII spaces. Use Unicode-aware boundaries without accepting path prefixes.
+
+Merged current master 1c4ba732 into the item branch in 9c8ea436, resolving assets/config/config.example.yaml and tools/tool.go while preserving both sides. Checked auto-merged approval/runtime integration; no additional code fixes. Merge pushed before reviewing the new head.
+
+Claude Code reviewed all 34 files in origin/master...HEAD with review-code and its security reference. No P0/P1 findings; factory policy therefore passes this item despite the P2/P3 notes. Approval gating/resume/denial, owner audience isolation, subtask exclusion, topic paging and switched file/shell/send_file roots were inspected. Manager confirmed a clean worktree, unchanged reviewed head, whitespace check, test logs and both reproductions.
+
+Validation: gofmt and go vet ./... pass. Initial go test ./... hit an unrelated flaky internal/wechatlogin test: its random secret ID contained the forbidden test substring T1. That package passed 20 reruns and the full go test ./... rerun passed (171 packages). nsh check passed. Full Console scripts/test.sh passed: 165 files, 0 failed; eight parallel-load failures passed their isolated retries. Merge prerequisite tests also passed, including full Go and Console suites.
+
+Not checked: live model tool discovery/use, manual approval cards, Settings matrix in a browser, Android JVM tests (no JDK). Residual uncertainties: symlink replacement after selection, workspace-list topic-title trust marking, inherited deny_paths folder semantics, and current-topic search matches. No claim of manual UI verification.
+
+Installs: none. Test HOME/XDG directories were isolated; shared Go module cache was reused offline and pinned nsh cache copied in (cache-isolation deviation). No new top-level /tmp entries observed; existing outside records retained. Previous review worktree removed during recovery. Review temporary artifacts removed at end. Moved review/ → ready/; not merged into master.
