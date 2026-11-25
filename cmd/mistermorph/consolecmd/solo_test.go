@@ -17,6 +17,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/ownertools"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -660,7 +661,8 @@ func TestSoloSourceCollector(t *testing.T) {
 	c.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolStart, RunID: "run1", ToolName: "memory_save"})
 	got := c.Sources()
 	want := []daemonruntime.SoloSource{
-		{Kind: "workspace", ID: ws, Label: ws},
+		// The label follows the production display contract: a TMPDIR under HOME shows as ~/...
+		{Kind: "workspace", ID: ws, Label: ownertools.DisplayPath(ws, workspace.HostHomeDir())},
 		{Kind: "workspace", ID: "/srv/api", Label: "/srv/api"},
 		{Kind: "topic", ID: "t1", Label: "Pricing"},
 		{Kind: "thread", ID: "t2", Label: "Build"},
