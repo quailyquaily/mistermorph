@@ -14,7 +14,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
 | `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the pickers (Gallery: the photo picker; File: the document picker), voice input and task notifications through the native part |
-| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`), the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) saving files behind `morph.file.save` (`FileSaver`, `SaveDocumentActivity`) and whether a hardware keyboard is connected behind `morph.keyboard.state` (`HardwareKeyboard`, `AndroidHardwareKeyboard`), which the keyboard shortcuts need on a phone (`lib/shortcutPolicy.ts`) |
+| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`), the background task notifications behind `morph.notify.*` (`TaskNotifier`, `TaskNotifierJob`) saving files behind `morph.file.save` (`FileSaver`, `SaveDocumentActivity`) and whether a hardware keyboard is connected behind `morph.keyboard.state` (`HardwareKeyboard`, `AndroidHardwareKeyboard`), which the keyboard shortcuts need on a phone (`lib/shortcutPolicy.ts`); and nsh 0.6.0's `ScrollBox` patched so a scroll view no longer cancels a drag a scroll view inside it takes (`ScrollClaim`) |
 | `pages/login/ServerDialog.tsx` | The Android app's console server: typed on the login page or read from a QR code, checked before it is saved |
 | `pages/login/QrScanner.tsx`, `lib/qrScan.ts`, `lib/qrScannerPage.js` | The QR scanner: a web view whose page has the camera and the decoder, the app's side of a scan, and the page |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
@@ -527,6 +527,15 @@ Headless tests prove behaviour, not the look.
   scrolled into it. The app's native part takes that room back in dialog windows
   (android/src/com/longbridge/nsh/ModalKeyboardRoom.java, in nsh's package for its
   package-private parts); headless tests draw no keyboard and cannot show either.
+- On Android a scroll view (`ScrollBox`) decides at the first move past the slop whether it keeps
+  the drag, and one that does not cancels everything inside it, before the scroll view inside sees
+  the move: a sideways drag on a wide table or code block in the chat, or a vertical drag on the
+  Jobs graph once it is wider than the view, scrolled nothing. The app builds a patched copy in
+  place of the runtime's (android/src/com/longbridge/nsh/ScrollBox.java and ScrollClaim.java; the
+  outer scroll view stands aside when one inside takes the drag); `scripts/android-host.sh` refuses
+  any other nsh version. Headless and browser runs never use that code: the JDK test
+  (`ScrollClaimTest`) drives the decision through a model of Android's dispatch. See
+  `docs/feat/feat_20261125_android_nested_scroll.md`.
 - `Picker.pickFiles` leaves a file over 512 MiB unread (`file: null`, `status: "tooLarge"`);
   `lib/mobileHost.ts` leaves it out.
 - A tooltip goes out over a few frames as the next one comes in, so for a moment both show.

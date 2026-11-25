@@ -178,12 +178,18 @@ web/console-nsh/scripts/build-android.sh --abi x86_64 --run       # for an emula
 NSH_KEYSTORE_PASSWORD=… web/console-nsh/scripts/build-android.sh --keystore release.keystore --key-alias morph
 ```
 
-It needs the nsh 0.4.0 distribution (its `bin/nsh` first on `PATH`: the build uses its Android
-runtime and `embed/android/nsh.aar`), Node, a JDK (`javac`; `JAVA_HOME` is honoured) and the Android
+It needs nsh 0.6.0 (`nsh` on `PATH`; the build adds its Android runtime component when missing and
+fetches that release's `nsh.aar`), Node, a JDK (`javac`; `JAVA_HOME` is honoured) and the Android
 SDK (`ANDROID_HOME`, with `platforms;android-35` and build tools); no NDK and no Gradle. The native
 part's tests run on the JDK alone: `web/console-nsh/scripts/android-host.sh test`. Tagged releases publish `MrMorph-android.apk` when the repository has the
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` secrets: Android only
 updates an app signed with the same key, so releases are never signed with a runner's debug key.
+
+Wide tables and code blocks in replies scroll sideways inside the chat, and the Jobs graph scrolls
+both ways when it is larger than the screen. nsh 0.6.0's Android scroll view cancelled such a drag
+in the scroll view around it, so the build replaces it with a patched copy from the app's own Java;
+it builds only with nsh 0.6.0. See [the feature notes](feat/feat_20261125_android_nested_scroll.md)
+for the cause, the fix and what still needs a check on a device.
 
 Task notifications work as in the web console, with the same option: Settings → System → Topic task
 notifications. When a task in one of the person's topics finishes or fails while the app is not in the
