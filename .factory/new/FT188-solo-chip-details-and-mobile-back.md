@@ -9,3 +9,6 @@ Two changes to Solo's chips and thread cards (FT186) in the Console.
 Where it is today:
 - Chips: `web/console-nsh/components/chat/ChatSoloSources.tsx`, used in `components/chat/ChatHistoryItem.tsx` (`ctx.onOpenTopic`, which is `selectTopic` in `pages/chat/chatController.ts`). Thread cards: `ChatSoloThread` in the same file.
 - What a chip records comes from `internal/solo/sources.go` (`SourceCollector`, stored as `result.solo_sources`): today only kind, id and label. The dialog's details may need more recorded there.
+
+## lyric · 2026-11-25 21:55
+3. A thread chip and a topic chip often point at the same thing: a later Solo reply that reads a thread Solo started (to report on it, say) shows it as a topic chip. When the topic a reply reads is one Solo started (`started_from: "_solo"`), show it as a thread chip instead. Topic chips then mean only ordinary topics the agent looked into. Within one reply the collector already folds a topic into the thread it started (`Sources()` in `internal/solo/sources.go`); this extends that to threads started by earlier replies.
