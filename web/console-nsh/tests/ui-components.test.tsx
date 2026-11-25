@@ -104,7 +104,7 @@ test("the old address no longer opens the gallery: it is an unknown address, wit
   await locked.app.waitFor("id:login-password");
   expect(lastLocation(locked.app)).toBe(`/login?redirect=${encodeURIComponent(OLD_PATH)}`);
   await locked.app.type("id:login-password", "secret");
-  await locked.app.press("role:button[Login]");
+  await locked.app.press("role:button[Log in]");
   await locked.app.waitFor(`text:${OLD_PATH}`);
   expect(locked.app.shows("id:ui-components-page")).toBe(false);
 });
@@ -132,7 +132,7 @@ test("Logout in the head logs out and lands on the login page, in place of the g
   expect(app.shows("id:ui-components-page")).toBe(false);
   expect(lastLocation(app)).toBe(`/login?redirect=${encodeURIComponent(PATH)}`);
   await app.type("id:login-password", "secret");
-  await app.press("role:button[Login]");
+  await app.press("role:button[Log in]");
   await app.waitFor("id:ui-components-page");
   expect(lastLocation(app)).toBe(PATH);
 });
