@@ -72,3 +72,15 @@ Fixed the review P1 in b89fd5dd: both legacy source expectations now include use
 - Coder initially returned before background checks finished; resumed the same session, waited for checks, and verified its focused commit before pushing.
 - Written outside dir: the Claude harness command referenced a non-item-named cwd marker in /tmp; recorded in the run outside list for owner-confirmed cleanup. No new top-level /tmp entries were observed and no memory writes were reported.
 - Round 2 of 3: pushed the branch and moved new/ to review/.
+
+## factory · review · 2026-11-25 23:13
+head: b89fd5dd18378907a0fed60e147e646674b1ea26
+verdict: pass
+notes:
+- Claude Code reviewed all 18 changed files in origin/master...HEAD against the owner request and plans; no qualifying findings. The previous parser-test P1 is fixed. Branch merges cleanly with master; review worktree is clean and no code commits were made.
+- Validation reported by coder: configured gofmt/vet/Go gate passed; nsh check passed; required scripts/test.sh passed 172 files, 0 failed after isolated retries; focused Solo parser tests passed 5/5; all Console Node tests passed 369/369 (lib subset 323/323). Five Console files required the runner's isolated retry: agent-favicon, chat-topic-drag, mobile-nav-roots, settings-integrations-channels and settings-page-sections.
+- Verified source metadata safety and aggregation, prior-reply Solo thread classification, old records, localized in-place dialog, phone return-to-Solo provenance and desktop behavior. Sensitive-data and untrusted-input security surfaces reviewed without findings.
+- Not checked: visual appearance, physical Android/iPhone, real iPhone edge swipe, keyboard-first toolbar Back and GPUI desktop app. Endpoint-change and browser back/forward provenance clearing were inspected without dedicated tests. Browser Back may show Solo twice because toolbar Back follows existing history replacement semantics.
+- Installs: none. Coder initially returned with background checks running; resumed the same session and obtained completed results before accepting the review.
+- Written outside dir: Claude harness reported two background-task logs under its non-item-named temporary directory; recorded in the run outside list for owner-confirmed cleanup, not deleted. No new top-level temporary entries observed. No memory writes reported.
+- Round 2 of 3: moved review/ to ready/ for shipping; no merge or release performed.
