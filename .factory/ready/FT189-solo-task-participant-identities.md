@@ -93,3 +93,19 @@ Related non-blocking FT188 issue confirmed by coder's realistic engine probe: wo
 Process deviations: coder wrote a Claude memory file and a MEMORY.md line outside the permitted run directory; no such write was requested or accepted as feature work. Coder reports two early go test runs lacked TMPDIR, generated /tmp/TestSolo... folders then removed them; none remain. Manager before/after /tmp inventory found no new retained paths. No /tmp deletion performed. Existing legacy run-root files left untouched. Branch push initially needed credential.useHttpPath=true; the single retry succeeded. No base/tag push.
 
 Move: new/ → review/, round 1. Owner should inspect participant identity isolation, durable pause/restart semantics, bounded +N and accessible phone-width chips in review.
+
+## factory · review · 2026-11-26 08:24
+head: 15536f1ff0732d1473351550dde03a485afde815
+verdict: pass
+
+Claude Code reviewed origin/master...HEAD (base 12ab853ea955819a2daa2f4cd5928de845e37bba; 17 files). No qualifying P0/P1/P2/P3 findings. Worktree remained clean, with no commits. Branch merges cleanly with the fetched base.
+
+Validation by reviewer: configured gofmt/vet/full Go test gate passed (172 packages); nsh check passed; required Console scripts/test.sh passed (173 files, zero failures, 350s). Five unrelated Console files needed the script's automatic isolated retry and then passed. Additional Solo race tests passed in consolecmd, internal/solo and internal/daemonruntime. Tests used isolated HOME/XDG/cache settings. No installs.
+
+Checked identity-only metadata allowlists, bounded worker retention and +N, change-only durable updates, pause/end/restart merge, individual failure preservation, exact task/topic chip association and ambiguous suppression, existing FT188 source uses/details/navigation, and EN/ZH/JA/accessibility labels.
+
+Residual uncertainty, not confirmed defects: concurrent live activity readings may briefly arrive out of order; omitted counts on resumed tasks exceeding 32 workers with missed intermediate readings or resurfacing old workers were not reproduced. No live Console, browser phone-width/localized/dark layout, manual tooltip, native build/device or screen-reader checks in this review. Existing worker-tagged SourceCollector limitation predates this item and is unchanged.
+
+Process note: reviewer reports the CLI harness wrote background-task output under its own temporary directory outside the run directory; exact file was not supplied. Manager's top-level temporary inventory showed no new entries. This path is retained in the outside ledger; nothing there was deleted. No memory writes reported in this review.
+
+Move: review/ → ready/, round 1. Nothing merged, tagged or released. Owner should inspect live/device accessibility and the unverified high-worker-count resume cases before shipment.
