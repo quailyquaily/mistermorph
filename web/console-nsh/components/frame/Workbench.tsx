@@ -21,7 +21,7 @@
 // shows (the gesture handle, the navigation bar, a phone's home indicator), and keeps it clear,
 // as it does a side inset the frame leaves to it (lib/systemInsets.ts `workbenchInsets`).
 import type { JSX } from "nsh";
-import { batch, cleanup, effect, keyboardFrame, keymap, LayoutAnimation, PanResponder, safeArea, signal, untracked, View } from "nsh";
+import { batch, cleanup, effect, keyboardFrame, keymap, LayoutAnimation, PanResponder, platform, safeArea, signal, untracked, View } from "nsh";
 import { localStore } from "../../lib/platform";
 import { EDGE_TO_EDGE, noteWorkbenchOpen } from "../../lib/shell";
 import { workbenchInsets } from "../../lib/systemInsets";
@@ -134,7 +134,8 @@ function setShare(next: number, remember: boolean) {
 export function Workbench(props: { room: number; phone?: boolean }) {
   // On phones the system's insets inside the sheet: the bottom one (none while the keyboard is up,
   // the frame stands on it), and the sides where the frame does not take them.
-  const insets = () => (props.phone ? workbenchInsets(safeArea(), keyboardFrame().height, EDGE_TO_EDGE, SIDE_MARGIN) : null);
+  // The frame takes the side insets on Android and on iOS (lib/systemInsets.ts).
+  const insets = () => (props.phone ? workbenchInsets(safeArea(), keyboardFrame().height, EDGE_TO_EDGE || platform.os === "ios", SIDE_MARGIN) : null);
   const inset = () => insets()?.bottom ?? 0;
   const height = () => workbenchHeight(props.room, share(), inset());
   const sheetID = () => {

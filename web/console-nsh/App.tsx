@@ -1,6 +1,6 @@
 // The entry: read the host's boot data, restore the session and the language, start the router,
 // then mount the frame. Page logic lives in pages/, shared state in lib/.
-import { colorScheme, effect, keyboardFrame, mount, token, untracked, View } from "nsh";
+import { colorScheme, effect, keyboardFrame, mount, platform, safeArea, token, untracked, View } from "nsh";
 import "./assets/fonts/ibm-plex-sans-latin-400-normal.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-400-italic.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-500-normal.woff2";
@@ -18,7 +18,8 @@ import { startCache } from "./lib/cache";
 import { boot, isMobile, reportFrontendReady, setDocumentLanguage, setThemeColor, startVisibilityTracking } from "./lib/platform";
 import { route, router, startRouter } from "./lib/router";
 import { inShellless, inStandalone, startShell, systemInsets } from "./lib/shell";
-import { startSystemBack } from "./lib/systemBack";
+import { iosFrameInsets } from "./lib/systemInsets";
+import { edgeSwipeBack, startSystemBack } from "./lib/systemBack";
 import { PageView } from "./pages/routes";
 
 // Every scroll bar is the console's (styles/base.css: thin hairline thumbs shown while the pointer is
@@ -26,11 +27,16 @@ import { PageView } from "./pages/routes";
 Scrollbar.setTheme(SCROLLBAR);
 
 // The frame's padding: on Android, the room the system bars and the keyboard take (lib/systemInsets.ts;
-// on phones the bottom inset is the page column's, components/Shell.tsx); on iOS, the keyboard's.
+// on phones the bottom inset is the page column's, components/Shell.tsx); on iOS, the status bar's
+// and the side insets, and the keyboard's height (iosFrameInsets); elsewhere on phones, the keyboard's.
 function frameStyle() {
   const insets = systemInsets();
   if (insets) {
     const { top, right, bottom, left } = insets.frame;
+    return { paddingTop: top, paddingRight: right, paddingBottom: bottom, paddingLeft: left };
+  }
+  if (platform.os === "ios") {
+    const { top, right, bottom, left } = iosFrameInsets(safeArea(), keyboardFrame().height);
     return { paddingTop: top, paddingRight: right, paddingBottom: bottom, paddingLeft: left };
   }
   return isMobile() ? { paddingBottom: keyboardFrame().height } : undefined;
@@ -41,6 +47,8 @@ const frameTestID = () => `app-frame.bottom-${Math.round(Number(frameStyle()?.pa
 function App() {
   startShell();
   startSystemBack();
+  // iOS's swipe back from the left edge (lib/systemBack.ts); none elsewhere.
+  const swipeBack = edgeSwipeBack();
   // Screen readers, hyphenation and the browser's translate offer read the page language.
   effect(() => {
     const language = currentLocale();
@@ -65,7 +73,7 @@ function App() {
     // the composer and the fields stay above it (dialogs make room themselves, in their own layer).
     // On Android the surface also runs under the status and navigation bars: the frame keeps the
     // pages out from under them.
-    <View class="flex-1 bg-paper" style={frameStyle()} testID={frameTestID()}>
+    <View class="flex-1 bg-paper" style={frameStyle()} testID={frameTestID()} {...swipeBack}>
       <If when={route()}>
         <Shell shellless={inShellless()} standalone={inStandalone()}>
           <PageView />

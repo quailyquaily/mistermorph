@@ -28,8 +28,11 @@
 // - the dropdowns (nsh/base's Menu, Select, DatePicker) are that paper too on touch screens, where
 //   nsh would draw them as sheets flush with the bottom edge, padded with nothing.
 //
-// Otherwise iOS, the desktops and the web are unchanged (they pass no insets here). Pure functions, no
-// state, so the tests can check the numbers.
+// On iOS nsh draws the app under the status bar (and beside a notch on its side) as well: the frame
+// keeps the pages below the status bar and inside the side insets there too (`iosFrameInsets`); its
+// bottom stays the keyboard's height, and the home indicator's room is the navigation strip's and
+// the pages' own, as before. The desktops and the web are unchanged (they pass no insets here).
+// Pure functions, no state, so the tests can check the numbers.
 
 export interface Edges {
   top: number;
@@ -72,6 +75,15 @@ export function frameInsets(area: Partial<Edges>, keyboard: number, bottomNav: b
     bottomNav: raised > 0 || !bottomNav || workbench ? 0 : bottom,
     foot: raised > 0 || !phone || bottomNav || workbench ? 0 : bottom,
   };
+}
+
+/**
+ * The app frame's padding on iOS: the status bar's inset (a notch's, in portrait) at the top, the
+ * side insets (the notch on its side), and at the bottom the software keyboard's height (0 when
+ * hidden), as before: the home indicator is left to the navigation strip and the pages' feet.
+ */
+export function iosFrameInsets(area: Partial<Edges>, keyboard: number): Edges {
+  return { top: size(area.top), right: size(area.right), bottom: size(keyboard), left: size(area.left) };
 }
 
 /** The padding inside the workbench's sheet on a phone. */
