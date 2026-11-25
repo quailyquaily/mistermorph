@@ -84,3 +84,12 @@ notes:
 - Installs: none. Coder initially returned with background checks running; resumed the same session and obtained completed results before accepting the review.
 - Written outside dir: Claude harness reported two background-task logs under its non-item-named temporary directory; recorded in the run outside list for owner-confirmed cleanup, not deleted. No new top-level temporary entries observed. No memory writes reported.
 - Round 2 of 3: moved review/ to ready/ for shipping; no merge or release performed.
+
+## factory · 2026-11-26 07:09
+Shipped in merge commit 12ab853ea955819a2daa2f4cd5928de845e37bba on master; released as v0.3.137. Master and tag were pushed atomically.
+- Scheduled eligibility: latest review passed for unchanged branch head b89fd5dd18378907a0fed60e147e646674b1ea26, with no later owner note. Merged cleanly.
+- Claude Code validated the merged base without changes: configured gofmt/vet/Go gate passed (172 packages, 19 without tests); nsh check passed; required Console runner passed 172 files, 0 failed; focused Solo parser tests 5/5, lib Node tests 323/323, Android manifest tests 12/12 passed.
+- Linked issues/PRs: none to close. Branch retained: clean is not configured.
+- Installs: none unpinned; restored only pinned Go modules.
+- Not checked: visual appearance, physical Android/iPhone, real edge swipe, keyboard-first Back, desktop/mobile builds or full web/backend build. Prior UI verification limitations remain.
+- Written outside dir: a real-home Go telemetry counter may have been modified by the coder's initial go version command; no new top-level temporary paths observed. No code or settings were changed during validation.
