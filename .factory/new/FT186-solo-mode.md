@@ -17,3 +17,6 @@ Acceptance criteria:
 - A Solo message needing another workspace starts a work thread with that workspace, shows its card in Solo live, and posts its summary when done; Solo answers another message meanwhile.
 - A Solo question about earlier work in another topic is answered from that topic, with a chip naming it.
 - Ordinary topics work as before; Go and Console tests cover the Solo routing, the thread cards and the chips; `go test ./...` and the full Console test runner pass.
+
+## factory · 2026-11-25 15:51
+Moved to new/ at the owner's word ("sure. add to new/"), now that FT185 (workspace_list, workspace_use, topic_search, topic_read) has shipped in v0.3.134: build on those tools as they are on master rather than adding new ones.
