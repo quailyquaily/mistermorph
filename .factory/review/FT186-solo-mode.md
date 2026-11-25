@@ -1,6 +1,6 @@
 ---
 branch: factory/FT186-solo-mode
-round: 1
+round: 2
 ---
 # SOLO mode: one conversation, the agent arranges the rest (step 2)
 
@@ -72,3 +72,17 @@ Validation: Claude Code reviewed all 44 changed files / five commits in origin/m
 Residual risks (not confirmed introduced findings): restart completion catch-up scans only the latest 200 Solo records; editing earlier Solo messages removes later cards; thread reply excerpts enter Solo prompt without an explicit untrusted wrapper; local terminal Solo lacks Console work_thread/chips. No live-model end-to-end, native packaging, Android JVM or visual checks in this review.
 
 Round 1 of max 3: review/ → new/ because the required test gate fails, not because a new P1 code defect was demonstrated. Owner should address the pre-existing baseline failure separately and inspect the two P3 findings. No linked GitHub issues or PRs. Claude harness reports temporary output under /tmp/claude-995; recorded in the outside inventory, not deleted. No newly observed directly owned /tmp entries.
+
+## factory · plan · 2026-11-25 17:11
+Round 2 addition. Behaviour: import the baseline Login-selector correction already on master by merging master, preserving Solo and upstream changes; restrict file-tool workspace chips to paths the built-in resolvers actually resolve inside the workspace; include Solo on the first Console topics page after more than 100 topics while keeping pagination complete and duplicate-free. Scope: latest review P1 and its two confirmed P3 findings only; no unrelated bespoke baseline fixes. Decisions: reuse file-tool path resolution rather than a second alias parser; preserve page-size-one store ordering to avoid dropping topics. Checking: regression tests for outside/nest/alias/escape/symlink paths and HTTP pagination across 106 topics with multiple page sizes; rerun all required Go and Console gates.
+
+## factory · 2026-11-25 17:11
+Round 2 built and pushed at de665864. Moved new/ → review/.
+
+Merged master 49e236f6 without conflicts or rebase, importing its existing Log in selector correction and clearing the previous baseline P1. Added file-tool resolver-based workspace provenance and regression coverage (26 path cases), including symlink escapes; added first-page Solo pinning with complete HTTP pagination coverage at page sizes 100, 3, 2, 1 and 200 over 106 topics. Page-size-one keeps store ordering rather than pinning Solo, to avoid skipping topics. Updated English docs.
+
+Checks: Claude Code ran gofmt/vet/full Go tests (171 packages pass, 19 without tests), nsh check and required full Console scripts/test.sh: 171 files, 0 failed, 255s, exit 0, no retries. Manager independently reran gofmt, go vet ./..., go test ./... and nsh check successfully. Manager checked commits and protected paths against current master: only this item's work and a master merge; no protected-path changes in the feature diff.
+
+No installs or manifest/lockfile changes. Scripted tests used isolated HOME/XDG/cache variables; final HOME was made by mktemp -d and earlier isolated Go caches were moved into it. Offline Go module proxy read shared download cache without writing it. Recovered stale prior-run temporary files (read-only module directories required owner-write permissions before cleanup). No newly observed directly owned /tmp entries; Claude harness reported /tmp/claude-995, recorded in outside inventory, not deleted.
+
+Visual UI, native Android/iOS/desktop and live-model end-to-end were not checked this round. Review should confirm the baseline blocker is cleared, resolver behavior and pagination edge cases; earlier residual risks remain for review. Branch push initially lacked credential repository context and succeeded on its single retry with per-command credential.useHttpPath=true. No linked GitHub issues or PRs.
