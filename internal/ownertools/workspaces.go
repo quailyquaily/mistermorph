@@ -435,3 +435,8 @@ func isPathByte(c byte) bool {
 	}
 	return strings.IndexByte("._-/\\~+@", c) >= 0
 }
+
+// DisplayPath shows a path under home with ~, as the tools here and the Console do.
+func DisplayPath(dir, home string) string {
+	return displayPath(dir, home)
+}

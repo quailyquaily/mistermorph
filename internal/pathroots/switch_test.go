@@ -73,3 +73,22 @@ func TestUnswitchedStateIsEmpty(t *testing.T) {
 		t.Fatal("nil switch")
 	}
 }
+
+func TestWorkspaceSwitchAwaitingApproval(t *testing.T) {
+	dir := t.TempDir()
+	sw := NewWorkspaceSwitchAwaitingApproval(dir)
+	if got, pending := sw.PendingApproval(); !pending || got != dir {
+		t.Fatalf("PendingApproval = %q, %v; want the run's own workspace pending", got, pending)
+	}
+	sw.Approve(dir)
+	if _, pending := sw.PendingApproval(); pending {
+		t.Fatal("pending after approval")
+	}
+	if sw.Original() != dir || sw.Current() != dir {
+		t.Fatalf("original=%q current=%q", sw.Original(), sw.Current())
+	}
+	// A plain switch's own workspace never asks.
+	if _, pending := NewWorkspaceSwitch(dir).PendingApproval(); pending {
+		t.Fatal("plain switch pending in its own workspace")
+	}
+}

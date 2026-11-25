@@ -1,6 +1,7 @@
 // Package ownertools gives the Console owner's chat runs the tools that reach past the run's own
 // topic: workspace_list and workspace_use (the workspaces the agent knows, and switching the run to
-// another one), topic_search and topic_read (the owner's other Console topics). The owner may see
+// another one), topic_search and topic_read (the owner's other Console topics), and, in Solo's
+// runs, work_thread (starting work in a topic and workspace of its own). The owner may see
 // every Console topic and use every workspace, so only the owner's own chat runs get them: channel
 // runtimes, cron runs and subagents do not. Each tool is built for one run and checks, when it is
 // called, that the call comes from that run, as the owner, and not from a subtask.
@@ -84,9 +85,10 @@ func New(deps Deps) []tools.Tool {
 	}
 }
 
-// Catalog is every tool here, built without dependencies, for listing their schemas.
+// Catalog is every tool here, built without dependencies, for listing their schemas: the four
+// every owner chat run gets, and work_thread, which Solo's runs get.
 func Catalog() []tools.Tool {
-	return New(Deps{})
+	return append(New(Deps{}), NewWorkThread(Deps{}, nil))
 }
 
 func (d *Deps) now() time.Time {

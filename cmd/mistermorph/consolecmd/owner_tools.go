@@ -38,6 +38,11 @@ func (r *consoleLocalRuntime) ownerTools(generation *consoleLocalRuntimeGenerati
 	if r == nil || generation == nil || sw == nil {
 		return nil
 	}
+	return ownertools.New(r.ownerToolDeps(generation, job, sw))
+}
+
+// ownerToolDeps is what the owner tools of one run use.
+func (r *consoleLocalRuntime) ownerToolDeps(generation *consoleLocalRuntimeGeneration, job consoleLocalTaskJob, sw *pathroots.WorkspaceSwitch) ownertools.Deps {
 	reader := generation.reader
 	defaultDir := ""
 	var denyPaths []string
@@ -62,7 +67,7 @@ func (r *consoleLocalRuntime) ownerTools(generation *consoleLocalRuntimeGenerati
 	if r.store != nil {
 		deps.Topics = r.store
 	}
-	return ownertools.New(deps)
+	return deps
 }
 
 // ownerToolsPromptBlock tells an owner chat run when to reach past its own topic and workspace.

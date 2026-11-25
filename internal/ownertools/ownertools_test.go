@@ -550,7 +550,8 @@ func TestToolsRefuseOutsideTheOwnersRun(t *testing.T) {
 		if _, err := tool.Execute(ownerCtx(), map[string]any{}); err == nil {
 			t.Fatalf("catalog %s ran", tool.Name())
 		}
-		if !tools.IsDeferred(tool) || !tools.IsSubtaskExcluded(tool) {
+		// work_thread is how Solo hands off work: always listed in Solo's runs.
+		if tool.Name() != WorkThreadName && !tools.IsDeferred(tool) || !tools.IsSubtaskExcluded(tool) {
 			t.Fatalf("%s is not deferred and kept from subtasks", tool.Name())
 		}
 	}

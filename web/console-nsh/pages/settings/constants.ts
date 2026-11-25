@@ -92,6 +92,7 @@ export const TOOL_CHANNELS: ToolChannel[] = [
       "workspace_use",
       "topic_search",
       "topic_read",
+      "work_thread",
     ],
   },
   { id: "telegram", title: "Telegram", logo: telegramLogo, tools: ["send_file", "send_photo", "send_voice", "message_react", "ask_user"] },
@@ -117,6 +118,7 @@ export const TOOL_CHANNEL_ROWS: { id: string; icon: IconName }[] = [
   { id: "workspace_use", icon: "PhFolderOpen" },
   { id: "topic_search", icon: "PhMagnifyingGlass" },
   { id: "topic_read", icon: "PhChats" },
+  { id: "work_thread", icon: "PhArrowSquareOut" },
 ];
 
 export const MANAGED_RUNTIME_ITEMS = [
