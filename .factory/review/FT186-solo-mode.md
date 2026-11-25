@@ -1,6 +1,6 @@
 ---
 branch: factory/FT186-solo-mode
-round: 2
+round: 3
 ---
 # SOLO mode: one conversation, the agent arranges the rest (step 2)
 
@@ -98,3 +98,15 @@ Validation: Claude Code reviewed all 46 files in origin/master...HEAD, including
 Residual risks: restart catch-up scans only the newest 200 Solo records; editing earlier Solo messages removes later cards; thread reply excerpts lack an explicit untrusted wrapper; local terminal Solo lacks work_thread/chips; a cached first topic page can briefly omit old Solo until refreshed. These were not established as introduced blocking findings. Live-model end-to-end, visual UI, native builds and Android JVM tests were not checked.
 
 Round 2 of max 3: review/ → new/ for the reproducible required-test failure. Next build should correct the test expectation, not alter correct production path display. No linked GitHub issues or PRs. Recovered the previous review worktree. No newly observed directly owned /tmp entries; harness /tmp/claude-995 remains inventoried, not deleted. Coder reported editing its existing memory note outside the permitted folders despite being told not to; unrelated user files were left untouched.
+
+## factory · plan · 2026-11-25 17:45
+Round 3 addition. Behaviour: use ownertools.DisplayPath(ws, workspace.HostHomeDir()) for the expected Solo workspace label, matching production's correct home abbreviation. Scope: the latest review's test portability P1 only; no production or UI changes. Decisions: preserve display semantics rather than forcing absolute labels. Checking: reproduce the old failure with TMPDIR inside isolated HOME; run the corrected focused test three times both inside and outside HOME, then all required Go and Console gates.
+
+## factory · 2026-11-25 17:45
+Round 3 built and pushed at b1e337a5. Moved new/ → review/.
+
+Changed only cmd/mistermorph/consolecmd/solo_test.go: the expected workspace label now uses the production display contract. No runtime behavior, UI, config, documentation or dependency changes.
+
+Checks: Claude Code reproduced the original failure, then passed the focused test three times with TMPDIR inside HOME and three times outside HOME. Required gofmt/vet/full Go gate passed on retry: one initial internal/agentpair TestManagerRecordsExpirationWithoutAnotherMessage failure observed reversed event order; it passed 10 isolated repeats and the next full suite. Manager independently reran gofmt, go vet ./..., go test ./..., the focused test three times with nested TMPDIR, and nsh check successfully. Required Console scripts/test.sh passed: 171 files, 0 failed, 272s; chat-attachments passed on the script's isolated retry. Manager verified the focused commit, item-only history plus master merge, and no protected paths in the feature diff.
+
+No installs, manifest or lockfile changes. Scripted tests used isolated absolute HOME/XDG/cache paths with TMPDIR nested inside HOME and an offline read-only shared module proxy. No newly observed directly owned /tmp entries; coder reported no outside writes or Claude memory edits. No UI visual, native packaging or live-model checks this round (test-only change). Earlier review residual risks remain for review; no linked GitHub issues or PRs.
