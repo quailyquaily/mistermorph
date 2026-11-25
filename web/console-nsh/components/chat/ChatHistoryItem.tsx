@@ -94,6 +94,8 @@ export interface ChatRowContext {
   onElevationAnswer: (item: HistoryItem, answer: ElevationAnswer) => void;
   /** Opens a topic: a work thread from its card in Solo, or a topic a reply's chip names (FT186). */
   onOpenTopic: (topicID: string) => void;
+  /** Opens the details of a workspace, memory or journal chip under a Solo reply, in a dialog (FT188). */
+  onOpenSoloSource?: (source: SoloSource) => void;
 }
 
 function roleOf(item: HistoryItem | undefined) {
@@ -542,7 +544,7 @@ export function ChatHistoryItem(props: {
         />
       </If>
       <If when={sources().length && isTerminalStatus(status())}>
-        <ChatSoloSources sources={sources()} onOpen={(topicID) => ctx.onOpenTopic(topicID)} />
+        <ChatSoloSources sources={sources()} onOpen={(topicID) => ctx.onOpenTopic(topicID)} onDetails={ctx.onOpenSoloSource} />
       </If>
       <If when={approvalVisible()}>
         <View

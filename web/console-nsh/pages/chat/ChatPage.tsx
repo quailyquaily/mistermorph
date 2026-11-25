@@ -18,6 +18,7 @@ import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { onSystemBack } from "../../lib/systemBack";
+import { ChatSoloSourceDialog } from "../../components/chat/ChatSoloSourceDialog";
 import { scrollAreaKey } from "../../lib/scrollMemory";
 import { markMobileDetail } from "../../lib/shell";
 import { provideShortcut } from "../../lib/shortcuts";
@@ -363,15 +364,17 @@ export function ChatPage() {
     () => <DetailPanel c={c} phone={c.mobileMode()} class="flex-1" />,
   );
   const barShowsBack = panes.held(1, () => c.mobileShowBack());
+  const barBackTitle = panes.held(1, () => c.mobileBackTitle());
   const barTitle = panes.held(1, () => (c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")));
   const barShowsWorkspace = panes.held(1, () => c.mobileTopicSplitEnabled() && c.showChatPane() && c.workspaceSidebarAvailable());
   // A conversation over the topic list (an open topic, a new one) is not the navigation's page:
   // the bottom navigation steps aside. Without topics the conversation is the page itself.
   markMobileDetail(() => c.mobileShowBack());
-  // Android's Back from an open topic goes to the topic list, as the bar's back arrow does.
+  // Android's Back from an open topic goes where the bar's back arrow does: to the topic list, or
+  // to Solo from a topic opened there (FT188).
   onSystemBack(
     () => c.mobileShowBack(),
-    () => c.showTopicsView(),
+    () => c.leaveConversation(),
   );
   // Keyboard shortcuts (lib/shortcuts.ts): a new topic, and back to the message field.
   provideShortcut(
@@ -393,7 +396,7 @@ export function ChatPage() {
   const mobileLeading = () => (
     <View class="flex-1 flex-row items-center gap-2">
       <If when={barShowsBack()}>
-        <BackButton title={t("chat_topics_title")} onPress={() => c.mobileBack()} testID="chat-back" />
+        <BackButton title={barBackTitle()} onPress={() => c.mobileBack()} testID="chat-back" />
       </If>
       <Text class="flex-1 text-xl leading-6 tracking-[-0.03em] text-foreground line-clamp-1" role="header">
         {barTitle()}
@@ -476,6 +479,7 @@ export function ChatPage() {
         />
         <FilePreviewDialog c={c} />
         <RawJsonDialog open={c.rawDialogOpen()} json={c.rawDialogJSON()} onClose={() => c.closeRawDialog()} testID="chat-raw-json" />
+        <ChatSoloSourceDialog open={c.soloSourceDetailOpen()} source={c.soloSourceDetail()} onClose={() => c.closeSoloSource()} />
         <TopicRenameDialog rename={c.topicRename} regenerateDisabled={c.topicRenameRegenerateDisabled()} />
         <MessageDialog
           open={c.topicDeleteDialogOpen()}
