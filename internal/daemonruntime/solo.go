@@ -113,3 +113,9 @@ func SoloThreadStateEnded(state string) bool {
 	}
 	return false
 }
+
+// soloRecordID reports whether id is a Solo record's: a work thread's card or summary.
+func soloRecordID(id string) bool {
+	id = strings.TrimSpace(id)
+	return strings.HasPrefix(id, SoloThreadCardPrefix) || strings.HasPrefix(id, SoloThreadSummaryPrefix)
+}

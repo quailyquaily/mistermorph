@@ -385,11 +385,16 @@ func (s *ConsoleFileStore) ReplaceTopicTasks(targetID string, info TaskInfo, tri
 			return nil, ErrTopicRunning
 		}
 	}
-	// The topic's tasks newest first: the edited message and everything newer go.
+	// The topic's tasks newest first: the edited message and everything newer go. In Solo, the
+	// cards and summaries of its work threads stay: the threads run on in their own topics whatever
+	// becomes of the message that started them, and their cards are the way to them.
 	removed := make([]string, 0, 4)
 	for _, id := range s.orderedIDsByTopic[info.TopicID] {
 		item := s.items[id]
 		if id != targetID && !taskComesBefore(item, target) {
+			continue
+		}
+		if IsSoloTopicID(info.TopicID) && soloRecordID(id) {
 			continue
 		}
 		removed = append(removed, id)

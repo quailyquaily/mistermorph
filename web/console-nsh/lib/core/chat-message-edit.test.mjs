@@ -43,3 +43,19 @@ test("an edit replaces its message and everything after it", () => {
 test("the quote is one line", () => {
   assert.equal(editQuoteLine("  first line\n\nsecond\tline  "), "first line second line");
 });
+
+test("an edit in Solo keeps the cards and summaries of its work threads", () => {
+  const card = { soloThread: { kind: "card", topicID: "w1", taskID: "x" } };
+  const items = [
+    { role: "user", id: "t1:user", text: "hi" },
+    { role: "agent", id: "t1:agent", text: "hello" },
+    { role: "user", id: "t2:user", text: "migrate the db" },
+    { role: "agent", id: "solothread_x:agent", ...card },
+    { role: "agent", id: "t2:agent", text: "started" },
+    { role: "agent", id: "solosummary_x:agent", soloThread: { ...card.soloThread, kind: "summary" } },
+    { role: "user", id: "t3:user", text: "thanks" },
+  ];
+  const edit = { itemID: "t2:user", taskID: "t2" };
+  assert.deepEqual([...editReplacedItemIDs(items, edit)], ["t2:user", "t2:agent", "t3:user"]);
+  assert.deepEqual(historyBeforeEdit(items, edit).map((item) => item.id), ["t1:user", "t1:agent", "solothread_x:agent", "solosummary_x:agent"]);
+});
