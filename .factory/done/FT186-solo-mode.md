@@ -122,3 +122,17 @@ Validation: required gofmt, go vet ./... and go test ./... passed with TMPDIR ne
 Residual risks, not established as introduced blocking defects: restart completion catch-up scans the newest 200 Solo records; editing earlier messages removes later cards; thread excerpts lack an explicit untrusted wrapper; terminal Solo has no work_thread/chips; cached topic pages can temporarily omit Solo; background card-sync goroutines are not awaited on shutdown. Visual UI, native builds, Android JVM tests and live-model end-to-end were not checked.
 
 Round 3 of max 3: review/ → ready/. Owner should inspect the Solo flow and residual risks before shipping. No linked GitHub issues or PRs. Recovered the previous review worktree. No newly observed directly owned /tmp entries; harness /tmp/claude-995 stays inventoried, not deleted. No memory/settings writes reported. Review temporary files removed at end; no production commits or pushes in this review.
+
+## factory · 2026-11-25 19:05
+Merged into master by hand at the owner's word ("commit to master and push"), not by a ship run: merge commit 933f0506 (--no-ff) of branch head 74723bcd, pushed with the branch. Not tagged; the next v* tag releases it. Moved ready/ → done/ at the owner's word ("move to done.").
+
+Beyond the reviewed head b1e337a5, the merge carries five commits that fix this review's residual risks:
+- 400aedbf: a thread's reply is quoted as data, with markers it cannot close, in Solo's prompt and in its summary in Solo's history; the restart catch-up and the prompt read all Solo records page by page, not the newest 200. Shared Solo code moved to internal/solo.
+- d30574a6: an edit in Solo keeps the work thread cards and summaries after the edited message (store, journal replay and Console); other topics unchanged.
+- 0a473e85: the topic list saved for the next visit always keeps Solo.
+- a22b5a33: Solo in a terminal chat without a Console runtime gets the Solo prompt and recent threads, points longer work to the Console (it cannot start work threads), /solo says so, and its replies keep their chips.
+- 74723bcd: docs/console.md.
+
+Checks on 74723bcd (the merge's tree is identical): gofmt, go vet ./..., go test ./... pass; nsh check passes; Console scripts/test.sh 171 files, 0 failed. New tests cover each fix.
+
+Still open: background card-sync goroutines are not awaited on shutdown (the restart catch-up covers a missed update); no live-model end-to-end, visual or native check yet.
