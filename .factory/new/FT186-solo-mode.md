@@ -57,3 +57,18 @@ Visual check: coder checked built web UI in Chrome with stubbed API at desktop E
 Installs: none; no manifest or lockfile changes. Shared Go build cache was written before the isolated test environment was applied. Coder also reported a Claude project memory note outside the permitted run folders; it is not part of the implementation, and no unrelated user files were removed. No new directly owned /tmp entries were observed by the manager.
 
 Review should check owner/audience isolation, resumed-workspace approval, concurrent Solo/thread operation, durable once-only completion, and the existing Console failure before approval.
+
+## factory · review · 2026-11-25 16:43
+head: 78d0c47f1e83ab16fa708bfa6da88bf187d4c8ac
+verdict: fix
+fix:
+- [P1] web/console-nsh/tests/ui-components.test.tsx:107,135: required Console scripts/test.sh fails after isolated retry: `cannot find role:button[Login]` (2 assertions; UI says “Log in”). Factory gate blocks approval even though both failures reproduce unchanged on base 7eac7239 and are not introduced by FT186. Do not fix unrelated baseline code on this branch; restore the required baseline gate before approval and rerun review.
+notes:
+- [P3] cmd/mistermorph/consolecmd/solo.go:469-474: read_file/write_file add a workspace provenance chip for /var/lib/morph_nest paths and absolute paths outside that workspace. Verified scratch probes: reading /var/lib/morph_nest/notes.md or /etc/hosts both produces the current workspace chip. Resolve paths against run roots and only label the actual workspace touched.
+- [P3] web/console-nsh/pages/chat/chatController.ts:674: Solo is pinned only within loaded topic pages. Verified probe: EnsureSoloTopic followed by 100 CreateNamedTopic calls makes ListTopicsPage(Limit:100) omit _solo, so no pinned Solo appears initially. Include Solo in the first server page or fetch it separately.
+
+Validation: Claude Code reviewed all 44 changed files / five commits in origin/master...HEAD. No merge conflicts with base. Required Go formatting/vet/full tests pass (171 packages). nsh check passes. Console scripts/test.sh: 169 files, one failed after isolated retry; same two Login failures reproduced on base. New Solo UI tests pass; additional lib node tests 319/319 pass. Worktree remains unchanged. Tests used isolated HOME/XDG/cache paths. No installs.
+
+Residual risks (not confirmed introduced findings): restart completion catch-up scans only the latest 200 Solo records; editing earlier Solo messages removes later cards; thread reply excerpts enter Solo prompt without an explicit untrusted wrapper; local terminal Solo lacks Console work_thread/chips. No live-model end-to-end, native packaging, Android JVM or visual checks in this review.
+
+Round 1 of max 3: review/ → new/ because the required test gate fails, not because a new P1 code defect was demonstrated. Owner should address the pre-existing baseline failure separately and inspect the two P3 findings. No linked GitHub issues or PRs. Claude harness reports temporary output under /tmp/claude-995; recorded in the outside inventory, not deleted. No newly observed directly owned /tmp entries.
