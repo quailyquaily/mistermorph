@@ -157,6 +157,49 @@ run it was made for. Subtasks work in the workspace their parent used when they
 started. Settings → Tools lists them in the Console column of the channel tool
 matrix; they have no setting. See [Tools](./tools.md#other-topics-and-workspaces-console).
 
+## Solo
+
+Solo is the owner's one conversation with the agent: a pinned entry, always first in
+the Console's topic list (date and tag views, on phones too), beside the ordinary
+topics, which work as before. Each agent has one, the reserved topic `_solo`, made the
+first time the topic list (or Solo itself) is asked for; it cannot be deleted or
+renamed, and the Console offers no tags for it. A runtime from before Solo lists none, and the Console shows none for it.
+
+A Solo message is an owner chat run (it gets the tools in
+[Other topics and workspaces](#other-topics-and-workspaces)) with one tool more,
+`work_thread`. The agent decides per message: answer inline, recall from memory, the
+journal or another topic (`topic_search`/`topic_read`), or work. Work that needs a
+project folder or takes long goes into a **work thread**: an ordinary topic, titled for
+the work, marked as started from Solo (`started_from: "_solo"` on the topic, a mark in
+the topic list), with the workspace it needs attached. Its task goes through the normal
+task queue in the background, so Solo answers the next message meanwhile. `work_thread`
+can also give an existing thread (or other ordinary topic) more work in its own
+workspace. Short work in a known workspace may run in Solo itself with `workspace_use`.
+
+- **Asking first.** The thread's workspace is required and checked as `workspace_use`
+  checks a path (a known workspace or a folder the user named in the message; never a
+  denied path or the state folder); otherwise the agent is told to ask the user. A
+  thread's first write or command in a workspace other than Solo's asks for approval in
+  the thread, as after `workspace_use`.
+- **Cards.** Solo shows a card for each thread it started: title, workspace and state
+  (running, waiting for you, done, failed, stopped), followed live while the thread
+  runs; pressing Open thread opens it. When the thread's task ends, Solo gets its summary
+  (the start of the thread's reply, or why it failed or stopped) with the same link.
+  Cards and summaries are finished tasks of the Solo topic (`solothread_<task id>`,
+  `solosummary_<task id>`, with `result.solo_thread`); the summary is written once, also
+  when the thread ended while the runtime was down.
+- **Chips.** Under each Solo reply, chips name what its run actually used, from its own
+  successful tool calls: the workspace (file and shell tools, `workspace_use`), the
+  threads it started, the topics it read (both open when pressed), the memory and the
+  journal (`result.solo_sources`).
+- **Context.** Solo keeps summaries and links; a thread's full working context stays in
+  the thread, and what is said there stays there. Each Solo run's prompt lists the
+  recent threads with their topic IDs, workspaces, states and summaries, whatever the
+  history window or compaction kept.
+
+Solo is the Console owner's conversation; channel conversations keep their own
+audiences. In the terminal chat, `/solo` (or `/topic switch _solo`) opens it.
+
 ## Restart
 
 Settings that only apply after a restart (`process_restart` and `runtime_restart` fields) show a **Restart now** banner once saved. It calls `POST /api/system/restart`:
@@ -483,7 +526,8 @@ disables cross-process history sharing. Chat does not change this setting.
 The first message creates a topic. `/topics` opens the same topic picker used
 for explicit remote connections, filtered by the current workspace. Use
 `/topic switch <id>` or `chat --topic <id>` to open an existing topic, including
-one outside the picker scope. Selecting a topic restores its history with the
+one outside the picker scope. `/solo` opens [Solo](#solo), the agent's one
+pinned conversation (made on first use). Selecting a topic restores its history with the
 normal chat presentation. `/topic history` reads the latest saved history;
 `/topic history more` loads older entries. Each new local turn reads shared
 history again, including messages added by Web.

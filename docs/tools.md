@@ -26,6 +26,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `message_react`: runtime-injected in Telegram and Slack runtimes; params/context differ by channel.
   - `memory_save`, `memory_search`, `memory_forget`, `journal_search`, `journal_read`: registered for a top-level run that has an audience when `memories.enabled` (default on). `memory_save` is always visible; the others are deferred and found with `tool_search`. See [Memories](./memories.md#tools).
   - `workspace_list`, `workspace_use`, `topic_search`, `topic_read`: the Console owner's own chat runs only (not TODO runs, Agent Link messages, channel runtimes or subtasks). Deferred, found with `tool_search` when it is on. See [Other topics and workspaces](#other-topics-and-workspaces-console).
+  - `work_thread`: the Console owner's runs in Solo only. Always listed there (not deferred). See [`work_thread`](#work_thread-console-solo).
   - `skill_install_preview`, `skill_install`: Console only. A task that names one with `$` (the Skills page's Add skill does) gets it visible and runs with only the install tools. With `tools.tool_search.enabled` (default on), every other Console task gets both as deferred tools, found with `tool_search`. `skill_install` always asks for approval. See [Console skills page](./feat/feat_20260926_console_skills_page.md#41-installing-is-a-task).
 
 ### 2) ASCII architecture
@@ -446,6 +447,19 @@ Switches the running task's workspace for the rest of the task; the topic's atta
 `topic_read`: `topic_id` (required), `cursor` (`next_cursor` from the previous page), `limit` (1–20, default 5). Returns `topic` (`id`, `title`, `kind`, `tags`, `last_activity`, `workspace`, `workspace_source`), `turns` newest first (`task_id`, `time`, `status`, `message` up to 2,000 characters, `reply` up to 4,000, `error`, attachment names in `files`, referenced file names in `referenced_files`, `*_truncated` flags) and `next_cursor` while older turns remain.
 
 Both topic tools' results reach the model as untrusted tool output, like `read_file`'s.
+
+## `work_thread` (Console Solo)
+
+Purpose: from Solo, the owner's one conversation, start work in a topic and workspace of its own (a work thread) that runs in the background while Solo answers the next message. Only the owner's runs in Solo get it; each call is refused from any other run, audience or subtask. See [Console](./console.md#solo).
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `task` | `string` | Yes | None | What the thread should do, complete: the thread does not see Solo's conversation. |
+| `workspace` | `string` | Yes | None | The thread's workspace: a workspace from `workspace_list` or a folder inside one, or a folder the user named in this message (absolute or `~/`). |
+| `title` | `string` | For a new thread | None | The thread's title (at most 80 characters). |
+| `topic_id` | `string` | No | None | An existing topic to give more work, in its own workspace. Solo, Awareness, TODO and Agent Link topics are refused. |
+
+Creates the topic (marked `started_from: "_solo"`) with the workspace attached, or continues `topic_id`, records the thread's card in Solo and submits the task to the Console's queue; returns at once with `topic_id`, `task_id`, `title`, `workspace`, `state` (`running`), `continued` and a `note`. A missing, unknown or denied folder fails and starts nothing: the model asks the user which workspace. A topic still running a task is refused. The thread's first write or command in a workspace other than Solo's asks for approval in the thread. When the thread's task ends, Solo gets its summary. Codemode scripts cannot call it.
 
 ## `todo_list`
 
