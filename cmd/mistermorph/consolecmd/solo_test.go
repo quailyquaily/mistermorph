@@ -496,6 +496,51 @@ func TestSoloThreadAsksBeforeWritingOutsideSolosWorkspace(t *testing.T) {
 	}
 }
 
+// File calls name the workspace only when their path is in it: not for the nest, the cache or
+// state dirs, or absolute paths elsewhere.
+func TestSoloSourceCollectorFilePaths(t *testing.T) {
+	ws := t.TempDir()
+	ctx := pathroots.WithWorkspaceDir(context.Background(), ws)
+	link := filepath.Join(t.TempDir(), "ws-link")
+	if err := os.Symlink(ws, link); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		tool, path string
+		want       bool
+	}{
+		{"read_file", "notes.md", true},
+		{"read_file", "./src/../notes.md", true},
+		{"write_file", "workspace_dir/out.txt", true},
+		{"read_file", "/workspace_dir/out.txt", true},
+		{"read_file", filepath.Join(ws, "src", "main.go"), true},
+		{"read_file", filepath.Join(link, "main.go"), true},
+		{"read_file", "/var/lib/morph_nest/notes.md", false},
+		{"read_file", "/etc/hosts", false},
+		{"write_file", filepath.Join(filepath.Dir(ws), "sibling.txt"), false},
+		{"write_file", ws + "-other/x.txt", false},
+		{"read_file", "../outside.txt", false},
+		{"read_file", "file_cache_dir/a.png", false},
+		{"write_file", "file_state_dir/notes.md", false},
+		{"read_file", "", false},
+		{"bash", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool+" "+tc.path, func(t *testing.T) {
+			c := newSoloSourceCollector("run1")
+			event := agent.Event{Kind: agent.EventKindToolDone, RunID: "run1", ToolName: tc.tool, Text: "ok"}
+			if tc.path != "" {
+				event.Args = map[string]any{"path": tc.path}
+			}
+			c.HandleEvent(ctx, event)
+			got := c.Sources()
+			if tc.want != (len(got) == 1 && got[0].Kind == daemonruntime.SoloSourceWorkspace && got[0].ID == ws) || (!tc.want && len(got) != 0) {
+				t.Fatalf("sources = %+v, want workspace chip %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSoloSourceCollector(t *testing.T) {
 	ws := t.TempDir()
 	ctx := pathroots.WithWorkspaceDir(context.Background(), ws)
@@ -503,8 +548,8 @@ func TestSoloSourceCollector(t *testing.T) {
 	done := func(name, text string) agent.Event {
 		return agent.Event{Kind: agent.EventKindToolDone, RunID: "run1", ToolName: name, Text: text}
 	}
-	c.HandleEvent(ctx, done("read_file", "x"))
-	c.HandleEvent(ctx, done("read_file", "again"))
+	c.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, RunID: "run1", ToolName: "read_file", Args: map[string]any{"path": "notes.md"}, Text: "x"})
+	c.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, RunID: "run1", ToolName: "read_file", Args: map[string]any{"path": "notes.md"}, Text: "again"})
 	c.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, RunID: "run1", ToolName: "read_file", Args: map[string]any{"path": "file_cache_dir/a.png"}})
 	c.HandleEvent(ctx, done("workspace_use", `{"workspace_dir":"/srv/api","display":"/srv/api"}`))
 	c.HandleEvent(ctx, done("topic_read", `{"topic":{"id":"t1","title":"Pricing"}}`))
@@ -529,6 +574,13 @@ func TestSoloSourceCollector(t *testing.T) {
 	}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("sources = %+v\nwant %+v", got, want)
+	}
+	// Without a workspace, file calls name none.
+	bare := newSoloSourceCollector("run1")
+	bare.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolDone, RunID: "run1", ToolName: "read_file", Args: map[string]any{"path": "notes.md"}})
+	bare.HandleEvent(context.Background(), done("bash", "ok"))
+	if got := bare.Sources(); len(got) != 0 {
+		t.Fatalf("no-workspace sources = %+v", got)
 	}
 	var none *soloSourceCollector
 	none.HandleEvent(ctx, done("memory_search", ""))

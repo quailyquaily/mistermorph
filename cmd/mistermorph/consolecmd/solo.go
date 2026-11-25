@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/memorytools"
 	"github.com/quailyquaily/mistermorph/internal/ownertools"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
+	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 )
 
@@ -449,6 +451,61 @@ var soloWorkspaceTools = map[string]bool{
 	"read_file": true, "write_file": true, "bash": true, "powershell": true, "coder": true,
 }
 
+// soloPathTools name the file they touch in a path argument; they count as workspace use only when
+// that path resolves inside the workspace.
+var soloPathTools = map[string]bool{"read_file": true, "write_file": true}
+
+// soloPathInWorkspace reports whether a read_file/write_file path resolves inside workspace dir, as
+// those tools resolve it: workspace_dir/ aliases and relative paths land in the workspace, the
+// other aliases (file_cache_dir/, file_state_dir/) never do, and absolute paths only when under it.
+func soloPathInWorkspace(rawPath string, dir string) bool {
+	rawPath = pathutil.ExpandHomePath(strings.TrimSpace(rawPath))
+	if rawPath == "" {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimLeft(rawPath, "/\\"))
+	for _, alias := range []string{"workspace_dir", "file_cache_dir", "file_state_dir"} {
+		if lower == alias || strings.HasPrefix(lower, alias+"/") || strings.HasPrefix(lower, alias+"\\") {
+			return alias == "workspace_dir"
+		}
+	}
+	base, err := filepath.Abs(pathutil.ExpandHomePath(strings.TrimSpace(dir)))
+	if err != nil {
+		return false
+	}
+	var path string
+	if filepath.IsAbs(rawPath) {
+		path = filepath.Clean(rawPath)
+	} else {
+		path = filepath.Join(base, rawPath)
+	}
+	if path == base || pathutil.IsWithinDir(base, path) {
+		return true
+	}
+	// The workspace may be reached through a symlink on either side.
+	realBase, err1 := filepath.EvalSymlinks(base)
+	realPath, err2 := evalSymlinksOfExisting(path)
+	return err1 == nil && err2 == nil && (realPath == realBase || pathutil.IsWithinDir(realBase, realPath))
+}
+
+// evalSymlinksOfExisting resolves the symlinks of path's longest existing prefix (a file
+// write_file creates need not exist yet) and joins the rest back on.
+func evalSymlinksOfExisting(path string) (string, error) {
+	rest := ""
+	for {
+		real, err := filepath.EvalSymlinks(path)
+		if err == nil {
+			return filepath.Join(real, rest), nil
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return "", err
+		}
+		rest = filepath.Join(filepath.Base(path), rest)
+		path = parent
+	}
+}
+
 func (c *soloSourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
 	if c == nil || event.Kind != agent.EventKindToolDone || strings.TrimSpace(event.Error) != "" || event.Worker != nil {
 		return
@@ -467,12 +524,17 @@ func (c *soloSourceCollector) HandleEvent(ctx context.Context, event agent.Event
 			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: out.Dir, Label: out.Display})
 		}
 	case soloWorkspaceTools[name]:
-		if path, _ := event.Args["path"].(string); strings.HasPrefix(strings.TrimSpace(path), "file_cache_dir") {
+		dir, ok := pathroots.WorkspaceDirFromContext(ctx)
+		if !ok || strings.TrimSpace(dir) == "" {
 			return
 		}
-		if dir, ok := pathroots.WorkspaceDirFromContext(ctx); ok && strings.TrimSpace(dir) != "" {
-			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: dir, Label: ownertools.DisplayPath(dir, c.home)})
+		if soloPathTools[name] {
+			path, _ := event.Args["path"].(string)
+			if !soloPathInWorkspace(path, dir) {
+				return
+			}
 		}
+		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: dir, Label: ownertools.DisplayPath(dir, c.home)})
 	case name == ownertools.TopicReadName:
 		var out struct {
 			Topic struct {
