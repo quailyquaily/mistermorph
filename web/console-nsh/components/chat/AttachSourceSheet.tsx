@@ -35,6 +35,8 @@ export function attachSourcePanelShape(sheet: boolean): string {
 export function AttachSourceSheet(props: {
   open: boolean;
   onClose: () => void;
+  /** The paper has gone (DialogLayer `onClosed`): the chosen source's picker may open. */
+  onClosed?: () => void;
   onChoose: (source: AttachSource) => void;
   labels?: AttachSourceLabels;
   testID?: string;
@@ -49,6 +51,7 @@ export function AttachSourceSheet(props: {
     <DialogLayer
       open={props.open}
       onClose={props.onClose}
+      onClosed={props.onClosed}
       testID={testID()}
       label={labels().title}
       // No handle: the paper is not dragged; Back, Escape and the scrim close it.

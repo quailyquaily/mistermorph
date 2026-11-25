@@ -15,7 +15,9 @@ import { PopoverPicker } from "../shared/PopoverPicker";
 import { ICONS } from "../icons";
 import {
   Button,
+  afterLayerGone,
   BusyBeam,
+  HAND_OFF_AFTER_CLOSE,
   busyLook,
   CircleButton,
   circleButtonClass,
@@ -531,14 +533,24 @@ export function ChatComposer(props: ChatComposerProps) {
 
   // Upload files on a touch screen asks Gallery or File first (the system's photo or document
   // picker); the keyboard stays down through it, as for the pickers. Cancelled, nothing changes.
+  // On iOS the picker opens once the paper has gone (afterLayerGone: a picker presented while the
+  // paper is dismissed went with it); elsewhere at once, from the press (a browser needs that).
   const sourceSheetOpen = signal(false);
+  let chosenSource: AttachSource | null = null;
   function upload() {
+    chosenSource = null;
     if (touchScreen() && props.onUploadFrom) sourceSheetOpen.set(true);
     else props.onUpload?.();
   }
   function chooseSource(source: AttachSource) {
     sourceSheetOpen.set(false);
-    props.onUploadFrom?.(source);
+    if (HAND_OFF_AFTER_CLOSE) chosenSource = source;
+    else props.onUploadFrom?.(source);
+  }
+  function sourceSheetGone() {
+    const source = chosenSource;
+    chosenSource = null;
+    if (source) afterLayerGone(() => props.onUploadFrom?.(source));
   }
 
   const addItems = () => [
@@ -582,6 +594,11 @@ export function ChatComposer(props: ChatComposerProps) {
         <PopoverPicker
           items={addItems().map((item) => ({ value: item.id, title: item.label, icon: <Icon name={item.icon} size={16} color="subtle" /> }))}
           onChange={(id) => addItems().find((item) => item.id === id)?.onSelect()}
+          // Each item goes on to a picker or a dialog: the field does not take the focus back as
+          // the paper closes, before the item runs.
+          onCommand={() => {
+            refocusAfterSheet = false;
+          }}
           trigger={() => addTrigger(false)}
           accessibilityLabel={props.addLabel ?? ""}
           sheet={touchScreen() ? true : undefined}
@@ -1089,6 +1106,7 @@ export function ChatComposer(props: ChatComposerProps) {
       <AttachSourceSheet
         open={sourceSheetOpen()}
         onClose={() => sourceSheetOpen.set(false)}
+        onClosed={sourceSheetGone}
         onChoose={chooseSource}
         labels={props.uploadSourceLabels}
       />
