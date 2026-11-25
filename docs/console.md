@@ -188,7 +188,9 @@ workspace. Short work in a known workspace may run in Solo itself with `workspac
   (the start of the thread's reply, or why it failed or stopped) with the same link.
   Cards and summaries are finished tasks of the Solo topic (`solothread_<task id>`,
   `solosummary_<task id>`, with `result.solo_thread`); the summary is written once, also
-  when the thread ended while the runtime was down.
+  when the thread ended while the runtime was down, however far back the thread started.
+  Editing an earlier Solo message drops the messages after it but keeps these cards and
+  summaries: the threads run on in their own topics.
 - **Chips.** Under each Solo reply, chips name what its run actually used, from its own
   successful tool calls: the workspace (shell tools, `workspace_use`, and `read_file`/
   `write_file` on a file really inside it, symlinks resolved), the
@@ -198,9 +200,16 @@ workspace. Short work in a known workspace may run in Solo itself with `workspac
   the thread, and what is said there stays there. Each Solo run's prompt lists the
   recent threads with their topic IDs, workspaces, states and summaries, whatever the
   history window or compaction kept.
+- **Untrusted replies.** A thread's reply can repeat what the thread read (a web page, a
+  file), so Solo never takes it as instructions: the prompt's list of threads and each
+  summary in Solo's history quote it between markers and say it is data.
 
 Solo is the Console owner's conversation; channel conversations keep their own
-audiences. In the terminal chat, `/solo` (or `/topic switch _solo`) opens it.
+audiences. In the terminal chat, `/solo` (or `/topic switch _solo`) opens it. A terminal
+chat connected to a Console runtime (`--runtime-url`) works there as the Console does. A
+terminal chat on its own cannot start work threads (a thread would stop with the
+terminal): its Solo runs know Solo and its recent threads, do short work in the chat's
+own workspace, point longer work to the Console, and keep their chips.
 
 ## Restart
 
