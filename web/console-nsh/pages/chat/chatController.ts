@@ -66,7 +66,7 @@ import { invalidateResource, loadResource, peekResource, readResource, resourceK
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../../lib/core/workspace-tree.js";
 import { topicIcon, useTopicMetadata } from "../../lib/core/topic-metadata.js";
-import { isSoloTopicID, liveSoloThreads, SOLO_TOPIC_ID, soloSourcesOf, soloThreadOf, topicStartedFromSolo } from "../../lib/core/solo.js";
+import { firstTopicsPageWithSolo, isSoloTopicID, liveSoloThreads, SOLO_TOPIC_ID, soloSourcesOf, soloThreadOf, topicStartedFromSolo } from "../../lib/core/solo.js";
 import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicJobID, topicSidebarViewFor } from "../../lib/core/chat-cron-topics.js";
 import {
   activelyViewedTopic,
@@ -2485,7 +2485,7 @@ export function createChatController() {
     const items = topics();
     untracked(() => {
       if (!topicsKept || topicsKept.endpointRef !== submitEndpointRef()) return;
-      writeResource(topicsKey(topicsKept.endpointRef), { items: items.slice(0, TOPIC_PAGE_LIMIT), next_cursor: topicsKept.cursor }, { eager: true });
+      writeResource(topicsKey(topicsKept.endpointRef), { items: firstTopicsPageWithSolo(items, TOPIC_PAGE_LIMIT), next_cursor: topicsKept.cursor }, { eager: true });
     });
   });
 

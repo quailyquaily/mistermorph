@@ -75,3 +75,16 @@ export function liveSoloThreads(items) {
   }
   return out;
 }
+
+/**
+ * The topic list kept for the next visit: its first `limit` topics, and Solo with them however old
+ * it is, as the runtime's own first page always has it (else the next visit opens without Solo
+ * until the runtime answers).
+ */
+export function firstTopicsPageWithSolo(items, limit) {
+  const list = Array.isArray(items) ? items : [];
+  const page = list.slice(0, limit);
+  if (limit <= 0 || page.some((topic) => isSoloTopicID(topic?.id))) return page;
+  const solo = list.find((topic) => isSoloTopicID(topic?.id));
+  return solo ? [...list.slice(0, limit - 1), solo] : page;
+}

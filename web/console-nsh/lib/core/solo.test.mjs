@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isSoloTopicID, liveSoloThreads, soloSourcesOf, soloThreadEnded, soloThreadOf, topicStartedFromSolo } from "./solo.js";
+import { firstTopicsPageWithSolo, isSoloTopicID, liveSoloThreads, soloSourcesOf, soloThreadEnded, soloThreadOf, topicStartedFromSolo } from "./solo.js";
 
 test("Solo's topic and the threads it started", () => {
   assert.equal(isSoloTopicID(" _solo "), true);
@@ -44,4 +44,12 @@ test("the threads still running in a history", () => {
     { role: "user" },
   ];
   assert.deepEqual(liveSoloThreads(items), ["a", "d"]);
+});
+
+test("the kept topics page keeps Solo however old it is", () => {
+  const topics = Array.from({ length: 5 }, (_, i) => ({ id: `t${i}` }));
+  assert.deepEqual(firstTopicsPageWithSolo([...topics, { id: "_solo" }], 3).map((t) => t.id), ["t0", "t1", "_solo"]);
+  assert.deepEqual(firstTopicsPageWithSolo([{ id: "_solo" }, ...topics], 3).map((t) => t.id), ["_solo", "t0", "t1"]);
+  assert.deepEqual(firstTopicsPageWithSolo(topics, 3).map((t) => t.id), ["t0", "t1", "t2"]);
+  assert.deepEqual(firstTopicsPageWithSolo([...topics, { id: "_solo" }], 10).length, 6);
 });
