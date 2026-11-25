@@ -2521,7 +2521,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	// A Solo reply shows what its run used: the workspace, the threads and the sources (solo.go).
 	var soloSources *solo.SourceCollector
 	if consoleSoloRun(job) {
-		soloSources = solo.NewSourceCollector(job.TaskID)
+		soloSources = solo.NewSourceCollector(job.TaskID).WithSoloThreads(r.store.TopicStartedFromSolo)
 	}
 	eventSink := agent.EventSinkFunc(func(ctx context.Context, event agent.Event) {
 		trace.HandleEvent(ctx, event)

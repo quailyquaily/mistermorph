@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -423,6 +424,16 @@ func TestSoloStartsWorkThreadThatRunsWhileSoloAnswers(t *testing.T) {
 		t.Fatalf("summaries in Solo = %d, want 1", summaries)
 	}
 
+	// A later Solo reply that reads the thread shows it as the thread it is (its stored
+	// started_from), not as a topic.
+	report := h.chat(daemonruntime.ConsoleSoloTopicID, "solo-recall "+rec.TopicID+" report on the thread")
+	reportSources := soloSourcesOf(t, h.client.wait(report.ID, daemonruntime.TaskDone))
+	wantRead := []daemonruntime.SoloSourceUse{{Action: daemonruntime.SoloUseRead, Count: 1}}
+	if len(reportSources) != 1 || reportSources[0].Kind != daemonruntime.SoloSourceThread || reportSources[0].ID != rec.TopicID ||
+		reportSources[0].Label != "Build report" || !reflect.DeepEqual(reportSources[0].Uses, wantRead) {
+		t.Fatalf("chips of the reply that read the thread = %+v", reportSources)
+	}
+
 	// The next Solo run is told about the thread and what it came to; the thread's own
 	// conversation stays in the thread.
 	next := h.chat(daemonruntime.ConsoleSoloTopicID, "solo-after what came of it")
@@ -459,7 +470,8 @@ func TestSoloAnswersFromAnotherTopicWithItsChip(t *testing.T) {
 		t.Fatalf("reply = %+v", done.Result)
 	}
 	sources := soloSourcesOf(t, done)
-	if len(sources) != 1 || sources[0].Kind != daemonruntime.SoloSourceTopic || sources[0].ID != pricing.ID || sources[0].Label != "Pricing" {
+	if len(sources) != 1 || sources[0].Kind != daemonruntime.SoloSourceTopic || sources[0].ID != pricing.ID || sources[0].Label != "Pricing" ||
+		fmt.Sprint(sources[0].Uses) != "[{read 1}]" {
 		t.Fatalf("chips = %+v, want the Pricing topic", sources)
 	}
 	// An ordinary topic's reply carries no chips, and its runs have no work_thread.
@@ -664,12 +676,12 @@ func TestSoloSourceCollector(t *testing.T) {
 	got := c.Sources()
 	want := []daemonruntime.SoloSource{
 		// The label follows the production display contract: a TMPDIR under HOME shows as ~/...
-		{Kind: "workspace", ID: ws, Label: ownertools.DisplayPath(ws, workspace.HostHomeDir())},
-		{Kind: "workspace", ID: "/srv/api", Label: "/srv/api"},
-		{Kind: "topic", ID: "t1", Label: "Pricing"},
-		{Kind: "thread", ID: "t2", Label: "Build"},
-		{Kind: "memory"},
-		{Kind: "journal"},
+		{Kind: "workspace", ID: ws, Label: ownertools.DisplayPath(ws, workspace.HostHomeDir()), Uses: []daemonruntime.SoloSourceUse{{Action: "read_file", Count: 2}}},
+		{Kind: "workspace", ID: "/srv/api", Label: "/srv/api", Uses: []daemonruntime.SoloSourceUse{{Action: "select", Count: 1}}},
+		{Kind: "topic", ID: "t1", Label: "Pricing", Uses: []daemonruntime.SoloSourceUse{{Action: "read", Count: 1}}},
+		{Kind: "thread", ID: "t2", Label: "Build", Uses: []daemonruntime.SoloSourceUse{{Action: "start", Count: 1}, {Action: "read", Count: 1}}},
+		{Kind: "memory", Uses: []daemonruntime.SoloSourceUse{{Action: "search", Count: 1}}},
+		{Kind: "journal", Uses: []daemonruntime.SoloSourceUse{{Action: "read", Count: 1}, {Action: "search", Count: 1}}},
 	}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("sources = %+v\nwant %+v", got, want)

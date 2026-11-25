@@ -38,9 +38,20 @@ func TestSoloTopicIsMadeOnceAndKept(t *testing.T) {
 	if err != nil || !thread.TitleCustomized || thread.StartedFrom != ConsoleSoloTopicID {
 		t.Fatalf("CreateThreadTopic() = %+v, %v", thread, err)
 	}
+	plain, err := store.CreateTopic("Pricing")
+	if err != nil {
+		t.Fatal(err)
+	}
 	reloaded, err := NewConsoleFileStore(opts)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Which topics are Solo's threads comes from their stored records.
+	var noStore *ConsoleFileStore
+	if !reloaded.TopicStartedFromSolo(thread.ID) || !reloaded.TopicStartedFromSolo(" "+thread.ID+" ") ||
+		reloaded.TopicStartedFromSolo(plain.ID) || reloaded.TopicStartedFromSolo(ConsoleSoloTopicID) ||
+		reloaded.TopicStartedFromSolo("missing") || reloaded.TopicStartedFromSolo("") || noStore.TopicStartedFromSolo(thread.ID) {
+		t.Fatal("TopicStartedFromSolo is wrong about a topic")
 	}
 	solo, ok := reloaded.GetTopic(ConsoleSoloTopicID)
 	if !ok || solo.Title != ConsoleSoloTopicTitle || solo.DeletedAt != nil {

@@ -26,17 +26,49 @@ type SourceCollector struct {
 	runID   string
 	home    string
 	items   []daemonruntime.SoloSource
-	seen    map[string]bool
+	seen    map[string]int
 	threads map[string]bool
+	// soloThread reports whether a topic is a work thread Solo started, from the topic's own
+	// stored record; nil knows none.
+	soloThread func(topicID string) bool
 }
 
 func NewSourceCollector(runID string) *SourceCollector {
-	return &SourceCollector{runID: strings.TrimSpace(runID), home: workspace.HostHomeDir(), seen: map[string]bool{}, threads: map[string]bool{}}
+	return &SourceCollector{runID: strings.TrimSpace(runID), home: workspace.HostHomeDir(), seen: map[string]int{}, threads: map[string]bool{}}
 }
 
-// workspaceTools are the calls that work in the run's workspace.
-var workspaceTools = map[string]bool{
-	"read_file": true, "write_file": true, "bash": true, "powershell": true, "coder": true,
+// WithSoloThreads tells the collector which topics are work threads Solo started: soloThread
+// answers from the topic's stored record (its started_from), never from what a tool call said. A
+// topic the run reads that is one shows as a thread, as it did under the reply that started it;
+// every other topic read stays a topic.
+func (c *SourceCollector) WithSoloThreads(soloThread func(topicID string) bool) *SourceCollector {
+	if c != nil {
+		c.mu.Lock()
+		c.soloThread = soloThread
+		c.mu.Unlock()
+	}
+	return c
+}
+
+// workspaceTools are the calls that work in the run's workspace, and what each does there.
+var workspaceTools = map[string]string{
+	"read_file":  daemonruntime.SoloUseReadFile,
+	"write_file": daemonruntime.SoloUseWriteFile,
+	"bash":       daemonruntime.SoloUseShell,
+	"powershell": daemonruntime.SoloUseShell,
+	"coder":      daemonruntime.SoloUseCoder,
+}
+
+// memoryTools and journalTools are the calls that use the memory and the journal, and how.
+var memoryTools = map[string]string{
+	memorytools.SearchName: daemonruntime.SoloUseSearch,
+	memorytools.SaveName:   daemonruntime.SoloUseSave,
+	memorytools.ForgetName: daemonruntime.SoloUseForget,
+}
+
+var journalTools = map[string]string{
+	memorytools.JournalSearchName: daemonruntime.SoloUseSearch,
+	memorytools.JournalReadName:   daemonruntime.SoloUseRead,
 }
 
 // pathTools name the file they touch in a path argument; they count as workspace use only when
@@ -125,9 +157,9 @@ func (c *SourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
 			Display string `json:"display"`
 		}
 		if json.Unmarshal([]byte(strings.TrimSpace(event.Text)), &out) == nil && strings.TrimSpace(out.Dir) != "" {
-			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: out.Dir, Label: out.Display})
+			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: out.Dir, Label: out.Display}, daemonruntime.SoloUseSelect)
 		}
-	case workspaceTools[name]:
+	case workspaceTools[name] != "":
 		dir, ok := pathroots.WorkspaceDirFromContext(ctx)
 		if !ok || strings.TrimSpace(dir) == "" {
 			return
@@ -138,7 +170,7 @@ func (c *SourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
 				return
 			}
 		}
-		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: dir, Label: ownertools.DisplayPath(dir, c.home)})
+		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceWorkspace, ID: dir, Label: ownertools.DisplayPath(dir, c.home)}, workspaceTools[name])
 	case name == ownertools.TopicReadName:
 		var out struct {
 			Topic struct {
@@ -147,7 +179,13 @@ func (c *SourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
 			} `json:"topic"`
 		}
 		if json.Unmarshal([]byte(strings.TrimSpace(event.Text)), &out) == nil && strings.TrimSpace(out.Topic.ID) != "" {
-			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceTopic, ID: out.Topic.ID, Label: out.Topic.Title})
+			// A thread Solo started, by this reply or an earlier one, is read as that thread.
+			id := strings.TrimSpace(out.Topic.ID)
+			kind := daemonruntime.SoloSourceTopic
+			if c.isSoloThread(id) {
+				kind = daemonruntime.SoloSourceThread
+			}
+			c.add(daemonruntime.SoloSource{Kind: kind, ID: id, Label: out.Topic.Title}, daemonruntime.SoloUseRead)
 		}
 	case name == ownertools.WorkThreadName:
 		var out struct {
@@ -156,31 +194,55 @@ func (c *SourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
 			Workspace string `json:"workspace"`
 		}
 		if json.Unmarshal([]byte(strings.TrimSpace(event.Text)), &out) == nil && strings.TrimSpace(out.TopicID) != "" {
-			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceThread, ID: out.TopicID, Label: out.Title})
+			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceThread, ID: out.TopicID, Label: out.Title}, daemonruntime.SoloUseStart)
 		}
-	case name == memorytools.SearchName || name == memorytools.SaveName || name == memorytools.ForgetName:
-		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceMemory})
-	case name == memorytools.JournalSearchName || name == memorytools.JournalReadName:
-		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceJournal})
+	case memoryTools[name] != "":
+		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceMemory}, memoryTools[name])
+	case journalTools[name] != "":
+		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceJournal}, journalTools[name])
 	}
 }
 
-func (c *SourceCollector) add(source daemonruntime.SoloSource) {
+func (c *SourceCollector) isSoloThread(topicID string) bool {
+	c.mu.Lock()
+	lookup := c.soloThread
+	c.mu.Unlock()
+	return lookup != nil && lookup(topicID)
+}
+
+// add notes one successful call's use of a source. A source is listed once, where the run first
+// used it, and each further call adds to its uses: one more of an action it already has, or a new
+// action after them. Only the action's name and a count are kept, so the uses of a source are
+// bounded by the few actions there are.
+func (c *SourceCollector) add(source daemonruntime.SoloSource, action string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	key := source.Kind + "\x00" + source.ID
-	if c.seen[key] {
-		return
+	index, ok := c.seen[key]
+	if !ok {
+		index = len(c.items)
+		c.seen[key] = index
+		if source.Kind == daemonruntime.SoloSourceThread {
+			c.threads[source.ID] = true
+		}
+		source.Uses = nil
+		c.items = append(c.items, source)
 	}
-	c.seen[key] = true
-	if source.Kind == daemonruntime.SoloSourceThread {
-		c.threads[source.ID] = true
+	item := &c.items[index]
+	for i := range item.Uses {
+		if item.Uses[i].Action == action {
+			if item.Uses[i].Count < daemonruntime.SoloSourceUseMaxCount {
+				item.Uses[i].Count++
+			}
+			return
+		}
 	}
-	c.items = append(c.items, source)
+	item.Uses = append(item.Uses, daemonruntime.SoloSourceUse{Action: action, Count: 1})
 }
 
 // Sources is what the run used, in the order it first used each; a topic the run started a thread
-// in shows once, as the thread.
+// in shows once, as the thread, with what the run did to it as a topic among the thread's uses.
+// The result is the caller's own: calls that end later do not change it.
 func (c *SourceCollector) Sources() []daemonruntime.SoloSource {
 	if c == nil {
 		return nil
@@ -192,7 +254,28 @@ func (c *SourceCollector) Sources() []daemonruntime.SoloSource {
 		if item.Kind == daemonruntime.SoloSourceTopic && c.threads[item.ID] {
 			continue
 		}
+		item.Uses = append([]daemonruntime.SoloSourceUse(nil), item.Uses...)
+		if item.Kind == daemonruntime.SoloSourceThread {
+			if index, ok := c.seen[daemonruntime.SoloSourceTopic+"\x00"+item.ID]; ok {
+				item.Uses = mergeUses(item.Uses, c.items[index].Uses)
+			}
+		}
 		out = append(out, item)
 	}
 	return out
+}
+
+// mergeUses adds more to uses: an action uses already has gains its count, a new one follows.
+func mergeUses(uses []daemonruntime.SoloSourceUse, more []daemonruntime.SoloSourceUse) []daemonruntime.SoloSourceUse {
+next:
+	for _, use := range more {
+		for i := range uses {
+			if uses[i].Action == use.Action {
+				uses[i].Count = min(daemonruntime.SoloSourceUseMaxCount, uses[i].Count+use.Count)
+				continue next
+			}
+		}
+		uses = append(uses, use)
+	}
+	return uses
 }

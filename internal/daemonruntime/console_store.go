@@ -579,6 +579,12 @@ func (s *ConsoleFileStore) Get(id string) (*TaskInfo, bool) {
 	return &cp, true
 }
 
+// TopicStartedFromSolo reports whether the stored topic id is a work thread Solo started.
+func (s *ConsoleFileStore) TopicStartedFromSolo(id string) bool {
+	topic, ok := s.GetTopic(id)
+	return ok && IsSoloTopicID(topic.StartedFrom)
+}
+
 func (s *ConsoleFileStore) GetTopic(id string) (*TopicInfo, bool) {
 	if s == nil {
 		return nil, false

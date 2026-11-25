@@ -689,7 +689,7 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 					}
 					currentTurn.trace = chattrace.NewCollector(runID, pathroots.New(sess.workspaceDir, sess.fileStateDir, sess.fileCacheDir), g, nil)
 					if daemonruntime.IsSoloTopicID(task.TopicID) {
-						currentTurn.soloSources = solo.NewSourceCollector(runID)
+						currentTurn.soloSources = solo.NewSourceCollector(runID).WithSoloThreads(sess.sharedTopics.TopicStartedFromSolo)
 					}
 				}
 				checkpointStore, checkpointErr := contextcheckpoint.NewFileStore(sess.contextCheckpointRoot(), sess.conversationKey())
