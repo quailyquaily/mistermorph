@@ -29,14 +29,31 @@ func (g *Guard) ApprovalsAvailable() bool {
 // be stored, and is denied otherwise, never allowed outright. It audits like Evaluate.
 func EvaluateForced(ctx context.Context, g *Guard, meta Meta, a Action) (Result, error) {
 	name := strings.ToLower(strings.TrimSpace(a.ToolName))
+	return evaluateAlwaysAsk(ctx, g, meta, a, name+"_requires_approval", name+"_requires_approval_but_approvals_are_unavailable")
+}
+
+// WorkspaceSwitchReason starts the reason of an approval that a write or a command needs because
+// the run switched to a workspace other than its topic's (workspace_use).
+const WorkspaceSwitchReason = "workspace_switch_requires_approval"
+
+// EvaluateWorkspaceSwitch decides a write or a command in a workspace the run switched to, the
+// first in that workspace: like a forced-approval tool, it needs approval when approvals can be
+// stored and is denied otherwise. It audits like Evaluate.
+func EvaluateWorkspaceSwitch(ctx context.Context, g *Guard, meta Meta, a Action, workspaceDir string) (Result, error) {
+	dir := strings.TrimSpace(workspaceDir)
+	return evaluateAlwaysAsk(ctx, g, meta, a, WorkspaceSwitchReason+": "+dir, WorkspaceSwitchReason+"_but_approvals_are_unavailable: "+dir)
+}
+
+func evaluateAlwaysAsk(ctx context.Context, g *Guard, meta Meta, a Action, reason, unavailableReason string) (Result, error) {
 	res := Result{
 		RiskLevel: RiskHigh,
 		Decision:  DecisionRequireApproval,
-		Reasons:   []string{name + "_requires_approval"},
+		Reasons:   []string{reason},
+		Forced:    true,
 	}
 	if !g.ApprovalsAvailable() {
 		res.Decision = DecisionDeny
-		res.Reasons = []string{name + "_requires_approval_but_approvals_are_unavailable"}
+		res.Reasons = []string{unavailableReason}
 	}
 	if g == nil {
 		return res, nil

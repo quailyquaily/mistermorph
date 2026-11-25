@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
 )
 
 type localSubtaskRunner struct {
@@ -192,6 +193,13 @@ func PrepareSubtaskContext(ctx context.Context, meta map[string]any) (string, co
 	ctx = context.WithValue(ctx, workerContextKey{}, worker)
 	runCtx := llmstats.WithRunID(ctx, taskID)
 	runCtx = WithSubtaskDepth(runCtx, SubtaskDepthFromContext(runCtx)+1)
+	// A subtask works in the workspace its parent uses when it starts, fixed: it gets no part in
+	// the parent's workspace switch, which only the parent may move (and spawn itself asks before
+	// it starts in a switched workspace).
+	if _, switched := pathroots.WorkspaceSwitchFromContext(runCtx); switched {
+		dir, _ := pathroots.WorkspaceDirFromContext(runCtx)
+		runCtx = pathroots.WithWorkspaceDir(runCtx, dir)
+	}
 
 	outMeta := cloneSubtaskMeta(meta)
 	outMeta["trigger"] = "subtask.spawn"

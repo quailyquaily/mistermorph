@@ -116,6 +116,47 @@ ID) and, in `args`, `target: "child"`, `child_id`, `child_task_id` and `parent_r
 `steer_applied` also carries `step`. They are kept in the task's trace, which the terminal chat's
 `/agents` inspector reads.
 
+## Other topics and workspaces
+
+A Console chat task runs in its topic's workspace. The owner's own chat runs (sent
+from the Console chat, or from `mistermorph chat`, in one of the owner's topics) also
+get four tools that reach past that topic:
+
+- `workspace_list` lists the workspaces the agent knows: those attached to the
+  owner's topics (with the topics' titles), the default workspace (`workspace_dir`)
+  and the recently used ones, most recently used first, each with its path, whether
+  it still exists and when it was last used. A use is recorded when an owner chat
+  task starts in a workspace and when a task switches to one (`workspace_uses` in
+  `agent.db`, the latest 100).
+- `workspace_use` switches the running task to another workspace for the rest of the
+  task: `read_file`, `write_file`, the working directory of `bash`/`powershell`,
+  `coder` and `spawn`, `send_file`'s `workspace_dir` and `workspace_dir/` paths all
+  follow it. The path must be a known workspace (or a folder inside one) or a folder
+  the user named in the message (an absolute or `~/` path). The topic's attachment
+  does not change. The run's activity shows the switch (`Using ~/proj/api`).
+  Reading needs no approval. The first write or command in a workspace other than
+  the topic's (`write_file`, `bash`, `powershell`, `coder`, `spawn`, `image_generate`,
+  `image_edit`) asks for approval on the usual approval card, with the reason
+  `workspace_switch_requires_approval: <path>`; once approved, writes and commands in
+  that workspace do not ask again in this task (another workspace asks again). The
+  approval is asked whatever `guard.enabled` and `guard.approvals.enabled` say; a
+  denied approval runs nothing. A run resumed after the approval goes on in the
+  workspace it switched to. `tools.read_file.deny_paths`, the protected state files
+  and the agent's state folder cannot be a workspace, by path or through a symlink.
+- `topic_search` finds the owner's topics by title, tags and what was said in them
+  (the user's messages and the replies), most recently active first, with each
+  topic's ID, title, last activity, workspace and a short excerpt.
+- `topic_read` reads one topic's conversation, newest first, a few turns at a time
+  with a cursor: each turn's message and reply (cut to 2,000 and 4,000 characters),
+  its files' names, and the topic's workspace.
+
+They are deferred tools (found with `tool_search` when it is on) and are not given
+to TODO items' runs, the Awareness topic, Agent Link messages, other Console tasks,
+channel runtimes or subtasks; each call also checks that it comes from the owner's
+run it was made for. Subtasks work in the workspace their parent used when they
+started. Settings → Tools lists them in the Console column of the channel tool
+matrix; they have no setting. See [Tools](./tools.md#other-topics-and-workspaces-console).
+
 ## Restart
 
 Settings that only apply after a restart (`process_restart` and `runtime_restart` fields) show a **Restart now** banner once saved. It calls `POST /api/system/restart`:
@@ -557,7 +598,7 @@ for storage and execution boundaries.
 
 The agent's state is in SQLite, next to the journal and the memories (see `docs/feat/feat_20261108_agent_db.md`):
 
-- `<file_state_dir>/agent.db`: the config (unless `--config` names a file), the identity and soul, the heartbeat workflows, contacts (with an index of every channel identifier), the contacts bus inbox and outbox, the TODO list, Console login sessions, Agent Link peers, and each conversation's context use, latest request snapshot and workspace.
+- `<file_state_dir>/agent.db`: the config (unless `--config` names a file), the identity and soul, the heartbeat workflows, contacts (with an index of every channel identifier), the contacts bus inbox and outbox, the TODO list, Console login sessions, Agent Link peers, each conversation's context use, latest request snapshot and workspace, and the recently used workspaces.
 - `<file_state_dir>/usage.db`: LLM usage, one row per call (`stats.llm_usage.retention_days` bounds it); also the coder tool's runs and the last subscription quota of each coding CLI (`coder_quota`: Codex, Claude Code, the Antigravity CLI).
 
 Each change is one transaction; there are no lock files for these stores (the TODO scheduler keeps `locks/cron.scheduler.lck`). The files an older version kept (`config.yaml` at the default path, `persona/identity.yaml`, `persona/soul.md`, `HEARTBEAT.md`, `contacts/ACTIVE.md`, `INACTIVE.md`, `bus_inbox.json`, `bus_outbox.json`, `cron.yaml`, `console/sessions.json`, `agentlink/peers.json`, `topics/*/context*.json` and `workspace.json`, `stats/llm_usage/*.jsonl`) are imported the first time the database opens after the config is loaded (so a custom `contacts.dir_name` is honoured) and renamed `*.imported`; a record that does not parse is skipped and listed in the database's `meta` table under `import_rejects:<store>`.

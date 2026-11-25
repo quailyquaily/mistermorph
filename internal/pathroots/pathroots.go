@@ -71,8 +71,13 @@ func WorkspaceDirFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
 	}
-	dir, ok := ctx.Value(workspaceDirContextKey{}).(string)
-	if !ok {
+	var dir string
+	switch v := ctx.Value(workspaceDirContextKey{}).(type) {
+	case string:
+		dir = v
+	case *WorkspaceSwitch:
+		dir = v.Current()
+	default:
 		return "", false
 	}
 	dir = strings.TrimSpace(dir)

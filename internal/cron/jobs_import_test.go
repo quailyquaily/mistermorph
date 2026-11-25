@@ -505,6 +505,7 @@ func TestUpgradeFromAnAgentDBBeforeTheJobsTableKeepsItsState(t *testing.T) {
 		// What a version before the jobs table left: no jobs table, schema 5.
 		`DROP TABLE jobs`,
 		`DROP TABLE job_runs`,
+		`DROP TABLE workspace_uses`,
 		`PRAGMA user_version = 5`,
 	} {
 		if _, err := raw.Exec(stmt); err != nil {
@@ -520,7 +521,7 @@ func TestUpgradeFromAnAgentDBBeforeTheJobsTableKeepsItsState(t *testing.T) {
 	}
 	check := openRawAgentDB(t, path)
 	var version int
-	if err := check.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
+	if err := check.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 10 {
 		t.Fatalf("user_version = %d, %v", version, err)
 	}
 	for query, want := range map[string]int{

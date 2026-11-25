@@ -70,6 +70,7 @@ func (e *Engine) resumeRun(ctx context.Context, approvalRequestID string, opts R
 	}
 
 	ctx = llmstats.WithRunID(ctx, rs.RunID)
+	ctx = restoreWorkspaceSwitch(ctx, rs.Workspace)
 	proctrack.Attach(ctx, rs.RunID)
 	// One worker scope for the resumed run, as Run has, continuing the names and avatars given
 	// out before the pause, from the name set the task started with.

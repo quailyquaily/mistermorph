@@ -55,3 +55,29 @@ func TestNewCheckedBuildsApprovalsOnlyGuardWhenDisabled(t *testing.T) {
 		t.Fatal("RequestApproval(bash) succeeded on a disabled guard")
 	}
 }
+
+func TestWorkspaceSwitchApprovalIsForced(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewFileApprovalStore(filepath.Join(dir, "approvals.json"), filepath.Join(dir, ".locks"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := New(Config{Enabled: false}, nil, store)
+	bash := Action{Type: ActionToolCallPre, ToolName: "bash", ToolParams: map[string]any{"cmd": "make"}}
+	res, err := EvaluateWorkspaceSwitch(context.Background(), g, Meta{RunID: "r"}, bash, "/w/other")
+	if err != nil || res.Decision != DecisionRequireApproval || !res.Forced || res.Reasons[0] != WorkspaceSwitchReason+": /w/other" {
+		t.Fatalf("EvaluateWorkspaceSwitch() = %+v, %v", res, err)
+	}
+	if _, err := g.RequestForcedApproval(context.Background(), Meta{RunID: "r"}, bash, res, "bash", nil); err != nil {
+		t.Fatalf("RequestForcedApproval on an approvals-only guard: %v", err)
+	}
+	// Only a forced decision opens the store this way.
+	if _, err := g.RequestForcedApproval(context.Background(), Meta{RunID: "r"}, bash, Result{Decision: DecisionRequireApproval}, "bash", nil); err == nil {
+		t.Fatal("RequestForcedApproval took a decision that was not forced")
+	}
+	// Without a store, the call is denied rather than allowed.
+	res, _ = EvaluateWorkspaceSwitch(context.Background(), nil, Meta{}, bash, "/w/other")
+	if res.Decision != DecisionDeny {
+		t.Fatalf("no store = %+v", res)
+	}
+}

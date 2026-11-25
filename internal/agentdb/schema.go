@@ -17,6 +17,7 @@ func migrations() []sqlitedb.Migration {
 		{Name: "give jobs triggers and uses", SQL: jobTriggersSQL},
 		{Name: "create job runs", SQL: jobRunsSQL},
 		{Name: "give job runs their task record", SQL: jobRunTaskSQL},
+		{Name: "create workspace uses", SQL: workspaceUsesSQL},
 	}
 }
 
@@ -373,4 +374,15 @@ CREATE INDEX job_runs_by_queued ON job_runs (queued_at);
 // keeps the run's output; empty for a run that never started or wrote none.
 const jobRunTaskSQL = `
 ALTER TABLE job_runs ADD COLUMN task_id TEXT NOT NULL DEFAULT '';
+`
+
+// workspaceUsesSQL: when each workspace was last used by a run (its topic's workspace when a
+// Console task starts, or one a task switched to with workspace_use), for workspace_list's recent
+// workspaces. internal/workspace bounds how many rows are kept.
+const workspaceUsesSQL = `
+CREATE TABLE workspace_uses (
+	workspace_dir TEXT PRIMARY KEY,
+	used_at       TEXT NOT NULL
+);
+CREATE INDEX workspace_uses_by_time ON workspace_uses (used_at DESC);
 `

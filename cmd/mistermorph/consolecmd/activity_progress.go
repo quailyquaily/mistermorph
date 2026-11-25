@@ -460,6 +460,9 @@ func buildConsoleActivityEntry(event agent.Event) *consoleActivityEntry {
 	}
 	if strings.TrimSpace(event.Kind) == agent.EventKindToolDone {
 		entry.Shell = buildConsoleShellResult(event)
+		if summary := workspaceUseActivitySummary(event); summary != "" {
+			entry.Summary = summary
+		}
 	}
 	if entry.Kind == "subtask" && entry.Name == "" {
 		entry.Name = "subtask"
