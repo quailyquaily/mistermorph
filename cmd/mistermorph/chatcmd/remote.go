@@ -139,6 +139,7 @@ func newSharedChatModel(ctx context.Context, c *remoteClient) *chatModel {
 		{Name: "/deny", Description: "deny the pending action"},
 		{Name: "/topics", Description: "list shared topics"},
 		{Name: "/topic", Description: "new, switch, history, title, or delete a topic"},
+		{Name: chatSoloCommand, Description: chatSoloDescription},
 		{Name: "/status", Description: "show full session details"},
 		{Name: "/exit", Description: "exit the chat session"},
 		{Name: "/quit", Description: "exit the chat session"},
@@ -426,7 +427,7 @@ func (m *chatModel) command(text string) tea.Cmd {
 	name = chatcommands.NormalizeCommand(name)
 	text = strings.TrimSpace(name + " " + args)
 	switch name {
-	case "/quit", "/exit", "/topics", "/status", "/stop", "/reset", "/approve", "/deny", "/help":
+	case "/quit", "/exit", "/topics", "/status", "/stop", "/reset", "/approve", "/deny", "/help", chatSoloCommand:
 		text = name
 	}
 	switch {
@@ -440,6 +441,10 @@ func (m *chatModel) command(text string) tea.Cmd {
 		return m.newDraft()
 	case text == "/topic":
 		return m.enqueueTranscript("/topic new · switch <id> · history [more] · title regenerate · delete")
+	case text == chatSoloCommand:
+		// Solo, the owner's one conversation: the runtime makes it on the first look.
+		m.renew()
+		return m.load(daemonruntime.ConsoleSoloTopicID, false)
 	case strings.HasPrefix(text, "/topic switch "):
 		m.renew()
 		return m.load(strings.TrimSpace(strings.TrimPrefix(text, "/topic switch ")), false)

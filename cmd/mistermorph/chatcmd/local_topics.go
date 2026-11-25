@@ -113,6 +113,12 @@ func (s *chatSession) selectLocalTopic(id string) error {
 		s.topicID = ""
 		return nil
 	}
+	if daemonruntime.IsSoloTopicID(id) {
+		// Solo is made on its first use, here as in the Console.
+		if _, err := s.sharedTopics.EnsureSoloTopic(); err != nil {
+			return err
+		}
+	}
 	topic, ok := s.sharedTopics.GetTopic(id)
 	if !ok || topic.DeletedAt != nil {
 		return fmt.Errorf("topic %q not found", id)

@@ -90,6 +90,31 @@ func (s *chatSession) localHistory(cursor string) (localHistoryMsg, error) {
 	return r, nil
 }
 
+// chatSoloCommand opens Solo, the owner's one conversation with the agent, as the Console's pinned
+// Solo entry does; `/topic switch _solo` opens it too.
+const (
+	chatSoloCommand     = "/solo"
+	chatSoloDescription = "open Solo, your one conversation with the agent"
+)
+
+// soloCommand switches the chat to Solo, making it first if the agent has none yet.
+func (s *chatSession) soloCommand() (*chatcommands.Result, error) {
+	if s.sharedTopics == nil {
+		return nil, fmt.Errorf("topic store is unavailable")
+	}
+	if err := s.selectLocalTopic(daemonruntime.ConsoleSoloTopicID); err != nil {
+		return nil, err
+	}
+	r, err := s.localHistory("")
+	if err != nil {
+		return nil, err
+	}
+	if s.sendMsg != nil {
+		s.sendMsg(r)
+	}
+	return &chatcommands.Result{}, nil
+}
+
 func (s *chatSession) topicCommand(ctx context.Context, args string) (*chatcommands.Result, error) {
 	if s.sharedTopics == nil {
 		return nil, fmt.Errorf("topic store is unavailable")

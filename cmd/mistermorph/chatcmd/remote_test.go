@@ -613,3 +613,32 @@ func TestRemoteDraftStatusSanitizesServerPath(t *testing.T) {
 		t.Fatalf("draft status emitted terminal escape: %q", output)
 	}
 }
+
+func TestRemoteSoloCommandOpensSolo(t *testing.T) {
+	var asked []string
+	m := remoteTestModel(t, func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/runtime/topics/"+daemonruntime.ConsoleSoloTopicID:
+			_ = json.NewEncoder(w).Encode(taskdomain.TopicInfo{ID: daemonruntime.ConsoleSoloTopicID, Title: "Solo"})
+		case r.URL.Path == "/runtime/workspace":
+			_ = json.NewEncoder(w).Encode(daemonruntime.WorkspaceResolution{WorkspaceDir: "/ws"})
+		case r.URL.Path == "/runtime/tasks":
+			_ = json.NewEncoder(w).Encode(pagination.Page[taskdomain.TaskInfo]{Items: []taskdomain.TaskInfo{{ID: "s1", TopicID: daemonruntime.ConsoleSoloTopicID, Task: "hi", Status: taskdomain.TaskDone}}})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	cmd := m.command("/solo")
+	if cmd == nil {
+		t.Fatal("/solo did nothing")
+	}
+	m.Update(cmd())
+	if m.id != daemonruntime.ConsoleSoloTopicID || m.tasks["s1"].Task != "hi" {
+		t.Fatalf("after /solo: id=%q tasks=%v asked=%v", m.id, m.tasks, asked)
+	}
+	if m.commandRegistry.Lookup("/solo") == nil && !strings.Contains(strings.Join(m.commandRegistry.Names(), " "), "/solo") {
+		t.Fatal("/solo is not listed")
+	}
+}
