@@ -2,9 +2,11 @@ package consolecmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -293,9 +295,20 @@ func (r *consoleLocalRuntime) syncSoloThread(taskID string) {
 		state = daemonruntime.SoloThreadStateOf(task.Status)
 	}
 	ended := daemonruntime.SoloThreadStateEnded(state)
-	if rec.State != state {
+	// What the task's result kept of its workers (at a pause or its end) joins what the card has;
+	// a worker still marked live when the task ended took the task's ending with it.
+	participants, omitted := rec.Participants, rec.ParticipantsOmitted
+	if found && task != nil {
+		recorded, recordedOmitted := soloParticipantsOfResult(task.Result)
+		participants, omitted = daemonruntime.MergeSoloParticipants(participants, omitted, recorded, recordedOmitted)
+	}
+	participants = daemonruntime.EndSoloParticipants(participants, state)
+	participantsChanged := omitted != rec.ParticipantsOmitted || !daemonruntime.SoloParticipantsEqual(participants, rec.Participants)
+	rec.Participants, rec.ParticipantsOmitted = participants, omitted
+	if rec.State != state || participantsChanged {
+		changedState := rec.State != state
 		rec.State = state
-		if ended {
+		if ended && changedState {
 			finished := time.Now().UTC()
 			if found && task != nil && task.FinishedAt != nil {
 				finished = task.FinishedAt.UTC()
@@ -312,6 +325,126 @@ func (r *consoleLocalRuntime) syncSoloThread(taskID string) {
 	}
 	if ended {
 		r.postSoloSummaryLocked(rec, task, found)
+	}
+}
+
+// soloParticipantsOfActivity is who a task's activity says worked on it: each worker's identity,
+// kind and status, and nothing else of it (its task, output, result and processes stay in the
+// thread). The second result counts the workers the activity no longer lists.
+func soloParticipantsOfActivity(progress *consoleActivityProgress) ([]daemonruntime.SoloParticipant, int) {
+	if progress == nil {
+		return nil, 0
+	}
+	raw := make([]daemonruntime.SoloParticipant, 0, len(progress.Workers))
+	for _, worker := range progress.Workers {
+		raw = append(raw, daemonruntime.SoloParticipant{
+			ID:          worker.ID,
+			Name:        worker.Name,
+			NameSet:     worker.NameSet,
+			NameIndex:   worker.NameIndex,
+			AvatarIndex: worker.AvatarIndex,
+			Kind:        worker.Kind,
+			Status:      worker.Status,
+		})
+	}
+	out, cut := daemonruntime.NormalizeSoloParticipants(raw)
+	return out, max(0, progress.WorkersOmitted) + cut
+}
+
+// soloParticipantsOfResult is soloParticipantsOfActivity for a stored task's result, whether it
+// is still the run's own value or was read back from the store.
+func soloParticipantsOfResult(result any) ([]daemonruntime.SoloParticipant, int) {
+	values, ok := result.(map[string]any)
+	if !ok || values["activity"] == nil {
+		return nil, 0
+	}
+	if progress, ok := values["activity"].(*consoleActivityProgress); ok {
+		return soloParticipantsOfActivity(progress)
+	}
+	raw, err := json.Marshal(values["activity"])
+	if err != nil {
+		return nil, 0
+	}
+	// Only a worker's identity, kind and status are read: SoloParticipant has no other field.
+	var activity struct {
+		Workers        []daemonruntime.SoloParticipant `json:"workers"`
+		WorkersOmitted int                             `json:"workers_omitted"`
+	}
+	if json.Unmarshal(raw, &activity) != nil {
+		return nil, 0
+	}
+	out, cut := daemonruntime.NormalizeSoloParticipants(activity.Workers)
+	return out, max(0, activity.WorkersOmitted) + cut
+}
+
+// soloParticipantFeed follows a running work thread task's activity for its card: the card is
+// written when who works on the task, or how one of them is doing, changed, and not otherwise
+// (most activity updates are a worker's output).
+type soloParticipantFeed struct {
+	r      *consoleLocalRuntime
+	taskID string
+
+	mu      sync.Mutex
+	seen    bool
+	latest  []daemonruntime.SoloParticipant
+	omitted int
+}
+
+// newSoloParticipantFeed is the feed of job's task, or nil when Solo did not start it.
+func (r *consoleLocalRuntime) newSoloParticipantFeed(job consoleLocalTaskJob) *soloParticipantFeed {
+	if r == nil || r.store == nil || !consoleSoloThreadTask(job.Trigger) || strings.TrimSpace(job.TaskID) == "" {
+		return nil
+	}
+	return &soloParticipantFeed{r: r, taskID: strings.TrimSpace(job.TaskID)}
+}
+
+// activityUpdated takes the task's activity as it changes.
+func (f *soloParticipantFeed) activityUpdated(progress *consoleActivityProgress) {
+	if f == nil {
+		return
+	}
+	participants, omitted := soloParticipantsOfActivity(progress)
+	f.mu.Lock()
+	if (f.seen || len(participants) == 0 && omitted == 0) && omitted == f.omitted && daemonruntime.SoloParticipantsEqual(participants, f.latest) {
+		f.mu.Unlock()
+		return
+	}
+	f.seen, f.latest, f.omitted = true, participants, omitted
+	f.mu.Unlock()
+	// The card takes the feed's latest reading when its turn comes, so two updates that cross
+	// cannot leave the older one on the card.
+	f.r.writeSoloThreadParticipants(f.taskID, func() ([]daemonruntime.SoloParticipant, int) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.latest, f.omitted
+	})
+}
+
+// writeSoloThreadParticipants brings a thread's card up to a reading of its task's workers; a
+// reading that changes nothing on the card writes nothing.
+func (r *consoleLocalRuntime) writeSoloThreadParticipants(taskID string, reading func() ([]daemonruntime.SoloParticipant, int)) {
+	r.soloMu.Lock()
+	defer r.soloMu.Unlock()
+	cardID := daemonruntime.SoloThreadCardID(taskID)
+	card, ok := r.store.Get(cardID)
+	if !ok || card == nil || card.TopicID != daemonruntime.ConsoleSoloTopicID {
+		return
+	}
+	rec, ok := solo.ThreadOf(*card)
+	if !ok {
+		return
+	}
+	more, moreOmitted := reading()
+	participants, omitted := daemonruntime.MergeSoloParticipants(rec.Participants, rec.ParticipantsOmitted, more, moreOmitted)
+	participants = daemonruntime.EndSoloParticipants(participants, rec.State)
+	if omitted == rec.ParticipantsOmitted && daemonruntime.SoloParticipantsEqual(participants, rec.Participants) {
+		return
+	}
+	rec.Participants, rec.ParticipantsOmitted = participants, omitted
+	if err := r.store.Update(cardID, func(info *daemonruntime.TaskInfo) {
+		info.Result = soloRecordResult(rec, soloCardText(rec))
+	}); err != nil {
+		r.currentLogger().Warn("console_solo_card_update_failed", "task_id", taskID, "error", err.Error())
 	}
 }
 

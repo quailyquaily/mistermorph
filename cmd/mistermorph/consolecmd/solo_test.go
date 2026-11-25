@@ -387,7 +387,7 @@ func TestSoloStartsWorkThreadThatRunsWhileSoloAnswers(t *testing.T) {
 	}
 	// Its chips: the thread it started.
 	sources := soloSourcesOf(t, done)
-	if len(sources) != 1 || sources[0].Kind != daemonruntime.SoloSourceThread || sources[0].ID != rec.TopicID || sources[0].Label != "Build report" {
+	if len(sources) != 1 || sources[0].Kind != daemonruntime.SoloSourceThread || sources[0].ID != rec.TopicID || sources[0].Label != "Build report" || sources[0].TaskID != rec.TaskID {
 		t.Fatalf("Solo chips = %+v", sources)
 	}
 
@@ -430,7 +430,7 @@ func TestSoloStartsWorkThreadThatRunsWhileSoloAnswers(t *testing.T) {
 	reportSources := soloSourcesOf(t, h.client.wait(report.ID, daemonruntime.TaskDone))
 	wantRead := []daemonruntime.SoloSourceUse{{Action: daemonruntime.SoloUseRead, Count: 1}}
 	if len(reportSources) != 1 || reportSources[0].Kind != daemonruntime.SoloSourceThread || reportSources[0].ID != rec.TopicID ||
-		reportSources[0].Label != "Build report" || !reflect.DeepEqual(reportSources[0].Uses, wantRead) {
+		reportSources[0].Label != "Build report" || !reflect.DeepEqual(reportSources[0].Uses, wantRead) || reportSources[0].TaskID != "" {
 		t.Fatalf("chips of the reply that read the thread = %+v", reportSources)
 	}
 

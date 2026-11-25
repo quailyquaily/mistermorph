@@ -2528,10 +2528,13 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		previewSink.HandleEvent(ctx, event)
 		soloSources.HandleEvent(ctx, event)
 	})
+	// A work thread's card in Solo shows who works on its task (solo.go).
+	soloParticipants := r.newSoloParticipantFeed(job)
 	previewSink.activityUpdated = func(progress *consoleActivityProgress) {
 		progressMu.Lock()
 		latestActivity = cloneConsoleActivityProgress(progress)
 		progressMu.Unlock()
+		soloParticipants.activityUpdated(progress)
 	}
 	if bundle := job.Generation.bundle; bundle != nil {
 		previewSink.observer = newConsoleLLMObserver(bundle.taskRuntime, job.Model, logger)

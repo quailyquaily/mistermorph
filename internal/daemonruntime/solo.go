@@ -53,6 +53,163 @@ type SoloThread struct {
 	FinishedAt string `json:"finished_at,omitempty"`
 	// Continued is set when the thread is an existing topic Solo gave more work.
 	Continued bool `json:"continued,omitempty"`
+	// Participants are the subagents and coders the thread's task started, in start order: the
+	// newest SoloParticipantLimit of them, with ParticipantsOmitted counting the older ones that
+	// are no longer listed. A task that started none, and a record from before they were kept,
+	// has neither.
+	Participants        []SoloParticipant `json:"participants,omitempty"`
+	ParticipantsOmitted int               `json:"participants_omitted,omitempty"`
+}
+
+// SoloParticipantLimit is the most participants a SoloThread lists; the oldest go first.
+const SoloParticipantLimit = 32
+
+// Kinds of SoloParticipant.
+const (
+	SoloParticipantSubagent = "subagent"
+	SoloParticipantCoder    = "coder"
+)
+
+// SoloParticipant is who one worker of a thread's task is, and how it is doing: the worker's
+// identity as its task allocated it (agent.WorkerMetadata), its kind and its status. It names the
+// worker only: never what it was asked, what it printed or answered, or its processes.
+type SoloParticipant struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+	// NameSet, NameIndex and AvatarIndex are the picks a client turns into a name in its own
+	// language and a logo style; older workers lack them.
+	NameSet     string `json:"name_set,omitempty"`
+	NameIndex   *int   `json:"name_index,omitempty"`
+	AvatarIndex *int   `json:"avatar_index,omitempty"`
+	// Kind is SoloParticipantCoder for a coder call, else SoloParticipantSubagent.
+	Kind string `json:"kind"`
+	// Status is the worker's own last status ("running", "done", "failed", "canceled", ...).
+	Status string `json:"status,omitempty"`
+}
+
+// NormalizeSoloParticipants is raw as a record keeps it: trimmed, without workers that have no
+// ID, each ID once (a repeat updates the first), kinds and statuses in their known words, and at
+// most SoloParticipantLimit of them. The second result counts the ones cut off the front.
+func NormalizeSoloParticipants(raw []SoloParticipant) ([]SoloParticipant, int) {
+	out := make([]SoloParticipant, 0, len(raw))
+	seen := make(map[string]int, len(raw))
+	for _, item := range raw {
+		item = cleanSoloParticipant(item)
+		if item.ID == "" {
+			continue
+		}
+		if i, ok := seen[item.ID]; ok {
+			out[i] = updateSoloParticipant(out[i], item)
+			continue
+		}
+		seen[item.ID] = len(out)
+		out = append(out, item)
+	}
+	cut := 0
+	if extra := len(out) - SoloParticipantLimit; extra > 0 {
+		cut = extra
+		out = append([]SoloParticipant(nil), out[extra:]...)
+	}
+	if len(out) == 0 {
+		return nil, cut
+	}
+	return out, cut
+}
+
+// MergeSoloParticipants brings a record's participants up to a later reading of its task's
+// workers (more, with moreOmitted workers the reading itself no longer lists). A worker the
+// record has is updated, a new one follows the others, and no worker is lost because the reading
+// lacks it: a task resumed after a pause reports only the workers of its latest run. The count of
+// omitted workers never counts one twice: what the record dropped, or what the reading dropped,
+// whichever is more.
+func MergeSoloParticipants(have []SoloParticipant, haveOmitted int, more []SoloParticipant, moreOmitted int) ([]SoloParticipant, int) {
+	joined := make([]SoloParticipant, 0, len(have)+len(more))
+	joined = append(joined, have...)
+	joined = append(joined, more...)
+	out, cut := NormalizeSoloParticipants(joined)
+	return out, max(0, max(haveOmitted, 0)+cut, moreOmitted)
+}
+
+// EndSoloParticipants is participants once their task ended in state: a worker still marked live
+// took the task's ending with it, and one that ended on its own keeps how it ended.
+func EndSoloParticipants(participants []SoloParticipant, state string) []SoloParticipant {
+	if !SoloThreadStateEnded(state) || len(participants) == 0 {
+		return participants
+	}
+	out := append([]SoloParticipant(nil), participants...)
+	for i := range out {
+		if !SoloThreadStateEnded(out[i].Status) {
+			out[i].Status = state
+		}
+	}
+	return out
+}
+
+// SoloParticipantsEqual reports whether two participant lists say the same.
+func SoloParticipantsEqual(a, b []SoloParticipant) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	index := func(p *int) int {
+		if p == nil {
+			return -1
+		}
+		return *p
+	}
+	for i := range a {
+		x, y := a[i], b[i]
+		if x.ID != y.ID || x.Name != y.Name || x.NameSet != y.NameSet || x.Kind != y.Kind || x.Status != y.Status ||
+			index(x.NameIndex) != index(y.NameIndex) || index(x.AvatarIndex) != index(y.AvatarIndex) {
+			return false
+		}
+	}
+	return true
+}
+
+func cleanSoloParticipant(item SoloParticipant) SoloParticipant {
+	out := SoloParticipant{
+		ID:      strings.TrimSpace(item.ID),
+		Name:    strings.TrimSpace(item.Name),
+		NameSet: strings.TrimSpace(item.NameSet),
+		Kind:    SoloParticipantSubagent,
+		Status:  strings.ToLower(strings.TrimSpace(item.Status)),
+	}
+	if strings.TrimSpace(item.Kind) == SoloParticipantCoder {
+		out.Kind = SoloParticipantCoder
+	}
+	if item.NameIndex != nil && *item.NameIndex >= 0 {
+		index := *item.NameIndex
+		out.NameIndex = &index
+	}
+	if item.AvatarIndex != nil && *item.AvatarIndex >= 0 {
+		index := *item.AvatarIndex
+		out.AvatarIndex = &index
+	}
+	return out
+}
+
+// updateSoloParticipant is have with what a later reading of the same worker says: its identity
+// stays where the reading has none.
+func updateSoloParticipant(have, next SoloParticipant) SoloParticipant {
+	if next.Name != "" {
+		have.Name = next.Name
+	}
+	if next.NameSet != "" {
+		have.NameSet = next.NameSet
+	}
+	if next.NameIndex != nil {
+		have.NameIndex = next.NameIndex
+	}
+	if next.AvatarIndex != nil {
+		have.AvatarIndex = next.AvatarIndex
+	}
+	if next.Kind == SoloParticipantCoder {
+		have.Kind = next.Kind
+	}
+	if next.Status != "" {
+		have.Status = next.Status
+	}
+	return have
 }
 
 // Kinds of SoloSource.
@@ -69,6 +226,11 @@ type SoloSource struct {
 	Kind  string `json:"kind"`
 	ID    string `json:"id,omitempty"`
 	Label string `json:"label,omitempty"`
+	// TaskID is, on a thread the reply started (or gave more work), the task that start made:
+	// the one whose card and participants belong to this chip. It is set only when the reply
+	// started exactly one task in the thread; a thread it only read, or started more than once,
+	// has none, so no task is ever picked for it by its topic alone.
+	TaskID string `json:"task_id,omitempty"`
 	// Uses is what the run's successful tool calls did with the source, in the order each kind
 	// of use first happened. Records from before it was kept have none.
 	Uses []SoloSourceUse `json:"uses,omitempty"`
