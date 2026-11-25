@@ -163,7 +163,8 @@ Solo is the owner's one conversation with the agent: a pinned entry, always firs
 the Console's topic list (date and tag views, on phones too), beside the ordinary
 topics, which work as before. Each agent has one, the reserved topic `_solo`, made the
 first time the topic list (or Solo itself) is asked for; it cannot be deleted or
-renamed, and the Console offers no tags for it. A runtime from before Solo lists none, and the Console shows none for it.
+renamed, and the Console offers no tags for it. `GET /topics` puts it first on the first page,
+however many topics are newer, and leaves it out of the pages after. A runtime from before Solo lists none, and the Console shows none for it.
 
 A Solo message is an owner chat run (it gets the tools in
 [Other topics and workspaces](#other-topics-and-workspaces)) with one tool more,
@@ -189,7 +190,8 @@ workspace. Short work in a known workspace may run in Solo itself with `workspac
   `solosummary_<task id>`, with `result.solo_thread`); the summary is written once, also
   when the thread ended while the runtime was down.
 - **Chips.** Under each Solo reply, chips name what its run actually used, from its own
-  successful tool calls: the workspace (file and shell tools, `workspace_use`), the
+  successful tool calls: the workspace (shell tools, `workspace_use`, and `read_file`/
+  `write_file` on a file really inside it, symlinks resolved), the
   threads it started, the topics it read (both open when pressed), the memory and the
   journal (`result.solo_sources`).
 - **Context.** Solo keeps summaries and links; a thread's full working context stays in
