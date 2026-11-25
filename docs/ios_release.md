@@ -227,7 +227,7 @@ Without this, the review fails under Guideline 2.1 (App Completeness), because t
 
 1. In App Store Connect, open your app → **App Store** tab. The first version, **1.0 Prepare for Submission**, is already there. Rename it to your release version, such as `0.3.80`, so it matches the build.
 2. **Screenshots**: upload iPhone screenshots at 6.9-inch (1320 × 2868) or 6.5-inch (1284 × 2778) size; the page lists the sizes it accepts. Without a Mac, take them on an iPhone running the TestFlight build. A Pro Max model gives the 6.9-inch size directly. If the build also runs on iPad, App Store Connect asks for 13-inch iPad screenshots too.
-3. Fill in **Promotional Text** (optional), **Description**, **Keywords**, **Support URL** and **Marketing URL** (optional).
+3. Fill in **Promotional Text** (optional), **Description**, **Keywords**, **Support URL** and **Marketing URL** (optional). The drafted text is in [iOS App Store Listing](ios_app_store_listing.md).
 4. **Build**: click **+** next to **Build** and pick the TestFlight build you tested.
 5. **App Review Information**: the same sign-in details as in Part 9 (server address, username, password). In **Notes**, explain that the app is a client for a self-hosted Mister Morph server, and that the demo server is provided for review. Also say why it allows plain http (`NSAllowsArbitraryLoads`): users run the server themselves, often on their own local network at an address of their choosing, and `morph console serve` serves plain http unless they put it behind a TLS proxy. App Review asks for this reason.
 6. **Version Release**: choose **Manually release this version** for the first time, so you control the launch day.
