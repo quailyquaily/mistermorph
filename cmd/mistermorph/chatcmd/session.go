@@ -32,6 +32,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
+	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
@@ -505,6 +506,11 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 				blocks = append(blocks, block)
 			}
 			blocks = append(blocks, agent.PromptBlock{Content: chatBuiltinCommandsBlock()})
+			if sess.sharedTopics != nil && daemonruntime.IsSoloTopicID(sess.topicID) {
+				// Solo in the terminal: what Solo is, its recent work threads, and that work threads
+				// start from the Console.
+				blocks = append(blocks, solo.PromptBlock(solo.PromptLocal, solo.ThreadRecords(sess.sharedTopics, solo.PromptThreads)))
+			}
 			spec.Blocks = append(blocks, spec.Blocks...)
 			return spec, loaded, nil
 		},

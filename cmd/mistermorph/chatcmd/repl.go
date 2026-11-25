@@ -23,6 +23,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
+	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -89,6 +90,8 @@ type activeChatTurn struct {
 	checkpointStore       agent.ContextCheckpointStore
 	userBoundary          string
 	contextCompactionOnly bool
+	// soloSources gathers, in a Solo turn, the workspace and sources it used, for its chips.
+	soloSources *solo.SourceCollector
 }
 
 type pendingChatApproval struct {
@@ -197,10 +200,15 @@ func startChatTurn(
 		// Subagents the turn starts, at any depth, take /steer messages from here.
 		turnCtx = agent.WithChildSteerHub(turnCtx, turn.children)
 	}
-	if turn.trace != nil {
+	if turn.trace != nil || turn.soloSources != nil {
 		baseSink, _ := agent.EventSinkFromContext(turnCtx)
 		turnCtx = agent.WithEventSinkContext(turnCtx, agent.EventSinkFunc(func(ctx context.Context, event agent.Event) {
-			turn.trace.HandleEvent(ctx, event)
+			if turn.trace != nil {
+				turn.trace.HandleEvent(ctx, event)
+			}
+			if turn.soloSources != nil {
+				turn.soloSources.HandleEvent(ctx, event)
+			}
 			if baseSink != nil {
 				baseSink.HandleEvent(ctx, event)
 			}
@@ -680,6 +688,9 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 						g = sess.taskRuntime.SharedGuard
 					}
 					currentTurn.trace = chattrace.NewCollector(runID, pathroots.New(sess.workspaceDir, sess.fileStateDir, sess.fileCacheDir), g, nil)
+					if daemonruntime.IsSoloTopicID(task.TopicID) {
+						currentTurn.soloSources = solo.NewSourceCollector(runID)
+					}
 				}
 				checkpointStore, checkpointErr := contextcheckpoint.NewFileStore(sess.contextCheckpointRoot(), sess.conversationKey())
 				if checkpointErr != nil {

@@ -200,6 +200,9 @@ func (s *chatSession) recordLocalResult(result chatTurnResult) error {
 		if result.turn.trace != nil {
 			data["trace"] = result.turn.trace.Snapshot()
 		}
+		if sources := result.turn.soloSources.Sources(); len(sources) > 0 {
+			data[daemonruntime.SoloSourcesResultKey] = sources
+		}
 		if messages := result.turn.children.Messages(); len(messages) > 0 {
 			data[chathistory.ChildMessagesResultKey] = messages
 		}

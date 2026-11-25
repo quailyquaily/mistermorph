@@ -112,8 +112,12 @@ func (s *chatSession) soloCommand() (*chatcommands.Result, error) {
 	if s.sendMsg != nil {
 		s.sendMsg(r)
 	}
-	return &chatcommands.Result{}, nil
+	return &chatcommands.Result{Reply: chatLocalSoloNote}, nil
 }
+
+// chatLocalSoloNote says what Solo in the terminal chat on its own does not do: a work thread runs
+// in the background, which a terminal that may close cannot keep.
+const chatLocalSoloNote = "Solo: work threads start from the Console (or a chat with --runtime-url); here the work runs in this chat."
 
 func (s *chatSession) topicCommand(ctx context.Context, args string) (*chatcommands.Result, error) {
 	if s.sharedTopics == nil {
