@@ -44,3 +44,15 @@ Not checked: no Android device/emulator, adb or KVM; no manual UI verification. 
 Temporary installs: cjdk 0.5.0, maven-artifact 0.3.5, jdk4py, jip 0.9.16 (latter two unused), Temurin JDK 17.0.21.1+2 via cjdk, checksum-verified Maven R8 8.5.35 and Android 15 robolectric framework. No system-wide install. Temporary tools removed at run end.
 
 Coder reported writes outside worktree/TMPDIR: shared legacy factory Go build cache and Claude project memory (FT187 note and old FT52 tool note update), beyond the requested scratch boundary. No such paths committed. Manager recorded this deviation rather than deleting unrelated memory. Manager's original tar extraction encountered filesystem errors; selected source files were read via Python instead. Git credential helper initially required credential.useHttpPath=true; retry succeeded.
+
+## factory · review · 2026-11-25 10:14
+head: 941edde506e40ad45d020b49e5ec94a1f07dda0f
+verdict: pass
+notes:
+- Claude Code reviewed all eight changed files against origin/master...HEAD. No concrete P0/P1/P2/P3 findings. The branch merges cleanly with current master 5dcaf935. No source edits or commits during review.
+- Mandatory gofmt, go vet ./..., and go test ./... passed (169 packages). Android host tests passed, including ScrollClaim 55/55; disabling the fix in a scratch copy makes 13 cases fail. nsh check passed on nsh 0.6.0 (5541637). Console scripts/test.sh was not rerun: no TS/TSX/JS changes, and those tests do not load Android Java.
+- Reviewed actual nsh v0.6.0 release runtime and aar (published checksums verified). Dex replacement passed using R8 8.5.35; original release ScrollBox bytecode matches pinned source. Runtime API reference checks passed, with unchanged 44-member usage and a deliberate missing-class control detected. These checks strengthen build compatibility evidence, not device behaviour evidence.
+- No Android device/emulator or full SDK APK build. Real gestures, flings, pull-to-refresh, multi-touch, selection, links and copy buttons remain unverified. Dex checks used Robolectric Android 15/JDK framework stand-ins and an empty lambda-stubs jar, not SDK build-tools 35.0.0. Owner should verify tables/code blocks and Jobs on Android before treating the reported bug as device-confirmed fixed.
+- Temporary review tools: cjdk 0.5.0, Temurin JDK 17.0.21.1+2, Maven R8 8.5.35, Robolectric Android 15; real nsh v0.6.0 runtime assets downloaded as test data. All temporary tools removed at run end, no system-wide installs.
+- Written outside dir: JVM perf data and Claude tool-output scratch paths in the shared temporary area, recorded for owner-approved clean only. Shared Go build cache reused. No memory/settings edits reported; worktree clean.
+- Moved review/ → ready/. No linked issue or PR to comment on.
