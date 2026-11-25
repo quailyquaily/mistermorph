@@ -124,9 +124,11 @@ export function edgeSwipeGoesBack(gesture: SwipeState): boolean {
  * is claimed (a capture, before the views under the finger): taps, presses and scrolling that do
  * not start at the edge going right are left as they were, and nothing is claimed while there is
  * no back to go to. Dialogs and sheets are layers over the frame, so a swipe on them is theirs.
+ * Elsewhere it is an empty object, not undefined: the frame spreads it, and nsh's web renderer
+ * reads a spread's keys, so spreading undefined stops the web Console from starting.
  */
-export function edgeSwipeBack(): TouchProps | undefined {
-  if (platform.os !== "ios") return undefined;
+export function edgeSwipeBack(): TouchProps {
+  if (platform.os !== "ios") return {};
   return PanResponder.create({
     onMoveShouldSetPanResponderCapture: (_event, gesture) => untracked(handlesBack) && claimsEdgeSwipe(gesture),
     onPanResponderRelease: (_event, gesture) => {
