@@ -69,6 +69,42 @@ type SoloSource struct {
 	Kind  string `json:"kind"`
 	ID    string `json:"id,omitempty"`
 	Label string `json:"label,omitempty"`
+	// Uses is what the run's successful tool calls did with the source, in the order each kind
+	// of use first happened. Records from before it was kept have none.
+	Uses []SoloSourceUse `json:"uses,omitempty"`
+}
+
+// What a run did with a source (SoloSourceUse.Action).
+const (
+	// SoloUseSelect: the run made the folder its workspace (workspace_use).
+	SoloUseSelect = "select"
+	// SoloUseReadFile and SoloUseWriteFile: read_file and write_file calls on files inside the workspace.
+	SoloUseReadFile  = "read_file"
+	SoloUseWriteFile = "write_file"
+	// SoloUseShell: shell commands run in the workspace (bash, powershell).
+	SoloUseShell = "shell"
+	// SoloUseCoder: a coding agent worked in the workspace (coder).
+	SoloUseCoder = "coder"
+	// SoloUseSearch: a search of the memory or the journal.
+	SoloUseSearch = "search"
+	// SoloUseSave and SoloUseForget: the memory was added to or changed, or lost entries.
+	SoloUseSave   = "save"
+	SoloUseForget = "forget"
+	// SoloUseRead: journal entries, a topic or a work thread were read.
+	SoloUseRead = "read"
+	// SoloUseStart: a work thread was started or given more work.
+	SoloUseStart = "start"
+)
+
+// SoloSourceUseMaxCount is the most calls one SoloSourceUse counts; more stay at it.
+const SoloSourceUseMaxCount = 9999
+
+// SoloSourceUse is one kind of use a run made of a source, and how many successful calls made
+// it. It names what was done only: never a call's arguments, its output, a command, a path, file
+// content or a search's words.
+type SoloSourceUse struct {
+	Action string `json:"action"`
+	Count  int    `json:"count"`
 }
 
 // SoloThreadCardID is the ID of the card of the thread whose task is taskID.

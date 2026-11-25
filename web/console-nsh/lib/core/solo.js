@@ -48,20 +48,51 @@ export function soloThreadOf(task) {
   };
 }
 
-/** What a Solo reply used, in order: [{kind, id, label}], without unknown kinds or repeats. */
+// What a source's uses may hold: a few named actions, each with a count (the runtime's bounds).
+const USE_ACTION = /^[a-z][a-z0-9_]{0,31}$/;
+const USE_LIMIT = 16;
+const USE_MAX_COUNT = 9999;
+
+/**
+ * What a run did with a source, as the runtime recorded it: [{action, count}], an action once
+ * (repeats add up), without malformed entries. A record from before uses were kept has none.
+ */
+export function soloSourceUsesOf(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    const action = String(item?.action || "").trim();
+    const count = Math.floor(Number(item?.count));
+    if (!USE_ACTION.test(action) || !Number.isFinite(count) || count < 1) continue;
+    const had = out.find((use) => use.action === action);
+    if (had) had.count = Math.min(USE_MAX_COUNT, had.count + count);
+    else if (out.length < USE_LIMIT) out.push({ action, count: Math.min(USE_MAX_COUNT, count) });
+  }
+  return out;
+}
+
+/**
+ * What a Solo reply used, in order: [{kind, id, label, uses}], without unknown kinds; a source
+ * listed again adds its uses to the first.
+ */
 export function soloSourcesOf(task) {
   const raw = task?.result?.solo_sources ?? task?.sources;
   if (!Array.isArray(raw)) return [];
-  const seen = new Set();
+  const seen = new Map();
   const out = [];
   for (const item of raw) {
     const kind = String(item?.kind || "").trim();
     if (!SOURCE_KINDS.includes(kind)) continue;
     const id = String(item?.id || "").trim();
     const key = `${kind}\u0000${id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ kind, id, label: String(item?.label || "").trim() });
+    const had = seen.get(key);
+    if (had) {
+      had.uses = soloSourceUsesOf([...had.uses, ...soloSourceUsesOf(item?.uses)]);
+      continue;
+    }
+    const source = { kind, id, label: String(item?.label || "").trim(), uses: soloSourceUsesOf(item?.uses) };
+    seen.set(key, source);
+    out.push(source);
   }
   return out;
 }

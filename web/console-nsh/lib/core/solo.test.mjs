@@ -27,8 +27,8 @@ test("a reply's sources: known kinds, once each, in order", () => {
   assert.deepEqual(
     soloSourcesOf({ result: { solo_sources: [{ kind: "topic", id: "t1", label: "A" }, { kind: "bogus" }, { kind: "topic", id: "t1" }, { kind: "memory" }] } }),
     [
-      { kind: "topic", id: "t1", label: "A" },
-      { kind: "memory", id: "", label: "" },
+      { kind: "topic", id: "t1", label: "A", uses: [] },
+      { kind: "memory", id: "", label: "", uses: [] },
     ],
   );
 });

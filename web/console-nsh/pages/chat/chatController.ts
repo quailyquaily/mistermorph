@@ -118,6 +118,7 @@ import { popupOpen } from "../../components/ui";
 import { createEntryFocus } from "./entryFocus";
 import { createOlderTopicPages } from "./olderTopics";
 import type { ChatRowContext, HistoryItem } from "../../components/chat/ChatHistoryItem";
+import type { SoloSource } from "../../components/chat/ChatSoloSources";
 import type { ElevationAnswer, ElevationState } from "../../components/chat/ChatElevationCard";
 import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQuestionCard";
 import { hasArtifactBlock } from "../../components/chat/ChatRichContent";
@@ -1250,9 +1251,66 @@ export function createChatController() {
     });
   }
 
+  // Back to Solo on phones (FT188): a topic opened from Solo, by a thread or topic chip under a
+  // reply or a thread card's Open thread, remembers that it came from there, and Back from it (the
+  // bar's arrow, Android's Back, iOS's edge swipe) returns to Solo instead of the topic list. Only
+  // that topic on that agent holds it, and only on the phone layout: opening any topic another way
+  // (the list, a link, the route), a new topic, the topic list, another agent or the browser's own
+  // history moving elsewhere lets it go. The browser's back needs none of this: opening the topic
+  // pushed it after Solo, so the history already leads back there.
+  const soloReturn = signal<{ endpointRef: string; topicID: string } | null>(null);
+  const mobileReturnsToSolo = () => {
+    const from = soloReturn();
+    return (
+      from !== null &&
+      mobileShowBack() &&
+      !creatingTopic() &&
+      from.topicID === normalizeTopicID(selectedTopicID()) &&
+      from.endpointRef === String(submitEndpointRef() || "").trim()
+    );
+  };
+  /** What the phone bar's back arrow says it goes to. */
+  const mobileBackTitle = () => (mobileReturnsToSolo() ? t("chat_back_to_solo") : t("chat_topics_title"));
+
+  /** Opens a topic from Solo's chips and thread cards; on a phone, Back from it returns to Solo. */
+  function openTopicFromSolo(topicID: string) {
+    const id = normalizeTopicID(topicID);
+    if (!id) return;
+    const fromSolo =
+      untracked(mobileTopicSplitEnabled) && !untracked(creatingTopic) && isSoloTopicID(normalizeTopicID(untracked(selectedTopicID))) && !isSoloTopicID(id);
+    selectTopic(id);
+    if (fromSolo) soloReturn.set({ endpointRef: String(untracked(submitEndpointRef) || "").trim(), topicID: id });
+  }
+
+  /** Leaves the open conversation as Back does: to Solo when it was opened from there, else to the topic list. */
+  function leaveConversation() {
+    if (untracked(mobileReturnsToSolo)) {
+      // Solo takes the topic's place in the history, as the topic list does when Back goes there.
+      selectTopic(SOLO_TOPIC_ID, { replace: true });
+      return;
+    }
+    showTopicsView();
+  }
+
+  // The details of a workspace, memory or journal chip under a Solo reply (FT188), in a dialog
+  // over the conversation. The source stays while the dialog closes, so its words do not empty on
+  // the way out.
+  const soloSourceDetail = signal<SoloSource | null>(null);
+  const soloSourceDetailOpen = signal(false);
+  function openSoloSource(source: SoloSource) {
+    batch(() => {
+      soloSourceDetail.set(source);
+      soloSourceDetailOpen.set(true);
+    });
+  }
+  function closeSoloSource() {
+    soloSourceDetailOpen.set(false);
+  }
+
   function showTopicsView() {
     if (!untracked(hasSidebarTopics)) return;
     cancelEntryFocus();
+    soloReturn.set(null);
     syncMobileTopicView({ preferTopics: true });
     void syncChatRoute("", { replace: true });
   }
@@ -1262,7 +1320,7 @@ export function createChatController() {
   // system Back needs none of this: the system lowers the keyboard before the app hears it.
   function mobileBack() {
     if (dismissSoftKeyboard(composer?.focused() ?? false)) return;
-    showTopicsView();
+    leaveConversation();
   }
 
   let lastMobile: boolean | undefined;
@@ -2492,6 +2550,7 @@ export function createChatController() {
   function resetTopicState() {
     topicsKept = null;
     batch(() => {
+      soloReturn.set(null);
       topicsFromLastTime.set(false);
       topics.set([]);
       topicsLoading.set(false);
@@ -3218,11 +3277,12 @@ export function createChatController() {
 
   /* ---------- selection, send, stop ---------- */
 
-  function selectTopic(topicID: string) {
+  function selectTopic(topicID: string, options: { replace?: boolean } = {}) {
     const id = normalizeTopicID(topicID);
     if (!id) return;
     cancelEntryFocus();
     batch(() => {
+      soloReturn.set(null);
       topicDeleteError.set("");
       topicDeleteDialogOpen.set(false);
       topicDeleteTarget.set(null);
@@ -3235,11 +3295,12 @@ export function createChatController() {
     rememberTopicSelection(untracked(submitEndpointRef), id);
     syncMobileTopicView({ preferChat: true });
     void loadHistory().finally(focusComposerOnDesktop);
-    void syncChatRoute(id);
+    void syncChatRoute(id, options);
   }
 
   function startNewTopic() {
     batch(() => {
+      soloReturn.set(null);
       creatingTopic.set(true);
       selectedTopicID.set("");
       applyComposerTopicLLMProfile("");
@@ -3681,7 +3742,8 @@ export function createChatController() {
     onDeny: (item) => void decideHistoryApproval(item, "deny"),
     onQuestionAnswer: (item, answer) => void answerHistoryQuestion(item, answer),
     onElevationAnswer: (item, answer) => void answerHistoryElevation(item, answer),
-    onOpenTopic: (topicID) => selectTopic(topicID),
+    onOpenTopic: (topicID) => openTopicFromSolo(topicID),
+    onOpenSoloSource: (source) => openSoloSource(source),
   };
 
   /* ---------- lifetimes ---------- */
@@ -3805,7 +3867,10 @@ export function createChatController() {
   effect(() => {
     const scope = `${currentHistoryScope()}\u0000${showChatPane() ? "chat" : "topics"}`;
     untracked(() => {
-      if (detailScope !== undefined && detailScope !== scope) closeActivityDetail({ restoreFocus: false });
+      if (detailScope !== undefined && detailScope !== scope) {
+        closeActivityDetail({ restoreFocus: false });
+        closeSoloSource();
+      }
       detailScope = scope;
     });
   });
@@ -3826,6 +3891,9 @@ export function createChatController() {
       }
       if (lastRouteTopic === topicID) return;
       lastRouteTopic = topicID;
+      // The route went somewhere other than the topic opened from Solo (the browser's back or
+      // forward, a link): that topic no longer leads back to Solo.
+      if (soloReturn() && soloReturn()!.topicID !== topicID) soloReturn.set(null);
       topicSidebarView.set(topicSidebarViewFor(topicID, topicSidebarView()) as SidebarView);
       // Back to the topic list on a phone (the bar's arrow, Android's Back, the browser's back): the
       // list comes back at once and the conversation slides out still showing its topic (ChatPage's
@@ -4080,6 +4148,14 @@ export function createChatController() {
     focusComposer,
     showTopicsView,
     mobileBack,
+    mobileBackTitle,
+    mobileReturnsToSolo,
+    leaveConversation,
+    openTopicFromSolo,
+    soloSourceDetail,
+    soloSourceDetailOpen,
+    openSoloSource,
+    closeSoloSource,
     setTopicSidebarView,
     clickTopicSidebarTitle,
     loadOlderTopics,
