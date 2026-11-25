@@ -568,6 +568,25 @@ func TestSoloSourceCollectorFilePaths(t *testing.T) {
 	if err := os.Symlink(ws, link); err != nil {
 		t.Fatal(err)
 	}
+	// Links inside the workspace: to a folder and a file outside it, a dangling one whose target
+	// is outside (a write through it lands there), and one to a folder inside it.
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(ws, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, target := range map[string]string{
+		"out":      outside,
+		"leak.txt": filepath.Join(outside, "secret.txt"),
+		"dangling": filepath.Join(outside, "new.txt"),
+		"code":     filepath.Join(ws, "src"),
+	} {
+		if err := os.Symlink(target, filepath.Join(ws, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cases := []struct {
 		tool, path string
 		want       bool
@@ -586,6 +605,19 @@ func TestSoloSourceCollectorFilePaths(t *testing.T) {
 		{"read_file", "file_cache_dir/a.png", false},
 		{"write_file", "file_state_dir/notes.md", false},
 		{"read_file", "", false},
+		// The tools clean a path before reading its alias: workspace_dir/../x is <ws>/x, and
+		// workspace_dir/../../x leaves the workspace (refused).
+		{"read_file", "workspace_dir/../inside.txt", true},
+		{"read_file", "workspace_dir/../../outside.txt", false},
+		{"write_file", "workspace_dir/src/../../../outside.txt", false},
+		{"write_file", "../outside.txt", false},
+		{"read_file", "workspace_dir", false},
+		{"read_file", "out/secret.txt", false},
+		{"write_file", "workspace_dir/out/new.txt", false},
+		{"read_file", filepath.Join(ws, "out", "secret.txt"), false},
+		{"read_file", "leak.txt", false},
+		{"write_file", "dangling", false},
+		{"write_file", "code/main.go", true},
 		{"bash", "", true},
 	}
 	for _, tc := range cases {

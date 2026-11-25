@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
 // Solo is the owner's one pinned conversation with the agent (daemonruntime.ConsoleSoloTopicID).
@@ -488,55 +490,71 @@ var soloWorkspaceTools = map[string]bool{
 // that path resolves inside the workspace.
 var soloPathTools = map[string]bool{"read_file": true, "write_file": true}
 
-// soloPathInWorkspace reports whether a read_file/write_file path resolves inside workspace dir, as
-// those tools resolve it: workspace_dir/ aliases and relative paths land in the workspace, the
-// other aliases (file_cache_dir/, file_state_dir/) never do, and absolute paths only when under it.
-func soloPathInWorkspace(rawPath string, dir string) bool {
-	rawPath = pathutil.ExpandHomePath(strings.TrimSpace(rawPath))
-	if rawPath == "" {
+// soloPathInWorkspace reports whether the file a read_file/write_file call named is inside
+// workspace dir. The path is resolved by the tools' own resolvers with the workspace as the only
+// root, so what they would refuse there (file_cache_dir/ and file_state_dir/ aliases, paths that
+// leave the workspace) never counts. Then the file's real place counts: a symlink in the workspace
+// that points outside it is not the workspace, and a path through a link to the workspace is.
+func soloPathInWorkspace(tool string, rawPath string, dir string) bool {
+	if strings.TrimSpace(rawPath) == "" {
 		return false
-	}
-	lower := strings.ToLower(strings.TrimLeft(rawPath, "/\\"))
-	for _, alias := range []string{"workspace_dir", "file_cache_dir", "file_state_dir"} {
-		if lower == alias || strings.HasPrefix(lower, alias+"/") || strings.HasPrefix(lower, alias+"\\") {
-			return alias == "workspace_dir"
-		}
 	}
 	base, err := filepath.Abs(pathutil.ExpandHomePath(strings.TrimSpace(dir)))
 	if err != nil {
 		return false
 	}
+	roots := pathroots.New(base, "", "")
 	var path string
-	if filepath.IsAbs(rawPath) {
-		path = filepath.Clean(rawPath)
+	if tool == "write_file" {
+		_, path, err = builtin.ResolveWritePath(roots, rawPath)
 	} else {
-		path = filepath.Join(base, rawPath)
+		path, err = builtin.ResolveReadPath(roots, rawPath)
 	}
-	if path == base || pathutil.IsWithinDir(base, path) {
-		return true
+	if err != nil {
+		return false
 	}
-	// The workspace may be reached through a symlink on either side.
-	realBase, err1 := filepath.EvalSymlinks(base)
-	realPath, err2 := evalSymlinksOfExisting(path)
-	return err1 == nil && err2 == nil && (realPath == realBase || pathutil.IsWithinDir(realBase, realPath))
+	realBase, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		realBase = base
+	}
+	realPath, err := evalSymlinksOfExisting(path)
+	if err != nil {
+		return false
+	}
+	return pathutil.IsWithinDir(realBase, realPath)
 }
 
 // evalSymlinksOfExisting resolves the symlinks of path's longest existing prefix (a file
-// write_file creates need not exist yet) and joins the rest back on.
+// write_file creates need not exist yet) and joins the rest back on. A dangling link is followed
+// to where it points, as a write through it would create its target there.
 func evalSymlinksOfExisting(path string) (string, error) {
-	rest := ""
-	for {
-		real, err := filepath.EvalSymlinks(path)
-		if err == nil {
-			return filepath.Join(real, rest), nil
+	for hops := 0; hops < 40; hops++ {
+		rest := ""
+		for {
+			real, err := filepath.EvalSymlinks(path)
+			if err == nil {
+				return filepath.Join(real, rest), nil
+			}
+			if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
+				target, rerr := os.Readlink(path)
+				if rerr != nil {
+					return "", rerr
+				}
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(path), target)
+				}
+				path = filepath.Join(target, rest)
+				break
+			}
+			parent := filepath.Dir(path)
+			if parent == path {
+				return "", err
+			}
+			rest = filepath.Join(filepath.Base(path), rest)
+			path = parent
 		}
-		parent := filepath.Dir(path)
-		if parent == path {
-			return "", err
-		}
-		rest = filepath.Join(filepath.Base(path), rest)
-		path = parent
 	}
+	return "", fmt.Errorf("too many links: %s", path)
 }
 
 func (c *soloSourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
@@ -563,7 +581,7 @@ func (c *soloSourceCollector) HandleEvent(ctx context.Context, event agent.Event
 		}
 		if soloPathTools[name] {
 			path, _ := event.Args["path"].(string)
-			if !soloPathInWorkspace(path, dir) {
+			if !soloPathInWorkspace(name, path, dir) {
 				return
 			}
 		}

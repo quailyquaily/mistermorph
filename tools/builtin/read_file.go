@@ -84,6 +84,13 @@ func (t *ReadFileTool) Execute(ctx context.Context, params map[string]any) (stri
 	return string(data), nil
 }
 
+// ResolveReadPath resolves a read_file path against roots as read_file does (aliases, relative
+// paths in the default dir, absolute paths as they are), without reading anything.
+func ResolveReadPath(roots pathroots.PathRoots, rawPath string) (string, error) {
+	tool := &ReadFileTool{Roots: pathroots.New(roots.WorkspaceDir, roots.FileCacheDir, roots.FileStateDir)}
+	return tool.resolvePath(context.Background(), rawPath)
+}
+
 func (t *ReadFileTool) resolvePath(ctx context.Context, rawPath string) (string, error) {
 	roots := pathroots.Resolve(ctx, t.Roots)
 	rawPath = strings.TrimSpace(rawPath)

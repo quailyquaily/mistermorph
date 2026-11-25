@@ -123,3 +123,31 @@ func TestReadFileTool_RelativePathUsesWorkspaceDirFromContext(t *testing.T) {
 		t.Fatalf("got %q, want %q", out, "from-workspace")
 	}
 }
+
+func TestResolveReadPath(t *testing.T) {
+	ws := t.TempDir()
+	roots := pathroots.New(ws, "", "")
+	cases := []struct {
+		path, want string
+		wantErr    bool
+	}{
+		{path: "notes.md", want: filepath.Join(ws, "notes.md")},
+		{path: "workspace_dir/a/b.md", want: filepath.Join(ws, "a", "b.md")},
+		{path: "workspace_dir/../x.md", want: filepath.Join(ws, "x.md")},
+		{path: "/etc/hosts", want: "/etc/hosts"},
+		{path: "../x.md", wantErr: true},
+		{path: "file_cache_dir/a.png", wantErr: true},
+	}
+	for _, tc := range cases {
+		got, err := ResolveReadPath(roots, tc.path)
+		if tc.wantErr {
+			if err == nil {
+				t.Fatalf("ResolveReadPath(%q) = %q, want error", tc.path, got)
+			}
+			continue
+		}
+		if err != nil || got != tc.want {
+			t.Fatalf("ResolveReadPath(%q) = %q, %v; want %q", tc.path, got, err, tc.want)
+		}
+	}
+}
