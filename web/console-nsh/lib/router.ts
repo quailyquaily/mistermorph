@@ -90,9 +90,10 @@ const ROUTES: RouteDef[] = [
   { pattern: "/login", page: "login", meta: { public: true, shellless: true } },
   { pattern: "/__boot-preview", page: "bootPreview", meta: { public: true, shellless: true } },
   { pattern: "/__components", page: "componentsPreview", meta: { public: true, shellless: true } },
-  // The UI component gallery, a testing page (pages/ui-components): an address and no navigation
-  // entry. Not public: the guard below asks for a session and a finished setup, as for any page.
-  { pattern: "/ui-components", page: "uiComponents", meta: { shellless: true } },
+  // The UI component gallery, a testing page (pages/ui-components): an underscore address beside the
+  // other testing pages, and no navigation entry. Not public: the guard below asks for a session and
+  // a finished setup, as for any page. Its old address, /ui-components, is unknown (no redirect).
+  { pattern: "/__ui-components", page: "uiComponents", meta: { shellless: true } },
   { pattern: "/overview", page: "overview" },
   { pattern: `${ENDPOINT_SCOPE}/setup`, page: "setup", meta: { endpointScoped: true } },
   { pattern: `${ENDPOINT_SCOPE}/setup/llm`, page: "setup", meta: { endpointScoped: true, setupStage: "llm" } },

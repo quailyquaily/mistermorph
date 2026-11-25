@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/caprefs"
+	"github.com/quailyquaily/mistermorph/internal/configtools"
 	"github.com/quailyquaily/mistermorph/internal/elevate"
 	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
+	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/secrets"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -36,6 +38,8 @@ const (
 	BuiltinContactsList  = "contacts_list"
 	BuiltinSpawn         = "spawn"
 	BuiltinCoder         = "coder"
+	BuiltinConfigGet     = configtools.GetToolName
+	BuiltinConfigSet     = configtools.SetToolName
 )
 
 // SearchableContactsSendTrigger is the trigger an ordinary run with tool search on passes to
@@ -62,6 +66,8 @@ var builtinToolNameSet = map[string]struct{}{
 	BuiltinContactsList:  {},
 	BuiltinSpawn:         {},
 	BuiltinCoder:         {},
+	BuiltinConfigGet:     {},
+	BuiltinConfigSet:     {},
 }
 
 type StaticRegistryConfig struct {
@@ -74,6 +80,19 @@ type StaticRegistryConfig struct {
 	WebSearch    StaticWebSearchConfig
 	ContactsSend StaticContactsSendConfig
 	TodoList     StaticTodoListConfig
+	Config       StaticConfigToolsConfig
+}
+
+// StaticConfigToolsConfig is config_get's and config_set's (internal/configtools). Both are
+// deferred, so they are registered only with tool search on; config_set never in an awareness
+// registry (heartbeat and scheduled runs have nobody to approve a change).
+type StaticConfigToolsConfig struct {
+	GetEnabled bool
+	SetEnabled bool
+	ToolSearch bool
+	// ConfigPath is the config they work on; empty registers neither.
+	ConfigPath string
+	StateDir   string
 }
 
 // StaticTodoListConfig is todo_list's: the cron.yaml path of the runtime's own TODO list, the
@@ -297,6 +316,13 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 			AgentLinkReplyTimeout: reader.GetDuration("contacts.agent_link.reply_timeout"),
 		},
 		TodoList: StaticTodoListConfig{CronPath: paths.CronPath},
+		Config: StaticConfigToolsConfig{
+			GetEnabled: reader.GetBool("tools.config_get.enabled"),
+			SetEnabled: reader.GetBool("tools.config_set.enabled"),
+			ToolSearch: reader.GetBool("tools.tool_search.enabled"),
+			ConfigPath: pathutil.ExpandHomePath(strings.TrimSpace(reader.GetString("config"))),
+			StateDir:   paths.StateDir,
+		},
 	}, nil
 }
 
@@ -484,6 +510,12 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		}
 	}
 
+	// The config tools belong to the base registries; a run's triggered registration adds none
+	// (an awareness run also adds triggered tools, and must never get config_set).
+	if triggers == nil {
+		registerConfigTools(reg, cfg, isSelected)
+	}
+
 	contactsSendEnabled := cfg.Common.Awareness && cfg.ContactsSend.Enabled
 	if isSelected(BuiltinContactsSend) {
 		switch {
@@ -492,5 +524,21 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		case cfg.ContactsSend.Enabled && triggers[SearchableContactsSendTrigger]:
 			_ = reg.Replace(builtin.NewDeferredContactsSendTool(contactSendOpts))
 		}
+	}
+}
+
+// registerConfigTools registers config_get, and outside awareness config_set, as deferred tools.
+func registerConfigTools(reg *tools.Registry, cfg StaticRegistryConfig, isSelected func(string) bool) {
+	c := cfg.Config
+	if !c.ToolSearch || strings.TrimSpace(c.ConfigPath) == "" {
+		return
+	}
+	opts := configtools.Options{ConfigPath: c.ConfigPath, StateDir: c.StateDir}
+	if c.GetEnabled && isSelected(BuiltinConfigGet) {
+		_ = reg.Replace(configtools.NewGetTool(opts))
+	}
+	if c.SetEnabled && !cfg.Common.Awareness && isSelected(BuiltinConfigSet) {
+		opts.SecretStore = secref.NewOSStore()
+		_ = reg.Replace(configtools.NewSetTool(opts))
 	}
 }

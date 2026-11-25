@@ -9,6 +9,7 @@ import (
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
+	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	"github.com/quailyquaily/mistermorph/internal/jobconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/logutil"
@@ -103,5 +104,8 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 			AuthToken: strings.TrimSpace(v.GetString("server.auth_token")),
 			MaxQueue:  v.GetInt("server.max_queue"),
 		},
+		Heartbeat: channelopts.HeartbeatConfigFromReader(v),
+		Cron:      channelopts.CronConfigFromReader(v),
+		ChatInfo:  chatinfo.FetcherOptionsFromReader(v),
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
+	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
@@ -39,6 +40,11 @@ type runtimeSnapshot struct {
 	AgentSettings       *agentsettings.ReaderSnapshot
 	TaskTimeout         time.Duration
 	Server              serverSnapshot
+	// Heartbeat and Cron configure the job loop (see Runtime.RunJobs).
+	Heartbeat channelopts.HeartbeatConfig
+	Cron      channelopts.CronConfig
+	// ChatInfo is how the job loop looks up the chats a job notifies.
+	ChatInfo chatinfo.FetcherOptions
 }
 
 // serverSnapshot is the runtime API that ServeRuntimeAPI serves.

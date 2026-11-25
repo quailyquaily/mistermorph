@@ -1,4 +1,4 @@
-// The colour scheme's rules that the code keeps and the gallery shows (/ui-components, Colors):
+// The colour scheme's rules that the code keeps and the gallery shows (/__ui-components, Colors):
 // - the tints: a colour's fill or border at a share (`bg-blue/10`, `border-danger/45`) takes one
 //   of a few steps, whatever the colour, so the same state looks the same on every page;
 // - nsh's names: keys of theme.json that nsh's own components read (shadcn's names), each the

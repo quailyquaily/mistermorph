@@ -5,12 +5,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/accountdm"
 	awarenessruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/awareness"
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
-	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/livesend"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -59,18 +57,9 @@ func Run(ctx context.Context, channel string, awarenessDeps awarenessruntime.Dep
 		ChatInfoRefresher:  chatinfo.NewFetcher(chatinfo.FetcherOptionsFromReader(viper.GetViper())),
 		TaskStore:          opts.TaskStore,
 	}
-	pokeRequests := make(chan awarenessruntime.PokeRequest)
-	awarenessOpts.PokeRequests = pokeRequests
-	opts.Poke = func(ctx context.Context, input awareness.PokeInput) error {
-		return awarenessruntime.Trigger(ctx, pokeRequests, input)
-	}
-	if cronCfg.Enabled {
-		cronRequests := make(chan awarenessruntime.CronRequest)
-		awarenessOpts.CronRequests = cronRequests
-		opts.CronRun = func(ctx context.Context, run cronstore.RunRequest) (string, error) {
-			return awarenessruntime.StartCronRun(ctx, cronRequests, run)
-		}
-	}
+	triggers := awarenessruntime.AttachTriggers(&awarenessOpts)
+	opts.Poke = triggers.Poke
+	opts.CronRun = triggers.CronRun
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	errCh := make(chan error, 2)

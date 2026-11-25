@@ -329,12 +329,15 @@ func RedactToolParamsForDisplay(toolName string, params map[string]any) map[stri
 }
 
 // redactToolParamValues returns params with the values a tool keeps secret replaced, for logs
-// and tool events: job_manage's bash_env values (todo_update was its earlier name), which may be credentials (the names stay), and
-// a codemode script's source, which may hold the values the script passes to such a tool.
+// and tool events: job_manage's bash_env values (todo_update was its earlier name), which may be credentials (the names stay),
+// a codemode script's source, which may hold the values the script passes to such a tool, and
+// config_set's value, which may be a key (its approval and result show it masked where it is one).
 func redactToolParamValues(toolName string, params map[string]any) map[string]any {
 	switch strings.TrimSpace(toolName) {
 	case codeModeToolName:
 		return withheldCodeModeParams(params)
+	case configSetToolName:
+		return withheldConfigSetParams(params)
 	case "job_manage", "todo_update":
 	default:
 		return params
@@ -391,6 +394,25 @@ const codeModeWithheld = "[withheld]"
 // values a script passes to its calls is only known once it runs, and it may build them in any
 // expression, so no part of the source is shown; each call the script makes is shown on its own,
 // with its own redaction. Parameters codemode does not take are left out as well.
+// configSetToolName is the agent's config writer (internal/configtools). Its value is withheld from
+// logs and events whatever the path: only the tool knows which paths are secret.
+const configSetToolName = "config_set"
+
+// configSetValueWithheld stands in for config_set's value in logs and tool events.
+const configSetValueWithheld = "[withheld]"
+
+func withheldConfigSetParams(params map[string]any) map[string]any {
+	if _, ok := params["value"]; !ok {
+		return params
+	}
+	out := make(map[string]any, len(params))
+	for key, value := range params {
+		out[key] = value
+	}
+	out["value"] = configSetValueWithheld
+	return out
+}
+
 func withheldCodeModeParams(params map[string]any) map[string]any {
 	raw, ok := params["code"]
 	if !ok {

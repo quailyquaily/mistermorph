@@ -7,7 +7,7 @@ import (
 )
 
 func TestRequiresForcedApproval(t *testing.T) {
-	for name, want := range map[string]bool{"skill_install": true, " Skill_Install ": true, "bash": false, "": false} {
+	for name, want := range map[string]bool{"skill_install": true, " Skill_Install ": true, "config_set": true, "config_get": false, "bash": false, "": false} {
 		if got := RequiresForcedApproval(name); got != want {
 			t.Fatalf("RequiresForcedApproval(%q) = %v, want %v", name, got, want)
 		}

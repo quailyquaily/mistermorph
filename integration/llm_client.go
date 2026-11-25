@@ -31,6 +31,7 @@ type runtimeBuildDependencies struct {
 	buildClient      llmutil.BaseClientBuilder
 	buildImageClient func(llmutil.RuntimeValues, *slog.Logger) (llm.ImageClient, error)
 	connectMCP       func(context.Context, []mcphost.ServerConfig, *slog.Logger) (mcpRegistration, error)
+	channels         channelRunners
 }
 
 func normalizeRuntimeBuildDependencies(in runtimeBuildDependencies) runtimeBuildDependencies {
@@ -45,6 +46,7 @@ func normalizeRuntimeBuildDependencies(in runtimeBuildDependencies) runtimeBuild
 	if in.connectMCP == nil {
 		in.connectMCP = connectIntegrationMCP
 	}
+	in.channels = normalizeChannelRunners(in.channels)
 	return in
 }
 

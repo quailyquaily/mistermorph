@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -100,5 +101,36 @@ func TestChannelDependenciesOfferContactsSendThroughToolSearch(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// An embedding program gets config_get and config_set only when it names its config file with
+// the "config" key; its awareness registry never has config_set.
+func TestChannelDependenciesOfferConfigToolsWithAConfigFile(t *testing.T) {
+	for _, withConfig := range []bool{true, false} {
+		cfg := DefaultConfig()
+		stateDir := t.TempDir()
+		cfg.Set("file_state_dir", stateDir)
+		cfg.Set("file_cache_dir", t.TempDir())
+		if withConfig {
+			cfg.Set("config", filepath.Join(stateDir, "config.yaml"))
+		}
+		rt := New(cfg)
+		snap := rt.snapshot()
+		if reg := rt.buildAwarenessRegistry(snap.StaticRegistry, nil); reg != nil {
+			if _, ok := reg.Get(toolsutil.BuiltinConfigSet); ok {
+				t.Fatal("the awareness registry has config_set")
+			}
+		}
+		deps := rt.telegramDependencies(snap).CommonDependencies
+		got := runtimetest.DiscoverConfigTools(t, deps)
+		want := runtimetest.ConfigToolsDiscovery{SearchOffered: true, FoundGet: true, FoundSet: true, AwarenessGet: true}
+		if !withConfig {
+			want = runtimetest.ConfigToolsDiscovery{}
+			got.SearchOffered = false
+		}
+		if got != want {
+			t.Fatalf("config %v: discovery = %+v, want %+v", withConfig, got, want)
+		}
 	}
 }
