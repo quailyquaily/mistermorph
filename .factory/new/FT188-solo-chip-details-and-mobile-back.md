@@ -47,3 +47,16 @@ Built in commits 366c55ea, 50440132 and e0ce1674; advanced to current master bef
 - Recovery: resumed an interrupted build's uncommitted item work; removed stale temporary files. No /tmp additions observed during this run.
 - Written outside dir: coder reported creating its FT188 memory note and updating its memory index under its own Claude project memory; no secrets or machine paths were committed. This was outside the requested work area.
 - Branch push initially failed because the credential request omitted the repository path; retry with per-command credential.useHttpPath=true succeeded.
+
+## factory · review · 2026-11-25 22:49
+head: e0ce16741cd7e147c1b2781332110a66c527b841
+verdict: fix
+fix:
+- [P1] web/console-nsh/lib/core/solo.js:93: adding uses to every parsed source breaks the existing deep-equality expectation in lib/core/solo.test.mjs:25-34. Update that expectation for the new shape and run the core Node tests. Example: node --test lib/core/solo.test.mjs yields 4 passed, 1 failed on this head versus 5 passed on base; actual sources include uses: [] but expected sources do not. Runtime behavior is not affected; factory policy treats failing tests as P1.
+notes:
+- Reviewed origin/master...e0ce1674 with Claude Code against the owner request and plan; branch merges cleanly. No other qualifying findings.
+- Coder ran configured gofmt/vet/Go tests successfully, nsh check successfully, and scripts/test.sh successfully (172 files, 0 failed after the script's isolated retries). Extra lib Node tests: 322 passed, 1 failed. Manager independently reproduced the solo.test.mjs failure.
+- Headless phone navigation probe passed; source safety, prior-reply thread classification, old records, desktop behavior and locale keys were checked. Visual appearance and physical Android/iPhone behavior remain unverified; edge swipe and keyboard-first Back were not exercised, endpoint-change/browser-history provenance clearing was inspected only.
+- Installs: none. Worktree clean after review; no code commits made.
+- Written outside dir: coder harness reported a background log under /tmp/claude-995; recorded for owner-confirmed cleanup, not deleted. No new top-level /tmp entries observed.
+- Round 1 of 3: returned to new/ for the next build to fix the failing test.
