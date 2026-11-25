@@ -59,13 +59,16 @@ func (t consoleSoloTopics) GetTopic(id string) (*daemonruntime.TopicInfo, bool) 
 	return t.r.store.GetTopic(id)
 }
 
+// ensureSoloTopic makes Solo once per runtime: Solo cannot be deleted, so once made it stays.
 func (r *consoleLocalRuntime) ensureSoloTopic() {
-	if r == nil || r.store == nil {
+	if r == nil || r.store == nil || r.soloReady.Load() {
 		return
 	}
 	if _, err := r.store.EnsureSoloTopic(); err != nil {
 		r.currentLogger().Warn("console_solo_topic_create_failed", "error", err.Error())
+		return
 	}
+	r.soloReady.Store(true)
 }
 
 // consoleSoloRun reports whether a Console task is a Solo run: the owner's chat run in Solo.

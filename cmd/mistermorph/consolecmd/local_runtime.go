@@ -183,6 +183,7 @@ type consoleLocalRuntime struct {
 	// counts the card updates under way (solo.go).
 	soloMu    sync.Mutex
 	soloSyncs sync.WaitGroup
+	soloReady atomic.Bool
 }
 
 type topicDeleterFunc func(id string) (bool, error)
