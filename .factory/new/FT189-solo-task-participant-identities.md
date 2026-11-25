@@ -56,3 +56,10 @@ These are proposed additions, not capabilities already present:
 Assessment validation: code/board inspection only, no implementation, builds, tests, installs or visual/device checks. Claude Code reported no file writes; assessment worktree remains clean.
 
 Non-blocking follow-up for FT188 verification: code reading suggests `internal/solo/sources.go:114` ignores worker-tagged tool events, while real coder completion carries a worker (`agent/worker.go:209-218`); FT188's collector test uses an event without one. A real coder workspace-use count may therefore be absent. This is unconfirmed and not a reason to fabricate provenance; verify with a realistic event fixture during related implementation/review rather than silently expanding this item.
+
+## factory · 2026-11-26 07:39
+Owner authorized moving FT189 to new/. Moved backlog/ to new/ without changing the assessment, scope or acceptance criteria above.
+
+Dependency update: FT188 is now in done/; its shipping record reports merge 12ab853ea955819a2daa2f4cd5928de845e37bba on master and release v0.3.137, pushed on 2026-11-26 at 07:09 Asia/Tokyo. The earlier hold until FT188 ships is therefore satisfied. Recheck the current code at build time and preserve FT188 behavior.
+
+This change only queues the item. No build, review, implementation or ship was started by this intake action.
