@@ -100,6 +100,13 @@ fi
 if [[ -z "$(read_plist NSMicrophoneUsageDescription)" ]]; then
   echo "warning: Info.plist has no NSMicrophoneUsageDescription" >&2
 fi
+# The app's only encryption is the system's HTTPS, which is exempt. Without the key App Store
+# Connect holds every build at "Missing Compliance" until someone answers by hand, so no build
+# can go to testers or to review on its own.
+if [[ "$(read_plist ITSAppUsesNonExemptEncryption)" != false ]]; then
+  echo "Info.plist does not set ITSAppUsesNonExemptEncryption to false (nsh.json's ios.infoPlist)" >&2
+  exit 1
+fi
 
 mkdir -p "$(dirname "$out")"
 cp "$built" "$out"

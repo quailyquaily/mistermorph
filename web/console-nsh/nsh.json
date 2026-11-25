@@ -48,6 +48,7 @@
   },
   "ios": {
     "infoPlist": {
+      "ITSAppUsesNonExemptEncryption": false,
       "NSAppTransportSecurity": {
         "NSAllowsArbitraryLoads": true
       },
