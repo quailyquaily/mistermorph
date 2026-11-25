@@ -1,3 +1,7 @@
+---
+branch: factory/FT189-solo-task-participant-identities
+round: 1
+---
 # Solo task chips and cards show participating subagents and coders
 
 ## factory · 2026-11-25 23:18
@@ -63,3 +67,29 @@ Owner authorized moving FT189 to new/. Moved backlog/ to new/ without changing t
 Dependency update: FT188 is now in done/; its shipping record reports merge 12ab853ea955819a2daa2f4cd5928de845e37bba on master and release v0.3.137, pushed on 2026-11-26 at 07:09 Asia/Tokyo. The earlier hold until FT188 ships is therefore satisfied. Recheck the current code at build time and preserve FT188 behavior.
 
 This change only queues the item. No build, review, implementation or ship was started by this intake action.
+
+
+## factory · plan · 2026-11-26 08:15
+### Behaviour
+Project each Solo-started task's actual worker identities into its card and terminal summary. Refresh on identity/status changes through the existing activity callback, not every output chunk. Retain bounded roster and omitted counts, normalize stale running identities at task completion without erasing individual failure, and keep durable last-known identities across reload/restart. Cards display newest three names/avatars/states plus correct +N. Starting thread chips show three avatars plus +N with accessible names/roles only for an exact loaded task match. Empty/legacy/unresolved/ambiguous records remain plain; other provenance kinds unchanged.
+### Scope
+Implement the existing assessed requirement and tests across runtime projection, Solo transport/source association, Console parsing/joining and shared rendering. Preserve FT188 uses, source dedup/order, details and mobile Back. No new endpoint, scheduler, parent tracking, raw activity payload or nested worker navigation. Verify realistic coder event provenance fixture but do not expand into unrelated fixes.
+### Decisions
+Reuse worker identity localization/status/avatar helpers, flatten descendants because parentage is unavailable, retain newest bounded 32 and count omitted. Use an explicit optional task association; if dedup merges different starting task IDs, carry a lossless bounded representation or deliberately suppress ambiguous decoration. Never infer by topic alone. Existing main Agent identity remains untouched. Safe allowlisted metadata only. Isolate test HOME and all already-defined cache overrides.
+### Checking
+Add regression tests for live change-only projection/write triggers, terminal/pause/restart durability and state normalization, identity-only bounded metadata, repeated/nested workers, omitted counts; source exact/ambiguous association preserving uses; card/summary and chip rendering, accessibility/localization, no-worker/legacy/fallback/per-task isolation and FT188 behaviour. Run configured gofmt/vet/go test gate, nsh check and scripts/test.sh. Report any unavailable manual web/phone/native checks without claiming they ran.
+
+## factory · 2026-11-26 08:15
+Built at head 15536f1f (backend efdde58c), based on master 12ab853e. Cards/summaries retain bounded safe worker identity projections; existing activity changes refresh only changed participant state. Newest three localized identities and states appear on cards; starting chips show avatars only for exact loaded task/topic matches. Repeated starts folded into the same topic suppress ambiguous chip decoration. Missing historical data stays absent; descendants remain flat. Pause/resume merges durable workers rather than replacing them. FT188 interactions and uses preserved.
+
+Installs: none; no dependency/manifest/config changes.
+
+Tests: coder reports isolated gofmt/vet/go test gate passed (172 packages); manager independently reran the configured complete Go gate successfully. Coder reports nsh check passed and required Console script passed: 173 files, 0 failed (445s). Regression coverage includes runtime projection/retention/status/change-only writes, restart, source task association, and 8 Console participant tests.
+
+Visual checks: coder reports inspecting real-component headless Chrome fixtures at 320/390px without overflow; 900px automated no-overflow check only. Not checked: full live Console, ZH/JA browser layout, dark scheme, manual tooltip, native builds or device screen readers. Headless locale tests passed; no native rendering claim.
+
+Related non-blocking FT188 issue confirmed by coder's realistic engine probe: worker-tagged coder completions are excluded by SourceCollector, so real coder workspace-use provenance may be absent. Not changed here; review should inspect separately.
+
+Process deviations: coder wrote a Claude memory file and a MEMORY.md line outside the permitted run directory; no such write was requested or accepted as feature work. Coder reports two early go test runs lacked TMPDIR, generated /tmp/TestSolo... folders then removed them; none remain. Manager before/after /tmp inventory found no new retained paths. No /tmp deletion performed. Existing legacy run-root files left untouched. Branch push initially needed credential.useHttpPath=true; the single retry succeeded. No base/tag push.
+
+Move: new/ → review/, round 1. Owner should inspect participant identity isolation, durable pause/restart semantics, bounded +N and accessible phone-width chips in review.
