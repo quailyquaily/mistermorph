@@ -7,8 +7,13 @@ name: Build iOS App
 # Secrets: IOS_CERTIFICATE_BASE64 and IOS_CERTIFICATE_PASSWORD (the Apple Distribution .p12),
 # IOS_CODESIGN_IDENTITY ("Apple Distribution: Example Inc (TEAMID1234)"),
 # IOS_PROVISIONING_PROFILE_BASE64 (the App Store .mobileprovision), IOS_APP_STORE_APP_ID (the app's
-# numeric Apple ID in App Store Connect), and the App Store Connect API key the release already uses
-# (APPLE_API_KEY_BASE64, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID). Without them there is no iOS app.
+# numeric Apple ID in App Store Connect), and an App Store Connect API key of its own,
+# IOS_API_KEY_BASE64 and IOS_API_KEY_ID, with the team's APPLE_API_ISSUER_ID. Without them there is
+# no iOS app.
+#
+# The key has the App Manager role, which TestFlight groups and Beta App Review need; it can also
+# change the App Store listing, so it is not the release's Developer key (APPLE_API_KEY_*, for
+# notarization) but a second one that only this workflow reads (docs/ios_release.md, Part 5).
 
 on:
   workflow_dispatch:
@@ -20,12 +25,19 @@ on:
         description: Upload to TestFlight
         type: boolean
         default: true
+      submit:
+        description: Send to external testers (Beta App Review), after the upload
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       version:
         type: string
         required: true
       upload:
+        type: boolean
+        default: true
+      submit:
         type: boolean
         default: true
 
@@ -42,6 +54,9 @@ jobs:
       IOS_CODESIGN_IDENTITY: ${{ secrets.IOS_CODESIGN_IDENTITY }}
       IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
       IOS_APP_STORE_APP_ID: ${{ secrets.IOS_APP_STORE_APP_ID }}
+      IOS_API_KEY_BASE64: ${{ secrets.IOS_API_KEY_BASE64 }}
+      IOS_API_KEY_ID: ${{ secrets.IOS_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
 
     steps:
       - name: Check the iOS signing secrets
@@ -50,7 +65,8 @@ jobs:
         run: |
           missing=()
           for name in IOS_CERTIFICATE_BASE64 IOS_CERTIFICATE_PASSWORD IOS_CODESIGN_IDENTITY \
-            IOS_PROVISIONING_PROFILE_BASE64 IOS_APP_STORE_APP_ID; do
+            IOS_PROVISIONING_PROFILE_BASE64 IOS_APP_STORE_APP_ID IOS_API_KEY_BASE64 IOS_API_KEY_ID \
+            APPLE_API_ISSUER_ID; do
             [[ -n "${!name}" ]] || missing+=("${name}")
           done
           if (( ${#missing[@]} > 0 )); then
@@ -71,8 +87,8 @@ jobs:
           gpui: "false"
           components: web ios
 
-      # The Apple Distribution identity in a temporary keychain (CODESIGN_IDENTITY) and the API key
-      # (APPLE_API_KEY_PATH, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID), as for the macOS release.
+      # The Apple Distribution identity in a temporary keychain (CODESIGN_IDENTITY) and the iOS API
+      # key (APPLE_API_KEY_PATH, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID), as for the macOS release.
       - name: Set up iOS signing
         if: steps.secrets.outputs.ready == 'true'
         shell: bash
@@ -80,9 +96,8 @@ jobs:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           APPLE_CODESIGN_IDENTITY: ${{ secrets.IOS_CODESIGN_IDENTITY }}
-          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_BASE64: ${{ secrets.IOS_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.IOS_API_KEY_ID }}
         run: |
           ./scripts/macos-signing-setup.sh
           profile="${RUNNER_TEMP}/Morph.mobileprovision"
@@ -121,3 +136,15 @@ jobs:
           cp "${APPLE_API_KEY_PATH}" ~/.appstoreconnect/private_keys/
           xcrun altool --upload-app --type ios --file dist/Morph.ipa \
             --apiKey "${APPLE_API_KEY_ID}" --apiIssuer "${APPLE_API_ISSUER_ID}"
+
+      # Waits for Apple to process the build, then submits it to Beta App Review and adds it to the
+      # external group (the repository variable IOS_TESTFLIGHT_GROUP, else "Beta"). Builds go out
+      # on every tag; a submission refused while an earlier build is still in review only warns.
+      - name: Send to external testers
+        if: steps.secrets.outputs.ready == 'true' && inputs.upload && inputs.submit
+        shell: bash
+        timeout-minutes: 75
+        env:
+          VERSION: ${{ inputs.version }}
+          TESTFLIGHT_GROUP: ${{ vars.IOS_TESTFLIGHT_GROUP }}
+        run: node web/console-nsh/scripts/testflight-submit.mjs

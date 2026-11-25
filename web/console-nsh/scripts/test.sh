@@ -62,6 +62,17 @@ if [ "$all" -eq 1 ]; then
     cat "$logs/color-steps.log"
   fi
 fi
+# And the TestFlight submission against a fake App Store Connect (scripts/testflight-submit.test.mjs).
+if [ "$all" -eq 1 ]; then
+  if node --test scripts/testflight-submit.test.mjs >"$logs/testflight-submit.log" 2>&1; then
+    echo "ok    scripts/testflight-submit.test.mjs"
+  else
+    failed=$((failed + 1))
+    echo
+    echo "---- scripts/testflight-submit.test.mjs"
+    cat "$logs/testflight-submit.log"
+  fi
+fi
 # And every Image clipping its source (scripts/image-clip.test.mjs).
 if [ "$all" -eq 1 ]; then
   if node --test scripts/image-clip.test.mjs >"$logs/image-clip.log" 2>&1; then

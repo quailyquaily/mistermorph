@@ -80,7 +80,7 @@ A team can hold only a few Developer ID Application certificates at a time. Once
 #### 2. App Store Connect API key
 
 1. Sign in to `https://appstoreconnect.apple.com` and open Users and Access → Integrations → App Store Connect API → Team Keys. The first time, the Account Holder has to request API access.
-2. Click `+` (Generate API Key). Name it, for example `mistermorph-notarize`, and give it the **Developer** role.
+2. Click `+` (Generate API Key). Name it, for example `mistermorph-notarize`, and give it the **Developer** role. The iPhone app's TestFlight upload uses a separate App Manager key ([iOS Release](ios_release.md), Part 5).
 3. Download the key, `AuthKey_<KEY ID>.p8`. Apple offers the download only once.
 4. Copy the **Key ID** from the key's row and the **Issuer ID** shown above the table.
 5. On a Mac you can check the key with `xcrun notarytool history --key AuthKey_ABCD123456.p8 --key-id ABCD123456 --issuer <issuer id>`. Without a Mac, the first tagged release checks it; an authentication error from `notarytool` means the key, ID or issuer is wrong.

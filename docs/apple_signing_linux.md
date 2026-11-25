@@ -117,7 +117,7 @@ The API key lets the release workflow submit builds to Apple's notary service. I
 2. Click **Users and Access**, then the **Integrations** tab, then **App Store Connect API** in the left column.
 3. Select the **Team Keys** tab. If you see **Request Access** instead of a key list, the Account Holder has to click it and accept the terms first; this is a one-time step.
 4. Click **Generate API Key**, or the **+** button if keys already exist.
-5. Name it, for example `mistermorph-notarize`. Under **Access**, choose **Developer**. That role is enough for notarization; don't give it Admin.
+5. Name it, for example `mistermorph-notarize`. Under **Access**, choose **Developer**. That role is enough for notarization; don't give it Admin. The iPhone app uses a second key with the App Manager role, which only its own workflow can read ([iOS Release](ios_release.md), Part 5); don't raise this key's role for it.
 6. Click **Generate**.
 7. In the key's row, click **Download API Key**. Save it into `~/apple-signing`. The file is named `AuthKey_<KEY ID>.p8`.
 8. Write down two values from the same page:
