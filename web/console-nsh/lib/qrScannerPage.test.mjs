@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { SCAN_INTERVAL_MS, SCANNER_SCRIPT, scannerPage } from "./qrScannerPage.js";
+import { PIXEL_SIDE, SCAN_INTERVAL_MS, SCANNER_SCRIPT, scannerPage } from "./qrScannerPage.js";
+import { JSQR_SOURCE } from "./vendor/jsqr.js";
 
 function deferred() {
   let resolve, reject;
@@ -38,9 +39,10 @@ function fakeStream() {
 /**
  * A page: `camera` is what getUserMedia answers (a stream, an error, or a promise of either; null
  * for a browser without it), `detector` false for a browser without BarcodeDetector, `formats`
- * what it reads, `frames` what each look at the picture finds.
+ * what it reads, `frames` what each look at the picture finds. `jsQR`: a stand-in for jsQR (the
+ * page's other script), told each frame's pixels as a canvas gives them, answering from `frames`.
  */
-function page({ camera, detector = true, formats = ["qr_code"], frames = [] } = {}) {
+function page({ camera, detector = true, formats = ["qr_code"], frames = [], jsQR = false } = {}) {
   const posts = [];
   const timers = new Map();
   let nextTimer = 1;
@@ -48,7 +50,10 @@ function page({ camera, detector = true, formats = ["qr_code"], frames = [] } = 
   const documentListeners = {};
   const asked = [];
   const looks = [];
+  const drawn = [];
   const video = {
+    videoWidth: 1920,
+    videoHeight: 1080,
     readyState: 4,
     srcObject: null,
     paused: false,
@@ -62,12 +67,28 @@ function page({ camera, detector = true, formats = ["qr_code"], frames = [] } = 
   const document = {
     hidden: false,
     getElementById: (id) => (id === "camera" ? video : null),
+    createElement: (name) => {
+      const canvas = { name, width: 0, height: 0 };
+      canvas.getContext = () => ({
+        drawImage: (source, x, y, w, h) => drawn.push({ source, w, h }),
+        getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+      });
+      return canvas;
+    },
     addEventListener: (name, listener) => (documentListeners[name] = listener),
   };
   const window = {
     nsh: { postMessage: (data) => posts.push(JSON.parse(data)) },
     addEventListener: (name, listener) => (windowListeners[name] = listener),
   };
+  if (jsQR) {
+    window.jsQR = (data, w, h, options) => {
+      looks.push({ pixels: data.length, w, h, options });
+      const next = frames.length ? frames.shift() : null;
+      if (next instanceof Error) throw next;
+      return next;
+    };
+  }
   if (detector) {
     window.BarcodeDetector = class {
       static getSupportedFormats() {
@@ -104,6 +125,8 @@ function page({ camera, detector = true, formats = ["qr_code"], frames = [] } = 
     Promise,
     JSON,
     String,
+    Math,
+    Uint8ClampedArray,
     setTimeout: (fn, ms) => {
       const id = nextTimer++;
       timers.set(id, { fn, ms });
@@ -120,6 +143,7 @@ function page({ camera, detector = true, formats = ["qr_code"], frames = [] } = 
     video,
     asked,
     looks,
+    drawn,
     timers,
     settle,
     /** Runs the pending look at the picture, if one is due. */
@@ -144,10 +168,70 @@ test("the page is one document with the script in it, and asks for nothing but t
   const html = scannerPage();
   assert.match(html, /<video id="camera" playsinline muted autoplay><\/video>/);
   assert.ok(html.includes(SCANNER_SCRIPT));
-  // No address is read, opened or sent from the page.
+  // jsQR, whole, before the scanner's script; it has no `</script` that could end its element.
+  assert.ok(html.includes(JSQR_SOURCE));
+  assert.ok(html.indexOf(JSQR_SOURCE) < html.indexOf(SCANNER_SCRIPT));
+  assert.equal(/<\/script/i.test(JSQR_SOURCE), false);
+  // No address is read, opened or sent from the page: its own parts, and jsQR (whose "location" is
+  // a finder pattern's, never the page's).
+  const own = html.replace(JSQR_SOURCE, "");
   for (const word of ["fetch(", "XMLHttpRequest", "location", "WebSocket", "sendBeacon", "localStorage", "cookie", "<a ", "src="]) {
-    assert.ok(!html.includes(word), word);
+    assert.ok(!own.includes(word), word);
   }
+  for (const word of ["fetch(", "XMLHttpRequest", "WebSocket", "sendBeacon", "localStorage", "cookie", "window.location", "document.location", "location.href", "eval(", "new Function"]) {
+    assert.ok(!JSQR_SOURCE.includes(word), `jsQR: ${word}`);
+  }
+});
+
+test("without BarcodeDetector jsQR reads the frames' pixels, a small copy of each, and the first code is told", async () => {
+  const stream = fakeStream();
+  const p = page({ camera: stream, detector: false, jsQR: true, frames: [null, { data: "" }, { data: "https://morph.example.com" }] });
+  await p.settle();
+  assert.deepEqual(p.posts, [{ type: "ready" }]);
+  for (let i = 0; i < 3; i++) await p.tick();
+  assert.deepEqual(p.posts, [{ type: "ready" }, { type: "result", text: "https://morph.example.com" }]);
+  assert.equal(stream.track.stopped, 1);
+  // A 1920 × 1080 frame is read at PIXEL_SIDE on its long side, the picture itself drawn.
+  const side = Math.round((1080 * PIXEL_SIDE) / 1920);
+  assert.deepEqual(p.drawn.map(({ source, w, h }) => [source === p.video, w, h]), [[true, PIXEL_SIDE, side], [true, PIXEL_SIDE, side], [true, PIXEL_SIDE, side]]);
+  assert.equal(JSON.stringify(p.looks[0]), JSON.stringify({ pixels: PIXEL_SIDE * side * 4, w: PIXEL_SIDE, h: side, options: { inversionAttempts: "dontInvert" } }));
+});
+
+/** A QR code's modules (true: dark), row by row, from lib/vendor/qrcode.js. */
+async function qrModules(text) {
+  const { create } = await import("./vendor/qrcode.js");
+  const matrix = create(text, { errorCorrectionLevel: "M" }).modules;
+  const modules = [];
+  for (let y = 0; y < matrix.size; y++) {
+    const row = [];
+    for (let x = 0; x < matrix.size; x++) row.push(Boolean(matrix.get(y, x)));
+    modules.push(row);
+  }
+  return { modules };
+}
+
+test("the real jsQR reads a QR code from its pixels", async () => {
+  // jsQR's own build, run as the page runs it (a global jsQR), on a code drawn by lib/vendor/qrcode.js.
+  const context = vm.createContext({ self: {}, Uint8ClampedArray, Math, Array, Object, Number, String, Error, Int32Array, Uint8Array, Float32Array });
+  vm.runInContext(JSQR_SOURCE, context);
+  const jsQR = context.self.jsQR;
+  assert.equal(typeof jsQR, "function");
+  const { modules } = await qrModules("https://morph.example.com:9080");
+  const scale = 6;
+  const quiet = 4;
+  const side = (modules.length + quiet * 2) * scale;
+  const data = new Uint8ClampedArray(side * side * 4).fill(255);
+  modules.forEach((row, y) =>
+    row.forEach((dark, x) => {
+      if (!dark) return;
+      for (let dy = 0; dy < scale; dy++)
+        for (let dx = 0; dx < scale; dx++) {
+          const at = (((y + quiet) * scale + dy) * side + (x + quiet) * scale + dx) * 4;
+          data[at] = data[at + 1] = data[at + 2] = 0;
+        }
+    }),
+  );
+  assert.equal(jsQR(data, side, side, { inversionAttempts: "dontInvert" })?.data, "https://morph.example.com:9080");
 });
 
 test("the camera starts, the first QR code is told, and the camera is released before it is", async () => {
