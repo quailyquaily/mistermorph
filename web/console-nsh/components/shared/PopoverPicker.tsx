@@ -161,6 +161,8 @@ export function PopoverPicker(props: {
   value?: string;
   /** The row picked (pressed, or Enter on the highlighted one). */
   onChange: (value: string) => void;
+  /** On phones, a menu's row pressed: told at once, while `onChange` waits for the paper to go (PopupList). */
+  onCommand?: (value: string) => void;
   /** What shows and opens the list; `open` while the list shows (for its pressed look). */
   trigger: (state: { open: boolean }) => JSX.Element;
   /** What screen readers call the trigger (and its tooltip). */
@@ -309,6 +311,7 @@ export function PopoverPicker(props: {
         value={props.value}
         role={role()}
         onChoose={(value) => props.onChange(value)}
+        onCommand={props.onCommand}
         filterPlaceholder={props.filterPlaceholder}
         emptyText={props.emptyText}
         partID={props.partID ?? props.testID}

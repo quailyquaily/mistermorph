@@ -19,8 +19,11 @@
 // on it. So a page that shows a back arrow registers the same action here with the same `when`,
 // and one without an arrow registers nothing.
 //
-// Other platforms keep what they have: the browser's back button and Escape on the desktop.
-import { cleanup, computed, context, effect, platform, signal, untracked } from "nsh";
+// iOS has no system Back: there the swipe in from the left edge of the screen is the app's own
+// (`edgeSwipeBack`), and runs the same action, so it goes back wherever a back arrow shows. Other
+// platforms keep what they have: the browser's back button and Escape on the desktop.
+import type { TouchProps } from "nsh";
+import { cleanup, computed, context, effect, PanResponder, platform, signal, untracked } from "nsh";
 import { BackHandler } from "nsh/mobile";
 import { OWN_HISTORY } from "./platform";
 import { navigate } from "./router";
@@ -92,4 +95,44 @@ export function startSystemBack() {
     if (!handlesBack()) return;
     return BackHandler.on("press", () => handleBack());
   });
+}
+
+/** The swipe back's numbers, in points: how near the left edge it starts, how far it goes before it
+ *  is taken (well past a tap's wobble, mostly sideways), and how far, or how far and how fast
+ *  (points per second), it goes to go back on release. */
+export const EDGE_SWIPE = { edge: 24, claim: 12, commit: 72, flick: 32, flickSpeed: 400 };
+
+interface SwipeState {
+  x0: number;
+  dx: number;
+  dy: number;
+  vx: number;
+}
+
+/** Whether a finger's move is the swipe back: from the left edge, rightwards, mostly sideways. */
+export function claimsEdgeSwipe(gesture: SwipeState): boolean {
+  return gesture.x0 <= EDGE_SWIPE.edge && gesture.dx >= EDGE_SWIPE.claim && Math.abs(gesture.dx) > 2 * Math.abs(gesture.dy);
+}
+
+/** Whether the swipe, let go, goes back: far enough, or a flick a little way. */
+export function edgeSwipeGoesBack(gesture: SwipeState): boolean {
+  return gesture.dx >= EDGE_SWIPE.commit || (gesture.dx >= EDGE_SWIPE.flick && gesture.vx >= EDGE_SWIPE.flickSpeed);
+}
+
+/**
+ * On iOS, the handlers of the swipe back, for the app's frame (App.tsx); none elsewhere. Only a move
+ * is claimed (a capture, before the views under the finger): taps, presses and scrolling that do
+ * not start at the edge going right are left as they were, and nothing is claimed while there is
+ * no back to go to. Dialogs and sheets are layers over the frame, so a swipe on them is theirs.
+ */
+export function edgeSwipeBack(): TouchProps | undefined {
+  if (platform.os !== "ios") return undefined;
+  return PanResponder.create({
+    onMoveShouldSetPanResponderCapture: (_event, gesture) => untracked(handlesBack) && claimsEdgeSwipe(gesture),
+    onPanResponderRelease: (_event, gesture) => {
+      if (edgeSwipeGoesBack(gesture)) handleBack();
+    },
+    // Taken, the swipe stays the app's until the finger lifts.
+    onPanResponderTerminationRequest: () => false,
+  }).panHandlers;
 }

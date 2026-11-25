@@ -57,9 +57,10 @@ export interface ConsoleOptions {
   locale?: string;
   /**
    * `"android"`: the phone app on Android, whose own host (lib/mobileHost.ts) answers `morph.*`
-   * from the app's storage, where `location` and the console server's address are saved.
+   * from the app's storage, where `location` and the console server's address are saved. `"ios"`:
+   * the iPhone app, the same app without Android's native part.
    */
-  platform?: "android";
+  platform?: "android" | "ios";
   /**
    * The system bars' insets (`safeArea()`): Android's with `platform`; without it, a phone
    * browser's (`env(safe-area-inset-*)`, under its home indicator or a cutout).
@@ -224,11 +225,11 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
       : options.barRooms
         ? { "morph.fixture.room": null }
         : {};
-  if (options.platform === "android") {
+  if (options.platform === "android" || options.platform === "ios") {
     const app = await open(entry, {
       width: options.width ?? 390,
       height: options.height ?? 844,
-      platform: "android",
+      platform: options.platform,
       locale: options.locale ?? "en-US",
       colorScheme: options.colorScheme ?? null,
       safeArea: options.safeArea ?? null,

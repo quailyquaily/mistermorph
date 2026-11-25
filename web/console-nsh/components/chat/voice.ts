@@ -13,6 +13,10 @@
 //   "no_mic" (a phone without one), and a tap explains it instead of recording. Typing is never
 //   affected.
 //
+// Either way the mic shows only while the agent can transcribe: the platform's recognizer (the
+// iPhone app's) does not need the agent's transcription route, but voice input is one feature
+// everywhere, set up by that route, so it is offered on no client without it.
+//
 // The words go into the draft of the conversation they were spoken for: when `scope` (the agent
 // and the topic) changes, or the host ends the recording (the phone app left the foreground), what
 // is under way is thrown away, and an answer that comes later is dropped.
@@ -45,7 +49,9 @@ export type VoiceRecorder = typeof voiceRecording;
 
 export function createVoiceInput(options: VoiceInputOptions) {
   const recorder = options.recorder ?? voiceRecording;
-  const records = recorder.available() && Boolean(options.transcribe && options.canTranscribe && options.endpointRef);
+  // Whether the agent's transcription route is asked about (GET /voice/transcribe).
+  const asksAgent = Boolean(options.canTranscribe && options.endpointRef);
+  const records = recorder.available() && asksAgent && Boolean(options.transcribe);
   // Whether there is a live preview to turn on and off: the platform's recognizer has one, and a
   // recording host only where it says so (the browser's speech recognition; the desktop has none).
   const previewable = !records || recorder.previews();
@@ -98,7 +104,28 @@ export function createVoiceInput(options: VoiceInputOptions) {
       }),
     );
     // The mic shows while the agent the composer sends to can transcribe (GET /voice/transcribe).
-    // Whether the app is in front comes from the host (nsh's `lifecycle` breaks the web page).
+    trackAgent(ready);
+  } else {
+    // The platform recognizes the words, and the mic still waits for the agent's route (above).
+    const recognizes = signal(false);
+    const agentReady = signal(!asksAgent);
+    if (asksAgent) trackAgent(agentReady);
+    effect(() => {
+      const ok = recognizes() && agentReady();
+      untracked(() => ready.set(ok));
+    });
+    void Speech.available()
+      .then((ok) => {
+        if (!disposed) recognizes.set(ok === true);
+      })
+      .catch((error: Error) => {
+        console.warn("voice input unavailable:", error?.message || error);
+      });
+  }
+
+  // Asks the agent whether it transcribes, again when the app comes back to the front. Whether the
+  // app is in front comes from the host (nsh's `lifecycle` breaks the web page).
+  function trackAgent(into: Signal<boolean>) {
     const inFront = () => isVisible() && hasFocus();
     const front = signal(inFront());
     cleanup(onVisibilityChange(() => front.set(inFront())));
@@ -106,17 +133,9 @@ export function createVoiceInput(options: VoiceInputOptions) {
       endpointRef: () => options.endpointRef!(),
       active: () => front(),
       check: (ref) => options.canTranscribe!(ref),
-      ready,
+      ready: into,
       disposed: () => disposed,
     });
-  } else {
-    void Speech.available()
-      .then((ok) => {
-        if (!disposed) ready.set(ok === true);
-      })
-      .catch((error: Error) => {
-        console.warn("voice input unavailable:", error?.message || error);
-      });
   }
 
   function clearTimers() {

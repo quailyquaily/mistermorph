@@ -456,6 +456,7 @@ test("on the phone Upload files asks Gallery or File: Gallery opens the photo pi
 
   await app.press("id:chat-composer-add");
   await app.press("text:Upload Files");
+  await app.waitFor("id:chat-attach-source-gallery");
   await app.press("id:chat-attach-source-gallery");
   await app.waitFor("label:Preview file: photo.png");
   expect(app.picks().map((pick) => pick.kind)).toEqual(["files", "images"]);
@@ -466,6 +467,39 @@ test("on the phone Upload files asks Gallery or File: Gallery opens the photo pi
 
   // The document previews from the agent once uploaded, as before.
   expect(app.enabled("label:Preview file: report.pdf")).toBe(true);
+});
+
+// On iOS a popup is a view controller, and one presented while the popup under it is dismissed
+// went with it: the add menu hands on to the Gallery or File sheet, and that sheet to the picker,
+// only once it has gone.
+test("on the iPhone the add menu and the Gallery or File sheet hand on only once they have gone", async () => {
+  const { app } = await openConsole({
+    platform: "ios",
+    location: "/e/default/chat/topic-1",
+    api: {
+      "GET /proxy:/todo/tasks": { body: { items: [] } },
+      "GET /proxy:/topics": TOPICS,
+      "GET /proxy:/tasks": { body: { items: [] } },
+      "POST /proxy:/files/upload": () => ({ body: { files: [{ name: "report.pdf", dir_name: "workspace_dir", path: "report.pdf" }] } }),
+    },
+  });
+  app.onPick(() => [{ name: "report.pdf", type: "application/pdf", data: bytes("%PDF-1.4") }]);
+  await app.waitFor("id:chat-composer-input");
+  await app.press("id:chat-composer-add");
+  await app.press("text:Upload Files");
+  // Not while the menu goes out: the sheet comes after it, and stays.
+  expect(app.count("id:chat-attach-source-files")).toBe(0);
+  await app.waitFor("id:chat-attach-source-files");
+  await app.wait(1000);
+  expect(app.shows("id:chat-attach-source-files")).toBe(true);
+  // The picker likewise waits for the sheet to go.
+  await app.press("id:chat-attach-source-files");
+  expect(app.picks().length).toBe(0);
+  await app.waitFor("id:chat-attach-source-files", { state: "gone" });
+  await app.wait(400);
+  expect(app.picks().map((pick) => pick.kind)).toEqual(["files"]);
+  await app.wait(200);
+  await app.waitFor("label:Preview file: report.pdf");
 });
 
 test("on the phone a cancelled sheet or picker keeps the draft, and a removed file can be picked again", async () => {
@@ -487,6 +521,7 @@ test("on the phone a cancelled sheet or picker keeps the draft, and a removed fi
   // The document picker cancelled: no file, the draft as it was.
   await app.press("id:chat-composer-add");
   await app.press("text:Upload Files");
+  await app.waitFor("id:chat-attach-source-files");
   await app.press("id:chat-attach-source-files");
   await app.waitUntil(() => app.picks().length === 1);
   await app.wait(100);
@@ -498,6 +533,7 @@ test("on the phone a cancelled sheet or picker keeps the draft, and a removed fi
   for (let round = 0; round < 2; round += 1) {
     await app.press("id:chat-composer-add");
     await app.press("text:Upload Files");
+    await app.waitFor("id:chat-attach-source-files");
     await app.press("id:chat-attach-source-files");
     await app.waitFor("label:Preview file: report.pdf");
     await app.waitUntil(() => app.enabled("id:chat-composer-send"));

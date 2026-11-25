@@ -1392,6 +1392,8 @@ export function PopupTitle(props: { label: string }) {
 export function PopupSheet(props: {
   open: boolean;
   onClose: () => void;
+  /** The paper has gone out and its layer is removed (DialogLayer `onClosed`). */
+  onClosed?: () => void;
   /** The paper's title row, and its name for screen readers. */
   label?: string;
   testID?: string;
@@ -1408,6 +1410,7 @@ export function PopupSheet(props: {
       <DialogLayer
         open={props.open}
         onClose={props.onClose}
+        onClosed={props.onClosed}
         testID={props.testID}
         label={props.label}
         sheet
@@ -1428,6 +1431,10 @@ export function PopupSheet(props: {
  * second line, a mark; 44pt for a finger), an optional filter over them, in a `PopupSheet`. A row
  * pressed is `onChoose`, and the paper closes. The filter takes the focus (and raises the
  * keyboard) only once it is pressed.
+ *
+ * A `menu`'s rows are commands, which often open the next popup or a system picker: on iOS those
+ * run once the paper has gone (`afterLayerGone`), not while it goes out. A `listbox`'s choice is a
+ * value, taken at once.
  */
 export function PopupList(props: {
   open: boolean;
@@ -1437,6 +1444,8 @@ export function PopupList(props: {
   /** The chosen item's value, marked in the list; none for a menu of commands. */
   value?: string;
   onChoose: (value: string) => void;
+  /** A `menu`'s row pressed: told at once, before the paper goes and `onChoose` runs. */
+  onCommand?: (value: string) => void;
   filterPlaceholder?: string;
   emptyText?: string;
   /** Rows under the list, after a hairline: never filtered out. */
@@ -1451,14 +1460,36 @@ export function PopupList(props: {
   /** For tests: the list's scroll view and what it reports. */
   listProbe?: PickerProbe;
 }) {
+  // A command chosen, waiting for the paper to go (cleared when it opens again).
+  let command: string | null = null;
+  effect(() => {
+    if (props.open) command = null;
+  });
   return (
-    <PopupSheet open={props.open} onClose={props.onClose} label={props.label} testID={props.layerID ?? props.partID} probe={props.probe}>
+    <PopupSheet
+      open={props.open}
+      onClose={props.onClose}
+      onClosed={() => {
+        const chosen = command;
+        command = null;
+        if (chosen !== null) afterLayerGone(() => props.onChoose(chosen));
+      }}
+      label={props.label}
+      testID={props.layerID ?? props.partID}
+      probe={props.probe}
+    >
       {(contentMax) => (
         <View class="shrink p-2">
           <PickerList
             items={props.items}
             value={props.value}
             onChoose={(value) => {
+              if (props.role === "menu") props.onCommand?.(value);
+              if (props.role === "menu" && HAND_OFF_AFTER_CLOSE) {
+                command = value;
+                props.onClose();
+                return;
+              }
               props.onChoose(value);
               props.onClose();
             }}
@@ -2266,10 +2297,30 @@ export function watchDialogs(watcher: ((name: string) => DialogProbe | undefined
 // system's insets itself (layerStyle).
 const ANDROID_LAYER = platform.os === "android";
 
+// On iOS a dialog layer is a view controller presented over the one below, and one presented while
+// the layer under it is being dismissed is dismissed with it: the next popup (or a system picker)
+// showed for a moment, then went, and stayed open to the app, so it never showed again. There a
+// choice that opens something waits until its layer is gone (`HAND_OFF_AFTER_CLOSE`), and a little
+// longer for the dismissal to end. Elsewhere it runs at once, as before: a browser opens its file
+// picker only from the press itself.
+export const HAND_OFF_AFTER_CLOSE = platform.os === "ios";
+const IOS_HANDOFF_MS = 250;
+
+/**
+ * Runs `action` once a layer that just closed is gone (DialogLayer `onClosed`), on iOS: what a
+ * choice in a popup opens next, another popup or a system picker, is presented on its own and
+ * stays. A timer, not animation frames: an idle app may draw no frame.
+ */
+export function afterLayerGone(action: () => void) {
+  setTimeout(action, IOS_HANDOFF_MS);
+}
+
 /** The dialog layer under `Modal` and `MessageDialog` (scrim, panel, the motion from the pressing control): for a dialog with a panel of its own. */
 export function DialogLayer(props: {
   open: boolean;
   onClose: () => void;
+  /** The panel has gone out and the layer is removed: what it hands on to may open (`afterLayerGone`). */
+  onClosed?: () => void;
   testID?: string;
   /** The panel's classes (width, padding, gap). */
   panelClass: string;
@@ -2283,6 +2334,14 @@ export function DialogLayer(props: {
 }) {
   const shown = signal(untracked(() => props.open));
   trackPopup(() => props.open);
+  let wasShown = untracked(shown);
+  effect(() => {
+    const now = shown();
+    untracked(() => {
+      if (wasShown && !now) props.onClosed?.();
+      wasShown = now;
+    });
+  });
   const panel = createMotion({ initial: { opacity: 0 } });
   const probe = untracked(() => props.probe ?? dialogWatcher?.(props.testID ?? props.label ?? ""));
   probe?.motion?.(panel);

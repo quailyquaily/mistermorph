@@ -1,7 +1,7 @@
-// Voice input. Where nsh's Speech module recognizes speech, the mic listens, the live words show
-// while it does, and the final text goes into the draft; discarding throws it away. Where the host
-// records instead (a browser, the desktop app), the mic shows only while the agent's transcription
-// route is ready, and the agent transcribes the recording into the draft.
+// Voice input. Where nsh's Speech module recognizes speech (the iPhone app), the mic listens, the
+// live words show while it does, and the final text goes into the draft; discarding throws it away.
+// Where the host records instead (a browser, the desktop app), the agent transcribes the recording
+// into the draft. Either way the mic shows only while the agent's transcription route is ready.
 import { expect, test } from "nsh/test";
 import { openConsole, type ApiHandler } from "./harness";
 
@@ -48,7 +48,7 @@ const transcribeChecks = (calls: { uri?: string }[]) => calls.filter((call) => c
 test("speaking fills the draft, and discarding keeps it as it was", async () => {
   const { app } = await openConsole({
     location: "/e/default/chat/topic-1",
-    api: CHAT,
+    api: { ...CHAT, "GET /proxy:/voice/transcribe": READY },
   });
   await app.waitFor("id:chat-composer-voice");
   await app.press("id:chat-composer-voice");
@@ -139,6 +139,23 @@ test("the voice bar shows in the landing composer, a conversation's and a phone'
     await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
     await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
   }
+});
+
+test("where the platform recognizes speech, the mic still waits for the agent's transcription route", async () => {
+  let ready = false;
+  const { app, calls } = await openConsole({
+    location: "/e/default/chat/topic-1",
+    api: { ...CHAT, "GET /proxy:/voice/transcribe": () => (ready ? READY : UNSET) },
+  });
+  await app.waitFor("id:chat-composer-input");
+  await app.waitUntil(() => transcribeChecks(calls) === 1);
+  await app.wait(50);
+  expect(app.count("id:chat-composer-voice")).toBe(0);
+  // The route was set meanwhile: the mic shows once the app comes back to the front.
+  ready = true;
+  await app.host.send("morph.visibility", { visible: true, focused: false });
+  await app.host.send("morph.visibility", { visible: true, focused: true });
+  await app.waitFor("id:chat-composer-voice");
 });
 
 test("without a ready transcription route there is no mic: unset or failed", async () => {
