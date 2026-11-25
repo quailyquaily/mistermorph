@@ -5,7 +5,8 @@
 # android`, added here when missing) and that release's nsh.aar (embedding SDK, fetched and checked
 # here when missing), Node, a JDK, curl, unzip and the Android SDK (build tools and
 # `platforms;android-35`, found through ANDROID_HOME); no NDK, no Gradle. The app's own Java (android/src: voice input's
-# recorder, the task notifications' background watcher, saving files) goes into the runtime's classes.dex
+# recorder, the task notifications' background watcher, saving files, and nsh 0.6.0's ScrollBox with the
+# fix for scroll views inside scroll views in place of the runtime's) goes into the runtime's classes.dex
 # (scripts/android-host.sh).
 #
 #   scripts/build-android.sh [--out FILE] [--abi ABI]... [--format apk|aab] [--run]
@@ -100,7 +101,7 @@ trap 'rm -rf "$shim"' EXIT
 mkdir -p "$shim/nsh-runtime/android/release"
 ln -s "$runtime/lib" "$shim/nsh-runtime/android/release/lib"
 "$app/scripts/android-host.sh" dex "$runtime/classes.dex" "$aar" "$sdk/platforms/android-35/android.jar" \
-  "$build_tools" "$shim/nsh-runtime/android/release"
+  "$build_tools" "$shim/nsh-runtime/android/release" "$nsh_version"
 
 # The manifest nsh links lacks what the app adds (scripts/android-manifest.mjs): cleartext HTTP (the
 # console server is usually plain http:// on the local network, nsh's Android runtime fetches through
