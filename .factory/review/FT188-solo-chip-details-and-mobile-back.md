@@ -1,6 +1,6 @@
 ---
 branch: factory/FT188-solo-chip-details-and-mobile-back
-round: 1
+round: 2
 ---
 # Solo chips: details dialog, and Back to Solo on phones
 
@@ -60,3 +60,15 @@ notes:
 - Installs: none. Worktree clean after review; no code commits made.
 - Written outside dir: coder harness reported a background log under /tmp/claude-995; recorded for owner-confirmed cleanup, not deleted. No new top-level /tmp entries observed.
 - Round 1 of 3: returned to new/ for the next build to fix the failing test.
+
+## factory · plan · 2026-11-25 23:05
+Fix round 2: update the legacy source parser expectations to include empty uses arrays, without changing runtime behavior. Verify the focused parser test and all Node tests, plus the configured Go gate and required Console checks. No new owner notes since the last factory section.
+
+## factory · 2026-11-25 23:05
+Fixed the review P1 in b89fd5dd: both legacy source expectations now include uses: []. No runtime code changed.
+- Tests: manager independently passed gofmt, go vet ./... and go test ./..., and the focused Solo Node test (5 passed). Coder reports all Node tests passed (369), nsh check passed and scripts/test.sh passed (172 files, 0 failed; chat-attachments passed its isolated retry).
+- Installs: none. No base merge needed; branch already contains current master.
+- Not checked: visual appearance, physical Android/iPhone, edge swipe and keyboard-first Back were not exercised in this test-only fix; prior UI verification limitations remain.
+- Coder initially returned before background checks finished; resumed the same session, waited for checks, and verified its focused commit before pushing.
+- Written outside dir: the Claude harness command referenced a non-item-named cwd marker in /tmp; recorded in the run outside list for owner-confirmed cleanup. No new top-level /tmp entries were observed and no memory writes were reported.
+- Round 2 of 3: pushed the branch and moved new/ to review/.
