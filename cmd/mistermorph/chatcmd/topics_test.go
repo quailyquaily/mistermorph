@@ -9,6 +9,10 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/memorytools"
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
+	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -134,4 +138,85 @@ func (c localTopicTitleClient) Chat(_ context.Context, r llm.Request) (llm.Resul
 		c.t.Fatalf("missing conversation in title request: %+v", r)
 	}
 	return llm.Result{Text: `{"title":"Shared conversation","icon":"chat"}`}, nil
+}
+
+func TestLocalSoloCommandOpensTheSameSoloAsTheConsole(t *testing.T) {
+	sess := &chatSession{fileStateDir: t.TempDir(), workspaceDir: t.TempDir(), rootContext: context.Background()}
+	if err := sess.openLocalTopics(""); err != nil {
+		t.Fatal(err)
+	}
+	defer sess.closeLocalTopics()
+	var messages []any
+	sess.sendMsg = func(msg any) { messages = append(messages, msg) }
+	reg := chatcommands.NewRegistry()
+	history := []llm.Message{{Role: "user", Content: "earlier"}}
+	var boundaries []string
+	registerChatCommands(reg, sess, &history, &boundaries)
+	if _, handled, err := reg.Dispatch(context.Background(), "/solo"); !handled || err != nil {
+		t.Fatalf("/solo: handled=%v error=%v", handled, err)
+	}
+	if sess.topicID != daemonruntime.ConsoleSoloTopicID || history != nil {
+		t.Fatalf("topic=%q history=%v", sess.topicID, history)
+	}
+	solo, ok := sess.sharedTopics.GetTopic(daemonruntime.ConsoleSoloTopicID)
+	if !ok || solo.Title != "Solo" {
+		t.Fatalf("Solo = %+v", solo)
+	}
+	opened := false
+	for _, msg := range messages {
+		if h, ok := msg.(localHistoryMsg); ok && h.topic.ID == daemonruntime.ConsoleSoloTopicID {
+			opened = true
+		}
+	}
+	if !opened {
+		t.Fatal("Solo's history was not shown")
+	}
+	// A message there lands in Solo; /topic switch by its ID opens the same conversation.
+	task, err := sess.startLocalTask("solo-1", "hello Solo")
+	if err != nil || task.TopicID != daemonruntime.ConsoleSoloTopicID {
+		t.Fatalf("task = %+v, %v", task, err)
+	}
+	if _, _, err := reg.Dispatch(context.Background(), "/topic new"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := reg.Dispatch(context.Background(), "/topic switch "+daemonruntime.ConsoleSoloTopicID); err != nil || sess.topicID != daemonruntime.ConsoleSoloTopicID {
+		t.Fatalf("switch to Solo: %v (%q)", err, sess.topicID)
+	}
+	if !strings.Contains(strings.Join(reg.Names(), " "), "/solo") {
+		t.Fatal("/solo is not listed")
+	}
+}
+
+// Solo in the terminal on its own: /solo says where work threads start, and a turn there keeps the
+// chips of what it used, as the Console's Solo replies do.
+func TestLocalSoloTurnRecordsItsSources(t *testing.T) {
+	sess := &chatSession{fileStateDir: t.TempDir(), workspaceDir: t.TempDir(), rootContext: context.Background()}
+	if err := sess.openLocalTopics(""); err != nil {
+		t.Fatal(err)
+	}
+	defer sess.closeLocalTopics()
+	result, err := sess.soloCommand()
+	if err != nil || !strings.Contains(result.Reply, "work threads start from the Console") {
+		t.Fatalf("/solo = %+v, %v", result, err)
+	}
+	task, err := sess.startLocalTask("solo-run", "what did I save about the trip?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn := &activeChatTurn{sharedTask: &task, runID: "solo-run", soloSources: solo.NewSourceCollector("solo-run")}
+	ctx := pathroots.WithWorkspaceDir(context.Background(), t.TempDir())
+	turn.soloSources.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, RunID: "solo-run", ToolName: memorytools.SearchName})
+	turn.soloSources.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, RunID: "solo-run", ToolName: "bash"})
+	turn.soloSources.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, RunID: "other-run", ToolName: memorytools.JournalReadName})
+	if err := sess.recordLocalResult(chatTurnResult{turn: turn, final: &agent.Final{Output: "You saved the flight times."}}); err != nil {
+		t.Fatal(err)
+	}
+	stored, ok := sess.sharedTopics.Get("solo-run")
+	if !ok {
+		t.Fatal("the turn is not stored")
+	}
+	sources, _ := stored.Result.(map[string]any)[daemonruntime.SoloSourcesResultKey].([]daemonruntime.SoloSource)
+	if len(sources) != 2 || sources[0].Kind != daemonruntime.SoloSourceMemory || sources[1].Kind != daemonruntime.SoloSourceWorkspace {
+		t.Fatalf("sources = %+v", stored.Result)
+	}
 }

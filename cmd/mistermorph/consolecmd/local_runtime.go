@@ -47,6 +47,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/logutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
+	"github.com/quailyquaily/mistermorph/internal/ownertools"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/personautil"
 	"github.com/quailyquaily/mistermorph/internal/proaccount"
@@ -54,6 +55,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
+	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/streaming"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
@@ -178,6 +180,11 @@ type consoleLocalRuntime struct {
 	configSaved configtools.Reloader
 	// taskLimiter bounds how many topics run a task at once (console.max_concurrency).
 	taskLimiter *runtimecore.ResizableLimiter
+	// soloMu keeps Solo's thread records (cards and summaries) written one at a time; soloSyncs
+	// counts the card updates under way (solo.go).
+	soloMu    sync.Mutex
+	soloSyncs sync.WaitGroup
+	soloReady atomic.Bool
 }
 
 type topicDeleterFunc func(id string) (bool, error)
@@ -211,7 +218,10 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 	out.notificationHub = newConsoleNotificationHub()
 	persistTasks := consoleTaskPersistenceEnabledFromReader(gen.reader)
 	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{
-		OnTaskUpdate:         out.notificationHub.PublishTaskCompletion,
+		OnTaskUpdate: func(previous, next daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger) {
+			out.notificationHub.PublishTaskCompletion(previous, next, trigger)
+			out.observeSoloThreadTask(previous, next, trigger)
+		},
 		RootDir:              gen.paths.TaskTargetDir("console"),
 		Persist:              persistTasks,
 		JournalDir:           gen.paths.JournalDir,
@@ -280,6 +290,8 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 		gen.cleanupNow()
 		return nil, err
 	}
+	// Work threads that ended while the runtime was down bring their summaries to Solo now.
+	out.reconcileSoloThreads()
 	return out, nil
 }
 
@@ -1399,7 +1411,7 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 		AuthToken: strings.TrimSpace(authToken),
 		TaskTopic: daemonruntime.TaskTopicRoutes{
 			TaskReader:   r.store,
-			TopicReader:  r.store,
+			TopicReader:  consoleSoloTopics{r: r},
 			TopicDeleter: topicDeleterFunc(r.deleteTopic),
 			CreateTopic: func(title string) (daemonruntime.TopicInfo, error) {
 				return r.store.CreateNamedTopic(sanitizeConsoleTopicTitle(title))
@@ -1650,6 +1662,9 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 		// Before anything else: a command or a topic title sent here would otherwise still land.
 		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("a TODO item's topic only holds that item's runs")
 	} else if topicID != "" && topicID != daemonruntime.ConsoleDefaultTopicID {
+		if daemonruntime.IsSoloTopicID(topicID) {
+			r.ensureSoloTopic()
+		}
 		if topic, ok := r.store.GetTopic(topicID); !ok || topic == nil || topic.DeletedAt != nil {
 			return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("topic not found")
 		}
@@ -2503,9 +2518,15 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 			trace.Restore(previous.Trace)
 		}
 	}
+	// A Solo reply shows what its run used: the workspace, the threads and the sources (solo.go).
+	var soloSources *solo.SourceCollector
+	if consoleSoloRun(job) {
+		soloSources = solo.NewSourceCollector(job.TaskID)
+	}
 	eventSink := agent.EventSinkFunc(func(ctx context.Context, event agent.Event) {
 		trace.HandleEvent(ctx, event)
 		previewSink.HandleEvent(ctx, event)
+		soloSources.HandleEvent(ctx, event)
 	})
 	previewSink.activityUpdated = func(progress *consoleActivityProgress) {
 		progressMu.Lock()
@@ -2631,6 +2652,9 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	progressMu.Unlock()
 	result := buildConsoleTaskResult(final, agentCtx, activity, reasoningSink.Snapshot())
 	result["trace"] = trace.Snapshot()
+	if sources := soloSources.Sources(); len(sources) > 0 {
+		result[daemonruntime.SoloSourcesResultKey] = sources
+	}
 	if lease != nil {
 		// What the person sent the task's subagents, for the topic's history (chathistory).
 		if messages := lease.Children.Messages(); len(messages) > 0 {
@@ -2801,9 +2825,14 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	// The owner's own chat runs may switch workspace for the rest of the run (workspace_use);
 	// every other run works in its topic's workspace.
 	ownerRun := consoleOwnerChatRun(job)
+	soloRun := ownerRun && daemonruntime.IsSoloTopicID(job.TopicID)
 	var workspaceSwitch *pathroots.WorkspaceSwitch
 	if ownerRun {
 		workspaceSwitch = pathroots.NewWorkspaceSwitch(job.WorkspaceDir)
+		if consoleSoloThreadTask(job.Trigger) {
+			// A work thread Solo started: the workspace Solo chose asks before its first write.
+			workspaceSwitch = r.soloThreadWorkspaceSwitch(ctx, job, generation.reader.GetString("workspace_dir"))
+		}
 		ctx = pathroots.WithWorkspaceSwitch(ctx, workspaceSwitch)
 		if strings.TrimSpace(job.ResumeApprovalID) == "" {
 			r.recordWorkspaceUse(job.WorkspaceDir)
@@ -2971,6 +3000,9 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 		if ownerRun {
 			spec.Blocks = append(spec.Blocks, ownerToolsPromptBlock())
 		}
+		if soloRun {
+			spec.Blocks = append(spec.Blocks, r.soloPromptBlock())
+		}
 	}
 	reactTool := newConsoleMessageReactTool(r.store, r.streamHub, job)
 	reg := bundle.taskRuntime.BaseRegistry.Clone()
@@ -2990,6 +3022,11 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 			if err := reg.Replace(tool); err != nil {
 				return nil, nil, err
 			}
+		}
+	}
+	if soloRun {
+		if err := reg.Replace(ownertools.NewWorkThread(r.ownerToolDeps(generation, job, workspaceSwitch), r.startSoloThread)); err != nil {
+			return nil, nil, err
 		}
 	}
 	installOnly := skillInstallOnlyTask(generation, task)

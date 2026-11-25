@@ -349,16 +349,24 @@ export function TopicSidebar(props: {
             when={view() === "agents"}
             else={
               <If
-                when={c.isCronTopicID(row().topic?.id) && !row().topic?.icon}
+                when={c.isSoloTopicID(row().topic?.id)}
                 else={
-                  <Image class="overflow-hidden"
-                    src={c.topicIcon(row().topic)}
-                    accessibilityElementsHidden
-                    style={{ width: 20, height: 20, tintColor: token("subtle") as string }}
-                  />
+                  <If
+                    when={c.isCronTopicID(row().topic?.id) && !row().topic?.icon}
+                    else={
+                      <Image class="overflow-hidden"
+                        src={c.topicIcon(row().topic)}
+                        accessibilityElementsHidden
+                        style={{ width: 20, height: 20, tintColor: token("subtle") as string }}
+                      />
+                    }
+                  >
+                    <Icon name="PhAlarm" size={20} color="subtle" />
+                  </If>
                 }
               >
-                <Icon name="PhAlarm" size={20} color="subtle" />
+                {/* Solo (FT186), the owner's one conversation: always first, with its own mark. */}
+                <Icon name="PhUserCircle" size={20} color="subtle" testID="chat-topic-solo-icon" />
               </If>
             }
           >
@@ -376,6 +384,12 @@ export function TopicSidebar(props: {
               <FadeText text={c.cronTopicModel(row().topic)} class="font-mono text-xs text-muted-foreground" noTooltip />
             </If>
           </View>
+          {/* A work thread Solo started is marked as such. */}
+          <If when={c.topicStartedFromSolo(row().topic)}>
+            <View role="image" accessibilityLabel={t("chat_topic_from_solo")} tooltip={<Tip text={t("chat_topic_from_solo")} />} testID={`chat-topic-from-solo-${normalizeTopicID(row().topic?.id)}`}>
+              <Icon name="PhArrowsSplit" size={13} color="muted-foreground" />
+            </View>
+          </If>
           <If when={c.topicActivityState(row().topic)}>
             <StatusDot
               status={c.topicActivityState(row().topic)}

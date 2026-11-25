@@ -55,6 +55,16 @@ func registerChatCommands(reg *chatcommands.Registry, sess *chatSession, history
 	reg.Register("/topics", "list shared topics", func(_ context.Context, args string) (*chatcommands.Result, error) {
 		return sess.topicsCommand(strings.TrimSpace(args))
 	})
+	reg.Register(chatSoloCommand, chatSoloDescription, func(ctx context.Context, args string) (*chatcommands.Result, error) {
+		result, err := sess.soloCommand()
+		if err == nil {
+			*history = nil
+			if historyBoundaries != nil {
+				*historyBoundaries = nil
+			}
+		}
+		return result, err
+	})
 	reg.Register("/topic", "new, switch, history, title, or delete a topic", func(ctx context.Context, args string) (*chatcommands.Result, error) {
 		result, err := sess.topicCommand(ctx, args)
 		if err == nil {

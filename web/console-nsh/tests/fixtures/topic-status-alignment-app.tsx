@@ -55,6 +55,8 @@ const c = {
   topicTitle: (topic: any) => String(topic?.title ?? ""),
   topicTimeLabel: () => "",
   isCronTopicID: (id: any) => String(id ?? "").startsWith("_cron_"),
+  isSoloTopicID: (id: any) => String(id ?? "").trim() === "_solo",
+  topicStartedFromSolo: (topic: any) => topic?.started_from === "_solo",
   cronTopicModel: () => "gpt-5.2",
   topicIcon: (topic: any) => topicIcon(topic),
   topicAgentContact: () => null,

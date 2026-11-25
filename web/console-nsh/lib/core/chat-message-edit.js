@@ -40,18 +40,27 @@ export function editedMessageIndex(items, edit) {
   return list.findIndex((item) => text(item?.role).toLowerCase() === "user" && historyItemTaskID(item) === text(edit?.taskID));
 }
 
-/** The rows an edit replaces: the edited message's and every one after it (their ids). */
+// In Solo (FT186) an edit keeps the cards and summaries of the work threads after the edited
+// message: the threads run on in their own topics, and the runtime keeps their records too.
+function keptByEdit(item) {
+  return Boolean(item?.soloThread);
+}
+
+/** The rows an edit replaces: the edited message's and every one after it (their ids), but Solo's thread records. */
 export function editReplacedItemIDs(items, edit) {
   const list = Array.isArray(items) ? items : [];
   const index = edit ? editedMessageIndex(list, edit) : -1;
-  return new Set(index < 0 ? [] : list.slice(index).map((item) => item?.id));
+  return new Set(index < 0 ? [] : list.slice(index).filter((item) => !keptByEdit(item)).map((item) => item?.id));
 }
 
-/** The conversation an accepted edit leaves on screen: the rows before the edited message, or null when it is not there. */
+/**
+ * The conversation an accepted edit leaves on screen: the rows before the edited message and the
+ * Solo thread records after it, or null when the message is not there.
+ */
 export function historyBeforeEdit(items, edit) {
   const list = Array.isArray(items) ? items : [];
   const index = editedMessageIndex(list, edit);
-  return index < 0 ? null : list.slice(0, index);
+  return index < 0 ? null : [...list.slice(0, index), ...list.slice(index).filter(keptByEdit)];
 }
 
 /** The quote bar's one line: the message with its line breaks and runs of spaces as single spaces. */

@@ -207,6 +207,10 @@ const (
 	ConsoleDefaultTopicTitle   = "Default"
 	ConsoleAwarenessTopicID    = "_awareness"
 	ConsoleAwarenessTopicTitle = "Awareness"
+	// ConsoleSoloTopicID is the Solo conversation: the owner's one pinned conversation of the
+	// agent, which answers there and starts work threads (ordinary topics) for longer work.
+	ConsoleSoloTopicID    = "_solo"
+	ConsoleSoloTopicTitle = "Solo"
 	// AgentLinkTopicPrefix starts the ID of the topic that holds what another agent sends this one
 	// over Agent Link: one topic per agent, named after it, kept apart from the person's own topics.
 	AgentLinkTopicPrefix = "_agentlink_"
@@ -278,12 +282,17 @@ func TopicNameRegenerable(id string) bool {
 }
 
 // IsReservedTopicID reports whether id is a topic the runtime keeps for itself: the default topic,
-// Awareness, the Agent Link agents' topics and the TODO items' topics. Their titles are fixed (a
+// Awareness, Solo, the Agent Link agents' topics and the TODO items' topics. Their titles are fixed (a
 // TODO item's topic follows the item's title), and a person does not start chats in the Agent
 // Link ones.
 func IsReservedTopicID(id string) bool {
 	id = strings.TrimSpace(id)
-	return id == ConsoleDefaultTopicID || id == ConsoleAwarenessTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id)
+	return id == ConsoleDefaultTopicID || id == ConsoleAwarenessTopicID || id == ConsoleSoloTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id)
+}
+
+// IsSoloTopicID reports whether id is the Solo conversation.
+func IsSoloTopicID(id string) bool {
+	return strings.TrimSpace(id) == ConsoleSoloTopicID
 }
 
 const (

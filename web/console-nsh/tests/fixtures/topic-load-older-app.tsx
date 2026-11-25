@@ -41,6 +41,8 @@ const c = {
   cronToggleTitle: () => "Job runs",
   cronTopicModel: () => "",
   isCronTopicID: () => false,
+  isSoloTopicID: (id: any) => String(id ?? "").trim() === "_solo",
+  topicStartedFromSolo: (topic: any) => topic?.started_from === "_solo",
   loadOlderTopics: () => {
     asks.set(asks() + 1);
     loading.set(true);

@@ -39,6 +39,8 @@ import { ChatElevationCard, type ElevationAnswer, type ElevationState } from "./
 import { ChatQuestionCard, type QuestionAnswer, type QuestionState } from "./ChatQuestionCard";
 import { ChatRichContent } from "./ChatRichContent";
 import { ChatSkillInstallPreview } from "./ChatSkillInstallPreview";
+import { ChatSoloSources, type SoloSource } from "./ChatSoloSources";
+import { ChatSoloThread, type SoloThreadView } from "./ChatSoloThread";
 import { ChatStatusCard } from "./ChatStatusCard";
 import { ChatStatusMark } from "./ChatStatusMark";
 import { ChatSystemMessage } from "./ChatSystemMessage";
@@ -90,6 +92,8 @@ export interface ChatRowContext {
   onDeny: (item: HistoryItem) => void;
   onQuestionAnswer: (item: HistoryItem, answer: QuestionAnswer) => void;
   onElevationAnswer: (item: HistoryItem, answer: ElevationAnswer) => void;
+  /** Opens a topic: a work thread from its card in Solo, or a topic a reply's chip names (FT186). */
+  onOpenTopic: (topicID: string) => void;
 }
 
 function roleOf(item: HistoryItem | undefined) {
@@ -335,7 +339,11 @@ export function ChatHistoryItem(props: {
     approvalPending() && approvalMessage() !== "" && approvalReasons().length === 0 && approvalParams().length === 0;
   const approvalHeading = () => (approvalPending() ? t("chat_approval_title") : String(item()?.text || approvalMessage()).trim());
 
-  const bubbleVisible = () => !approvalVisible() && String(item()?.text || "") !== "";
+  // Solo (FT186): a work thread's card or summary stands in for the reply's text, and a reply's
+  // chips say what its run used.
+  const soloThread = (): SoloThreadView | null => (isAgent() && item()?.soloThread ? item().soloThread : null);
+  const sources = (): SoloSource[] => (isAgent() && Array.isArray(item()?.sources) ? item().sources : []);
+  const bubbleVisible = () => !approvalVisible() && !soloThread() && String(item()?.text || "") !== "";
   const awaitingWord = () =>
     isAgent() && item()?.awaiting === true && !questionOpen() && !isTerminalStatus(status())
       ? pollingActionWord(item()?.pendingSeed || item()?.taskId || item()?.id)
@@ -343,6 +351,7 @@ export function ChatHistoryItem(props: {
   const copyAvailable = () =>
     !contextCompact() &&
     !approvalVisible() &&
+    !soloThread() &&
     (isAgent() || role() === "user") &&
     String(item()?.text || "").trim() !== "" &&
     !awaitingWord() &&
@@ -500,6 +509,21 @@ export function ChatHistoryItem(props: {
         folded={ctx.folds}
         previews={ctx.previews}
       />
+      <If when={soloThread()}>
+        {(thread) => (
+          <ChatSoloThread thread={thread()} onOpen={() => ctx.onOpenTopic(thread().topicID)}>
+            <If when={thread().kind === "summary" && thread().summary}>
+              <ChatRichContent
+                source={thread().summary}
+                ownerKey={`${item()?.id}:solo-summary`}
+                endpointRef={ctx.endpointRef()}
+                fallbackTopicID={thread().topicID}
+                previews={ctx.previews}
+              />
+            </If>
+          </ChatSoloThread>
+        )}
+      </If>
       <If when={bubbleVisible() && awaitingWord()}>
         <View class="h-[27.2px] justify-center">
           <MosaicText text={awaitingWord()} label={item()?.text} />
@@ -516,6 +540,9 @@ export function ChatHistoryItem(props: {
           previews={ctx.previews}
           class={status() === "failed" ? "opacity-90" : ""}
         />
+      </If>
+      <If when={sources().length && isTerminalStatus(status())}>
+        <ChatSoloSources sources={sources()} onOpen={(topicID) => ctx.onOpenTopic(topicID)} />
       </If>
       <If when={approvalVisible()}>
         <View

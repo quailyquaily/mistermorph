@@ -113,6 +113,12 @@ func (s *chatSession) selectLocalTopic(id string) error {
 		s.topicID = ""
 		return nil
 	}
+	if daemonruntime.IsSoloTopicID(id) {
+		// Solo is made on its first use, here as in the Console.
+		if _, err := s.sharedTopics.EnsureSoloTopic(); err != nil {
+			return err
+		}
+	}
 	topic, ok := s.sharedTopics.GetTopic(id)
 	if !ok || topic.DeletedAt != nil {
 		return fmt.Errorf("topic %q not found", id)
@@ -193,6 +199,9 @@ func (s *chatSession) recordLocalResult(result chatTurnResult) error {
 		data := map[string]any{"final": result.final}
 		if result.turn.trace != nil {
 			data["trace"] = result.turn.trace.Snapshot()
+		}
+		if sources := result.turn.soloSources.Sources(); len(sources) > 0 {
+			data[daemonruntime.SoloSourcesResultKey] = sources
 		}
 		if messages := result.turn.children.Messages(); len(messages) > 0 {
 			data[chathistory.ChildMessagesResultKey] = messages

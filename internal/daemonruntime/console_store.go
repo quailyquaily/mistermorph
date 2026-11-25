@@ -207,18 +207,60 @@ func (s *ConsoleFileStore) CreateNamedTopic(title string) (TopicInfo, error) {
 	return s.createTopic(title, strings.TrimSpace(title) != "")
 }
 
-func (s *ConsoleFileStore) createTopic(title string, customized bool) (TopicInfo, error) {
+// CreateThreadTopic creates an empty work thread: a topic of the person's, named title (kept
+// like a name the person gave), that the run of startedFrom (the Solo topic) started.
+func (s *ConsoleFileStore) CreateThreadTopic(title, startedFrom string) (TopicInfo, error) {
+	return s.createTopicInfo(TopicInfo{
+		Title:           strings.TrimSpace(title),
+		TitleCustomized: strings.TrimSpace(title) != "",
+		StartedFrom:     strings.TrimSpace(startedFrom),
+	})
+}
+
+// EnsureSoloTopic returns the Solo conversation, creating it on first use: one per agent, kept in
+// the agent's own store. Calling it again changes nothing.
+func (s *ConsoleFileStore) EnsureSoloTopic() (TopicInfo, error) {
 	if s == nil {
 		return TopicInfo{}, fmt.Errorf("console task store is nil")
 	}
 	now := time.Now().UTC()
-	topic := TopicInfo{
-		ID:              buildConsoleTopicID(),
-		Title:           strings.TrimSpace(title),
-		TitleCustomized: customized,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+	unlock, err := s.lockShared()
+	if err != nil {
+		return TopicInfo{}, err
 	}
+	defer unlock()
+	if topic, ok := s.topics[ConsoleSoloTopicID]; ok && !topicDeleted(topic) {
+		return topic, nil
+	}
+	topic := normalizeTopicInfo(TopicInfo{
+		ID:        ConsoleSoloTopicID,
+		Title:     ConsoleSoloTopicTitle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	cursor, err := s.appendTopicEventLocked(taskdomain.JournalTypeTopicUpsert, topic, now, TaskTrigger{})
+	if err != nil {
+		return TopicInfo{}, err
+	}
+	s.topics[topic.ID] = topic
+	s.orderedTopicIDs = upsertOrderedTopicID(s.orderedTopicIDs, s.topics, topic.ID)
+	s.projectionCursor = cursor
+	s.persistTopicsProjectionLocked(now)
+	return topic, nil
+}
+
+func (s *ConsoleFileStore) createTopic(title string, customized bool) (TopicInfo, error) {
+	return s.createTopicInfo(TopicInfo{Title: strings.TrimSpace(title), TitleCustomized: customized})
+}
+
+func (s *ConsoleFileStore) createTopicInfo(topic TopicInfo) (TopicInfo, error) {
+	if s == nil {
+		return TopicInfo{}, fmt.Errorf("console task store is nil")
+	}
+	now := time.Now().UTC()
+	topic.ID = buildConsoleTopicID()
+	topic.CreatedAt = now
+	topic.UpdatedAt = now
 
 	unlock, err := s.lockShared()
 	if err != nil {
@@ -343,11 +385,16 @@ func (s *ConsoleFileStore) ReplaceTopicTasks(targetID string, info TaskInfo, tri
 			return nil, ErrTopicRunning
 		}
 	}
-	// The topic's tasks newest first: the edited message and everything newer go.
+	// The topic's tasks newest first: the edited message and everything newer go. In Solo, the
+	// cards and summaries of its work threads stay: the threads run on in their own topics whatever
+	// becomes of the message that started them, and their cards are the way to them.
 	removed := make([]string, 0, 4)
 	for _, id := range s.orderedIDsByTopic[info.TopicID] {
 		item := s.items[id]
 		if id != targetID && !taskComesBefore(item, target) {
+			continue
+		}
+		if IsSoloTopicID(info.TopicID) && soloRecordID(id) {
 			continue
 		}
 		removed = append(removed, id)
@@ -700,8 +747,8 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 	}
 	id = strings.TrimSpace(id)
 	// An Agent Link agent's topic stays: its next message would land in a deleted topic. So does a
-	// TODO item's topic, for its next run.
-	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id) {
+	// TODO item's topic, for its next run, and Solo, the owner's one conversation.
+	if id == "" || id == ConsoleDefaultTopicID || id == ConsoleSoloTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id) {
 		return false, nil
 	}
 	now := time.Now().UTC()
@@ -1469,6 +1516,9 @@ func nextConsoleTopic(topic TopicInfo, exists bool, topicID string, title string
 		if topic.ID == ConsoleAwarenessTopicID && topic.Title == "" {
 			topic.Title = ConsoleAwarenessTopicTitle
 		}
+		if topic.ID == ConsoleSoloTopicID && topic.Title == "" {
+			topic.Title = ConsoleSoloTopicTitle
+		}
 		return normalizeTopicInfo(topic)
 	}
 	changed := false
@@ -1653,6 +1703,10 @@ func normalizeTopicInfo(topic TopicInfo) TopicInfo {
 	if topic.ID == ConsoleAwarenessTopicID && topic.Title == "" {
 		topic.Title = ConsoleAwarenessTopicTitle
 	}
+	if topic.ID == ConsoleSoloTopicID && topic.Title == "" {
+		topic.Title = ConsoleSoloTopicTitle
+	}
+	topic.StartedFrom = strings.TrimSpace(topic.StartedFrom)
 	if topic.LLMTitleGeneratedAt != nil {
 		generatedAt := topic.LLMTitleGeneratedAt.UTC()
 		topic.LLMTitleGeneratedAt = &generatedAt

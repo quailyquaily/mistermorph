@@ -255,3 +255,47 @@ func TestSubtaskExcludedToolsAreNotHandedToSubtasks(t *testing.T) {
 		t.Fatal("read_file did not reach a subtask")
 	}
 }
+
+// A work thread Solo started runs in the workspace Solo chose for it: its first write there asks,
+// like a write after a switch, and once approved the resumed run (a fresh context, as the Console
+// gives) asks nothing more.
+func TestDispatchedWorkspaceAsksBeforeTheFirstWrite(t *testing.T) {
+	store := newMemoryApprovalStore()
+	g := approvalsOnlyGuard(store)
+	reg, reader, writer, _ := wsRegistry()
+	client := newMockClient(
+		llm.Result{ToolCalls: []llm.ToolCall{call("r1", "read_file", nil)}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("w1", "write_file", nil)}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("w2", "write_file", nil)}},
+		finalResponse("done"),
+	)
+	engine := New(client, reg, Config{MaxSteps: 8}, DefaultPromptSpec(), WithGuard(g))
+	threadCtx := func() context.Context {
+		return pathroots.WithWorkspaceSwitch(context.Background(), pathroots.NewWorkspaceSwitchAwaitingApproval("/ws/thread"))
+	}
+	pending, _, err := engine.Run(threadCtx(), "work in the thread", RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got := reader.calls(); len(got) != 1 || got[0] != "/ws/thread" {
+		t.Fatalf("reads = %v", got)
+	}
+	if got := writer.calls(); len(got) != 0 {
+		t.Fatalf("wrote before approval: %v", got)
+	}
+	approvalID := pendingApprovalID(t, pending)
+	rec, ok, err := store.Get(context.Background(), approvalID)
+	if err != nil || !ok || !strings.Contains(strings.Join(rec.Reasons, " "), guard.WorkspaceSwitchReason+": /ws/thread") {
+		t.Fatalf("approval = %+v, %v, %v", rec, ok, err)
+	}
+	if err := g.ResolveApproval(context.Background(), approvalID, guard.ApprovalApproved, "tester", ""); err != nil {
+		t.Fatal(err)
+	}
+	final, _, err := engine.Resume(threadCtx(), approvalID)
+	if err != nil || final == nil || final.Output != "done" {
+		t.Fatalf("Resume() = %#v, %v", final, err)
+	}
+	if got := writer.calls(); len(got) != 2 || got[0] != "/ws/thread" || got[1] != "/ws/thread" {
+		t.Fatalf("writes = %v", got)
+	}
+}
