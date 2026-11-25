@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -269,6 +270,68 @@ func TestSoloIsListedFirstTimeAndOpensByID(t *testing.T) {
 	h.client.ok("GET", "/topics?limit=50", nil, &page)
 	if len(page.Items) != 1 || page.Items[0].Title != "Solo" {
 		t.Fatalf("topics after delete and rename = %+v", page.Items)
+	}
+}
+
+// Solo is on the first page of the topic list however many topics are newer, and every topic is
+// listed once across the pages.
+func TestSoloIsOnTheFirstPageAfterManyTopics(t *testing.T) {
+	h := newSoloHarness(t)
+	for i := 0; i < 5; i++ {
+		if _, err := h.rt.store.CreateNamedTopic(fmt.Sprintf("Older %d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.rt.ensureSoloTopic()
+	for i := 0; i < 100; i++ {
+		if _, err := h.rt.store.CreateNamedTopic(fmt.Sprintf("Newer %d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The store's own first page of 100 does not reach Solo.
+	for _, topic := range h.rt.store.ListTopicsPage(daemonruntime.TopicListOptions{Limit: 100}) {
+		if topic.ID == daemonruntime.ConsoleSoloTopicID {
+			t.Fatal("setup: Solo is within the store's first 100 topics")
+		}
+	}
+	for _, limit := range []int{100, 3, 2, 1, 200} {
+		t.Run(fmt.Sprint("limit ", limit), func(t *testing.T) {
+			seen := map[string]int{}
+			cursor, pages := "", 0
+			for {
+				var page struct {
+					Items      []daemonruntime.TopicInfo `json:"items"`
+					NextCursor string                    `json:"next_cursor"`
+				}
+				path := fmt.Sprintf("/topics?limit=%d", limit)
+				if cursor != "" {
+					path += "&cursor=" + url.QueryEscape(cursor)
+				}
+				h.client.ok("GET", path, nil, &page)
+				if pages == 0 && limit > 1 && (len(page.Items) == 0 || page.Items[0].ID != daemonruntime.ConsoleSoloTopicID) {
+					t.Fatalf("first page starts %+v, want Solo", page.Items[:1])
+				}
+				if len(page.Items) > limit {
+					t.Fatalf("page %d has %d topics, limit %d", pages, len(page.Items), limit)
+				}
+				for _, topic := range page.Items {
+					seen[topic.ID]++
+				}
+				pages++
+				if page.NextCursor == "" || pages > 200 {
+					break
+				}
+				cursor = page.NextCursor
+			}
+			if len(seen) != 106 {
+				t.Fatalf("listed %d topics over %d pages, want 106 (5 older, Solo, 100 newer)", len(seen), pages)
+			}
+			for id, n := range seen {
+				if n != 1 {
+					t.Fatalf("topic %s listed %d times", id, n)
+				}
+			}
+		})
 	}
 }
 

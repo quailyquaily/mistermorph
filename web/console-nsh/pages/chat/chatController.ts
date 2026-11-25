@@ -669,8 +669,9 @@ export function createChatController() {
     }
     return awarenessTopic ? [awarenessTopic, ...items] : items;
   });
-  // Solo (FT186), the owner's one conversation, pinned first in the date and tag views. A runtime
-  // from before Solo lists none, and the list has no Solo then.
+  // Solo (FT186), the owner's one conversation, pinned first in the date and tag views. The runtime
+  // puts it first on the first topics page however many topics are newer (consoleSoloTopics). A
+  // runtime from before Solo lists none, and the list has no Solo then.
   const soloTopic = computed(() => topics().find((topic) => isSoloTopicID(normalizeTopicID(topic?.id))) || null);
   const soloTopicGroup = computed(() => (soloTopic() ? { key: "solo", label: "", topics: [soloTopic()], solo: true } : null));
   const hasVisibleTopics = () => visibleTopics().length > 0 || soloTopic() !== null;

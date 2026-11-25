@@ -17,6 +17,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/memorytools"
 	"github.com/quailyquaily/mistermorph/internal/ownertools"
+	"github.com/quailyquaily/mistermorph/internal/pagination"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
@@ -43,15 +44,47 @@ const (
 
 // consoleSoloTopics is the topic reader of the Console's routes: the store, with Solo made on the
 // first listing (or the first look at it), so every agent's Console shows it from the start.
+// Solo is always first on the first page, however many topics were used since, and the pages
+// after it leave it out.
 type consoleSoloTopics struct {
 	r *consoleLocalRuntime
 }
 
 func (t consoleSoloTopics) ListTopicsPage(opts daemonruntime.TopicListOptions) []daemonruntime.TopicInfo {
-	if strings.TrimSpace(opts.Cursor) == "" {
+	first := strings.TrimSpace(opts.Cursor) == ""
+	if first {
 		t.r.ensureSoloTopic()
 	}
-	return t.r.store.ListTopicsPage(opts)
+	// The route asks for one more than it shows and takes its next cursor from the last one shown,
+	// so a pinned Solo needs at least one store topic after it on the page (Limit > 2).
+	if opts.Limit <= 2 {
+		return t.r.store.ListTopicsPage(opts)
+	}
+	items := t.r.store.ListTopicsPage(opts)
+	out := make([]daemonruntime.TopicInfo, 0, len(items)+1)
+	if first {
+		solo, ok := t.r.store.GetTopic(daemonruntime.ConsoleSoloTopicID)
+		if !ok || solo == nil {
+			return items
+		}
+		out = append(out, *solo)
+	}
+	// Solo, wherever the store has it (even as the route's look-ahead), is only in front of the
+	// first page; a page that loses it takes the store's next topic in its place.
+	for _, item := range items {
+		if !daemonruntime.IsSoloTopicID(item.ID) {
+			out = append(out, item)
+		}
+	}
+	if len(out) > opts.Limit {
+		return out[:opts.Limit]
+	}
+	if len(out) < opts.Limit && len(items) == opts.Limit {
+		last := items[len(items)-1]
+		next := t.r.store.ListTopicsPage(daemonruntime.TopicListOptions{Limit: 1, Cursor: pagination.EncodeKeysetCursor(last.UpdatedAt, last.ID)})
+		out = append(out, next...)
+	}
+	return out
 }
 
 func (t consoleSoloTopics) GetTopic(id string) (*daemonruntime.TopicInfo, bool) {
