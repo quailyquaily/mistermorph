@@ -3,6 +3,7 @@ import { readWorkerIndices, workerDisplayName } from "./worker-identity.js";
 import { taskApprovalState } from "./chat-approvals.js";
 import { placeSteeredAgentsAfterUsers } from "./chat-history-steering.js";
 import { formatDate } from "./intl-format.js";
+import { soloSourcesOf, soloThreadOf } from "./solo.js";
 
 const AWARENESS_TOPIC_ID = "_awareness";
 const LEGACY_HEARTBEAT_TOPIC_ID = "_heartbeat";
@@ -632,6 +633,9 @@ function taskHistoryItems(task, t, options = {}) {
       rawJSON: taskRawJSON(task),
       pendingSeed: taskID,
       presentation,
+      // Solo (FT186): a work thread's card or summary, and the chips of what a reply used.
+      soloThread: soloThreadOf(task),
+      sources: soloSourcesOf(task),
     });
   }
   return items;

@@ -73,6 +73,7 @@ const ctx: ChatRowContext = {
   onDeny: () => {},
   onQuestionAnswer: () => {},
   onElevationAnswer: () => {},
+  onOpenTopic: () => {},
 };
 
 function App() {

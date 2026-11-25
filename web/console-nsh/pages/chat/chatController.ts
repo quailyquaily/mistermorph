@@ -66,6 +66,7 @@ import { invalidateResource, loadResource, peekResource, readResource, resourceK
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../../lib/core/workspace-tree.js";
 import { topicIcon, useTopicMetadata } from "../../lib/core/topic-metadata.js";
+import { isSoloTopicID, liveSoloThreads, SOLO_TOPIC_ID, soloSourcesOf, soloThreadOf, topicStartedFromSolo } from "../../lib/core/solo.js";
 import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicJobID, topicSidebarViewFor } from "../../lib/core/chat-cron-topics.js";
 import {
   activelyViewedTopic,
@@ -154,6 +155,9 @@ export const DEFAULT_TOPIC_ID = "default";
 export const AWARENESS_TOPIC_ID = "_awareness";
 const AWARENESS_REFRESH_INTERVAL_MS = 5000;
 const TOPIC_ACTIVITY_REFRESH_INTERVAL_MS = 5000;
+// How often an open Solo looks again while one of its work threads runs (FT186): the thread's card
+// follows its state, and its summary comes in when it ends.
+const SOLO_THREADS_REFRESH_INTERVAL_MS = 3000;
 // What another agent sends this one over Agent Link is kept in a topic per agent,
 // "_agentlink_<instance_id>", listed apart from the person's own topics.
 const AGENT_LINK_TOPIC_PREFIX = "_agentlink_";
@@ -656,7 +660,8 @@ export function createChatController() {
         if (awarenessVisible) awarenessTopic = topic;
         continue;
       }
-      if (isAgentLinkTopicID(id) || isCronTopicID(id)) continue;
+      // Solo has its own place, first in the list (soloTopicGroup).
+      if (isAgentLinkTopicID(id) || isCronTopicID(id) || isSoloTopicID(id)) continue;
       items.push(topic);
     }
     if (!awarenessTopic && awarenessVisible) {
@@ -664,7 +669,11 @@ export function createChatController() {
     }
     return awarenessTopic ? [awarenessTopic, ...items] : items;
   });
-  const hasVisibleTopics = () => visibleTopics().length > 0;
+  // Solo (FT186), the owner's one conversation, pinned first in the date and tag views. A runtime
+  // from before Solo lists none, and the list has no Solo then.
+  const soloTopic = computed(() => topics().find((topic) => isSoloTopicID(normalizeTopicID(topic?.id))) || null);
+  const soloTopicGroup = computed(() => (soloTopic() ? { key: "solo", label: "", topics: [soloTopic()], solo: true } : null));
+  const hasVisibleTopics = () => visibleTopics().length > 0 || soloTopic() !== null;
   const cronTopics = computed(() => cronTopicsOf(topics()));
   const cronModels = signal<any>(null);
   let cronModelsLoadSeq = 0;
@@ -753,6 +762,7 @@ export function createChatController() {
     const id = normalizeTopicID(topic?.id);
     if (id === DEFAULT_TOPIC_ID) return t("chat_topic_default");
     if (id === AWARENESS_TOPIC_ID) return t("chat_topic_awareness");
+    if (isSoloTopicID(id)) return t("chat_topic_solo");
     if (isCronTopicID(id)) return t("chat_topic_cron_untitled");
     if (isAgentLinkTopicID(id)) {
       const instanceID = agentLinkInstanceID(agentLinkTopicContactID(id));
@@ -894,7 +904,8 @@ export function createChatController() {
   const topicSidebarGroups = computed((): any[] => {
     if (topicSidebarView() === "agents") return agentTopics().length > 0 ? [{ key: "agents", label: "", topics: agentTopics() }] : [];
     if (topicSidebarView() === "cron") return cronSidebarGroups(topics());
-    return topicSidebarView() === "tags" ? topicTagGroups() : [...(pinnedTopicGroup() ? [pinnedTopicGroup()] : []), ...topicDayGroups()];
+    const solo = soloTopicGroup() ? [soloTopicGroup()] : [];
+    return topicSidebarView() === "tags" ? [...solo, ...topicTagGroups()] : [...solo, ...(pinnedTopicGroup() ? [pinnedTopicGroup()] : []), ...topicDayGroups()];
   });
   const knownTags = computed(() => knownTopicTags(topics()));
   const selectedTopicOrdinaryTags = () => ordinaryTopicTags(selectedTopic());
@@ -903,6 +914,7 @@ export function createChatController() {
     Boolean(workspaceTopicID()) &&
     !isAgentLinkTopicID(workspaceTopicID()) &&
     !isCronTopicID(workspaceTopicID()) &&
+    !isSoloTopicID(workspaceTopicID()) &&
     topics().some((topic) => normalizeTopicID(topic?.id) === normalizeTopicID(workspaceTopicID()));
   const topicTagsSaving = () => topicTagSaves().has(normalizeTopicID(workspaceTopicID()));
   /** A save of this topic's tags is under way. */
@@ -965,7 +977,7 @@ export function createChatController() {
   function topicDropTags(topic: any, group: any): string[] | null {
     const id = normalizeTopicID(topic?.id);
     if (topicSidebarView() !== "tags" || group?.drop?.kind !== "tag") return null;
-    if (!id || isAgentLinkTopicID(id) || isCronTopicID(id) || topicTagSaves().has(id)) return null;
+    if (!id || isAgentLinkTopicID(id) || isCronTopicID(id) || isSoloTopicID(id) || topicTagSaves().has(id)) return null;
     const current = topics().find((item) => normalizeTopicID(item?.id) === id);
     return current ? tagsAfterDrop(current, group.drop) : null;
   }
@@ -1052,7 +1064,7 @@ export function createChatController() {
   const selectedTopicIsCron = () => isCronTopicID(normalizeTopicID(selectedTopicID()));
   const selectedTopicIsReserved = () => {
     const id = normalizeTopicID(selectedTopicID());
-    return id === DEFAULT_TOPIC_ID || id === AWARENESS_TOPIC_ID || selectedTopicIsAgent() || selectedTopicIsCron();
+    return id === DEFAULT_TOPIC_ID || id === AWARENESS_TOPIC_ID || isSoloTopicID(id) || selectedTopicIsAgent() || selectedTopicIsCron();
   };
   const topicDeleteAvailable = () => Boolean(workspaceTopicID()) && !selectedTopicIsReserved();
   const topicDeleteDisabled = () => !topicDeleteAvailable() || topicDeleting();
@@ -2423,6 +2435,8 @@ export function createChatController() {
         durationText: taskDurationLabel(detail),
         rawJSON: taskRawJSON(detail),
         pendingSeed,
+        soloThread: soloThreadOf(detail),
+        sources: soloSourcesOf(detail),
       });
       if (nextApproval) void loadApprovalDetails(endpointRef);
       const tracked = trackedTasks.get(key);
@@ -3666,6 +3680,7 @@ export function createChatController() {
     onDeny: (item) => void decideHistoryApproval(item, "deny"),
     onQuestionAnswer: (item, answer) => void answerHistoryQuestion(item, answer),
     onElevationAnswer: (item, answer) => void answerHistoryElevation(item, answer),
+    onOpenTopic: (topicID) => selectTopic(topicID),
   };
 
   /* ---------- lifetimes ---------- */
@@ -3687,6 +3702,25 @@ export function createChatController() {
     }
   }
   cleanup(onVisibilityChange(onPageVisibilityChange));
+
+  // An open Solo follows the work threads it started while any runs (FT186): their cards change
+  // state and their summaries come in. A thread the topic list does not have yet joins it.
+  const soloLiveThreads = computed(() =>
+    isSoloTopicID(normalizeTopicID(selectedTopicID())) && !creatingTopic() ? liveSoloThreads(chatHistoryItems()).join("|") : "",
+  );
+  effect(() => {
+    const live = soloLiveThreads();
+    untracked(() => {
+      if (live && live.split("|").some((id) => !topics().some((topic) => normalizeTopicID(topic?.id) === id))) {
+        void loadTopics({ preserveSelection: true, preserveDraft: true });
+      }
+    });
+    if (!live) return;
+    const timer = setInterval(() => {
+      if (isVisible()) void refreshHistory();
+    }, SOLO_THREADS_REFRESH_INTERVAL_MS);
+    cleanup(() => clearInterval(timer));
+  });
 
   // Heartbeat and TODO runs start on their own, so the awareness topic and a TODO item's topic look
   // for new ones while open.
@@ -4016,6 +4050,8 @@ export function createChatController() {
     topicAgentAvatar,
     cronTopicModel,
     isCronTopicID,
+    isSoloTopicID,
+    topicStartedFromSolo,
     toggleTopicGroup,
     // actions
     setTaskInput,
