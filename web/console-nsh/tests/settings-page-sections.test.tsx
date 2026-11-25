@@ -241,6 +241,52 @@ test("System keeps the server's settings; language, notifications and Log out ar
   expect(app.shows("id:settings-app")).toBe(true);
 });
 
+const GENERAL = "/e/default/settings/general";
+
+test("in a web browser General ends with the App card, over HTTPS or plain HTTP, and search finds it", async () => {
+  for (const [origin, hint] of [
+    ["https://console.example", "The browser has not offered to install yet."],
+    [undefined, "Installing needs HTTPS (or localhost)."],
+  ] as const) {
+    const { app } = await openConsole({ location: GENERAL, origin });
+    await app.waitFor("id:settings-app");
+    expect(app.shows("id:settings-general >> id:settings-app")).toBe(true);
+    expect(app.texts().some((text) => text.startsWith(hint))).toBe(true);
+    // The other General settings stay.
+    expect(app.shows("id:settings-language")).toBe(true);
+    expect(app.shows("id:settings-logout")).toBe(true);
+    await app.type("id:settings-search", "App");
+    await app.waitFor("id:settings-search-results");
+    await app.waitFor("role:option[App]");
+    expect(app.shows("role:option[Appearance]")).toBe(true);
+  }
+});
+
+test("the desktop and phone apps have no App card in General, and search does not offer it", async () => {
+  const shell = { "morph.shell.info": { version: "0.3.80", build: "3080" } };
+  const cases: [string, Parameters<typeof openConsole>[0]][] = [
+    ["desktop", { runtime: "desktop" }],
+    ["desktop over HTTPS", { runtime: "desktop", origin: "https://console.example" }],
+    ["Android with its version", { platform: "android", host: shell }],
+    ["Android without the native part", { platform: "android" }],
+    ["Android tablet", { platform: "android", host: shell, width: 1280, height: 800 }],
+  ];
+  for (const [name, options] of cases) {
+    const { app } = await openConsole({ location: GENERAL, ...options });
+    await app.waitFor("id:settings-logout");
+    expect(app.shows("id:settings-language")).toBe(true);
+    expect([name, app.shows("id:settings-app")]).toEqual([name, false]);
+    expect([name, app.shows("text:App")]).toEqual([name, false]);
+    expect([name, app.texts().some((text) => text.startsWith("Install this agent as an app"))]).toEqual([name, false]);
+    // Search where the page has it at hand (not under a phone's pull-to-reveal list).
+    if (options?.platform === "android" && !options.width) continue;
+    await app.type("id:settings-search", "App");
+    await app.waitFor("id:settings-search-results");
+    await app.waitFor("role:option[Appearance]");
+    expect([name, app.shows("role:option[App]")]).toEqual([name, false]);
+  }
+});
+
 test("Log out in General is the console's logout: the session ends here too, even when the request fails, and the login page replaces Settings", async () => {
   for (const failed of [false, true]) {
     const expiresAt = new Date(Date.now() + 86400000).toISOString();

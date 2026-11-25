@@ -51,6 +51,8 @@ export interface ConsoleOptions {
   host?: Record<string, unknown>;
   /** The host's runtime (`web`). */
   runtime?: "web" | "desktop";
+  /** The console server's origin the host reports (`ORIGIN`, plain HTTP); API stubs answer any. */
+  origin?: string;
   features?: string[];
   locale?: string;
   /**
@@ -259,7 +261,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
       handlers: {
         "morph.boot": {
           runtime: options.runtime ?? "web",
-          origin: ORIGIN,
+          origin: options.origin ?? ORIGIN,
           basePath: "/",
           location: options.location ?? "/",
           kv: { "quail-language": "en", ...(options.kv || {}) },

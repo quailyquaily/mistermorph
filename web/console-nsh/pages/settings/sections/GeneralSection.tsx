@@ -1,6 +1,6 @@
 // General: this device's own settings, the same whichever agent is selected: the interface language,
 // the appearance (light or dark),
-// notifications, the console session, and installing the selected agent as an app.
+// notifications, the console session, and, in a web browser, installing the selected agent as an app.
 import { Text, View } from "nsh";
 import { Button } from "../../../components/ui";
 import { localeState, themeState } from "../../../lib/stores/index.js";
@@ -9,6 +9,7 @@ import { SettingsAppPanel } from "../../../components/settings/SettingsAppPanel"
 import { TopicNotificationSetting } from "../../../components/settings/TopicNotificationSetting";
 import { SettingRow, SettingsCard } from "../../../components/settings-page/parts";
 import { isMobile } from "../../../lib/shell";
+import { isBrowser } from "../../../lib/platform";
 import type { SettingsStore } from "../store";
 import { t } from "../i18n";
 
@@ -73,7 +74,10 @@ export function GeneralSection(props: { s: SettingsStore }) {
           </SettingRow>
         </View>
       </SettingsCard>
-      <SettingsAppPanel />
+      {/* The desktop and phone apps are the installed app already: no App card, nor its gap. */}
+      <If when={isBrowser()}>
+        <SettingsAppPanel />
+      </If>
     </View>
   );
 }

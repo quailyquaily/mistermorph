@@ -1,5 +1,6 @@
 // The App and Updates panels (SettingsAppPanel.tsx), Credits (SettingsCreditsPanel.tsx) and the
-// notifications row (TopicNotificationSetting.tsx).
+// notifications row (TopicNotificationSetting.tsx). Where General shows App (a web browser only):
+// settings-page-sections.test.tsx.
 import { expect, test } from "nsh/test";
 import { openFixture } from "./fixtures/integrations-harness";
 
@@ -34,16 +35,6 @@ test("App: without an agent it asks for one; on an insecure origin it says insta
   });
   await insecure.app.waitFor("Installing needs HTTPS (or localhost). Open the console over HTTPS to install it.");
   expect(insecure.app.shows("Install")).toBe(false);
-});
-
-test("App: in the desktop app it says so", async () => {
-  const { app } = await openFixture({
-    view: "app",
-    runtime: "desktop",
-    params: { endpoints: [{ endpoint_ref: "ep_1", agent_name: "Morph", connected: true }] },
-    api: { "GET /settings/auto-update": { body: AUTO_UPDATE } },
-  });
-  await app.waitFor("Already running in the desktop app.");
 });
 
 // What host.js reads from a browser (`morph.client.platform`).

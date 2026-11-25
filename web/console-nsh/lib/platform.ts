@@ -96,6 +96,11 @@ export const desktopVersion = () => config.desktopVersion;
  */
 export const shellInfo = (): ShellInfo | null =>
   shellFromBoot({ runtime: config.runtime, os: platform.os, shell: config.shell, desktopVersion: config.desktopVersion });
+/**
+ * A web browser: the web runtime with no shell of ours around it (not the desktop app, not the
+ * phone app). A browser on a small screen is still a browser; lib/shell's `isMobile` is the layout.
+ */
+export const isBrowser = () => !MOBILE && config.runtime === "web" && shellInfo() === null;
 export const languages = () => config.languages;
 export const initialLocation = () => config.location || "/";
 export const basePath = () => config.basePath || "/";

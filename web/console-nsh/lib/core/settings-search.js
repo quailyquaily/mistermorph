@@ -15,6 +15,9 @@ import {
 
 const MAX_RESULTS = 40;
 
+// General's App card, which only a web browser shows (GeneralSection): `app: false` leaves it out.
+const APP_FIELD = "settings_app_title";
+
 // Settings written by hand in SettingsView (not from config-field-groups), by i18n key. A key
 // names both the label and how the field is found on the page: the row whose label reads it.
 const HAND_WRITTEN_FIELDS = {
@@ -45,8 +48,9 @@ const HAND_WRITTEN_FIELDS = {
     "settings_console_guard_redaction_title",
     "settings_console_guard_approvals_title",
   ],
-  // This device's settings (language, notifications, the session), the same for every agent.
-  general: ["settings_language_title", "settings_appearance_title", "settings_session_title", "settings_app_title"],
+  // This device's settings (language, notifications, the session), the same for every agent; App
+  // only in a web browser (see APP_FIELD).
+  general: ["settings_language_title", "settings_appearance_title", "settings_session_title", APP_FIELD],
   system: [
     "settings_logs_title",
     "settings_auto_update_card_title",
@@ -113,7 +117,8 @@ function fieldEntries(groups, where, target) {
 // buildSettingsSearchIndex lists every setting Settings can show for this endpoint: sections,
 // config fields (with their config path), hand-written fields, channels and tools. Each entry's
 // target says where it lives: the section, and the channel pane or Advanced dialog that holds it.
-export function buildSettingsSearchIndex(t, { sections = [], channels = [], tools = [] } = {}) {
+// `app` says whether General shows its App card (only in a web browser).
+export function buildSettingsSearchIndex(t, { sections = [], channels = [], tools = [], app = true } = {}) {
   const sectionTitles = new Map(sections.map((item) => [item.id, item.title]));
   const has = (id) => sectionTitles.has(id);
   const advanced = t("settings_advanced_action");
@@ -125,6 +130,7 @@ export function buildSettingsSearchIndex(t, { sections = [], channels = [], tool
   for (const [section, keys] of Object.entries(HAND_WRITTEN_FIELDS)) {
     if (!has(section)) continue;
     for (const key of keys) {
+      if (key === APP_FIELD && !app) continue;
       entries.push({ title: t(key), where: [sectionTitles.get(section)], target: { section, text: t(key) } });
     }
   }
