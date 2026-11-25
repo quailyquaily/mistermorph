@@ -206,6 +206,24 @@ workspace. Short work in a known workspace may run in Solo itself with `workspac
   (`action`, `count`) and nothing else: no arguments, output, commands, file paths,
   file content or search text. A reply from before uses were kept names its source and
   says its details were not recorded.
+- **Participants.** A thread's card and its summary show the subagents and coders the
+  thread's task started: avatar, name and state for the newest three, then `+N` for the
+  rest. They are the task's workers, not the agent that runs the thread, and they only
+  show: the thread opens from Open thread as before. The card follows the task while it
+  runs (it is written when a worker starts or its status changes, not for what a worker
+  prints) and keeps what it had across a pause, the task's end and a restart; a worker
+  still marked running when its task ended shows the task's ending, one that failed
+  stays failed. `result.solo_thread` keeps them as `participants` (`id`, `name`,
+  `name_set`, `name_index`, `avatar_index`, `kind`, `status`; the newest 32) and
+  `participants_omitted`, and nothing else of a worker: not what it was asked, its
+  output, its result or its processes. Nested workers are listed like the others. A
+  task without workers, and a card from before participants were kept, shows no row.
+  The chip of a thread under the reply that started it shows the same workers' avatars
+  and `+N`, with their names, kinds and states in the chip's name and tooltip: its source
+  carries the started task's `task_id`, and the Console shows the workers only when that
+  task's card is in the loaded history. A thread chip without a task (the reply only
+  read the thread, or started work in it more than once), one whose card is not loaded,
+  and every other kind of chip are unchanged.
 - **Back to Solo.** On the phone layout, Back from a topic opened from Solo (a thread or
   topic chip, or a card's Open thread) returns to Solo: the bar's arrow, Android's Back
   and the iPhone's edge swipe. A topic opened any other way goes back to the topic

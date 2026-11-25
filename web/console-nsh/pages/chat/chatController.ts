@@ -66,7 +66,7 @@ import { invalidateResource, loadResource, peekResource, readResource, resourceK
 import { rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../../lib/core/workspace-tree.js";
 import { topicIcon, useTopicMetadata } from "../../lib/core/topic-metadata.js";
-import { firstTopicsPageWithSolo, isSoloTopicID, liveSoloThreads, SOLO_TOPIC_ID, soloSourcesOf, soloThreadOf, topicStartedFromSolo } from "../../lib/core/solo.js";
+import { firstTopicsPageWithSolo, isSoloTopicID, liveSoloThreads, SOLO_TOPIC_ID, soloSourcesOf, soloThreadOf, soloThreadOfSource, topicStartedFromSolo } from "../../lib/core/solo.js";
 import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicJobID, topicSidebarViewFor } from "../../lib/core/chat-cron-topics.js";
 import {
   activelyViewedTopic,
@@ -119,6 +119,7 @@ import { createEntryFocus } from "./entryFocus";
 import { createOlderTopicPages } from "./olderTopics";
 import type { ChatRowContext, HistoryItem } from "../../components/chat/ChatHistoryItem";
 import type { SoloSource } from "../../components/chat/ChatSoloSources";
+import { soloThreadRoster } from "../../components/chat/ChatSoloThread";
 import type { ElevationAnswer, ElevationState } from "../../components/chat/ChatElevationCard";
 import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQuestionCard";
 import { hasArtifactBlock } from "../../components/chat/ChatRichContent";
@@ -3744,6 +3745,12 @@ export function createChatController() {
     onElevationAnswer: (item, answer) => void answerHistoryElevation(item, answer),
     onOpenTopic: (topicID) => openTopicFromSolo(topicID),
     onOpenSoloSource: (source) => openSoloSource(source),
+    // A thread chip shows the workers of the task its reply started, from that task's own card
+    // in the loaded history; without that card it shows none.
+    soloSourceParticipants: (source) => {
+      const thread = soloThreadOfSource(source, chatHistoryItems());
+      return thread ? soloThreadRoster(thread) : null;
+    },
   };
 
   /* ---------- lifetimes ---------- */
