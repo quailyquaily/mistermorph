@@ -45,6 +45,7 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 			"model_profile", strings.TrimSpace(req.ModelProfile), "model", target.Model)
 	}
 
+	steerSource, finishSteer := OpenSubtaskSteer(runCtx, taskID, meta, req)
 	var result *SubtaskResult
 	if req.RunFunc != nil {
 		directResult, err := req.RunFunc(runCtx)
@@ -54,8 +55,9 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 			result = NormalizeDirectSubtaskResult(taskID, req.OutputSchema, directResult)
 		}
 	} else {
-		result = r.runAgentSubtask(runCtx, meta, taskID, req, target)
+		result = r.runAgentSubtask(runCtx, meta, taskID, req, target, steerSource)
 	}
+	finishSteer(result)
 
 	if result != nil {
 		result.Worker = WorkerFromContext(runCtx)
@@ -105,7 +107,7 @@ func (r *localSubtaskRunner) subtaskTarget(ctx context.Context, req SubtaskReque
 	return target, nil
 }
 
-func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[string]any, taskID string, req SubtaskRequest, target SubtaskProfile) *SubtaskResult {
+func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[string]any, taskID string, req SubtaskRequest, target SubtaskProfile, steerSource SteerSource) *SubtaskResult {
 	subOpts := []Option{WithLogger(r.engine.log)}
 	if r.engine.guard != nil {
 		subOpts = append(subOpts, WithGuard(r.engine.guard))
@@ -144,6 +146,8 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 		Model:     target.Model,
 		Scene:     "spawn.subtask",
 		Meta:      meta,
+		// Messages the person sends this subtask directly reach it at its next step.
+		SteerSource: steerSource,
 	})
 	if err != nil {
 		return FailedSubtaskResult(taskID, err)

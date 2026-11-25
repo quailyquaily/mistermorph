@@ -1138,6 +1138,7 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 	logger.Info("subtask_start", "task_id", taskID, "mode", mode, "output_schema", strings.TrimSpace(req.OutputSchema),
 		"model_profile", strings.TrimSpace(req.ModelProfile), "model", model)
 
+	steerSource, finishSteer := agent.OpenSubtaskSteer(runCtx, taskID, meta, req)
 	var result *agent.SubtaskResult
 	if req.RunFunc != nil {
 		directResult, err := req.RunFunc(runCtx)
@@ -1161,6 +1162,8 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 				WorkerNameSet: rt.EngineToolsConfig.WorkerNameSet,
 			},
 			Meta: meta,
+			// Messages the person sends this subtask directly reach it at its next step.
+			SteerSource: steerSource,
 		})
 		if err != nil {
 			result = agent.FailedSubtaskResult(taskID, err)
@@ -1168,6 +1171,7 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 			result = agent.SubtaskResultFromFinal(taskID, req.OutputSchema, runResult.Final)
 		}
 	}
+	finishSteer(result)
 	result.Worker = agent.WorkerFromContext(runCtx)
 	logger.Info("subtask_done", "task_id", taskID, "status", result.Status, "output_kind", result.OutputKind)
 	agent.EmitEventDetached(ctx, nil, agent.Event{

@@ -194,6 +194,9 @@ func (s *chatSession) recordLocalResult(result chatTurnResult) error {
 		if result.turn.trace != nil {
 			data["trace"] = result.turn.trace.Snapshot()
 		}
+		if messages := result.turn.children.Messages(); len(messages) > 0 {
+			data[chathistory.ChildMessagesResultKey] = messages
+		}
 		if result.runCtx != nil {
 			data["plan"] = result.runCtx.Plan
 			if m := result.runCtx.Metrics; m != nil {

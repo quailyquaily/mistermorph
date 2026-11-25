@@ -112,6 +112,7 @@ import { shortcutsEligible } from "../../lib/shortcutPolicy";
 import { dismissSoftKeyboard } from "../../lib/softKeyboard";
 import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
 import type { ComposerFileItem, ComposerHandle, ComposerProfileItem } from "../../components/chat/ChatComposer";
+import type { WorkerSendOutcome } from "../../components/chat/WorkerMessageComposer";
 import { popupOpen } from "../../components/ui";
 import { createEntryFocus } from "./entryFocus";
 import { createOlderTopicPages } from "./olderTopics";
@@ -3288,12 +3289,19 @@ export function createChatController() {
 
   // `keyboardDismissed`: Send lowered a touch keyboard, so the field is not focused again after the
   // send, even where the window is wide enough for the desktop layout.
-  async function submitTask(options: { keyboardDismissed?: boolean } = {}) {
+  // `text`: send this text instead of the composer's draft (a message a worker could not take, sent
+  // to the main agent from its panel): the composer's draft and files stay as they are. Resolves
+  // whether the runtime took the message.
+  async function submitTask(options: { keyboardDismissed?: boolean; text?: string } = {}): Promise<boolean> {
     cancelEntryFocus();
-    if (untracked(messageEdit)) return submitMessageEdit(options);
-    const draftText = String(untracked(taskInput) || "");
+    const direct = typeof options.text === "string";
+    if (!direct && untracked(messageEdit)) {
+      await submitMessageEdit(options);
+      return false;
+    }
+    const draftText = direct ? String(options.text) : String(untracked(taskInput) || "");
     const task = draftText.trim();
-    if (!task || untracked(sending) || untracked(composerFilesPending)) return;
+    if (!task || untracked(sending) || (!direct && untracked(composerFilesPending))) return false;
     const submittedScope = untracked(composerDraftScope);
     const usesTopics = untracked(consoleTopicsEnabled);
     let accepted = false;
@@ -3301,14 +3309,14 @@ export function createChatController() {
     const endpointRef = untracked(submitEndpointRef);
     if (!endpointRef) {
       err.set(untracked(submitBlockedMessage) || t("msg_select_endpoint"));
-      return;
+      return false;
     }
     const llmProfile = String(untracked(composerLLMProfile) || "").trim();
     const pendingWorkspace = String(untracked(pendingWorkspaceDir) || "").trim();
     const { requestBody, submittedFiles, fileReferences } = buildComposerSubmission({
       task,
       llmProfile,
-      files: untracked(composerFiles),
+      files: direct ? [] : untracked(composerFiles),
       topicID: usesTopics && !untracked(creatingTopic) ? normalizeTopicID(untracked(selectedTopicID)) : "",
       workspaceDir: usesTopics ? pendingWorkspace : "",
     }) as { requestBody: Record<string, any>; submittedFiles: any[]; fileReferences: any[] };
@@ -3319,7 +3327,7 @@ export function createChatController() {
       sending.set(true);
       err.set("");
       suppressDraftPersistence = true;
-      taskInput.set("");
+      if (!direct) taskInput.set("");
       if (usesTopics && !normalizeTopicID(untracked(selectedTopicID))) creatingTopic.set(true);
     });
 
@@ -3354,10 +3362,12 @@ export function createChatController() {
       if (usesTopics && !submittedTopicID) throw new Error(t("chat_missing_topic_id"));
       accepted = true;
       acceptedTopicID = submittedTopicID;
-      clearChatDraft(submittedScope.endpointRef, submittedScope.topicID);
-      clearComposerFileDraft(submittedScope);
+      if (!direct) {
+        clearChatDraft(submittedScope.endpointRef, submittedScope.topicID);
+        clearComposerFileDraft(submittedScope);
+      }
       // A response belongs to the composer that submitted it, even after navigation.
-      if (composerFileDraftKey(submittedScope) !== composerFileDraftKey(untracked(composerDraftScope))) return;
+      if (composerFileDraftKey(submittedScope) !== composerFileDraftKey(untracked(composerDraftScope))) return true;
       if (!steerTargetTaskID) applyComposerTopicLLMProfile(llmProfile);
       patchHistoryItem(userHistoryID, { taskId: taskID, files: normalizeHistoryFileReferences(fileReferences), endpointRef, topicID: submittedTopicID });
       let targetHistoryID = "";
@@ -3388,27 +3398,59 @@ export function createChatController() {
         }
         rememberTopicSelection(endpointRef, topicID);
         await loadTopics({ preferredTopicID: topicID, preserveSelection: true });
-        if (endpointRef !== untracked(submitEndpointRef) || normalizeTopicID(untracked(selectedTopicID)) !== topicID) return;
+        if (endpointRef !== untracked(submitEndpointRef) || normalizeTopicID(untracked(selectedTopicID)) !== topicID) return true;
         await syncChatRoute(topicID, { replace: true });
       }
       if (steerTargetTaskID && targetNeedsTracking) void pollTask(steerTargetTaskID, targetHistoryID, endpointRef);
       await pollTask(taskID, agentHistoryID, endpointRef);
+      return true;
     } catch (error) {
       const message = errorMessage(error, t("msg_load_failed"));
       if (!accepted) {
-        rememberChatDraft(submittedScope.endpointRef, submittedScope.topicID, draftText);
-        if (composerFileDraftKey(submittedScope) !== composerFileDraftKey(untracked(composerDraftScope))) return;
-        taskInput.set(draftText);
+        // A direct text was never the composer's: its sender keeps it.
+        if (!direct) {
+          rememberChatDraft(submittedScope.endpointRef, submittedScope.topicID, draftText);
+          if (composerFileDraftKey(submittedScope) !== composerFileDraftKey(untracked(composerDraftScope))) return false;
+          taskInput.set(draftText);
+        }
       } else if (endpointRef !== untracked(submitEndpointRef) || (usesTopics && normalizeTopicID(untracked(selectedTopicID)) !== acceptedTopicID)) {
-        return;
+        return accepted;
       }
       err.set(message);
       patchHistoryItem(agentHistoryID, { status: "failed", text: message, rawJSON: "" });
+      return accepted;
     } finally {
       suppressDraftPersistence = false;
       sending.set(false);
-      if (!options.keyboardDismissed) focusComposerOnDesktop();
+      if (!options.keyboardDismissed && !direct) focusComposerOnDesktop();
     }
+  }
+
+  // Sends a running subagent of the reply `item` (its task runs in the selected topic) a message
+  // from its panel (WorkerMessageComposer): the runtime queues it for that worker alone, which takes
+  // it at its next step. A worker that cannot take it is refused with the runtime's `code`
+  // (child_finished, child_unsupported, ...): nothing was sent, and the panel keeps the draft.
+  async function sendWorkerMessage(item: HistoryItem | null, workerID: string, text: string): Promise<WorkerSendOutcome> {
+    const task = String(text || "").trim();
+    const endpointRef = String(item?.endpointRef || untracked(submitEndpointRef) || "").trim();
+    if (!task || !workerID) return { ok: false, code: "empty", message: "" };
+    if (!endpointRef) return { ok: false, code: "", message: untracked(submitBlockedMessage) || t("msg_select_endpoint") };
+    const topicID = untracked(consoleTopicsEnabled) ? normalizeTopicID(untracked(selectedTopicID)) : "";
+    try {
+      await runtimeApiFetchForEndpoint(endpointRef, "/tasks", {
+        method: "POST",
+        body: { task, topic_id: topicID, steer_target_child_id: workerID, trigger: CONSOLE_CHAT_TRIGGER },
+      });
+      return { ok: true };
+    } catch (error: any) {
+      return { ok: false, code: error?.status === 409 ? String(error?.code || "") : "", message: errorMessage(error, t("msg_load_failed")) };
+    }
+  }
+
+  // Sends text a worker could not take to the main agent, as a message in the conversation (when the
+  // person chose to from the worker's panel; never on its own).
+  function sendToMainAgent(text: string): Promise<boolean> {
+    return submitTask({ text, keyboardDismissed: true });
   }
 
 
@@ -3992,6 +4034,8 @@ export function createChatController() {
     ensureComposerCommandsLoaded,
     ensureComposerSkillsLoaded,
     submitTask,
+    sendWorkerMessage,
+    sendToMainAgent,
     stopActiveTask,
     cancelMessageEdit,
     selectTopic,

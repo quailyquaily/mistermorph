@@ -175,6 +175,8 @@ function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string
           class={props.class}
           onClose={() => c.closeActivityDetail()}
           onProcessesEnded={(byStop) => c.closeEndedProcesses(detail(), byStop)}
+          onWorkerMessage={(workerID, text) => c.sendWorkerMessage(item(), workerID, text)}
+          onSendToParent={(text) => c.sendToMainAgent(text)}
         />
       )}
     </If>

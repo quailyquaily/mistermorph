@@ -44,6 +44,14 @@ func registerChatCommands(reg *chatcommands.Registry, sess *chatSession, history
 			return &chatcommands.Result{}, nil
 		})
 	}
+	// The session's loop handles /steer itself, with the running turn; this entry lists it.
+	reg.Register(chatSteerCommand, chatSteerDescription, func(_ context.Context, args string) (*chatcommands.Result, error) {
+		text, err := sess.steerChildCommand(nil, args, nil)
+		if err != nil {
+			return nil, err
+		}
+		return &chatcommands.Result{Reply: text}, nil
+	})
 	reg.Register("/topics", "list shared topics", func(_ context.Context, args string) (*chatcommands.Result, error) {
 		return sess.topicsCommand(strings.TrimSpace(args))
 	})

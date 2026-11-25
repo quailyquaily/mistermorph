@@ -65,6 +65,8 @@ func buildTaskHistory(tasks []taskdomain.TaskInfo, job taskdomain.TaskInfo, limi
 				}
 			}
 			history = append(history, TaskStepMessages(task)...)
+			// What the person sent its subagents while it ran, at the times they sent it.
+			history = append(history, TaskChildMessageItems(task)...)
 			if outbound, ok := TaskOutbound(task); ok {
 				history = append(history, outbound)
 			}

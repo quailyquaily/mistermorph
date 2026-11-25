@@ -150,7 +150,31 @@ function clock(raw: string) {
  * settings of the call) and the calls it made on its own; then what it printed and what it answered
  * (its result, or its error). While it runs, its answer is the running state.
  */
-export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; agentName?: string; itemID?: string }) {
+/** A message the person sent a worker, as its record shows it (lib/core/chat-workers.js `workerMessageList`). */
+export interface WorkerMessage {
+  text: string;
+  status: string;
+  step: number;
+  at: string;
+  pending?: boolean;
+}
+
+function workerMessageStatus(message: WorkerMessage, name: string) {
+  if (message.status === "applied") return t("chat_worker_message_applied", { step: message.step });
+  if (message.status === "dropped") return t("chat_worker_message_dropped", { name });
+  return t("chat_worker_message_queued", { name });
+}
+
+export function ChatWorkerOutput(props: {
+  worker: any;
+  ask?: WorkerAsk | null;
+  agentName?: string;
+  itemID?: string;
+  /** What the person sent it while it ran, with what became of each, in order. */
+  messages?: WorkerMessage[];
+  /** Offered beside a message the worker returned without taking: send it to the main agent. */
+  onSendToParent?: (text: string) => void;
+}) {
   const worker = () => props.worker;
   const agent = () => props.agentName || t("chat_worker_agent");
   const name = () => String(worker().displayName || worker().name || "");
@@ -197,6 +221,42 @@ export function ChatWorkerOutput(props: { worker: any; ask?: WorkerAsk | null; a
       <If when={(props.ask?.calls.length ?? 0) > 0 || (props.ask?.callsOmitted ?? 0) > 0}>
         <View class="gap-1 pl-3" testID="chat-worker-calls">
           <ActivityCallTree itemID={`${props.itemID ?? ""}:${worker().id}`} calls={props.ask?.calls ?? []} omitted={props.ask?.callsOmitted} />
+        </View>
+      </If>
+
+      {/* What the person sent it directly while it ran: each with whether it took it in, and at which step. */}
+      <If when={(props.messages?.length ?? 0) > 0}>
+        <View class="gap-1.5" testID="chat-worker-messages">
+          <Speaker from={t("chat_worker_message_you")} to={name()} fromColor={NEON.amber} toColor={tone()} at={clock(props.messages?.[0]?.at ?? "")} />
+          <Each of={props.messages ?? []} key={(message, index) => `${index}:${message.text}`}>
+            {(message) => (
+              <View class="gap-1" testID={`chat-worker-message-item.${message().status}`}>
+                <View selectable class="border-l-2 pl-2.5" style={{ borderColor: `${NEON.amber}80` }}>
+                  <TerminalText text={message().text} copyOnly class={`font-mono text-xs leading-[18px] ${TERMINAL_FG}`} testID="chat-worker-message-text" />
+                </View>
+                <View class="flex-row flex-wrap items-center gap-2 pl-3">
+                  <Text
+                    class={`min-w-0 shrink font-mono text-[11px] leading-[18px] ${TERMINAL_MUTED}`}
+                    style={message().status === "dropped" ? { color: NEON.fail } : message().status === "applied" ? { color: NEON.ok } : undefined}
+                    testID={`chat-worker-message-status.${message().status}`}
+                  >
+                    {workerMessageStatus(message(), name())}
+                  </Text>
+                  <If when={message().status === "dropped" && props.onSendToParent}>
+                    <TipButton
+                      accessibilityLabel={t("chat_worker_message_to_parent")}
+                      tooltip={<Tip text={t("chat_worker_message_to_parent")} />}
+                      onPress={() => props.onSendToParent?.(message().text)}
+                      testID="chat-worker-message-resend"
+                      class="rounded-full bg-white/8 px-2 py-0.5 hover:bg-white/16"
+                    >
+                      <Text class={`text-[11px] ${TERMINAL_FG}`}>{t("chat_worker_message_to_parent")}</Text>
+                    </TipButton>
+                  </If>
+                </View>
+              </View>
+            )}
+          </Each>
         </View>
       </If>
 

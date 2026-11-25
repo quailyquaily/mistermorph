@@ -76,6 +76,32 @@ Inspection is read-only and does not send instructions to either agent. The
 parent task continues while the view is open. Main-thread output received
 during inspection appears when you return to chat.
 
+## Message a running subagent
+
+Use `/steer <child-id> <message>` in chat to send one running subagent a
+message while the task runs. The ID is the one `/agents` shows (a full ID, a
+unique prefix, or a worker ID such as `worker-2`); a running child's record shows
+the command with its ID. Any running child of the task can be named, nested
+ones included.
+
+- The child takes the message at its next step. It never interrupts a model
+  request or a running tool. The child reads it as a message from you, not
+  from the agent that started it.
+- The child's record in `/agents` shows the message as queued, then applied at
+  the step it took it in, or as not applied when the child returned first.
+- The child's result tells the parent that you redirected it, so the parent
+  does not treat the changed result as a fault. The next turns' history holds
+  the message, after your request for that turn.
+- A child that has already finished is not sent the message. The reply says so,
+  and the text is not lost: send it without `/steer` to message the main agent.
+- A `coder` child (an external CLI) cannot take messages; `/steer` says so.
+- `/steer` without a running task, without an ID, or without a message is
+  refused with what to do instead. It is never sent to the main agent.
+
+Plain text typed while a task runs still goes to the main agent, as before.
+`/steer` works with local execution and with a Console, which must run a version
+with subagent messages.
+
 The inspector is available with both Console and local execution. Both store a
 bounded trace with each completed or pending task. Remote Console also streams
 execution records. Reopening a topic restores its retained tool output, plans, file

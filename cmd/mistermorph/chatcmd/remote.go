@@ -131,6 +131,7 @@ func newSharedChatModel(ctx context.Context, c *remoteClient) *chatModel {
 		{Name: "/agents", Description: "inspect subagent threads [id]"},
 		{Name: "/agent", Description: "inspect subagent threads [id]"},
 		{Name: "/subagents", Description: "inspect subagent threads [id]"},
+		{Name: chatSteerCommand, Description: chatSteerDescription},
 		{Name: "/reset", Description: "reset the conversation context"},
 		{Name: "/init", Description: "create AGENTS.md for this project"},
 		{Name: "/update", Description: "regenerate this project’s AGENTS.md"},
@@ -526,6 +527,9 @@ func (m *chatModel) command(text string) tea.Cmd {
 	case text == "/help":
 		return m.enqueueTranscript(formatChatCommandOutput("/help", "", m.commandRegistry) + "\n\n/topic new|switch <id>|history [more]|title regenerate|delete")
 	default:
+		if name == chatSteerCommand {
+			return m.steerChild(args)
+		}
 		if isChatAgentCommand(name) {
 			return m.openAgentBrowser(strings.TrimSpace(args))
 		}

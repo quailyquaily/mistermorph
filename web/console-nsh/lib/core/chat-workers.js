@@ -23,6 +23,30 @@ function normalizeProcesses(raw) {
     }));
 }
 
+const MESSAGE_STATUSES = new Set(["queued", "applied", "dropped"]);
+
+// normalizeWorkerMessages reads what the person sent a worker while it ran, as the runtime keeps
+// it: each message's text, its status (queued until the worker takes it in at a step, applied, or
+// dropped when the worker returned first) and that step.
+function normalizeWorkerMessages(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter((message) => typeof message?.text === "string" && message.text.trim())
+    .map((message) => {
+      const status = text(message.status).toLowerCase();
+      const step = Number(message.step);
+      return {
+        text: message.text,
+        status: MESSAGE_STATUSES.has(status) ? status : "queued",
+        step: Number.isSafeInteger(step) && step > 0 ? step : 0,
+        at: text(message.at),
+        appliedAt: text(message.applied_at || message.appliedAt),
+      };
+    });
+}
+
 // normalizeActivityWorkers reads the runtime's worker list, or a list this function already
 // returned, since activity is normalized again as updates arrive.
 export function normalizeActivityWorkers(raw) {
@@ -54,6 +78,7 @@ export function normalizeActivityWorkers(raw) {
       summary: text(item.summary),
       error: text(item.error),
       processes: normalizeProcesses(item.processes),
+      messages: normalizeWorkerMessages(item.messages),
     });
   }
   return workers;
@@ -178,4 +203,36 @@ export function rosterWorkers(activity, taskStatus, lang) {
     state: workerState(worker, taskStatus),
     sections: workerSections(worker),
   }));
+}
+
+// workerMessageMode says whether the person can send a worker a message now: "open" for a running
+// subagent (it takes it at its next step), "coder" for a running coder (an external CLI, which
+// cannot take one mid-run), "closed" once the worker (or its task) has finished.
+export function workerMessageMode(worker) {
+  if (!worker || worker.state !== "running") {
+    return "closed";
+  }
+  return worker.kind === "coder" ? "coder" : "open";
+}
+
+// workerMessageList is what a worker's record shows of the messages sent to it: those the runtime
+// reports, then the ones this client sent that it has not reported yet (pending: [{ id, text }],
+// oldest first), shown queued. A reported message settles the oldest pending one with its text.
+export function workerMessageList(reported, pending) {
+  const list = Array.isArray(reported) ? reported.map((message) => ({ ...message, pending: false })) : [];
+  const unclaimed = new Map();
+  for (const message of list) {
+    unclaimed.set(message.text, (unclaimed.get(message.text) || 0) + 1);
+  }
+  const settled = [];
+  for (const message of Array.isArray(pending) ? pending : []) {
+    const left = unclaimed.get(message.text) || 0;
+    if (left > 0) {
+      unclaimed.set(message.text, left - 1);
+      settled.push(message.id);
+      continue;
+    }
+    list.push({ text: message.text, status: "queued", step: 0, at: text(message.at), appliedAt: "", pending: true });
+  }
+  return { list, settled };
 }

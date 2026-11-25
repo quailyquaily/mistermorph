@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/pagination"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 )
@@ -86,6 +87,15 @@ func (c *remoteClient) request(ctx context.Context, method, path string, body, o
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusConflict {
+			// A refused message for a subagent says why, in a sentence for the person.
+			var rejected daemonruntime.SteerRejectedError
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			if json.Unmarshal(body, &rejected) == nil && rejected.Code != "" && rejected.Message != "" {
+				rejected.Message = remoteLine(rejected.Message)
+				return &rejected
+			}
+		}
 		herr := &remoteHTTPError{status: resp.StatusCode}
 		if resp.StatusCode == http.StatusBadRequest {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

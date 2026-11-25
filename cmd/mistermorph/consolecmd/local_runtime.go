@@ -29,6 +29,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
+	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	"github.com/quailyquaily/mistermorph/internal/chattrace"
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
@@ -1667,6 +1668,10 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 		Ref:    "web/console",
 	})
 	task := strings.TrimSpace(req.Task)
+	if childID := strings.TrimSpace(req.SteerTargetChildID); childID != "" {
+		// A message for a child goes to it as written: never a command, a new task or the parent.
+		return r.steerConsoleChild(task, strings.TrimSpace(req.TopicID), childID, len(req.FileReferences) > 0)
+	}
 	command, _ := chatcommands.ParseCommand(task)
 	command = chatcommands.NormalizeCommand(command)
 	contextCompactionOnly := chatcommands.IsContextCompactCommand(task)
@@ -2626,6 +2631,12 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	progressMu.Unlock()
 	result := buildConsoleTaskResult(final, agentCtx, activity, reasoningSink.Snapshot())
 	result["trace"] = trace.Snapshot()
+	if lease != nil {
+		// What the person sent the task's subagents, for the topic's history (chathistory).
+		if messages := lease.Children.Messages(); len(messages) > 0 {
+			result[chathistory.ChildMessagesResultKey] = messages
+		}
+	}
 	if questions != nil {
 		if asked := questions.snapshot(); len(asked) > 0 {
 			result["questions"] = asked

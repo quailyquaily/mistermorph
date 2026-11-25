@@ -13,6 +13,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 )
 
 const (
@@ -79,11 +80,13 @@ func (s *chatAgentStore) handleEventAt(ctx context.Context, event agent.Event, n
 		s.prune()
 		return
 	}
-	// Root-agent events and events for evicted records cannot create new rows.
-	if record == nil || (!record.Finished.IsZero() && event.Kind != agent.EventKindSubtaskDone) {
+	// Root-agent events and events for evicted records cannot create new rows. A message the
+	// child returned without is reported after it finished.
+	if record == nil || (!record.Finished.IsZero() && event.Kind != agent.EventKindSubtaskDone && event.Kind != runtimecontrol.EventKindSteerDropped) {
 		return
 	}
-	if event.Step > record.Step {
+	steer := event.Kind == agent.EventKindSteerQueued || event.Kind == agent.EventKindSteerApplied || event.Kind == runtimecontrol.EventKindSteerDropped
+	if event.Step > record.Step && !steer {
 		record.Step = event.Step
 	}
 	if event.Model != "" {
@@ -123,6 +126,16 @@ func (s *chatAgentStore) handleEventAt(ctx context.Context, event agent.Event, n
 			output += "\n" + event.Error
 		}
 		record.appendEntry(now, label, output)
+	case agent.EventKindSteerQueued:
+		record.appendEntry(now, "Your message · queued", event.Text)
+	case agent.EventKindSteerApplied:
+		label := "Your message · applied"
+		if event.Step > 0 {
+			label = fmt.Sprintf("Your message · applied at step %d", event.Step)
+		}
+		record.appendEntry(now, label, event.Text)
+	case runtimecontrol.EventKindSteerDropped:
+		record.appendEntry(now, "Your message · not applied (the subagent returned first)", event.Text)
 	case agent.EventKindContextCompactionStart:
 		record.Activity = "Compacting context"
 		record.appendEntry(now, "Context compaction", "Started")

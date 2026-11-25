@@ -98,6 +98,13 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			}
 			resp, err := submit(r.Context(), req)
 			if err != nil {
+				var rejected *SteerRejectedError
+				if errors.As(err, &rejected) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusConflict)
+					_ = json.NewEncoder(w).Encode(rejected)
+					return
+				}
 				if msg, ok := badRequestMessage(err); ok {
 					http.Error(w, msg, http.StatusBadRequest)
 					return
