@@ -529,3 +529,18 @@ All commands ran with `TMPDIR` under the review folder and a throwaway `HOME` fr
 ## lyric · 2026-11-27 06:56
 
 FT191 先不 ship
+
+
+## lyric · 2026-11-27 07:07
+
+懂了。保持吧。ship FT191
+
+## factory · 2026-11-27 07:07
+
+Shipped FT191 on the owner's explicit approval, superseding the earlier hold. Independent desktop proxy configuration file retained unchanged.
+
+- Merge: `289c27b31a72d3bee399dd0bb7c809cce7254789` into `master`.
+- Tag: `v0.3.140`. Master and tag pushed atomically.
+- Merged-base checks passed: configured Go formatting/vet/tests; cargo test --locked (98 unit + 1 integration passed, 5 ignored); nsh check; Console parallel script (174 files, 0 failed, one file passed its solo retry).
+- No installs. Native UI, real proxy, real secret-store writes, macOS and Windows were not exercised. Existing P2 credential-persistence and P3 redirect-error findings remain unchanged.
+- No linked GitHub issues or PRs to close. Feature branch retained (ship clean not configured).
