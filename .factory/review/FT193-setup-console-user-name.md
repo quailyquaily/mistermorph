@@ -1,3 +1,7 @@
+---
+branch: factory/FT193-setup-console-user-name
+round: 1
+---
 # Ask how to address the user before the existing Setup steps
 
 ## factory · 2026-11-27 07:37
@@ -30,3 +34,35 @@ Out of scope: a profile-management product, multi-user accounts, per-Agent nickn
 - Test empty, Unicode-whitespace-only, surrounding whitespace, internal spaces, CJK/emoji, 80/81-code-point values, line breaks/control characters and markup-looking text. Client and server agree; direct invalid API writes fail without changing the prior value; markup displays literally.
 - Save errors preserve input, stay on the page and can be retried. Unauthenticated writes are rejected under existing auth rules. A name-only save leaves stable IDs, credentials, unrelated settings and Agent persona/name/avatar/soul unchanged.
 - Cover persistence/restart and normal/Solo submission/history in Go tests; cover wizard navigation, validation, fallback and affected labels in Console tests. Check desktop and 360/390pt mobile with keyboard, light/dark and en/zh/ja labels. During implementation run configured Go checks, nsh check and web/console-nsh/scripts/test.sh; this intake performs no implementation or build/review/ship run.
+
+## factory · plan · 2026-11-27 08:55
+
+Behaviour
+- Add a first, localized human-name Setup stage, with load, validation, explicit confirmed save, retained input on error and safe retry. Keep fresh direct/resumed routes from skipping it while preserving configured-install and integrity-repair behavior.
+- Persist console.user_name with existing configstore conventions; read it through authenticated Console APIs and resolve current submission identity from the same server-owned source. Preserve stable identifiers and historical snapshots; fallback to Console User when absent.
+- Normalize Unicode surrounding whitespace and validate 1–80 code points, no line breaks or controls, in client and server. Render literal text. Update current-user TODO labels immediately after save.
+Scope
+- Console config/settings/schema/example, authenticated profile read/write, ordinary/Solo submission metadata and chathistory projections, Setup routing/state/UI/locales and regression tests.
+- No Agent identity changes, multi-user system, new profile Settings page or historical rewrites. No FT192 dependency.
+Decisions
+- Use a narrow console.user_name persisted setting, not persona or browser storage. Keep existing account/auth/routing identifiers. Retain Console User for missing legacy names. Follow existing API omission semantics so name-only writes cannot modify other settings.
+- Apply the actual repository-pinned nsh version (AGENTS.md says 0.6.0), not the stale version mentioned in factory config.
+Checking
+- Go table tests for normalization, invalid writes, auth, unrelated-setting preservation, durable reload, ordinary/Solo inbound/conversation/history snapshots and legacy fallback.
+- Console tests for navigation/resume/direct-route/repair, validation including code-point boundaries and Unicode, failed-save retention/retry, text rendering and TODO labels; en/zh/ja labels.
+- Run gofmt cleanliness, go vet ./..., go test ./..., nsh check and scripts/test.sh. Use throwaway HOME and XDG/cache directories for scripted tests. Check UI sizes/themes/keyboard if a browser is available; explicitly report any visual checks not performed.
+
+## factory · 2026-11-27 08:55
+Built at 691189af (four topic commits from 289c27b3). Added authenticated, configstore-backed console.user_name; localized first Setup name page; validation and explicit-save retry; ordinary/Solo submission, inbound and history snapshot identity; current-user TODO labels. Stable IDs, authentication account and Agent identity remain unchanged. Historical snapshots are preserved with legacy Console User fallback.
+
+Explicit generic Setup re-entry starts at the prefilled user page; automatic configured-install routing remains unblocked, unfinished setup resumes, and legitimate repair routes are preserved. CLI set (including parent object), import and edit normalize/validate names. Invalid hand-edited legacy values fall back on read. Older servers without the new auth/me property retain three-stage compatibility.
+
+Checks: manager independently passed gofmt cleanliness, go vet ./... and go test ./... on final head. Claude Code passed nsh check (repository-pinned 0.6.0) and all 175 Console test files on final head. Added Go persistence/restart, auth, validation, ordinary/Solo/history and CLI-write tests; Console setup routing, failed-save retry, Unicode validation and labels tests.
+
+Installs: none. Initial UI checked in headless Chrome with stubbed API at desktop 1280x800 and mobile 390x844/360x740, light/dark, en/zh/ja, keyboard Enter, Back, failed save and literal markup rendering. Final re-entry routing tested headlessly; visual probe not repeated after routing-only changes. Not checked: real mobile devices, desktop app window, on-screen keyboard overlap, screen readers or live-server browser end-to-end.
+
+Review attention: FT192 is now ready but is not in the base; its SETUP_REENTRY_FIRST_STAGE must become user when integrating both, with likely Setup/locales conflicts. Runtime TODO API chat_options names still carry the old fallback and are relabeled by Console. Bulk template/legacy-state-copy writers are not validated at write time; read fallback remains. Review these against intake scope.
+
+Claude reported an unsolicited auto-memory write outside the run directory during its first call, then stopped further memory writes when instructed. Harness task logs were written outside dir under its shared temporary directory; tracked for owner inspection, not deleted. No unpinned installs.
+
+Move: new/ → review/; ready for independent review, not merged or shipped.
