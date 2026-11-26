@@ -78,6 +78,19 @@ function setupStagePath(stage, endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
   return endpointRoutePath(endpointRef, "/setup/llm");
 }
 
+// Setup's entry, /setup, opened by a person starts at the first page (pages/setup/setup-state.ts).
+// A flow that only comes back to Setup, as a finished repair does, marks its link: it goes on at
+// the first unfinished step, or the last page when nothing is left.
+const SETUP_RESUME_QUERY = "resume";
+
+function setupResumePath(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
+  return `${endpointRoutePath(endpointRef, "/setup")}?${SETUP_RESUME_QUERY}=1`;
+}
+
+function isSetupResumeRoute(routeLike) {
+  return typeof routeLike?.query?.[SETUP_RESUME_QUERY] === "string" && routeLike.query[SETUP_RESUME_QUERY] !== "";
+}
+
 async function fetchConsoleSetupIntegrity(options = {}) {
   const endpointRef = String(options.endpointRef || "").trim() || CONSOLE_LOCAL_ENDPOINT_REF;
   return loadResource(
@@ -399,8 +412,11 @@ export {
   fetchConsoleSetupIntegrity,
   invalidateConsoleSetupReadiness,
   isAllowedRepairSetupRoute,
+  isSetupResumeRoute,
   isSetupStageBeforeUserName,
   repairRouteForKey,
   resolveConsoleSetupStage,
+  setupResumePath,
   setupStagePath,
+  SETUP_RESUME_QUERY,
 };

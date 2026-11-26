@@ -314,13 +314,17 @@ test("a console set up before the name existed is not sent to Setup, and can add
   expect(app.shows("id:setup-page")).toBe(false);
   expect(writes(calls).length).toBe(0);
 
-  // Setup, opened on purpose, lists the name as not set; its pencil opens the name page.
+  // The last page lists the name as not set.
+  const done = await openConsole({ location: "/e/default/setup/done", api });
+  await done.app.waitFor("id:setup-stage-done");
+  await done.app.waitFor("id:setup-done-value-user >> text:Not set");
+  // Setup, opened on purpose, starts at the name page.
   const opened = await openConsole({ location: "/e/default/setup", api });
-  await opened.app.waitFor("id:setup-stage-done");
-  await opened.app.waitFor("id:setup-done-value-user >> text:Not set");
-  await opened.app.press("id:setup-done-edit-user");
   await opened.app.waitFor("id:setup-stage-user");
+  expect(lastLocation(opened.app).startsWith("/e/default/setup/user")).toBe(true);
+  await opened.app.waitFor("text:/setup // step 1/i");
   expect(opened.app.value("id:setup-user-name") || "").toBe("");
+  expect(opened.app.enabled("id:setup-submit")).toBe(false);
   await opened.app.type("id:setup-user-name", "Lyra");
   await opened.app.press("id:setup-submit");
   // The steps follow in order, each with what is saved.
@@ -328,6 +332,54 @@ test("a console set up before the name existed is not sent to Setup, and can add
   expect(state.userName).toBe("Lyra");
   // Nothing but the name was written.
   expect(writes(opened.calls).map((call) => `${call.method} ${call.path}`)).toEqual(["PUT /settings/console"]);
+});
+
+for (const entry of ["/e/default/setup", "/setup"]) {
+  test(`Setup opened again at ${entry} on a finished console starts at the name page with the saved name`, async () => {
+    const { state, api } = readyConsole({ userName: "小明 🙂" });
+    const { app, calls } = await openConsole({ location: entry, api });
+    await app.waitFor("id:setup-stage-user");
+    expect(lastLocation(app).startsWith("/e/default/setup/user")).toBe(true);
+    expect(lastLocation(app).includes("resume")).toBe(false);
+    await app.waitFor("text:/setup // step 1/i");
+    await app.waitUntil(() => app.value("id:setup-user-name") === "小明 🙂");
+    // Opening it saved nothing.
+    expect(writes(calls).length).toBe(0);
+    // Continue with the name as it is: the same name again, and on through the saved steps.
+    await app.press("id:setup-submit");
+    await app.waitFor("id:setup-stage-llm");
+    await app.waitFor("text:/setup // step 2/i");
+    await app.waitUntil(() => app.value("id:setup-model") === "gpt-test");
+    expect(state.consolePuts).toEqual([{ config_changes: { [NAME_KEY]: "小明 🙂" } }]);
+    expect(state.userName).toBe("小明 🙂");
+    expect(state.identity?.name).toBe("Morph");
+    expect(writes(calls).map((call) => `${call.method} ${call.path}`)).toEqual(["PUT /settings/console"]);
+  });
+}
+
+test("a finished console is still not sent to Setup by itself, with or without a saved name", async () => {
+  for (const userName of ["", "Lyra"]) {
+    const { api } = readyConsole({ userName });
+    for (const location of ["/", "/e/default/chat", "/e/default/todo"]) {
+      const { app, calls } = await openConsole({ location, api });
+      await app.waitFor("id:nav-todo");
+      expect(app.shows("id:setup-page")).toBe(false);
+      expect(lastLocation(app).includes("/setup")).toBe(false);
+      expect(writes(calls).length).toBe(0);
+    }
+  }
+});
+
+test("Setup opened at its entry while unfinished goes on where it stopped, not back to the name", async () => {
+  const model = nameConsole({ userName: "Lyra" });
+  const first = await openConsole({ location: "/e/default/setup", api: model.api });
+  await first.app.waitFor("id:setup-stage-llm");
+  const persona = nameConsole({ userName: "Lyra", configured: true });
+  const second = await openConsole({ location: "/e/default/setup", api: persona.api });
+  await second.app.waitFor("id:setup-stage-persona");
+  const soul = nameConsole({ userName: "Lyra", configured: true, identity: { name: "Morph", creature: "", vibe: "", emoji: "" } });
+  const third = await openConsole({ location: "/e/default/setup", api: soul.api });
+  await third.app.waitFor("id:setup-stage-soul");
 });
 
 test("the name page opened again shows the saved name, and leaving without Continue saves nothing", async () => {
@@ -388,6 +440,39 @@ test("a repair of one step is not held up by a missing name", async () => {
   const other = await openConsole({ location: "/e/default/setup/user", api });
   await other.app.waitUntil(() => lastLocation(other.app).startsWith("/e/default/troubleshooting"));
   expect(other.app.shows("id:setup-stage-user")).toBe(false);
+});
+
+test("a finished repair comes back to Setup's last page, not to the name page", async () => {
+  // The identity is damaged until the repair saves it.
+  let damaged = true;
+  const { state, api } = readyConsole(
+    { userName: "Lyra" },
+    {
+      "GET /setup/integrity": () => ({
+        body: { items: damaged ? [{ key: "identity", stage: "persona", status: "malformed", path: "/state/identity.yaml" }] : [] },
+      }),
+    },
+  );
+  const put = api["PUT /proxy:/persona/identity"];
+  api["PUT /proxy:/persona/identity"] = (request: ApiRequest) => {
+    damaged = false;
+    return put(request);
+  };
+  const { app } = await openConsole({ location: "/e/default/setup/persona?repair=identity", api });
+  await app.waitFor("id:setup-stage-persona");
+  await app.waitUntil(() => app.value("id:setup-persona-name") === "Morph");
+  await app.clear("id:setup-persona-name");
+  await app.type("id:setup-persona-name", "Fixed");
+  await app.press("id:setup-submit");
+  await app.waitFor("id:setup-stage-done");
+  expect(lastLocation(app).startsWith("/e/default/setup/done")).toBe(true);
+  expect(lastLocation(app).includes("resume")).toBe(false);
+  expect(state.identity?.name).toBe("Fixed");
+  expect(state.consolePuts.length).toBe(0);
+  // Troubleshooting with nothing left to fix does the same.
+  const clean = await openConsole({ location: "/e/default/troubleshooting", api });
+  await clean.app.waitFor("id:setup-stage-done");
+  expect(clean.app.shows("id:setup-stage-user")).toBe(false);
 });
 
 /* ---------- what the page accepts ---------- */

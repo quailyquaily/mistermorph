@@ -47,7 +47,14 @@ import {
 import { pickRandomPersonaSeed } from "../../lib/core/persona-seeds.js";
 import { openReentrantDialog } from "../../lib/core/reentrant-dialog.js";
 import { llmSecretConfigPath } from "../../lib/core/secret-storage.js";
-import { invalidateConsoleSetupReadiness, resolveConsoleSetupStage, setupStagePath } from "../../lib/core/setup.js";
+import {
+  invalidateConsoleSetupReadiness,
+  isSetupResumeRoute,
+  resolveConsoleSetupStage,
+  SETUP_RESUME_QUERY,
+  setupResumePath,
+  setupStagePath,
+} from "../../lib/core/setup.js";
 import {
   OPENAI_COMPATIBLE_API_BASE_OPTIONS,
   normalizeSetupProviderChoice,
@@ -773,9 +780,15 @@ export function useSetup() {
       await loadEndpoints();
     }
     if (currentPagePath === "/setup") {
+      // Setup's entry. Unfinished, it goes on at its first unfinished step (the name page while no
+      // name is saved). Finished and opened by a person, it starts over at the name page, with the
+      // saved name to edit; a flow that only comes back here (a finished repair) and a server that
+      // keeps no name get the last page.
       const setupState = await resolveConsoleSetupStage(endpointState.items, { endpointRef });
-      const target = setupStagePath(setupState.stage === "ready" ? "done" : setupState.stage, endpointRef);
-      await replaceRoute(target, route.query);
+      const { [SETUP_RESUME_QUERY]: _resume, ...query } = route.query;
+      const readyStage: SetupStage = !isSetupResumeRoute(route) && consoleUserNameSupported() ? "user" : "done";
+      const target = setupStagePath(setupState.stage === "ready" ? readyStage : setupState.stage, endpointRef);
+      await replaceRoute(target, query);
       return;
     }
     if (options.onReady === "done" && currentPagePath !== "/setup/done") {
@@ -793,7 +806,7 @@ export function useSetup() {
   async function finishStep() {
     const endpointRef = routeEndpointRef();
     if (untracked(inRepairMode)) {
-      await replaceRoute(endpointRoutePath(endpointRef, "/setup"), {});
+      await navigate(setupResumePath(endpointRef), { replace: true });
       return;
     }
     const next = untracked(nextStage);
