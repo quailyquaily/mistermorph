@@ -14,6 +14,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configstore"
+	"github.com/quailyquaily/mistermorph/internal/consoleuser"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/spf13/cobra"
@@ -176,8 +177,18 @@ func newSetCmd() *cobra.Command {
 				if len(value.Content) > 0 {
 					node = value.Content[0]
 				}
+				if isConsoleUserNamePath(parts) {
+					// The name is saved here by the rule the Console saves it by.
+					if node, err = consoleUserNameNode(node, false); err != nil {
+						return err
+					}
+				}
 				configbootstrap.DeleteMappingKey(parent, key)
 				parent.Content = append(parent.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, node)
+			}
+			// Also when the name came inside a larger value (config set console '{...}').
+			if _, err := checkConsoleUserName(doc, nil); err != nil {
+				return err
 			}
 			out, err := configbootstrap.MarshalDocument(doc)
 			if err != nil {
@@ -228,8 +239,67 @@ func ImportDocument(path string, data []byte) error {
 		if len(doc.Content) > 0 && doc.Content[0].Kind != yaml.MappingNode && doc.Content[0].ShortTag() != "!!null" {
 			return fmt.Errorf("config must be a mapping")
 		}
+		checked, err := checkConsoleUserName(&doc, data)
+		if err != nil {
+			return err
+		}
+		data = checked
 	}
 	return configstore.WriteFileBy(path, data, configstore.ByImport)
+}
+
+func isConsoleUserNamePath(parts []string) bool {
+	return strings.EqualFold(strings.Join(parts, "."), consoleuser.ConfigKey)
+}
+
+// consoleUserNameNode is node as console.user_name is saved: a string, by the rule every save of
+// the name goes by (consoleuser.NormalizeName). An empty value, which means no name, passes only
+// with allowEmpty: a whole config may carry the key empty, as the template does.
+func consoleUserNameNode(node *yaml.Node, allowEmpty bool) (*yaml.Node, error) {
+	if node == nil || node.Kind != yaml.ScalarNode {
+		return nil, fmt.Errorf("%s: must be text", consoleuser.ConfigKey)
+	}
+	if allowEmpty && (node.Value == "" || node.ShortTag() == "!!null") {
+		return node, nil
+	}
+	name, err := consoleuser.NormalizeName(node.Value)
+	if err != nil {
+		if node.Value == "" {
+			return nil, fmt.Errorf("%s: %w (use --unset to remove the name)", consoleuser.ConfigKey, err)
+		}
+		return nil, fmt.Errorf("%s: %w", consoleuser.ConfigKey, err)
+	}
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name}, nil
+}
+
+// checkConsoleUserName refuses a config whose console.user_name is not a name, and gives the
+// config with the name as it is saved (the white space around it dropped). A config without the
+// key, or with a name already in that form, comes back as it was given.
+func checkConsoleUserName(doc *yaml.Node, data []byte) ([]byte, error) {
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return data, nil
+	}
+	parts := strings.Split(consoleuser.ConfigKey, ".")
+	parent := doc.Content[0]
+	for _, part := range parts[:len(parts)-1] {
+		parent = configbootstrap.FindMappingValue(parent, part)
+		if parent == nil || parent.Kind != yaml.MappingNode {
+			return data, nil
+		}
+	}
+	current := configbootstrap.FindMappingValue(parent, parts[len(parts)-1])
+	if current == nil {
+		return data, nil
+	}
+	checked, err := consoleUserNameNode(current, true)
+	if err != nil {
+		return nil, err
+	}
+	if checked == current || checked.Value == current.Value {
+		return data, nil
+	}
+	current.Tag, current.Style, current.Value = checked.Tag, 0, checked.Value
+	return configbootstrap.MarshalDocument(doc)
 }
 
 func newImportCmd() *cobra.Command {
