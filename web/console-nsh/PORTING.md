@@ -536,6 +536,12 @@ Headless tests prove behaviour, not the look.
   any other nsh version. Headless and browser runs never use that code: the JDK test
   (`ScrollClaimTest`) drives the decision through a model of Android's dispatch. See
   `docs/feat/feat_20261125_android_nested_scroll.md`.
+- The desktop runtime's parts are cargo features of `nsh-platform-gpui`, on by default: `net`
+  (fetch), `websocket`, `svg`, `shader`, `crypto`, `zlib` and the base components. 0.5.0 built
+  them in. `desktop/nsh/Cargo.toml` turns the defaults off (no `webview`, no nsh `updater`), so
+  it names every other one: with only `js`, from v0.3.119 to v0.3.136 every fetch failed with "this
+  host has no network stack", the desktop app stayed on the login page even without a password,
+  and SVG images were blank. Nothing headless or in a browser shows it; run the built app.
 - `Picker.pickFiles` leaves a file over 512 MiB unread (`file: null`, `status: "tooLarge"`);
   `lib/mobileHost.ts` leaves it out.
 - A tooltip goes out over a few frames as the next one comes in, so for a moment both show.

@@ -31,7 +31,25 @@ mime_guess = "2"
 notify-rust = "4"
 nsh-base = "=0.6.0"
 nsh-engine = { version = "=0.6.0", default-features = false }
-nsh-platform-gpui = { version = "=0.6.0", default-features = false, features = ["js"] }
+# Since 0.6.0 the runtime's parts are features, on by default; 0.5.0 built them in. Without `net`
+# the Console's fetch fails ("this host has no network stack") and the app never logs in. All the
+# defaults but `webview` (the app has none) and `updater` (src/update.rs is the app's own).
+nsh-platform-gpui = { version = "=0.6.0", default-features = false, features = [
+    "js",
+    "net",
+    "websocket",
+    "svg",
+    "shader",
+    "crypto",
+    "zlib",
+    "editor",
+    "emoji-picker",
+    "highlight",
+    "math",
+    "plot",
+    "rich-editor",
+    "term",
+] }
 gpui_platform = { package = "gpui-fast-platform", version = "0.1.16", default-features = false, features = ["font-kit", "wayland", "x11"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -44,6 +62,10 @@ ureq = "3"
 url = "2"
 yaml-rust2 = "0.10"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+# tests/nsh_features.rs reads the manifests; already in the lock via GPUI.
+toml = "0.8"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
