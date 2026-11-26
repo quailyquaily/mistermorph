@@ -285,6 +285,8 @@ func TestStreamResume(t *testing.T) {
 			return ok && !st.Connected
 		})
 		held, _ := receiving(b)
+		// B sees the drop before the relay may: under load b2 came while b1 was still a member.
+		waitLeftRelay(t, relay, b.InstanceID())
 		attach(t, ctx, b, relay, "b2")
 		if res := <-results; res.Status != StatusDelivered {
 			t.Fatalf("result = %+v", res)
@@ -349,6 +351,7 @@ func TestStreamResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer reopened.Close()
+		waitLeftRelay(t, relay, reopened.InstanceID())
 		attach(t, ctx, reopened, relay, "a2")
 		waitFor(t, "delivery after the restart", func() bool { return got.count() == 1 })
 		saved, _ := os.ReadFile(got.last().Attachments[0].Path)

@@ -49,14 +49,7 @@ func TestStreamResumeAfterSenderReconnect(t *testing.T) {
 					return st.Bytes >= 2*streamChunkSize
 				})
 				aCancel()
-				waitFor(t, "the sender left the relay", func() bool {
-					for _, p := range relay.Members() {
-						if p.InstanceID == a.InstanceID() {
-							return false
-						}
-					}
-					return true
-				})
+				waitLeftRelay(t, relay, a.InstanceID())
 				if route == "in process" {
 					attach(t, ctx, a, relay, "a2")
 				} else {

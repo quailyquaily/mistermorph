@@ -47,6 +47,21 @@ func waitFor(t testing.TB, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
+// waitLeftRelay waits until the relay has dropped instanceID's connection. A node that the test
+// attaches again before then is refused as a duplicate (attach tries once, unlike a runtime's
+// reconnect loop), and nothing reconnects it.
+func waitLeftRelay(t testing.TB, relay *Relay, instanceID string) {
+	t.Helper()
+	waitFor(t, "the relay to drop "+instanceID, func() bool {
+		for _, p := range relay.Members() {
+			if p.InstanceID == instanceID {
+				return false
+			}
+		}
+		return true
+	})
+}
+
 func envelope(text string) busruntime.MessageEnvelope {
 	return busruntime.MessageEnvelope{Text: text, SessionID: "0194d8f0-0000-7000-8000-000000000000"}
 }
