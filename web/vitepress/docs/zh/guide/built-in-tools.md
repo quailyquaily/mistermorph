@@ -93,18 +93,19 @@ Shell 的默认启用状态按平台区分：
 
 ### `coder`
 
-用本机 Codex 或 Claude Code CLI 运行 coding 子任务。CLI stdout 会按 streaming JSON/JSONL 读取，文本增量会先作为 tool-output event 发出，结束后再返回 `SubtaskResult` envelope。
+用本机 Codex、Claude Code 或 Antigravity（`agy`）CLI 运行 coding 子任务。每个 CLI 都以 stdio 上的 session 运行：一个进程依次接收多个任务；它工作时报告的内容会先作为 tool-output event 发出，结束后再返回 `SubtaskResult` envelope。不使用终端，也不读取 CLI 的屏幕。
 
-关键限制：默认通过 `tools.coder.enabled=false` 关闭，但 `$coder` 可以只为当前任务暴露它；只支持 `coder=codex` 或 `coder=claude`；本地 CLI 会以 bypass approval / permission 的方式运行。如果 CLI 不在服务进程 PATH 里，设置 `tools.coder.path_extra`。
+关键限制：默认通过 `tools.coder.enabled=false` 关闭，但 `$coder` 可以只为当前任务暴露它；只支持 `coder=codex`、`coder=claude` 或 `coder=agy`；本地 CLI 会以 bypass approval / permission 的方式运行，只有 Console 例外：那里的 session 会请用户批准操作，除非 `tools.coder.bypass_approvals.codex`、`.claude` 或 `.agy` 为 true。Console 对话会在任务之间保留 session；其他运行里 session 只存在于一次 run。在 Console 之外，CLI 自己提出的问题会让任务失败，问题文本就是错误信息。如果 CLI 不在服务进程 PATH 里，设置 `tools.coder.path_extra`。
 
-- Codex 默认路径：`codex app-server`
-- Claude 默认路径：`claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`，task 通过 stdin 传入
+- Codex：`codex app-server`（stdio 上的 JSON-RPC）
+- Claude Code：`claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`；会询问的 Console session 加 `--permission-mode default`，其他情况加 `--dangerously-skip-permissions`；每个任务是 stdin 上的一条消息，关闭的 session 用 `--resume <uuid>` 重新打开
+- Antigravity：`agy acp`（stdio 上的 ACP），绕过审批时加 `--dangerously-skip-permissions`。`agy` 需要先登录：在终端里运行一次 `agy` 并登录。未登录时任务会立即失败并说明原因
 
-CLI 在独立的进程组中运行，取消时它启动的命令也会一并停止。
+CLI 在独立的进程组中运行，取消时它启动的命令也会一并停止。任务被取消或失败时会关闭 CLI 进程；同一对话的下一个任务会重新打开 session。
 
 聊天渠道（Telegram、Slack、Discord、LINE、Lark、Mixin 以及各类私信渠道）无法显示这些实时进度，因此 `coder` 运行超过 2 分钟时，会向对话发送一条简短的状态消息，之后每 5 分钟一条，直到结束，例如 "Claude Code is still working (12 min so far). Now: running a command."。消息只说明步骤类型，不包含命令、文件路径或输出。
 
-Codex / Claude Code 委托优先用它。
+Codex / Claude Code / Antigravity CLI 委托优先用它。
 
 ## 运行时工具
 

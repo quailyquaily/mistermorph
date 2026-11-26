@@ -12,13 +12,13 @@ Subagent は主に次のような場面で使います。
 - shell コマンドが長く、出力も多いので、親 loop から切り離したい。
 - 処理自体は複数ステップだが、内側の実行に許すツールを絞りたい。
 - 中間の生出力ではなく、最後に短い結果だけを親へ返したい。
-- 子タスクをローカル Codex または Claude Code CLI に委譲したい。
+- 子タスクをローカル Codex、Claude Code または Antigravity（`agy`）CLI に委譲したい。
 
 入口の選び方は次の通りです。
 
 - 1 本の明確な shell コマンドなら `bash.run_in_subtask=true`。
 - 内側の実行でもツール推論が必要なら `spawn`。
-- ローカル Codex / Claude Code に任せるなら `coder`。
+- ローカル Codex / Claude Code / Antigravity CLI に任せるなら `coder`。
 - 親がそのまま終えられる小さな 1 ステップ作業なら、無理に 1 層増やさない。
 
 ## Overview
@@ -28,7 +28,7 @@ Mistermorph には現在、三つの隔離タスク入口があります。
 | 入口 | もう一度 LLM loop を起こすか | 向いている場面 | 返り値 |
 |---|---|---|---|
 | `spawn` | 起こす | 内側の agent 側でもツール利用と推論が必要 | `SubtaskResult` JSON envelope |
-| `coder` | ローカル内側 Mister Morph loop は起こさず、Codex または Claude Code CLI を起動する | ローカル coding-agent CLI による子タスク | `SubtaskResult` JSON envelope |
+| `coder` | ローカル内側 Mister Morph loop は起こさず、Codex、Claude Code または Antigravity CLI を起動する | ローカル coding-agent CLI による子タスク | `SubtaskResult` JSON envelope |
 | `bash.run_in_subtask=true` | 起こさない | 1 本の shell コマンドを隔離して実行したい | `SubtaskResult` JSON envelope |
 
 共通点:
@@ -67,15 +67,16 @@ Mistermorph には現在、三つの隔離タスク入口があります。
 
 引数:
 
-- `coder`: 必須。`codex` または `claude`
+- `coder`: 必須。`codex`、`claude` または `agy`（Antigravity CLI）
 - `task`: 必須。coding CLI へのプロンプト
 - `cwd`: 任意。作業ディレクトリ上書き
 
 現在の挙動:
 
-- `codex` は `codex app-server` を実行します
-- `claude` は `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>` を実行し、task を stdin で渡します
-- stdout は streaming JSON/JSONL として解析され、テキスト差分は tool-output event として送られます
+- 各 CLI は stdio 上の session として、どのランタイムでも同じ方法で動きます。`codex` は `codex app-server`、`claude` は `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`、`agy` は `agy acp` です
+- session はタスクを順に受け取る 1 つの CLI プロセスです。Console の会話ではその会話の間、それ以外では 1 回の run の間だけ続きます
+- ユーザーに操作の承認を求め、CLI 自身の質問を表示するのは Console の会話の session だけです。それ以外の run は承認をバイパスし（Claude Code: `--dangerously-skip-permissions`）、そこで CLI が質問するとタスクはその質問文をエラーとして失敗します
+- CLI が作業中に報告した内容は tool-output event として送られます。端末は使わず、CLI の画面も読みません
 - 最終結果は `spawn` と同じ `SubtaskResult` envelope に正規化されます
 - 分離した子 run の中では `coder` は再公開されません
 
@@ -179,8 +180,9 @@ Call the bash tool and set `run_in_subtask` to true. Run `sleep 1; echo SUBAGENT
 ### 設定と組み込み
 
 - `tools.spawn.enabled` が制御するのは明示的な `spawn` ツール入口だけです。
-- `tools.coder.enabled` は明示的な `coder` ツール入口をデフォルトで公開するかを制御します。Codex / Claude Code 子プロセスは approval と permission prompt をバイパスするため、デフォルトは無効です。`$coder` ならそのタスクだけに公開できます。
-- `tools.coder.path_extra` は、`coder` が `codex` または `claude` を起動するときだけ PATH に追加するディレクトリです。
+- `tools.coder.enabled` は明示的な `coder` ツール入口をデフォルトで公開するかを制御します。Codex / Claude Code / Antigravity CLI 子プロセスは approval と permission prompt をバイパスするため、デフォルトは無効です。`$coder` ならそのタスクだけに公開できます。
+- `tools.coder.path_extra` は、`coder` が `codex`、`claude` または `agy` を起動するときだけ PATH に追加するディレクトリです。
+- `tools.coder.bypass_approvals.codex`、`.claude`、`.agy`（既定は false）は Console にだけ効きます。Console では coder の session がユーザーに操作の承認を求めます。true にすると、その CLI を承認プロンプトも sandbox もなしで起動します（Codex: approval policy `never`、sandbox `danger-full-access`。Claude Code と Antigravity CLI: `--dangerously-skip-permissions`）。CLI 自身の質問は引き続き表示されます。
 - `tools.spawn.enabled=false` でも、`bash.run_in_subtask=true` のような direct path は動きます。
 - `integration.Config.BuiltinToolNames` には `spawn`、`coder` を含めることも外すこともできます。
 - `agent.New(...)` で直接 engine を作る場合、`spawn` はデフォルトで有効、`coder` はデフォルトで無効です。必要なら `agent.WithSpawnToolEnabled(...)`、`agent.WithCoderToolEnabled(...)` を使います。

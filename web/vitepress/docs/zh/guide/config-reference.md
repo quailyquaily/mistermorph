@@ -131,8 +131,9 @@ Shell 默认值按平台区分：
 | `tools.write_file.enabled` | 是否启用 `write_file`。 |
 | `tools.write_file.max_bytes` | `write_file` 单次最大写入字节数。 |
 | `tools.spawn.enabled` | 是否启用 `spawn` 工具。它只控制显式 `spawn` 入口，不影响 subtask 运行机制本身。 |
-| `tools.coder.enabled` | 是否启用 `coder` 工具。默认关闭，因为 Codex / Claude Code 子进程会绕过 approval 和 permission prompt。 |
-| `tools.coder.path_extra` | 只给 `coder` 启动 `codex` / `claude` 时追加的 PATH 目录列表。 |
+| `tools.coder.enabled` | 是否启用 `coder` 工具。默认关闭，因为 Codex / Claude Code / Antigravity CLI 子进程会绕过 approval 和 permission prompt（Console 的 session 除外，见下）。 |
+| `tools.coder.path_extra` | 只给 `coder` 启动 `codex` / `claude` / `agy` 时追加的 PATH 目录列表。 |
+| `tools.coder.bypass_approvals.codex` / `.claude` / `.agy` | 只作用于 Console：为 true 时对应 CLI 的 session 不再请用户批准操作。默认 false。 |
 | `tools.contacts_send.enabled` | 是否启用 `contacts_send`。 |
 | `tools.todo_update.enabled` | 是否启用 `todo_update`。 |
 | `tools.plan_create.enabled` | 是否启用 `plan_create`。 |

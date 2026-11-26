@@ -92,17 +92,18 @@ Web 検索を行い、構造化された検索結果を返します。手がか�
 
 ### `coder`
 
-ローカルの Codex または Claude Code CLI で coding サブタスクを実行します。CLI stdout は streaming JSON/JSONL として読み、テキスト差分は tool-output event として流し、最後に `SubtaskResult` envelope を返します。
+ローカルの Codex、Claude Code または Antigravity（`agy`）CLI で coding サブタスクを実行します。各 CLI は stdio 上の session として動きます。1 つのプロセスがタスクを順に受け取り、作業中に報告した内容は tool-output event として流し、最後に `SubtaskResult` envelope を返します。端末は使わず、CLI の画面も読みません。
 
-- 主な制約: デフォルトでは `tools.coder.enabled=false` で無効ですが、`$coder` でそのタスクだけに公開できます。`coder=codex` または `coder=claude` だけを受け付けます。ローカル CLI は approval / permission をバイパスして実行されます。CLI がサービスの PATH 外にある場合は `tools.coder.path_extra` を設定します。
-- Codex の既定: `codex app-server`
-- Claude の既定: `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`（task は stdin で渡します）
+- 主な制約: デフォルトでは `tools.coder.enabled=false` で無効ですが、`$coder` でそのタスクだけに公開できます。`coder=codex`、`coder=claude`、`coder=agy` だけを受け付けます。ローカル CLI は approval / permission をバイパスして実行されます。例外は Console で、そこでは `tools.coder.bypass_approvals.codex`、`.claude`、`.agy` が true でない限り、session がユーザーに操作の承認を求めます。Console の会話はタスクをまたいで session を保持し、それ以外では session は 1 回の run の間だけ続きます。Console 以外で CLI 自身が質問した場合、タスクはその質問文をエラーとして失敗します。CLI がサービスの PATH 外にある場合は `tools.coder.path_extra` を設定します。
+- Codex: `codex app-server`（stdio 上の JSON-RPC）
+- Claude Code: `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`。承認を求める Console session では `--permission-mode default`、それ以外では `--dangerously-skip-permissions` を付けます。各タスクは stdin の 1 メッセージで、閉じた session は `--resume <uuid>` で開き直します
+- Antigravity: `agy acp`（stdio 上の ACP）。承認をバイパスするときは `--dangerously-skip-permissions` を付けます。`agy` は事前のサインインが必要です。端末で一度 `agy` を実行してサインインしてください。未サインインのタスクはすぐに失敗し、その旨を伝えます
 
-CLI は独自のプロセスグループで実行されるため、キャンセル時には CLI が起動したコマンドも停止します。
+CLI は独自のプロセスグループで実行されるため、キャンセル時には CLI が起動したコマンドも停止します。キャンセルまたは失敗したタスクは CLI のプロセスを閉じ、同じ会話の次のタスクが session を開き直します。
 
 チャットチャネル（Telegram、Slack、Discord、LINE、Lark、Mixin、各種 DM チャネル）ではこのライブ進捗を表示できないため、`coder` の実行が 2 分を超えると会話に短い状況メッセージを送り、終わるまで 5 分ごとに続けます（例: "Claude Code is still working (12 min so far). Now: running a command."）。メッセージに含まれるのはステップの種類だけで、コマンド、ファイルパス、出力は含みません。
 
-Codex / Claude Code への委譲にはこちらを使います。
+Codex / Claude Code / Antigravity CLI への委譲にはこちらを使います。
 
 ## ランタイムツール
 
