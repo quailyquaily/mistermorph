@@ -1,3 +1,7 @@
+---
+branch: factory/FT191-desktop-network-proxy
+round: 1
+---
 # Desktop: a network proxy setting (HTTP and SOCKS5) for the app's own requests
 
 ## factory · 2026-11-27 01:06
@@ -278,3 +282,140 @@ Tests use fake HTTP and SOCKS5 proxies on loopback that record what they are ask
 - Windows, where variable names are case-insensitive, and macOS.
 - Whether chat Markdown can show remote images; if it can, row 34 covers them through the same loader.
 - Whether any backend log line prints its environment or a proxy URL.
+
+## factory · plan · 2026-11-27 01:54
+
+### Behaviour
+Capture the inherited environment before threads, load saved desktop proxy state, then apply an immutable launch route. First use follows inherited variables; explicit mode owns the standard variables and requires the backend proxy marker; corrupt or inaccessible saved state blocks all networking. Save validates fields and uses OS secret storage with no plaintext fallback, changes persistence only, and reports pending until a full quit/reopen. Loopback shell traffic always uses a no-proxy agent. Required-proxy url_fetch validates every hop without relaxing guards or permitting direct fallback. Redact known password forms across backend output chunks and diagnostics.
+
+### Scope
+Implement the item's complete desktop Rust/Console/Go url_fetch/docs scope and regression criteria. Do not change guard defaults, subprocess injection, remote Console/browser behaviour or add automatic restart. Keep existing first-use and non-marker url_fetch behaviour.
+
+### Decisions
+Use MISTER_MORPH_DESKTOP_PROXY_REQUIRED=1 for the backend marker. Put cohesive launch state, validation, persistence and secret-store abstraction in a desktop proxy module; expose only sanitized host DTOs. Use platform-supported credential-store crate and mock credential storage for deterministic tests. Reuse existing dialog/confirmation primitives and all locale catalogs. Fail closed for unexpected persisted data and unsafe required-proxy routes. Report environment/platform limitations truthfully instead of claiming native UI checks.
+
+### Checking
+Add fake HTTP/SOCKS and table-driven tests for routing, auth encoding, environment casing and bypass, blocked startup, persistence/secret failure, pending/save/clear, no-fallback, redaction across chunks, required-proxy guards/auth/redirects, and subprocess non-injection. Run configured Go formatting/vet/tests, cargo test, nsh check and the Console parallel test script; inspect cargo tree ureq features before/after. Inspect UI only if a supported native session exists, otherwise explicitly record not viewed. Real macOS/Windows/Linux desktop and real proxy checks must be listed individually as not checked when unavailable.
+
+## factory · 2026-11-27 01:54
+
+# FT191 coder report: desktop network proxy (HTTP and SOCKS5)
+
+Branch `factory/FT191-desktop-network-proxy`, on `origin/master` = `098d31de` (no merge needed).
+
+Commits:
+
+- `c6e23dc0` feat(url_fetch): use the desktop's required proxy or refuse
+- `1707f05c` feat(desktop): a network proxy setting (HTTP and SOCKS5) for the app's own requests
+
+Nothing was pushed or fetched. `.github/workflows/`, `.factory/factory.toml`, `config.yaml` and `secrets/` are untouched. No config key was added, so `assets/config/config.example.yaml` is unchanged.
+
+## What changed
+
+### Desktop shell (`desktop/nsh`)
+
+- `src/proxy.rs` (new): the setting, its validation, the settings file, the three launch states (System default, explicit, blocked), the two environments, pending detection, save, "switch to System default".
+- `src/proxy_secret.rs` (new): the credential store behind a trait. The system store uses `keyring-core` with the macOS Keychain, Windows Credential Manager or Secret Service store; an in-memory store is used in tests.
+- `src/redact.rs` (new): the filter for the proxy password, on whole lines with carry-over between reads.
+- `src/main.rs`: the launch runs first in `main`, before `env_logger` and every thread: snapshot, load, set the process's variables once. `--check-update` in a blocked state prints the reason and exits with a failure, without a request. The backend is not started while blocked.
+- `src/backend.rs`: every backend environment comes from the launch (`BackendConfig.env`); `None` refuses the start before a binary is looked for or downloaded. The health check uses a client without a proxy. Backend output goes through the line filter.
+- `src/http.rs`: `agent` (proxy of the environment), `local_agent` (no proxy), `agent_for(url)` chosen by the target being loopback. All callers (`config.rs`, `files.rs`, `update.rs`, `backend.rs`) use it.
+- `src/shell.rs`: the blocked view (Quit, Open Log, "Switch to System default and quit" with a warning and a confirmation), and the startup error view naming the running proxy and offering the same switch.
+- `src/host.rs`: feature `networkProxy`, calls `morph.desktop.networkProxy.get` / `.set`.
+- `src/desktop_log.rs`, `src/startup_error.rs`, `src/paths.rs`: filter on every log line, `proxy` in the diagnostics, `network-proxy.json`.
+- `Cargo.toml` / `Cargo.lock`: ureq `socks-proxy`, the credential store crates.
+- `README.md`: files, host contract, a "Network proxy" section with the boundaries.
+
+### Console (`web/console-nsh`)
+
+- `components/settings/NetworkProxySetting.tsx` (new): the row and the dialog.
+- `lib/platform.ts`: `networkProxy()`, `saveNetworkProxy()`, `NetworkProxyError`.
+- `pages/settings/sections/GeneralSection.tsx`: the row, only when `hasFeature("networkProxy")`.
+- `lib/core/settings-search.js`, `pages/settings/SettingsPage.tsx`: Settings search finds the row only where it is shown.
+- `lib/i18n/index.js`: 43 strings in each of `en`, `zh`, `ja`.
+- `tests/network-proxy.test.tsx` (new), `tests/fixtures/integrations.tsx` (a `network-proxy` view).
+
+### Go core
+
+- `tools/builtin/url_fetch_required_proxy.go` (new) and a small hook in `url_fetch.go`. Nothing else in the core changed.
+- Tests: `url_fetch_required_proxy_test.go`, `desktop_proxy_env_test.go`, `fakeproxy_test.go`, `internal/shellenv/desktop_proxy_env_test.go`.
+
+### Docs (English)
+
+- `desktop/nsh/README.md`, `docs/app.md` (the desktop guide), `docs/tools.md`, `docs/security.md`.
+
+## Decisions
+
+- **Marker**: `MISTER_MORPH_DESKTOP_PROXY_REQUIRED=1`, as the plan names it.
+- **Host calls**: `morph.desktop.networkProxy.get` and `.set`. `set` answers `{ ok: false, error, fields | message }` instead of rejecting, because an nsh rejection carries only a string; `saveNetworkProxy` in `platform.ts` turns that into a thrown `NetworkProxyError` with per-field codes.
+- **Where the row is**: the item names `SettingsAppPanel.tsx`, but General shows that panel in a web browser only (it is the "install as an app" card). The row is its own component, mounted in General's card next to Session, shown by the feature.
+- **Clearing the password** is applied on Save (the dialog says so first), so Cancel discards it like every other edit.
+- **Kept password must exist**: saving an explicit setting that keeps a stored password checks the store. If the entry is gone the save is refused on the password field, since the next start would otherwise be blocked.
+- **Password with no user name**: refused on the password field, also when the user name is removed while a password is stored.
+- **A user name with an empty password** is written as `user:@host`, so both Go and ureq send the user name.
+- **Host**: saved lower-cased, IPv6 without brackets; a name ending in a numeric label is refused (it would be read as an address). Zone ids are refused.
+- **Settings file**: unknown mode or type values are a parse failure (blocked); unknown extra keys are tolerated.
+- **"Proxy variable inherited"** in System default means one of the six proxy names set to a non-empty value. The bypass list extended is `NO_PROXY` when set (even empty, as ureq reads it), else `no_proxy`.
+- **Fail closed in `url_fetch`**: with the marker and no proxy for a non-loopback destination (for example the variables are missing), the request is refused. A custom non-HTTP transport is refused too.
+- **Redaction** also covers Go's user-info and query encodings, lower-case hex, and URL-safe and unpadded Base64. A password of any length is redacted, so a very short one will mask unrelated text in the log.
+- **Removing the stored password** is best effort: the file stops naming it first; a store that cannot be reached leaves an entry nothing reads, and that is logged.
+- **Windows store crate** is used with its default features (the configuration its authors test).
+
+## Cargo feature evidence (`cargo tree -e features -i ureq`, in `desktop/nsh`)
+
+Full outputs: `ureq-features-before.txt` and `ureq-features-after.txt` beside this report.
+
+- Before (`098d31de`): `default`, `gzip`, `platform-verifier`, `_ring`, `_rustls`, `rustls`, `rustls-no-provider`, `rustls-webpki-roots`, `_tls`. No `socks-proxy`: the suspicion is confirmed.
+- After: the same plus `ureq feature "socks-proxy"`, requested by `mistermorph-desktop`. The tree still has one `ureq v3.5.1`, which `nsh-core` and `nsh-engine` use, so the feature holds for nsh's `fetch` and image loader too.
+- Consequence, as the item expected: an inherited `socks5://` variable, ignored before, is now honored in System default (tested: used, or an error, never direct).
+
+`Cargo.lock` gained `keyring-core`, `apple-native-keyring-store`, `windows-native-keyring-store`, `zbus-secret-service-keyring-store`, `secret-service`. Cargo also re-pointed several existing packages from `windows-sys` 0.52/0.59/0.60 to 0.61.2 when it resolved the new crates; that affects Windows builds only and was not built here.
+
+## Test outcomes
+
+All run with `TMPDIR` under the build's tmp folder and a throwaway `HOME` (with the `XDG_*` folders inside it).
+
+| Command | Result |
+| --- | --- |
+| `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` | exit 0; 172 packages `ok`, 0 failed (run on the committed tree) |
+| `cargo test --locked` in `desktop/nsh` | exit 0; 98 passed, 0 failed, 5 ignored (unit tests) and 1 passed (`tests/nsh_features.rs`). Base had 4 ignored; the fifth is the new read-only store probe |
+| `cargo build --locked` in `desktop/nsh` | builds, 0 warnings |
+| `nsh check` in `web/console-nsh` | exit 0, no findings |
+| `web/console-nsh/scripts/test.sh` | exit 0; 174 files, 0 failed, 273 s. `tests/chat-topic-drag.test.tsx` failed beside the others and passed on the script's own rerun; it does not touch this change |
+| `nsh test … tests/network-proxy.test.tsx` | 8 passed |
+
+Regression matrix coverage:
+
+- Rows 1–3, 5, 6, 18, 20–22, 24, 25 (core clients): `tools/builtin/desktop_proxy_env_test.go`, in a child process with the desktop's environment.
+- Rows 4–6, 11–13, 19–23, 34 (desktop client and nsh-style agents): `desktop/nsh/src/proxy/tests.rs`, in a child process.
+- Rows 7–9: `redact.rs` tests and `backend::tests::keeps_the_proxy_password_out_of_the_log`.
+- Rows 10, 14–17, 36–44, 46: `proxy/tests.rs`.
+- Rows 26–33: `url_fetch_required_proxy_test.go`.
+- Rows 36–38, 46 and criteria 5–6 on the Console side: `tests/network-proxy.test.tsx`.
+- Rows 47–48: `internal/shellenv/desktop_proxy_env_test.go`.
+
+## Limitations and what was not checked
+
+- **No native UI was viewed.** This machine has no display server for GPUI. The blocked view, the startup error view's new line and button, and the dialog in the real desktop window were not seen. The Console dialog was exercised headless with `nsh test` only; no screenshot was taken.
+- **macOS: not built, not run.** No Rust target is installed. The Keychain store code (`cfg(target_os = "macos")`) was written from the crate's source and not compiled.
+- **Windows: not built, not run.** The Credential Manager store code is not compiled; the case-insensitive handling of variable names (`is_name`) is untested; the `windows-sys` re-resolution in the lock is unbuilt.
+- **Linux desktop: not run as an app.** The crate builds and its tests pass, but the packaged app was not started, so rows 19, 35 and 45 were not observed in a running app (the app logging in through a proxied environment, the Console WebSocket, the startup error view).
+- **No real proxy and no real credentials** were used: fake HTTP and SOCKS5 proxies on loopback only.
+- **Credential store on Linux**: one read-only probe against this machine's Secret Service answered (available, no entry); with no session bus it reports unavailable with an error that holds no secret. Nothing was written to the real store. Saving, reading and deleting a real entry was not exercised.
+- **Launch-time store read and threads**: reading the password from the Secret Service happens before the process's variables are set, and its D-Bus client may leave a helper thread behind. Only an explicit setting with a stored password takes that path.
+- **Rows 24, 34, 35 are narrower than written.** Row 24 is one generic streamed HTTP response through the HTTP proxy with Go's default client, not an LLM provider or an MCP SSE client. Row 34 uses agents built the way nsh builds its own, not the Console's real skill preview or image loader. Row 35 was not tested: nsh's WebSocket has no proxy code and connects to loopback only.
+- **Rows 49 and 50** are documented, not tested: a coder session keeps its start environment; MCP stdio servers get the backend's environment (`internal/mcphost/host.go`).
+- **Row 45** is covered by unit tests of the diagnostics and the state, not by a failing start in a window.
+- **Remote images in chat Markdown**: not determined. Markdown renders through nsh's `TextView`; if it loads remote images it uses the same loader.
+- **Backend log lines**: a search of the Go sources found no code that logs its environment or a proxy URL. Error texts from third-party libraries were not audited; the log filter is the second line of defense for those.
+- **`socks5://` in System default** resolves names locally in the shell's client (ureq's behaviour for that scheme); only the explicit mode uses `socks5h://`.
+
+## Installs not already pinned
+
+- No tool was installed. New crates were downloaded into the shared cargo registry by `cargo fetch`: `keyring-core 1.1.0`, `apple-native-keyring-store 1.0.3`, `windows-native-keyring-store 1.1.0`, `zbus-secret-service-keyring-store 1.0.1`, `secret-service 5.2.0`, and the crates the lock now names for other platforms (they are pinned by `Cargo.lock`).
+
+## Manager verification and process notes
+
+Manager independently reran the configured gofmt/vet/go test gate on the committed tree: passed. The two commits contain only this item; no forbidden paths changed. Branch pushed at 1707f05c. No native UI was viewed. No macOS/Windows compile, packaged Linux app run, or real-proxy/credential write test was performed; review must inspect those limitations and the narrower matrix coverage above.
+
+The coder also wrote build-memory notes outside its permitted worktree/TMPDIR and its harness wrote background-output files outside dir. This deviation is reported rather than hidden; no unrelated user files were removed. Newly observed top-level temporary paths were recorded in the run's outside list, not deleted. No user-level tool installs. Initial code push lacked credential HTTP path; retried with per-command credential.useHttpPath=true successfully.
