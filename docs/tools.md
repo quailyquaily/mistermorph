@@ -301,6 +301,7 @@ Constraints:
 - If `headers` is not provided and `body` is provided, `Content-Type` is inferred from body type (`application/json` for JSON/object bodies, `text/plain` for plain strings).
 - At debug log level, the tool logs sanitized outbound request fields (`url`, `method`, `headers`).
 - Requests are subject to guard network policy.
+- In the desktop app with an explicit network proxy running (the backend has `MISTER_MORPH_DESKTOP_PROXY_REQUIRED=1`), a request or redirect hop to a destination that is not loopback goes through that proxy or is refused; `url_fetch` never connects to it directly. It is refused when `guard.network.url_fetch.allow_proxy` is false, when the auth profile's `allow_proxy` is false, and, for a host name, when `guard.network.url_fetch.deny_private_ips` is true (the proxy would resolve the name, so its address cannot be checked). Under the default guard settings that is every host name. An allowed request that cannot get through fails with an error naming the proxy by type, host and port. See [security.md](security.md).
 - Plain `GET` requests for allowlisted public post, shared-chat, article, and video URLs try Defuddle, then Jina Reader, then direct access. The allowlist covers X/Twitter posts and `t.co` short links, Reddit posts, public ChatGPT/Claude/Gemini/Grok shares, LinkedIn/Threads posts, YouTube/Bilibili videos, and Medium/Substack articles. Requests with custom headers, authentication, a body, or `download_path` remain direct.
 
 ## `web_search`

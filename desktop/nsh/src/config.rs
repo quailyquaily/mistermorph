@@ -100,7 +100,7 @@ pub fn fetch_backend_auto_update(addr: &str, base_path: &str, token: Option<&str
     let base = base_path.trim().trim_end_matches('/');
     let url = format!("http://{}{}/api/settings/auto-update", addr.trim(), base);
     let failed = |message: String| FetchError { unauthorized: false, message };
-    let agent = crate::http::agent(Some(std::time::Duration::from_secs(10)));
+    let agent = crate::http::agent_for(&url, Some(std::time::Duration::from_secs(10)));
     let mut request = agent.get(&url);
     if let Some(token) = token {
         request = request.header("Authorization", &format!("Bearer {token}"));

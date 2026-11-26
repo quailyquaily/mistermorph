@@ -32,6 +32,11 @@ pub fn app_state_file() -> Option<PathBuf> {
     config_root().map(|dir| dir.join("app-state.json"))
 }
 
+/// The network proxy setting (src/proxy.rs); its password is in the system's credential store.
+pub fn network_proxy_file() -> Option<PathBuf> {
+    config_root().map(|dir| dir.join("network-proxy.json"))
+}
+
 pub fn update_cache_dir() -> Option<PathBuf> {
     cache_root().map(|dir| dir.join("updates"))
 }

@@ -17,6 +17,8 @@ const MAX_RESULTS = 40;
 
 // General's App card, which only a web browser shows (GeneralSection): `app: false` leaves it out.
 const APP_FIELD = "settings_app_title";
+// General's network proxy row, which only the desktop app shows: `networkProxy: false` leaves it out.
+const NETWORK_PROXY_FIELD = "network_proxy_title";
 
 // Settings written by hand in SettingsView (not from config-field-groups), by i18n key. A key
 // names both the label and how the field is found on the page: the row whose label reads it.
@@ -50,7 +52,7 @@ const HAND_WRITTEN_FIELDS = {
   ],
   // This device's settings (language, notifications, the session), the same for every agent; App
   // only in a web browser (see APP_FIELD).
-  general: ["settings_language_title", "settings_appearance_title", "settings_session_title", APP_FIELD],
+  general: ["settings_language_title", "settings_appearance_title", NETWORK_PROXY_FIELD, "settings_session_title", APP_FIELD],
   system: [
     "settings_logs_title",
     "settings_auto_update_card_title",
@@ -117,8 +119,9 @@ function fieldEntries(groups, where, target) {
 // buildSettingsSearchIndex lists every setting Settings can show for this endpoint: sections,
 // config fields (with their config path), hand-written fields, channels and tools. Each entry's
 // target says where it lives: the section, and the channel pane or Advanced dialog that holds it.
-// `app` says whether General shows its App card (only in a web browser).
-export function buildSettingsSearchIndex(t, { sections = [], channels = [], tools = [], app = true } = {}) {
+// `app` says whether General shows its App card (only in a web browser), `networkProxy` whether it
+// shows the network proxy row (only in the desktop app).
+export function buildSettingsSearchIndex(t, { sections = [], channels = [], tools = [], app = true, networkProxy = false } = {}) {
   const sectionTitles = new Map(sections.map((item) => [item.id, item.title]));
   const has = (id) => sectionTitles.has(id);
   const advanced = t("settings_advanced_action");
@@ -131,6 +134,7 @@ export function buildSettingsSearchIndex(t, { sections = [], channels = [], tool
     if (!has(section)) continue;
     for (const key of keys) {
       if (key === APP_FIELD && !app) continue;
+      if (key === NETWORK_PROXY_FIELD && !networkProxy) continue;
       entries.push({ title: t(key), where: [sectionTitles.get(section)], target: { section, text: t(key) } });
     }
   }
