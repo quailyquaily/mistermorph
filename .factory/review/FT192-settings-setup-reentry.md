@@ -1,3 +1,7 @@
+---
+branch: factory/FT192-settings-setup-reentry
+round: 1
+---
 # Keep Setup available from Settings after initialization
 
 ## factory · 2026-11-27 07:37
@@ -28,3 +32,17 @@ Out of scope: implementing FT193's user identity page, factory reset, account/au
 - An intentional single-field edit changes only its intended setting; saved earlier steps survive later cancellation. Load/save errors do not advance or overwrite values with defaults.
 - Exercise first-run, ready re-entry, Back/exit, Done, reload and repair routes in router/setup tests; add a Settings action test and regression coverage for unchanged/omitted secrets and endpoint targeting in the appropriate existing backend tests.
 - Check desktop and 360/390pt mobile layouts, keyboard focus/Back behavior, light/dark appearance, and en/zh/ja labels using existing components. During implementation run the configured Go checks, nsh check and web/console-nsh/scripts/test.sh. This intake runs none of those build/review/ship actions.
+
+## factory · plan · 2026-11-27 08:14
+Behaviour: Agent Settings offers Setup for explicitly selected endpoint. Re-entry opens editable LLM, carrying a small non-sensitive marker through steps/reload. Keep first-run, readiness and integrity-repair guards. Back/exit returns to originating endpoint Agent Settings; completion to usable Console. Load saved values and block saving unknown values after failed load. Save explicit steps only, keeping configured credentials/auth usable unchanged.
+Scope: Settings action, wizard navigation/state/forms, en/zh/ja labels, focused frontend/backend regression coverage. No FT193 page, reset, account redesign or wizard rewrite.
+Decisions: Prefer reload-safe explicit route/query state and endpoint-derived return destination, not arbitrary redirects. Existing per-step saves persist on cancellation of later steps. No secrets exposed, fake uninitialized state or template overwrites. LLM first because FT193 absent.
+Checking: Cover ready/first-run/reload/repair routes, endpoint targeting, Back/exit/Done, failed loads/saves, secret omission and env-managed values. Run configured Go checks, nsh check and scripts/test.sh. Check desktop/mobile light/dark en/zh/ja if possible; explicitly report UI not visually checked.
+
+## factory · 2026-11-27 08:14
+Built commit 8b46a45a on factory/FT192-settings-setup-reentry. Settings > Models now exposes endpoint-specific Setup re-entry with reload-safe reentry=settings navigation, Back to Settings, and localized en/zh/ja text. Existing loaded model/persona steps continue without writes when unchanged; existing soul can continue as-is. Failed loads block saves until retry. Router readiness/auth/integrity guards are unchanged. Return address is derived from endpoint, not arbitrary URL. Added frontend route/state/action regressions and backend omitted-secret preservation and proxy endpoint-targeting tests.
+
+Installs: none.
+Tests: configured gofmt, go vet ./... and go test ./... passed in coder and manager verification. nsh check passed. Console scripts/test.sh passed: 175 files, 0 failed (257s). Earlier chat-topic-drag parallel failure passed isolated retry. Stubbed-API Chrome checks covered desktop and 360/390pt, light/dark and en/zh/ja: no page errors or write requests.
+Unchecked: real Android/iOS hardware Back and native desktop window; not every screenshot inspected; focus appearance, Retry/read-only/remote endpoint only headless tested; live OAuth, Bedrock and Cloudflare re-entry not exercised.
+Outside-dir write reported by coder: one Claude project memory note plus index; no installs or source paths outside the item worktree. Manager observed temporary paths were recorded in the run outside list for owner-confirmed clean only. No base branch or tags pushed.
