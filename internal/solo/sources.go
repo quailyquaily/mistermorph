@@ -28,13 +28,15 @@ type SourceCollector struct {
 	items   []daemonruntime.SoloSource
 	seen    map[string]int
 	threads map[string]bool
+	// started are, by thread topic, the tasks the run's work_thread calls started there.
+	started map[string][]string
 	// soloThread reports whether a topic is a work thread Solo started, from the topic's own
 	// stored record; nil knows none.
 	soloThread func(topicID string) bool
 }
 
 func NewSourceCollector(runID string) *SourceCollector {
-	return &SourceCollector{runID: strings.TrimSpace(runID), home: workspace.HostHomeDir(), seen: map[string]int{}, threads: map[string]bool{}}
+	return &SourceCollector{runID: strings.TrimSpace(runID), home: workspace.HostHomeDir(), seen: map[string]int{}, threads: map[string]bool{}, started: map[string][]string{}}
 }
 
 // WithSoloThreads tells the collector which topics are work threads Solo started: soloThread
@@ -190,16 +192,35 @@ func (c *SourceCollector) HandleEvent(ctx context.Context, event agent.Event) {
 	case name == ownertools.WorkThreadName:
 		var out struct {
 			TopicID   string `json:"topic_id"`
+			TaskID    string `json:"task_id"`
 			Title     string `json:"title"`
 			Workspace string `json:"workspace"`
 		}
 		if json.Unmarshal([]byte(strings.TrimSpace(event.Text)), &out) == nil && strings.TrimSpace(out.TopicID) != "" {
+			c.noteStart(out.TopicID, out.TaskID)
 			c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceThread, ID: out.TopicID, Label: out.Title}, daemonruntime.SoloUseStart)
 		}
 	case memoryTools[name] != "":
 		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceMemory}, memoryTools[name])
 	case journalTools[name] != "":
 		c.add(daemonruntime.SoloSource{Kind: daemonruntime.SoloSourceJournal}, journalTools[name])
+	}
+}
+
+// noteStart keeps which task a work_thread call started in a thread. A start that named no task
+// is kept too (as ""), so the thread's chip does not then pass for another start's task.
+func (c *SourceCollector) noteStart(topicID string, taskID string) {
+	taskID = strings.TrimSpace(taskID)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, had := range c.started[topicID] {
+		if had == taskID {
+			return
+		}
+	}
+	// Two different tasks already make the thread's chip ambiguous: more need not be kept.
+	if len(c.started[topicID]) < 2 {
+		c.started[topicID] = append(c.started[topicID], taskID)
 	}
 }
 
@@ -242,6 +263,8 @@ func (c *SourceCollector) add(source daemonruntime.SoloSource, action string) {
 
 // Sources is what the run used, in the order it first used each; a topic the run started a thread
 // in shows once, as the thread, with what the run did to it as a topic among the thread's uses.
+// A thread the run started carries that start's task; one it started twice carries none, since
+// its one chip cannot say which of the two tasks it stands for.
 // The result is the caller's own: calls that end later do not change it.
 func (c *SourceCollector) Sources() []daemonruntime.SoloSource {
 	if c == nil {
@@ -256,6 +279,10 @@ func (c *SourceCollector) Sources() []daemonruntime.SoloSource {
 		}
 		item.Uses = append([]daemonruntime.SoloSourceUse(nil), item.Uses...)
 		if item.Kind == daemonruntime.SoloSourceThread {
+			// The chip stands for one task only when the run started exactly one in the thread.
+			if started := c.started[item.ID]; len(started) == 1 {
+				item.TaskID = started[0]
+			}
 			if index, ok := c.seen[daemonruntime.SoloSourceTopic+"\x00"+item.ID]; ok {
 				item.Uses = mergeUses(item.Uses, c.items[index].Uses)
 			}

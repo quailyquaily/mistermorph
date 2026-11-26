@@ -36,8 +36,22 @@ function stateTone(state: string) {
   }
 }
 
-export function WorkerAvatar(props: { avatarStyle: string }) {
-  return <Image class="overflow-hidden" src={workerAvatarURL(props.avatarStyle)} accessibilityElementsHidden style={{ width: 20, height: 20 }} />;
+/** A worker's logo; `size` is its side in points (20 in the roster). */
+export function WorkerAvatar(props: { avatarStyle: string; size?: number; testID?: string }) {
+  return (
+    <Image
+      class="shrink-0 overflow-hidden"
+      src={workerAvatarURL(props.avatarStyle)}
+      accessibilityElementsHidden
+      style={{ width: props.size ?? 20, height: props.size ?? 20 }}
+      testID={props.testID}
+    />
+  );
+}
+
+/** The dot of a worker's state beside its name: running, done, or failed and stopped. */
+export function WorkerStateDot(props: { state: string; testID?: string }) {
+  return <View class={`size-1.5 shrink-0 rounded-full border ${stateTone(props.state)}`} testID={props.testID} />;
 }
 
 export function workerKindLabel(worker: any) {
@@ -72,7 +86,7 @@ function WorkerChip(props: { worker: any; selected: boolean; focus: boolean; onP
     >
       <WorkerAvatar avatarStyle={props.worker.avatarStyle} />
       <Text class="text-xs text-foreground">{props.worker.displayName}</Text>
-      <View class={`size-1.5 rounded-full border ${stateTone(props.worker.state)}`} />
+      <WorkerStateDot state={props.worker.state} />
     </TipButton>
   );
 }

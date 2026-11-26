@@ -40,7 +40,7 @@ import { ChatQuestionCard, type QuestionAnswer, type QuestionState } from "./Cha
 import { ChatRichContent } from "./ChatRichContent";
 import { ChatSkillInstallPreview } from "./ChatSkillInstallPreview";
 import { ChatSoloSources, type SoloSource } from "./ChatSoloSources";
-import { ChatSoloThread, type SoloThreadView } from "./ChatSoloThread";
+import { ChatSoloThread, type SoloRoster, type SoloThreadView } from "./ChatSoloThread";
 import { ChatStatusCard } from "./ChatStatusCard";
 import { ChatStatusMark } from "./ChatStatusMark";
 import { ChatSystemMessage } from "./ChatSystemMessage";
@@ -96,6 +96,8 @@ export interface ChatRowContext {
   onOpenTopic: (topicID: string) => void;
   /** Opens the details of a workspace, memory or journal chip under a Solo reply, in a dialog (FT188). */
   onOpenSoloSource?: (source: SoloSource) => void;
+  /** Who worked on the task a thread chip stands for, from that task's loaded card; null for none (FT189). */
+  soloSourceParticipants?: (source: SoloSource) => SoloRoster | null;
 }
 
 function roleOf(item: HistoryItem | undefined) {
@@ -544,7 +546,12 @@ export function ChatHistoryItem(props: {
         />
       </If>
       <If when={sources().length && isTerminalStatus(status())}>
-        <ChatSoloSources sources={sources()} onOpen={(topicID) => ctx.onOpenTopic(topicID)} onDetails={ctx.onOpenSoloSource} />
+        <ChatSoloSources
+          sources={sources()}
+          onOpen={(topicID) => ctx.onOpenTopic(topicID)}
+          onDetails={ctx.onOpenSoloSource}
+          participants={ctx.soloSourceParticipants}
+        />
       </If>
       <If when={approvalVisible()}>
         <View

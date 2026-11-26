@@ -256,3 +256,62 @@ func TestSoloSourceOldJSON(t *testing.T) {
 		t.Fatalf("written back as %s", again)
 	}
 }
+
+// The chip of a thread the reply started names that start's task, so the Console can show who
+// worked on exactly that task; a thread the reply only read names none.
+func TestSourceCollectorKeepsTheStartedTask(t *testing.T) {
+	ctx := context.Background()
+	c := NewSourceCollector("run1").WithSoloThreads(func(string) bool { return true })
+	c.HandleEvent(ctx, toolDone("topic_read", nil, `{"topic":{"id":"t0","title":"Earlier"}}`))
+	c.HandleEvent(ctx, toolDone("work_thread", nil, `{"topic_id":"t1","task_id":" task-a ","title":"Build","workspace":"~/p"}`))
+	c.HandleEvent(ctx, toolDone("topic_read", nil, `{"topic":{"id":"t1","title":"Build"}}`))
+	c.HandleEvent(ctx, toolDone("work_thread", nil, `{"topic_id":"t2","task_id":"task-b","title":"Docs"}`))
+	want := []daemonruntime.SoloSource{
+		{Kind: "thread", ID: "t0", Label: "Earlier", Uses: uses("read", 1)},
+		{Kind: "thread", ID: "t1", Label: "Build", TaskID: "task-a", Uses: uses("start", 1, "read", 1)},
+		{Kind: "thread", ID: "t2", Label: "Docs", TaskID: "task-b", Uses: uses("start", 1)},
+	}
+	if got := c.Sources(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("sources = %+v, want %+v", got, want)
+	}
+	raw, _ := json.Marshal(c.Sources()[:2])
+	if string(raw) != `[{"kind":"thread","id":"t0","label":"Earlier","uses":[{"action":"read","count":1}]},{"kind":"thread","id":"t1","label":"Build","task_id":"task-a","uses":[{"action":"start","count":1},{"action":"read","count":1}]}]` {
+		t.Fatalf("sources JSON = %s", raw)
+	}
+}
+
+// One reply can start a task in a thread and, once that ended, give the same thread more work:
+// two tasks, one chip. The chip then names neither, rather than one of them, and keeps both uses.
+func TestSourceCollectorNamesNoTaskForAThreadStartedTwice(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name   string
+		starts []string
+		task   string
+		count  int
+	}{
+		{"two tasks", []string{`"task-a"`, `"task-b"`}, "", 2},
+		{"three tasks", []string{`"task-a"`, `"task-b"`, `"task-c"`}, "", 3},
+		{"the same task reported twice", []string{`"task-a"`, `"task-a"`}, "task-a", 2},
+		{"a start that named no task, then one that did", []string{`""`, `"task-b"`}, "", 2},
+		{"a start that named a task, then one that did not", []string{`"task-a"`, `""`}, "", 2},
+		{"no task named", []string{`""`}, "", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := NewSourceCollector("run1")
+			for _, task := range tc.starts {
+				c.HandleEvent(ctx, toolDone("work_thread", nil, `{"topic_id":"t1","task_id":`+task+`,"title":"Build"}`))
+			}
+			// Another thread of the same reply keeps its own task.
+			c.HandleEvent(ctx, toolDone("work_thread", nil, `{"topic_id":"t2","task_id":"task-z","title":"Docs"}`))
+			got := c.Sources()
+			if len(got) != 2 || got[0].ID != "t1" || got[0].TaskID != tc.task || !reflect.DeepEqual(got[0].Uses, uses("start", tc.count)) {
+				t.Fatalf("thread = %+v, want task %q and %d starts", got, tc.task, tc.count)
+			}
+			if got[1].ID != "t2" || got[1].TaskID != "task-z" {
+				t.Fatalf("other thread = %+v", got[1])
+			}
+		})
+	}
+}
