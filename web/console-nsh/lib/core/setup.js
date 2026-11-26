@@ -74,6 +74,37 @@ function setupStagePath(stage, endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
   return endpointRoutePath(endpointRef, "/setup/llm");
 }
 
+// Setup opened again from Settings, on an agent that is set up already: the address says so
+// (`?reentry=settings`), so a reload stays in it. It names where setup was opened from and nothing
+// else; an address without it is the first-run setup, as before.
+const SETUP_REENTRY_QUERY = "reentry";
+const SETUP_REENTRY_SETTINGS = "settings";
+// The first step setup shows when it is opened again.
+const SETUP_REENTRY_FIRST_STAGE = "llm";
+
+function isSetupReentryRoute(routeLike) {
+  const query = routeLike?.query;
+  if (typeof query?.repair === "string" && query.repair.trim() !== "") {
+    return false;
+  }
+  return typeof query?.[SETUP_REENTRY_QUERY] === "string" && query[SETUP_REENTRY_QUERY].trim() === SETUP_REENTRY_SETTINGS;
+}
+
+// Where Settings opens setup again for `endpointRef`: its first step, editable, with the marker.
+function setupReentryPath(endpointRef) {
+  const ref = typeof endpointRef === "string" ? endpointRef.trim() : "";
+  if (!ref) {
+    return "";
+  }
+  return `${setupStagePath(SETUP_REENTRY_FIRST_STAGE, ref)}?${SETUP_REENTRY_QUERY}=${SETUP_REENTRY_SETTINGS}`;
+}
+
+// Where setup opened from Settings goes back to: the same agent's Models settings, which has the entry.
+function setupReentryReturnPath(endpointRef) {
+  const ref = typeof endpointRef === "string" ? endpointRef.trim() : "";
+  return ref ? endpointRoutePath(ref, "/settings/agent") : "";
+}
+
 async function fetchConsoleSetupIntegrity(options = {}) {
   const endpointRef = String(options.endpointRef || "").trim() || CONSOLE_LOCAL_ENDPOINT_REF;
   return loadResource(
@@ -367,7 +398,11 @@ export {
   fetchConsoleSetupIntegrity,
   invalidateConsoleSetupReadiness,
   isAllowedRepairSetupRoute,
+  isSetupReentryRoute,
   repairRouteForKey,
   resolveConsoleSetupStage,
+  SETUP_REENTRY_FIRST_STAGE,
+  setupReentryPath,
+  setupReentryReturnPath,
   setupStagePath,
 };

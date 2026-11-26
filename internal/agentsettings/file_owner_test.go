@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -201,6 +202,124 @@ func TestFileOwnerPreservesOSManagedSecretOnUnrelatedUpdate(t *testing.T) {
 	if !strings.Contains(string(raw), secref.OSSecretRef(id)) {
 		t.Fatalf("unrelated update lost OS ref:\n%s", raw)
 	}
+}
+
+// Setup opened again on a configured agent saves its model step as the Console sends it: the
+// fields the step shows, the tools as they were loaded, and no key the user did not type again.
+func TestFileOwnerSetupStepSaveKeepsUntypedSecretsAndOtherSettings(t *testing.T) {
+	const mainID = "b_LsX7HLzAR3OShG7YjRcw"
+	const profileID = "c_LsX7HLzAR3OShG7YjRcw"
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	config := "llm:\n" +
+		"  provider: openai\n" +
+		"  endpoint: https://api.example.com/v1\n" +
+		"  model: before\n" +
+		"  api_key: " + secref.OSSecretRef(mainID) + "\n" +
+		"  reasoning_effort: high\n" +
+		"  routes:\n" +
+		"    main_loop:\n" +
+		"      fallback_profiles: [fast]\n" +
+		"  profiles:\n" +
+		"    fast:\n" +
+		"      provider: openai\n" +
+		"      model: gpt-fast\n" +
+		"      api_key: " + secref.OSSecretRef(profileID) + "\n" +
+		"tools:\n" +
+		"  bash:\n" +
+		"    enabled: false\n" +
+		"telegram:\n" +
+		"  bot_token: keep-me\n"
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeFileOwnerSecretBackend{values: map[string]string{mainID: "main-secret", profileID: "profile-secret"}}
+	owner := NewFileOwner(FileOwnerOptions{
+		ConfigPath:   configPath,
+		Reader:       readFileOwnerTestConfigWithSource(t, configPath, backend),
+		SecretSource: backend,
+		OSStore:      backend,
+	})
+	before, err := owner.View(context.Background())
+	if err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+	loaded, err := json.Marshal(before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(loaded), "main-secret") || strings.Contains(string(loaded), "profile-secret") {
+		t.Fatalf("loaded settings expose a stored secret: %s", loaded)
+	}
+	tools, err := json.Marshal(before.Tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	save := func(model string) AgentSettingsView {
+		t.Helper()
+		current, err := owner.View(context.Background())
+		if err != nil {
+			t.Fatalf("View() error = %v", err)
+		}
+		// No api_key member at all: the stored key was left as it is.
+		body := `{"config_revision":` + strconv.Quote(current.ConfigRevision) +
+			`,"llm":{"inference_provider":` + strconv.Quote(current.LLM.InferenceProvider) +
+			`,"endpoint":"https://api.example.com/v1","model":` + strconv.Quote(model) + `},"tools":` + string(tools) + `}`
+		var update AgentSettingsUpdate
+		if err := json.Unmarshal([]byte(body), &update); err != nil {
+			t.Fatalf("decode setup save: %v", err)
+		}
+		view, err := owner.Update(context.Background(), update)
+		if err != nil {
+			t.Fatalf("Update() error = %v", err)
+		}
+		return view
+	}
+	check := func(label, model string, view AgentSettingsView) {
+		t.Helper()
+		if len(backend.puts) != 0 || len(backend.deletes) != 0 {
+			t.Fatalf("%s: secret store changed: puts=%v deletes=%v", label, backend.puts, backend.deletes)
+		}
+		if view.LLM.APIKey != "" || !view.SecretFields.LLM["api_key"].Configured {
+			t.Fatalf("%s: view exposed or lost the API key: key=%q status=%#v", label, view.LLM.APIKey, view.SecretFields.LLM["api_key"])
+		}
+		out, err := json.Marshal(view)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(out), "main-secret") || strings.Contains(string(out), "profile-secret") {
+			t.Fatalf("%s: saved settings expose a stored secret: %s", label, out)
+		}
+		raw, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{
+			"model: " + model,
+			"api_key: " + secref.OSSecretRef(mainID),
+			"api_key: " + secref.OSSecretRef(profileID),
+			"reasoning_effort: high",
+			"model: gpt-fast",
+			"bot_token: keep-me",
+		} {
+			if !strings.Contains(string(raw), want) {
+				t.Fatalf("%s: config lost %q:\n%s", label, want, raw)
+			}
+		}
+		if strings.Contains(string(raw), "main-secret") || strings.Contains(string(raw), "profile-secret") {
+			t.Fatalf("%s: config holds a plaintext secret:\n%s", label, raw)
+		}
+		if view.Tools.Bash.Enabled {
+			t.Fatalf("%s: bash was turned on", label)
+		}
+		if len(view.LLM.FallbackProfiles) != 1 || view.LLM.FallbackProfiles[0] != "fast" || len(view.LLM.Profiles) != 1 {
+			t.Fatalf("%s: profiles changed: %#v / %#v", label, view.LLM.Profiles, view.LLM.FallbackProfiles)
+		}
+	}
+
+	// The same values again, then one changed field: neither touches the keys or anything else.
+	check("unchanged save", "before", save("before"))
+	check("changed model", "after", save("after"))
 }
 
 func TestFileOwnerStoresNewAPIKeyInOSStore(t *testing.T) {

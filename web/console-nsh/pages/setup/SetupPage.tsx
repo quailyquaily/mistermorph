@@ -327,18 +327,31 @@ function LLMStage(props: { s: SetupState }) {
 
 function StageError(props: { s: SetupState }) {
   return (
-    <If when={props.s.err() && !isNetworkErrorMessage(props.s.err())}>
-      <InlineNotice type="error" text={props.s.err()} class="mt-0.5" testID="setup-error" />
-    </If>
+    <>
+      <If when={props.s.err() && !isNetworkErrorMessage(props.s.err())}>
+        <InlineNotice type="error" text={props.s.err()} class="mt-0.5" testID="setup-error" />
+      </If>
+      {/* The saved values did not load, so the step cannot be saved: read them again. */}
+      <If when={props.s.loadFailed()}>
+        <Button
+          variant="outlined"
+          size="xs"
+          label={t("setup_action_retry")}
+          disabled={props.s.loading()}
+          onPress={props.s.reloadStage}
+          testID="setup-load-retry"
+        />
+      </If>
+    </>
   );
 }
 
-function SubmitButton(props: { s: SetupState; disabled: boolean; onPress: () => void }) {
+function SubmitButton(props: { s: SetupState; disabled: boolean; onPress: () => void; labelKey?: string }) {
   return (
     <Button
       variant="primary"
       size="md"
-      label={t(props.s.stageMeta().submitKey || "setup_action_continue")}
+      label={t(props.labelKey || props.s.stageMeta().submitKey || "setup_action_continue")}
       loading={props.s.saving()}
       disabled={props.disabled}
       onPress={props.onPress}
@@ -613,7 +626,13 @@ function SoulStage(props: { s: SetupState }) {
           <PreviousButton s={s} />
         </View>
         <If when={s.soulSaveVisible()}>
-          <SubmitButton s={s} disabled={s.soulSaveDisabled()} onPress={() => void s.saveSoul()} />
+          {/* The saved soul, untouched: going on saves nothing, so the button does not say "save". */}
+          <SubmitButton
+            s={s}
+            disabled={s.soulSaveDisabled()}
+            onPress={() => void s.saveSoul()}
+            labelKey={s.soulKeepsSaved() ? "setup_action_continue" : undefined}
+          />
         </If>
       </View>
     </View>
@@ -683,6 +702,19 @@ export function SetupPage() {
           style={{ maxWidth: 640 }}
           testID={`setup-stage-${s.routeStage()}`}
         >
+          {/* Opened again from Settings: the way back, and what leaving keeps. */}
+          <If when={s.inReentryMode()}>
+            <View class="gap-1 px-2 pt-2" testID="setup-reentry">
+              <Button
+                variant="outlined"
+                size="xs"
+                label={t("setup_action_back_to_settings")}
+                onPress={() => void s.backToSettings()}
+                testID="setup-back-to-settings"
+              />
+              <Text class="text-xs text-muted-foreground">{t("setup_reentry_note")}</Text>
+            </View>
+          </If>
           <View class="gap-2 p-2">
             <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground" testID="setup-kicker">
               {s.stageKicker()}

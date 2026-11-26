@@ -555,6 +555,59 @@ func TestHandleProxyUpdatesPersonaAvatarCache(t *testing.T) {
 	}
 }
 
+// Setup and Settings save an agent's settings and persona through the proxy: a save names its
+// agent, and reaches that one only.
+func TestHandleProxySettingsSaveReachesOnlyTheNamedEndpoint(t *testing.T) {
+	clientA := &stubRuntimeEndpointClient{proxyStatus: http.StatusOK, proxyRaw: []byte(`{"ok":true}`)}
+	clientB := &stubRuntimeEndpointClient{proxyStatus: http.StatusOK, proxyRaw: []byte(`{"ok":true}`)}
+	endpointA := runtimeEndpoint{Ref: "ep_a", Name: "Morph A", Client: clientA}
+	endpointB := runtimeEndpoint{Ref: "ep_b", Name: "Morph B", Client: clientB}
+	s := &server{
+		endpoints:     []runtimeEndpoint{endpointA, endpointB},
+		endpointByRef: map[string]runtimeEndpoint{"ep_a": endpointA, "ep_b": endpointB},
+	}
+
+	for _, tc := range []struct {
+		uri  string
+		body string
+	}{
+		{uri: "/settings/agent", body: `{"config_revision":"rev-1","llm":{"model":"gpt-next"}}`},
+		{uri: "/persona/identity", body: `{"name":"Rhea"}`},
+	} {
+		t.Run(tc.uri, func(t *testing.T) {
+			*clientA = stubRuntimeEndpointClient{proxyStatus: http.StatusOK, proxyRaw: []byte(`{"ok":true}`)}
+			*clientB = stubRuntimeEndpointClient{proxyStatus: http.StatusOK, proxyRaw: []byte(`{"ok":true}`)}
+			req := httptest.NewRequest(http.MethodPut, "/console/api/proxy?endpoint=ep_b&uri="+url.QueryEscape(tc.uri), bytes.NewReader([]byte(tc.body)))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			s.handleProxy(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+			}
+			if clientB.lastMethod != http.MethodPut || clientB.lastPath != tc.uri || string(clientB.lastBody) != tc.body {
+				t.Fatalf("named endpoint got %s %s %q, want PUT %s %q", clientB.lastMethod, clientB.lastPath, clientB.lastBody, tc.uri, tc.body)
+			}
+			if clientA.lastMethod != "" || clientA.lastPath != "" || len(clientA.lastBody) != 0 {
+				t.Fatalf("other endpoint was reached: %s %s %q", clientA.lastMethod, clientA.lastPath, clientA.lastBody)
+			}
+		})
+	}
+
+	// An agent that is not there is refused: the save does not fall back to another one.
+	req := httptest.NewRequest(http.MethodPut, "/console/api/proxy?endpoint=ep_gone&uri="+url.QueryEscape("/settings/agent"), bytes.NewReader([]byte(`{}`)))
+	rec := httptest.NewRecorder()
+	*clientA = stubRuntimeEndpointClient{}
+	*clientB = stubRuntimeEndpointClient{}
+	s.handleProxy(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown endpoint status = %d, want %d (%s)", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if clientA.lastMethod != "" || clientB.lastMethod != "" {
+		t.Fatalf("a save for an unknown endpoint reached one: a=%q b=%q", clientA.lastMethod, clientB.lastMethod)
+	}
+}
+
 func TestHandleProxyDownloadRejectsNonFilesDownloadURI(t *testing.T) {
 	client := &stubRuntimeEndpointClient{}
 	s := &server{
