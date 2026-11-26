@@ -23,6 +23,7 @@
 ## Architecture
 
 - [Architecture](./arch.md)
+- [Agents: Clones, Sub-agents and Neighbors](./agents.md)
 - [Runtime Layers](./runtime_layers.md)
 - [Prompt System](./prompt.md)
 - [Bus](./bus.md)
