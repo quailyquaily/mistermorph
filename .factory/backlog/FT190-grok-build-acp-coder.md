@@ -219,3 +219,9 @@ Elsewhere:
 Opt-in, not part of the required run (uses the signed-in account): `MISTER_MORPH_CODER_SESSION_TEST=grok go test ./internal/codersessions -run TestInstalledCoderSession`. Run it once and write the result and the version in the design document.
 
 Required: `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`.
+
+## factory · 2026-11-26 15:19
+
+Moved to `backlog/`: the mandatory real-CLI protocol spike is blocked. The manager and Claude Code independently found no installed `grok` executable on PATH or in customary user-level installation directories. No CLI version, authentication, permissions/questions/plan protocol, cancellation or usage behavior could be verified. The request explicitly forbids implementing from documentation alone when a signed-in CLI is unavailable.
+
+No product code was changed, no installs were made, no commits were made on the code branch, and no tests were run. The owner must make a signed-in Grok CLI available to the builder, then move this item to `new/` to retry. The existing design remains planned and unverified.
