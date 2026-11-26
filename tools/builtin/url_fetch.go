@@ -46,6 +46,10 @@ type URLFetchTool struct {
 	AllowScheme      map[string]bool
 	Auth             *URLFetchAuth
 	FileCacheDir     string
+
+	// requiredProxy overrides the route read from the environment (tests); see
+	// url_fetch_required_proxy.go.
+	requiredProxy *requiredProxyRoute
 }
 
 func NewURLFetchTool(enabled bool, timeout time.Duration, maxBytes int64, userAgent string, fileCacheDir string) *URLFetchTool {
@@ -358,6 +362,26 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 		req.Header.Set(injectHeaderName, injectHeaderVal)
 	}
 
+	// While the desktop app requires a network proxy, every request and redirect hop to a
+	// destination that is not loopback goes through the proxy or is refused.
+	var required *requiredProxyPolicy
+	route := t.requiredProxy
+	if route == nil {
+		route = requiredProxyRouteFromEnv()
+	}
+	if route != nil {
+		required = &requiredProxyPolicy{
+			route:              *route,
+			guardOn:            hasNetPol,
+			guard:              netPol,
+			profileID:          authProfileID,
+			profileAllowsProxy: authProfileID != "" && profile.Allow.AllowProxy,
+		}
+		if err := required.check(u); err != nil {
+			return "", err
+		}
+	}
+
 	var client http.Client
 	if t.HTTPClient != nil {
 		client = *t.HTTPClient
@@ -390,7 +414,7 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 			req.Header.Set(injectHeaderName, injectHeaderVal)
 			return nil
 		}
-		if !profile.Allow.AllowProxy || (hasNetPol && !netPol.AllowProxy) {
+		if required == nil && (!profile.Allow.AllowProxy || (hasNetPol && !netPol.AllowProxy)) {
 			disableHTTPProxy(&client)
 		}
 	}
@@ -412,12 +436,17 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 			}
 			return nil
 		}
-		if !netPol.AllowProxy {
+		if required == nil && !netPol.AllowProxy {
 			disableHTTPProxy(&client)
 		}
 	}
-	if hasNetPol && netPol.DenyPrivateIPs {
+	if required == nil && hasNetPol && netPol.DenyPrivateIPs {
 		if err := applyNetworkPolicyTransport(&client, netPol); err != nil {
+			return "", err
+		}
+	}
+	if required != nil {
+		if err := required.apply(&client); err != nil {
 			return "", err
 		}
 	}
@@ -473,6 +502,9 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 		currentResp, requestErr := client.Do(attempt.request)
 		if requestErr != nil {
 			if !attempt.reader {
+				if required != nil {
+					return "", required.requestError(requestErr)
+				}
 				return "", requestErr
 			}
 			continue

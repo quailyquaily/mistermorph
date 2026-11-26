@@ -78,6 +78,37 @@ Hardening toggles:
 - `deny_private_ips`: blocks literal `localhost` / `127.0.0.1` / RFC1918 private IP targets to reduce SSRF risk. M1 does not resolve hostnames to IPs; enforce egress at the network/OS layer if you need stronger guarantees.
 - `allow_proxy`: when false, the HTTP client ignores `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` to avoid unexpected routing/MITM.
 
+#### `url_fetch` when the desktop app requires a network proxy
+
+While the desktop app runs an explicit network proxy, it starts the backend with the proxy variables and the marker `MISTER_MORPH_DESKTOP_PROXY_REQUIRED=1`. The marker changes how `url_fetch` picks its route. It does not change, read past or relax any guard or auth profile setting; without it `url_fetch` behaves exactly as described above.
+
+With the marker, for every request and every redirect hop to a destination that is not loopback:
+
+- The route is the proxy or nothing: `url_fetch` never removes the proxy and never dials the destination itself.
+- `allow_proxy` is honored: when the guard is on and `guard.network.url_fetch.allow_proxy` is false, or the request uses an auth profile whose `allow_proxy` is false, the request is refused before anything is sent.
+- `deny_private_ips` is honored: when it is true and the destination is a host name, the request is refused. The proxy would resolve the name, so the resolved address cannot be checked, and the name is not resolved locally to get around that. An IP literal is checked as before and, if allowed, sent through the proxy.
+- Everything else stays: allowed URL prefixes, the literal `localhost` and private-address checks, redirect rules and auth profile URL rules, on the first request and on every hop.
+
+`allow_proxy: false` and `deny_private_ips: true` are the defaults, so under the default guard settings `url_fetch` is refused for every host name while an explicit proxy is running. Nothing sets these automatically. An owner who wants `url_fetch` to reach host names through the proxy sets, by hand:
+
+```yaml
+guard:
+  network:
+    url_fetch:
+      allow_proxy: true
+      deny_private_ips: false
+```
+
+and, for requests with an auth profile, that profile's `allow.allow_proxy: true`.
+
+What turning `deny_private_ips` off gives up: the check that a URL does not name `localhost` or a private address, and the check that a host name does not resolve to one. Through a proxy the second check cannot be made at all, because the proxy resolves the name: a host name that points at an address inside the proxy's network is reachable for `url_fetch` if the proxy lets it through. Keep `allowed_url_prefixes` narrow, and restrict what the proxy itself may reach, if that matters.
+
+Other boundaries of the desktop proxy:
+
+- With a proxy password, the backend's environment contains the proxy URL with that password. Other processes of the same user can read it, and MCP stdio servers, which are started with the backend's whole environment, receive it.
+- The bash and PowerShell tools and the coder CLIs get neither the proxy variables nor the marker unless the owner lists a name in `tools.bash.injected_env_vars` / `tools.powershell.injected_env_vars`; listing them passes the password too.
+- The desktop log is filtered for the known forms of the proxy password. That filter is a second line of defense; it does not make arbitrary backend output safe.
+
 ### Redaction
 
 Guard redacts secret-like content **before it enters context/logs**:
