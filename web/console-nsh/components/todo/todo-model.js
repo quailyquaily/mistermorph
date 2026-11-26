@@ -1,6 +1,7 @@
 // The TODO page's model, from web/console/src/views/TodoView.js nearly verbatim: how a TODO item is
 // normalized, edited, validated, serialized and described. Editing functions mutate the task they
 // are given, as the Vue view did; the page applies them to a copy (cloneTaskForDraft) and stores it.
+import { consoleUserLabel } from "../../lib/core/console-user.js";
 import { currentLocale, translate } from "../../lib/core/context.js";
 import { isValidCronExpression } from "../../lib/core/cron.js";
 import channelDiscordLogoURL from "../../assets/images/channels/discord.svg";
@@ -842,7 +843,8 @@ function taskTitle(task) {
 
 function chatOptionTitle(option) {
   if (trimText(option?.platform).toLowerCase() === "console") {
-    return t("todo_chat_console_user");
+    // The Console's user by the name they saved in Setup, else the general label.
+    return consoleUserLabel(t("todo_chat_console_user"));
   }
   const name = trimText(option?.name);
   return name || t("todo_chat_unavailable");

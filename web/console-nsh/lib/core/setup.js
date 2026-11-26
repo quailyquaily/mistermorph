@@ -1,4 +1,5 @@
 import { sessionStore } from "../platform";
+import { consoleUserNameMissing } from "./console-user";
 import { endpointApiFetch, runtimeApiFetchForEndpoint } from "./context";
 import { endpointRoutePath } from "./endpoint-routes";
 import { CONSOLE_LOCAL_ENDPOINT_REF, visibleEndpoints } from "./endpoints";
@@ -61,6 +62,9 @@ function consoleSetupTargetEndpointRef(state) {
 function setupStagePath(stage, endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
   if (stage === "repair") {
 	return endpointRoutePath(endpointRef, "/troubleshooting");
+  }
+  if (stage === "user") {
+    return endpointRoutePath(endpointRef, "/setup/user");
   }
   if (stage === "persona") {
     return endpointRoutePath(endpointRef, "/setup/persona");
@@ -322,7 +326,35 @@ async function resolveConsoleSetupStageUncached(items, endpointRef) {
   return { stage: "ready", setup };
 }
 
+// The first question of Setup is how to address the Console's user (stage "user"). A Setup that
+// is not finished starts there while no name is saved; a finished one is never sent back for it,
+// so a Console set up before the question existed keeps working without a name. The name is the
+// Console's (lib/core/console-user.js), read by the router's guard on every navigation, so it is
+// laid over the cached stage here and not cached with it.
+function withConsoleUserStage(state) {
+  if (state && state.stage !== "ready" && consoleUserNameMissing()) {
+    return { ...state, stage: "user" };
+  }
+  return state;
+}
+
+/**
+ * Whether a Setup page may not be opened yet because the name has not been asked: a step of a
+ * Setup that starts at the name page, other than that page and the entry that leads to it.
+ */
+function isSetupStageBeforeUserName(pagePath, stage) {
+  if (stage !== "user") {
+    return false;
+  }
+  const path = typeof pagePath === "string" ? pagePath.trim() : "";
+  return path.startsWith("/setup/") && path !== "/setup/user";
+}
+
 async function resolveConsoleSetupStage(items, options = {}) {
+  return withConsoleUserStage(await resolveConsoleSetupStageCached(items, options));
+}
+
+async function resolveConsoleSetupStageCached(items, options = {}) {
   const endpointRef = String(options.endpointRef || "").trim();
   const cacheKey = resourceKey(
     "setup",
@@ -367,6 +399,7 @@ export {
   fetchConsoleSetupIntegrity,
   invalidateConsoleSetupReadiness,
   isAllowedRepairSetupRoute,
+  isSetupStageBeforeUserName,
   repairRouteForKey,
   resolveConsoleSetupStage,
   setupStagePath,
