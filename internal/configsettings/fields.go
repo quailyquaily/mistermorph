@@ -1,5 +1,7 @@
 package configsettings
 
+import "github.com/quailyquaily/mistermorph/internal/consoleuser"
+
 func AgentFields() []Field {
 	zero := 0.0
 	one := 1.0
@@ -125,6 +127,8 @@ func ConsoleFields() []Field {
 		{Path: "console.session_ttl", Kind: KindDuration, ApplyMode: ApplyProcessRestart},
 		{Path: "console.managed_runtimes", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 		{Path: "console.max_concurrency", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
+		// The name the Console's human is addressed by; read again for each new task.
+		{Path: consoleuser.ConfigKey, Kind: KindString, ApplyMode: ApplyImmediate, Normalize: consoleuser.NormalizeName},
 		{Path: "server.auth_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
 
 		{Path: "heartbeat.enabled", Kind: KindBool, ApplyMode: ApplyRuntimeRestart},

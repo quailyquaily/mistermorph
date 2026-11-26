@@ -122,6 +122,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("console.session_ttl", 7*24*time.Hour)
 	v.SetDefault("console.endpoints", []map[string]any{})
 	v.SetDefault("console.max_concurrency", DefaultChannelMaxConcurrency)
+	v.SetDefault("console.user_name", "")
 
 	v.SetDefault("telegram.poll_timeout", DefaultTelegramPollTimeout)
 	v.SetDefault("telegram.group_trigger_mode", DefaultGroupTriggerMode)

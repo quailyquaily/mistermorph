@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"strings"
 
+	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/imageinput"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
@@ -68,5 +69,9 @@ func buildConsoleTopicHistory(tasks []daemonruntime.TaskInfo, job consoleLocalTa
 }
 
 func newConsoleInboundHistoryItem(job consoleLocalTaskJob) chathistory.ChatHistoryItem {
-	return chathistory.TaskInbound(daemonruntime.TaskInfo{ID: job.TaskID, TopicID: job.TopicID, Task: job.Task, CreatedAt: job.CreatedAt})
+	info := daemonruntime.TaskInfo{ID: job.TaskID, TopicID: job.TopicID, Task: job.Task, CreatedAt: job.CreatedAt}
+	if name := strings.TrimSpace(job.UserDisplayName); name != "" {
+		info.Conversation = runtimecore.BuildTaskConversation(job.ConversationKey, "private", consoleParticipantKey, name, "", nil)
+	}
+	return chathistory.TaskInbound(info)
 }

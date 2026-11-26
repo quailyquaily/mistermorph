@@ -375,7 +375,7 @@ Settings that only apply after a restart (`process_restart` and `runtime_restart
 Auth:
 - `POST /auth/login`
 - `POST /auth/logout`
-- `GET /auth/me`
+- `GET /auth/me` (the fixed `account`, plus `user_name`, the saved name of the Console's user or `""`, and `display_name`, the name to show)
 
 Console settings:
 - `GET /settings/agent`
@@ -470,6 +470,19 @@ Paginated runtime lists return `items`, `limit`, `has_next`, and optional `next_
 - Anti-bruteforce protection is enabled in the backend.
 - JSON API responses use no-store cache headers.
 - SPA fetch requests use `cache: "no-store"`.
+
+## The user's name
+
+The Console has one human user, and Setup's first page asks how to address them ("What should we call you?"). The answer is `console.user_name` in the Console's config: one value on the server, shared by every browser, app and session of that Console. It is not part of any agent's persona, and saving it never touches an agent's name, avatar or soul, on this Console or on a connected one.
+
+- The page is `/e/<agent>/setup/user`, before the model, the agent's name and its soul. Continue saves the name with `PUT /settings/console` (`{"config_changes":{"console.user_name":"…"}}`, nothing else in the request) and goes on only after the server has saved it. A failed save leaves the page and the typed text as they are, to try again. Leaving the page without Continue saves nothing. Opened again (Back, or "Your name" on the last page), it shows the saved name.
+- A name is one line of 1 to 80 characters (Unicode code points) once the white space around it is dropped. An empty name, a longer one, and one with a line break or a control character are refused, by the page and by the server alike (`internal/consoleuser`), and nothing is cut to fit. Spaces inside the name, CJK and emoji are fine. The name is text wherever it is shown, never HTML or Markdown.
+- A Setup that is not finished starts at this page while no name is saved, also when another Setup page is opened directly. A Console that was set up before this page existed is not sent back to Setup: without a saved name it keeps the name "Console User".
+- Where the name is used: each new Console task records it as the name of its `console:user` participant, in ordinary topics and in Solo (Solo's own messages, the work threads it starts and their cards). The task's inbound message carries it as the sender's display name, which also names the Console contact, and the agent reads it as the sender's nickname in the current message and in the topic's history. The Console shows it where it names its user, such as the Console destination of a TODO.
+- What does not change: the identifiers `console:user` and `console`, the sign-in account (`account` in `GET /auth/me`), approval actors, contact ids and routing. The name is not a login.
+- History is not rewritten. A task keeps the name it recorded when it was sent, so a topic can show earlier messages under an earlier name; tasks recorded before a name could be saved stay "Console User".
+- `GET /auth/me` returns the saved name (`user_name`, `""` when none) and the name to show (`display_name`). It reads the same config value new tasks read, so a saved change applies to the next message without a restart or a new login. `MISTER_MORPH_CONSOLE_USER_NAME` sets the name from the environment; the page then cannot change it.
+- The agent's `config_set` tool cannot change it (`console.*` is the user's). `morph config set console.user_name` and hand edits are not checked when written; a saved value that is not a valid name is ignored ("Console User" is used) until a valid one is saved.
 
 ## Setup Wizard
 
