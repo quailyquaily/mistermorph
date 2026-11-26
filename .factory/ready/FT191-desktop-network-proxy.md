@@ -525,3 +525,7 @@ All commands ran with `TMPDIR` under the review folder and a throwaway `HOME` fr
   - harness copies of large tool outputs under `<local-harness-path>`;
   - one memory note in `<local-harness-path>` (`desktop-cargo-test-libshim.md` and its line in `MEMORY.md`).
 
+
+## lyric · 2026-11-27 06:56
+
+FT191 先不 ship
