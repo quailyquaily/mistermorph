@@ -7,17 +7,21 @@ use std::{
     sync::Mutex,
 };
 
+use crate::redact::Redactor;
+
 pub struct DesktopLog {
     file: Mutex<Option<File>>,
     path: Option<PathBuf>,
+    /// Takes the network proxy's password out of every line (src/redact.rs).
+    redactor: Redactor,
 }
 
 impl DesktopLog {
     /// Opens (appends to) the log; without a cache folder it only writes to the terminal.
-    pub fn open() -> DesktopLog {
+    pub fn open(redactor: Redactor) -> DesktopLog {
         let Some(path) = crate::paths::log_file() else {
             eprintln!("open desktop log file failed: no cache directory");
-            return DesktopLog { file: Mutex::new(None), path: None };
+            return DesktopLog { file: Mutex::new(None), path: None, redactor };
         };
         let opened = path
             .parent()
@@ -26,11 +30,11 @@ impl DesktopLog {
         match opened {
             Ok(mut file) => {
                 let _ = writeln!(file, "\n--- MisterMorph desktop start {} ---", crate::paths::rfc3339_now());
-                DesktopLog { file: Mutex::new(Some(file)), path: Some(path) }
+                DesktopLog { file: Mutex::new(Some(file)), path: Some(path), redactor }
             }
             Err(err) => {
                 eprintln!("open desktop log file failed: {err}");
-                DesktopLog { file: Mutex::new(None), path: None }
+                DesktopLog { file: Mutex::new(None), path: None, redactor }
             }
         }
     }
@@ -38,7 +42,18 @@ impl DesktopLog {
     /// A log that only writes to the terminal (tests).
     #[cfg(test)]
     pub fn none() -> DesktopLog {
-        DesktopLog { file: Mutex::new(None), path: None }
+        DesktopLog { file: Mutex::new(None), path: None, redactor: Redactor::none() }
+    }
+
+    /// A log at `path` with a filter (tests).
+    #[cfg(test)]
+    pub fn at(path: PathBuf, redactor: Redactor) -> DesktopLog {
+        let file = OpenOptions::new().create(true).append(true).open(&path).unwrap();
+        DesktopLog { file: Mutex::new(Some(file)), path: Some(path), redactor }
+    }
+
+    pub fn redactor(&self) -> &Redactor {
+        &self.redactor
     }
 
     pub fn path(&self) -> Option<&PathBuf> {
@@ -47,18 +62,24 @@ impl DesktopLog {
 
     /// A line to the terminal's stderr and the log.
     pub fn line(&self, line: &str) {
+        let line = self.redactor.text(line);
         eprintln!("{line}");
-        self.file_line(line);
+        self.write_line(&line);
     }
 
     /// A line to the log only.
     pub fn file_line(&self, line: &str) {
+        self.write_line(&self.redactor.text(line));
+    }
+
+    fn write_line(&self, line: &str) {
         if let Some(file) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
             let _ = writeln!(file, "{line}");
         }
     }
 
-    /// Raw output of the backend: to the log and to the terminal's stdout or stderr.
+    /// Output of the backend, already filtered (`Redactor::lines`): to the log and to the
+    /// terminal's stdout or stderr.
     pub fn output(&self, bytes: &[u8], stderr: bool) {
         if stderr {
             let _ = std::io::stderr().write_all(bytes);

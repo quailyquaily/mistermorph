@@ -24,8 +24,10 @@ use crate::{
 };
 
 /// What the host features the app may use (`hasFeature`). `voiceRecord`: the microphone records
-/// for the agent to transcribe (src/voice.rs), as the browser's does.
-pub const FEATURES: [&str; 9] = ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord"];
+/// for the agent to transcribe (src/voice.rs), as the browser's does. `networkProxy`: the app's
+/// own network proxy setting (src/proxy.rs).
+pub const FEATURES: [&str; 10] =
+    ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord", "networkProxy"];
 
 /// Work for the main thread, where the window and GPUI's dialogs are.
 pub enum Ui {
@@ -48,6 +50,8 @@ pub struct Desktop {
     pub config_path: Option<PathBuf>,
     pub auto_update: AutoUpdate,
     pub supervisor: Supervisor,
+    /// The network proxy this run launched with, and its saved setting.
+    pub proxy: Arc<crate::proxy::Launch>,
     pub ui: UnboundedSender<Ui>,
     origin: Mutex<String>,
     kv: Mutex<KvStore>,
@@ -71,6 +75,7 @@ impl Desktop {
         config_path: Option<PathBuf>,
         auto_update: AutoUpdate,
         supervisor: Supervisor,
+        proxy: Arc<crate::proxy::Launch>,
         ui: UnboundedSender<Ui>,
     ) -> Desktop {
         Desktop {
@@ -79,6 +84,7 @@ impl Desktop {
             config_path,
             auto_update,
             supervisor,
+            proxy,
             ui,
             origin: Mutex::new(String::new()),
             kv: Mutex::new(KvStore::load(crate::paths::kv_file())),
@@ -463,6 +469,37 @@ pub fn install(host: &HostChannel, desktop: &Arc<Desktop>) {
         call.resolve(Value::Null);
     });
 
+    // The network proxy setting. Reading it asks the credential store whether it is there, and
+    // saving writes to it: both off the engine thread. Saving stores the setting and nothing
+    // else; no answer and no log line holds a credential.
+    let d = desktop.clone();
+    host.handle("morph.desktop.networkProxy.get", move |call| {
+        let d = d.clone();
+        on_thread(call, move |_| Ok(d.proxy.view()));
+    });
+
+    let d = desktop.clone();
+    host.handle("morph.desktop.networkProxy.set", move |call| {
+        let d = d.clone();
+        on_thread(call, move |data| {
+            let answer = crate::proxy::save_answer(&d.proxy, data);
+            if answer["ok"] == json!(true) {
+                let saved = &answer["saved"];
+                d.log.line(&format!(
+                    "desktop_proxy saved mode={} type={} host={} port={} pending={}",
+                    saved["mode"].as_str().unwrap_or(""),
+                    saved["type"].as_str().unwrap_or(""),
+                    saved["host"].as_str().unwrap_or(""),
+                    saved["port"],
+                    answer["pending"],
+                ));
+            } else {
+                d.log.line(&format!("desktop_proxy save refused: {}", answer["error"].as_str().unwrap_or("")));
+            }
+            Ok(answer)
+        });
+    });
+
     let d = desktop.clone();
     host.handle("morph.desktop.ready", move |call| {
         d.frontend_ready();
@@ -487,7 +524,8 @@ mod tests {
         let (ui, _rx) = futures::channel::mpsc::unbounded();
         let log = Arc::new(DesktopLog::none());
         let supervisor = Supervisor::spawn(crate::backend::BackendConfig::new(None), log.clone());
-        let desktop = Arc::new(Desktop::new(log, Instant::now(), None, AutoUpdate::default(), supervisor, ui));
+        let proxy = Arc::new(crate::proxy::Launch::new(Vec::new(), None, Arc::new(crate::proxy_secret::MemoryStore::default())));
+        let desktop = Arc::new(Desktop::new(log, Instant::now(), None, AutoUpdate::default(), supervisor, proxy, ui));
         let key = crate::config::CONSOLE_AUTH_KEY;
         desktop.set_value("local", key, None).unwrap();
         assert_eq!(desktop.console_token(), None);
@@ -509,7 +547,9 @@ mod tests {
 
     #[test]
     fn features_match_the_contract() {
-        for feature in ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord"] {
+        for feature in
+            ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord", "networkProxy"]
+        {
             assert!(FEATURES.contains(&feature));
         }
     }

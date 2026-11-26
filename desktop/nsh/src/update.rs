@@ -211,7 +211,7 @@ enum FetchError {
 }
 
 fn fetch_manifest(url: &str) -> Result<Manifest, FetchError> {
-    let agent = crate::http::agent(Some(std::time::Duration::from_secs(60)));
+    let agent = crate::http::agent_for(url, Some(std::time::Duration::from_secs(60)));
     let mut response = agent
         .get(url)
         .header("Accept", "application/json")
@@ -262,7 +262,7 @@ fn download_asset(
 
 /// Downloads `url` to `path` through a temporary file.
 pub fn download_file(path: &Path, url: &str, headers: &[(String, String)]) -> Result<(), String> {
-    let agent = crate::http::agent(None);
+    let agent = crate::http::agent_for(url, None);
     let mut request = agent.get(url.trim());
     for (name, value) in headers {
         request = request.header(name, value);

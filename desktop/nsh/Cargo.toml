@@ -58,7 +58,9 @@ sys-locale = "0.3"
 tar = "0.4"
 # A random private directory for voice recordings (src/voice.rs); already in the lock via GPUI.
 tempfile = "3"
-ureq = "3"
+# `socks-proxy`: without it a `socks5://` proxy from the environment is ignored and the request
+# goes direct. The lock has one ureq, so this also holds for nsh's fetch and image loader.
+ureq = { version = "3", features = ["socks-proxy"] }
 url = "2"
 yaml-rust2 = "0.10"
 zip = { version = "2", default-features = false, features = ["deflate"] }
@@ -69,6 +71,21 @@ toml = "0.8"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# The network proxy's password (src/proxy_secret.rs) is kept in the system's credential store:
+# the macOS Keychain, the Windows Credential Manager, the Secret Service on Linux.
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+keyring-core = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1", features = ["keychain"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = "1"
+
+# zbus is in the lock already (notify-rust); the Rust crypto keeps OpenSSL out of the build.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store = { version = "1", features = ["rt-async-io-crypto-rust"] }
 
 # build.rs: the executable's icon on Windows (Explorer, shortcuts, the zip's file).
 [target.'cfg(windows)'.build-dependencies]

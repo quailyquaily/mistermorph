@@ -85,6 +85,7 @@ folders, `~/.config` and `~/.cache` on Linux):
 | `<config>/mistermorph/desktop/main-window.json` | Window size and position (the same file and format as the Wails app's) |
 | `<config>/mistermorph/desktop/kv.json` | The console's saved values (`localStorage` in the browser) |
 | `<config>/mistermorph/desktop/app-state.json` | The location the console was at, reopened on the next launch |
+| `<config>/mistermorph/desktop/network-proxy.json` | The network proxy setting: mode, type, host, port, user name and whether a password is stored. The password itself is in the system's credential store, never in a file (see "Network proxy") |
 | `<cache>/mistermorph/desktop/nsh-assets/<hash>/` | The console's fonts and icons, written once per build |
 | `<cache>/mistermorph/desktop/updates/` | Update packages the check downloaded (`auto_update.enabled`) |
 
@@ -92,7 +93,7 @@ folders, `~/.config` and `~/.cache` on Linux):
 
 | Call | Desktop behaviour |
 | --- | --- |
-| `morph.boot` | `runtime: "desktop"`, `origin: http://127.0.0.1:<port>`, `basePath: "/"`, the last location, `kv.json`, the system's languages, the version, all eight features |
+| `morph.boot` | `runtime: "desktop"`, `origin: http://127.0.0.1:<port>`, `basePath: "/"`, the last location, `kv.json`, the system's languages, the version, all ten features |
 | `morph.kv.set` | `local` is written to `kv.json`; `session` lives as long as the process |
 | `morph.history` | Remembers the location for the next launch (no back/forward: `morph.pop` is never sent) |
 | `morph.title` | The window title |
@@ -107,9 +108,89 @@ folders, `~/.config` and `~/.cache` on Linux):
 | `morph.desktop.checkUpdate` | The Go check, ported; re-reads `auto_update` from the config every time; `channel` overrides it |
 | `morph.desktop.restart` | Stops the backend, starts it again (new port), reloads the console |
 | `morph.desktop.quit` / `openLog` / `ready` | Quit (stops the backend); the log in the system's viewer; logs `desktop_startup_frontend_ready` |
+| `morph.desktop.networkProxy.get` | Feature `networkProxy`. `{ saved, running, pending, credentialStore }`: the saved setting without its password (`hasPassword` says one is stored), what the app runs with since it was opened (`mode`, and `type`, `host`, `port`, `username` for an explicit proxy), whether the two differ, and whether the system has a credential store |
+| `morph.desktop.networkProxy.set` | `{ mode, type, host, port, username, password?, clearPassword? }`. Saves the setting and nothing else: no process starts or stops. Answers the new state with `ok: true`, or `ok: false` with `error` (`validation` with `fields` mapping a field to an error code, `credential_store` or `write` with a `message`); nothing is saved then. No answer holds a credential |
 
 Closing the window quits (Linux, Windows) or hides the app (macOS), as before. Ctrl+Q / Cmd+Q
 quits.
+
+## Network proxy
+
+Settings, General, "Network proxy" (`src/proxy.rs`). One setting owned by the shell, read once
+at launch and turned into the standard proxy variables: one set for this process, one for the
+backend it starts. A changed setting applies when the user quits and reopens the app; the app
+never relaunches itself, and `morph.desktop.restart` starts the backend with the same launch
+state again.
+
+Two modes:
+
+- **System default** (the default): the app follows the proxy variables it inherited. The
+  backend gets the inherited environment exactly. The shell changes one thing for itself, and
+  only when a proxy variable was inherited: its bypass list (`NO_PROXY` when set, else
+  `no_proxy`) gains `localhost,127.0.0.1,::1,[::1]`.
+- **Explicit proxy**: HTTP or SOCKS5, host, port, optional user name and password. The eight
+  standard names (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` and their lower-case
+  forms) are taken over: inherited values are dropped, the six proxy names all carry the proxy
+  URL, and the only bypass is loopback. The backend gets `http://` or `socks5://` (never
+  `socks5h://`), `REQUEST_METHOD` removed, and the marker
+  `MISTER_MORPH_DESKTOP_PROXY_REQUIRED=1`; the shell gets `socks5h://` for SOCKS5, so that its
+  HTTP client resolves names at the proxy.
+
+A saved explicit proxy that cannot be loaded (a file that cannot be read or parsed, a field that
+fails validation, a stored password that is missing or cannot be read) **blocks the start**: no
+backend, no update check, no download, no Console, no request. The window says why, by type,
+host and port when they are known, and offers Quit, Open Log and "Switch to System default and
+quit", which warns first and keeps the fields that can be read and the stored password.
+`MrMorph --check-update` prints the same reason and fails. The startup error view offers the
+same switch when the backend does not start under an explicit proxy.
+
+What goes through an explicit proxy:
+
+- The backend's HTTP, SSE and WebSocket requests: LLM providers, channels, `web_search`, MCP
+  over HTTP, updates, skill installs, sign-ins, remote endpoints.
+- The shell's update check and downloads, and the Console's own external requests (skill
+  previews, remote images).
+
+Blocked rather than proxied:
+
+- `url_fetch` under the default guard settings, and whenever `allow_proxy` is false or
+  `deny_private_ips` is true for a host name. See `docs/tools.md` and `docs/security.md`.
+
+Not through the proxy, and not claimed:
+
+- Commands the agent runs (bash, PowerShell) and the coder CLIs do not receive the proxy
+  variables or the marker. Listing the names in `tools.bash.injected_env_vars`
+  (`tools.powershell.injected_env_vars` on Windows) passes the app's values, password included;
+  whether a program honors them is that program's matter. A coder session keeps the environment
+  it started with.
+- MCP stdio servers receive the variables; honoring them is theirs.
+- Links open in the system browser, which uses the system's settings.
+- The Console's WebSocket has no proxy support; in the desktop app it only connects to the
+  app's own backend on loopback.
+- Requests to `localhost`, `127.0.0.1` and `::1` never use a proxy. The shell's requests to its
+  backend use a client without a proxy, chosen by the target and not by `NO_PROXY`.
+- An HTTP proxy must allow `CONNECT` to the ports in use: the shell's client tunnels plain
+  `http://` requests too.
+- No PAC files, no reading of the OS proxy settings, no HTTPS-scheme proxies, SOCKS4, NTLM or
+  Kerberos.
+
+Secrets:
+
+- The password is kept in the macOS Keychain, the Windows Credential Manager or the Secret
+  Service on Linux (service `com.mistermorph.desktop`, account `network-proxy`). Without a
+  credential store, saving a setting with a password fails; there is no plaintext fallback.
+- While an explicit proxy with a password is running, the backend's environment contains the
+  proxy URL with that password. Other processes of the same user can read it, and MCP stdio
+  servers receive it.
+- The shell names a proxy by type, host and port only. In explicit mode with a password it
+  also filters the backend's output and the startup diagnostics on whole lines for the known
+  forms of the password (as typed, percent-encoded, the `user:password@` part of a proxy URL,
+  the Base64 of `user:password`). This is a second line of defense for those forms; it does not
+  make arbitrary backend output safe.
+
+ureq is built with its `socks-proxy` feature (`Cargo.toml`), which also holds for nsh's `fetch`
+and image loader (the lock has one ureq): a `socks5://` proxy from the environment, ignored
+before, is now used in System default too, or the request fails.
 
 ## Patches to nsh-platform-gpui
 

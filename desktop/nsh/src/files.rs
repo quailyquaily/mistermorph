@@ -307,7 +307,7 @@ pub fn upload(picked: &Picked, request: &UploadRequest, origin: &str, report: im
     let request = builder
         .body(ureq::SendBody::from_owned_reader(body))
         .map_err(|e| format!("upload failed: {e}"))?;
-    let mut response = crate::http::agent(None).run(request).map_err(|e| format!("upload failed: {e}"))?;
+    let mut response = crate::http::agent_for(&url, None).run(request).map_err(|e| format!("upload failed: {e}"))?;
     let status = response.status();
     let body = response
         .body_mut()
@@ -349,7 +349,7 @@ pub fn save_bytes(request: &SaveRequest, origin: &str) -> Result<Vec<u8>, String
         return Err("nothing to save".to_owned());
     };
     let url = crate::http::resolve(origin, url);
-    let mut call = crate::http::agent(None).get(&url).header("Cache-Control", "no-store");
+    let mut call = crate::http::agent_for(&url, None).get(&url).header("Cache-Control", "no-store");
     for (name, value) in &request.headers {
         call = call.header(name, value);
     }

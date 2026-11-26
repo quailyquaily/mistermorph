@@ -27,6 +27,9 @@ pub struct BackendConfig {
     pub base_path: String,
     pub startup_timeout: Duration,
     pub health_interval: Duration,
+    /// The backend's environment, built once at launch from the inherited snapshot
+    /// (`proxy::Launch::backend_env`); none while the saved network proxy blocks the start.
+    pub env: Option<crate::proxy::Env>,
 }
 
 impl BackendConfig {
@@ -36,9 +39,19 @@ impl BackendConfig {
             base_path: DEFAULT_BASE_PATH.to_owned(),
             startup_timeout: STARTUP_TIMEOUT,
             health_interval: HEALTH_INTERVAL,
+            env: Some(std::env::vars_os().collect()),
         }
     }
+
+    /// The environment every backend of this run gets; none refuses to start one.
+    pub fn with_env(mut self, env: Option<crate::proxy::Env>) -> BackendConfig {
+        self.env = env;
+        self
+    }
 }
+
+/// Why a start is refused while the saved network proxy could not be loaded.
+pub const BLOCKED: &str = "the saved network proxy could not be loaded: the backend is not started";
 
 /// A running backend.
 pub struct Backend {
@@ -50,6 +63,8 @@ pub struct Backend {
 impl Backend {
     /// Finds the binary, starts `console serve` and waits until `/health` answers.
     pub fn start(cfg: &BackendConfig, log: &Arc<DesktopLog>) -> Result<Backend, String> {
+        // Before anything else: a blocked start looks for no binary and downloads none.
+        let env = cfg.env.clone().ok_or_else(|| BLOCKED.to_owned())?;
         let addr = reserve_loopback_addr()?;
         let exe = std::env::current_exe().map_err(|e| format!("resolve executable path: {e}"))?;
         let binary = resolve_launcher(&exe, log)?;
@@ -59,7 +74,7 @@ impl Backend {
         command
             .args(&args)
             .env_clear()
-            .envs(child_env(std::env::vars().collect()))
+            .envs(child_env(env))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -81,7 +96,8 @@ impl Backend {
     fn wait_until_ready(&mut self, cfg: &BackendConfig) -> Result<(), String> {
         let deadline = Instant::now() + cfg.startup_timeout;
         let health = format!("http://{}/health", self.addr);
-        let agent = crate::http::agent(Some(Duration::from_secs(2)));
+        // The app's own backend: never through a proxy.
+        let agent = crate::http::local_agent(Some(Duration::from_secs(2)));
         loop {
             if Instant::now() >= deadline {
                 return Err(format!(
@@ -149,21 +165,31 @@ fn exit_text(status: std::process::ExitStatus) -> String {
     status.to_string()
 }
 
-/// The backend's output goes to the terminal and the desktop log.
-fn pipe_output(stream: Option<impl Read + Send + 'static>, stderr: bool, log: &Arc<DesktopLog>) {
-    let Some(mut stream) = stream else {
-        return;
-    };
+/// The backend's output goes to the terminal and the desktop log, through the log's filter: with
+/// a proxy password running it is written on whole lines, so that a secret split across two reads
+/// is still found.
+fn pipe_output(stream: Option<impl Read + Send + 'static>, stderr: bool, log: &Arc<DesktopLog>) -> Option<std::thread::JoinHandle<()>> {
+    let mut stream = stream?;
     let log = log.clone();
-    std::thread::spawn(move || {
+    Some(std::thread::spawn(move || {
+        let mut lines = log.redactor().lines();
         let mut buf = [0u8; 8192];
         loop {
             match stream.read(&mut buf) {
                 Ok(0) | Err(_) => break,
-                Ok(n) => log.output(&buf[..n], stderr),
+                Ok(n) => {
+                    let ready = lines.push(&buf[..n]);
+                    if !ready.is_empty() {
+                        log.output(&ready, stderr);
+                    }
+                }
             }
         }
-    });
+        let rest = lines.finish();
+        if !rest.is_empty() {
+            log.output(&rest, stderr);
+        }
+    }))
 }
 
 #[cfg(target_os = "linux")]
@@ -215,14 +241,14 @@ pub fn normalize_base_path(raw: &str) -> String {
     if base.is_empty() { DEFAULT_BASE_PATH.to_owned() } else { base.to_owned() }
 }
 
-/// The app's environment; inside an AppImage without the loader state the AppImage runtime set.
-pub fn child_env(base: Vec<(String, String)>) -> Vec<(String, String)> {
+/// The backend's environment; inside an AppImage without the loader state the AppImage runtime set.
+pub fn child_env(base: crate::proxy::Env) -> crate::proxy::Env {
     let in_appimage = base.iter().any(|(k, _)| k == "APPDIR" || k == "APPIMAGE");
     if !in_appimage {
         return base;
     }
     const BLOCKED: [&str; 7] = ["APPDIR", "APPIMAGE", "APPDIR_EXEC_PATH", "ARGV0", "OWD", "LD_LIBRARY_PATH", "LD_PRELOAD"];
-    base.into_iter().filter(|(k, _)| !BLOCKED.contains(&k.as_str())).collect()
+    base.into_iter().filter(|(k, _)| !BLOCKED.iter().any(|blocked| k == blocked)).collect()
 }
 
 /// A free loopback address (`127.0.0.1:<port>`): bound, read and released for the backend.
@@ -403,7 +429,7 @@ pub struct ReleaseFile {
 }
 
 fn fetch_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
-    let agent = crate::http::agent(Some(Duration::from_secs(60)));
+    let agent = crate::http::agent_for(url, Some(Duration::from_secs(60)));
     let mut response = agent.get(url).header("Accept", "application/json").call().map_err(|e| e.to_string())?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
@@ -620,7 +646,7 @@ mod tests {
 
     #[test]
     fn cleans_the_environment_inside_an_appimage() {
-        let env = |pairs: &[(&str, &str)]| pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<Vec<_>>();
+        let env = |pairs: &[(&str, &str)]| pairs.iter().map(|(k, v)| (k.into(), v.into())).collect::<crate::proxy::Env>();
         let plain = env(&[("PATH", "/bin"), ("LD_LIBRARY_PATH", "/x")]);
         assert_eq!(child_env(plain.clone()), plain);
         let appimage = env(&[("PATH", "/bin"), ("APPIMAGE", "/a"), ("APPDIR", "/d"), ("LD_PRELOAD", "x"), ("HOME", "/h")]);
@@ -698,6 +724,80 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    /// A reader that hands out the chunks it was given, one per read.
+    struct Chunks(std::collections::VecDeque<Vec<u8>>);
+
+    impl Read for Chunks {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let Some(mut chunk) = self.0.pop_front() else {
+                return Ok(0);
+            };
+            let n = chunk.len().min(buf.len());
+            buf[..n].copy_from_slice(&chunk[..n]);
+            if n < chunk.len() {
+                self.0.push_front(chunk.split_off(n));
+            }
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn keeps_the_proxy_password_out_of_the_log() {
+        use base64::Engine;
+        // Regression rows 7 to 9: the backend writes the password as typed, percent-encoded,
+        // inside a proxy URL and as a Proxy-Authorization value; in two writes split inside the
+        // secret; and in a line longer than one read.
+        const USER: &str = "morph";
+        const SECRET: &str = "S3ntinel p@ss:w%rd";
+        let encoded = crate::redact::percent_encode(SECRET);
+        let basic = base64::engine::general_purpose::STANDARD.encode(format!("{USER}:{SECRET}"));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("desktop.log");
+        let redactor = crate::redact::Redactor::for_credentials(USER, SECRET);
+        let log = Arc::new(DesktopLog::at(path.clone(), redactor.clone()));
+
+        let long = format!("{}{SECRET}{}\n", "a".repeat(20_000), "b".repeat(20_000));
+        let chunks: Vec<Vec<u8>> = vec![
+            format!("raw {SECRET}\nencoded {encoded}\n").into_bytes(),
+            format!("url http://{USER}:{encoded}@127.0.0.1:8080 failed\nProxy-Authorization: Basic {basic}\n").into_bytes(),
+            b"split S3nti".to_vec(),
+            b"nel p@ss:w%rd end\n".to_vec(),
+            long.into_bytes(),
+            format!("no newline at the end {SECRET}").into_bytes(),
+        ];
+        pipe_output(Some(Chunks(chunks.into())), true, &log).unwrap().join().unwrap();
+        // The shell's own lines and the startup diagnostics go through the same filter.
+        log.line(&format!("failed to start desktop host: proxyconnect http://{USER}:{encoded}@127.0.0.1:8080"));
+        log.file_line(&format!("desktop_window upload failed: {SECRET}"));
+        let detail = redactor.text(&format!("start desktop console host: dial http://{USER}:{encoded}@127.0.0.1:8080: {SECRET} / {basic}"));
+        let diagnostics = crate::startup_error::StartupError::classify(&detail, Some(&path))
+            .with_proxy(Some("HTTP 127.0.0.1:8080".to_owned()))
+            .diagnostics();
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        for text in [&written, &diagnostics] {
+            for form in [SECRET, encoded.as_str(), basic.as_str(), "S3ntinel", "w%rd", "w%25rd"] {
+                assert!(!text.contains(form), "{form} is in: {text}");
+            }
+        }
+        assert_eq!(written.matches("[redacted]").count(), 9, "{written}");
+        assert!(written.contains("url http://[redacted]@127.0.0.1:8080 failed\n"));
+        assert!(written.contains("split [redacted] end\n"));
+        assert!(written.contains(&format!("{}[redacted]{}\n", "a".repeat(20_000), "b".repeat(20_000))));
+        assert!(written.contains("no newline at the end [redacted]"));
+        assert!(diagnostics.contains("HTTP 127.0.0.1:8080"));
+    }
+
+    #[test]
+    fn passes_output_through_without_a_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("desktop.log");
+        let log = Arc::new(DesktopLog::at(path.clone(), crate::redact::Redactor::none()));
+        let chunks: Vec<Vec<u8>> = vec![b"half ".to_vec(), b"a line\nand more".to_vec()];
+        pipe_output(Some(Chunks(chunks.into())), false, &log).unwrap().join().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "half a line\nand more");
+    }
+
     /// Restarts a real backend: `MORPH_TEST_BACKEND=/path/to/morph cargo test -- --ignored`.
     /// Run it with an isolated HOME: the backend creates `~/.morph`.
     #[test]
@@ -709,7 +809,7 @@ mod tests {
         unsafe { std::env::set_var(BACKEND_BIN_ENV, &bin) };
         let supervisor = Supervisor::spawn(BackendConfig::new(None), Arc::new(DesktopLog::none()));
         let health = |addr: &str| {
-            crate::http::agent(Some(Duration::from_secs(2)))
+            crate::http::local_agent(Some(Duration::from_secs(2)))
                 .get(&format!("http://{addr}/health"))
                 .call()
                 .map(|r| r.status().as_u16())

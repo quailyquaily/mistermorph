@@ -10,6 +10,9 @@ mod host;
 mod http;
 mod notify;
 mod paths;
+mod proxy;
+mod proxy_secret;
+mod redact;
 mod shell;
 mod startup_error;
 mod store;
@@ -40,6 +43,14 @@ mod embedded {
 }
 
 fn main() -> ExitCode {
+    // The network proxy first, before any thread starts: the inherited environment is kept as a
+    // snapshot, the saved setting is loaded, and this process's proxy variables are set for it,
+    // once. Every request the app makes afterwards (the update check, the backend download, the
+    // Console) follows them; every backend environment is built from the snapshot.
+    let launch = Arc::new(proxy::Launch::from_system());
+    // SAFETY: nothing has started a thread that reads the environment yet.
+    unsafe { launch.apply_process_env() };
+
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     let started_at = Instant::now();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -48,6 +59,11 @@ fn main() -> ExitCode {
     let auto_update = config::load_auto_update(config_path.as_deref());
 
     if config::has_check_update_arg(&args) {
+        if let Some(blocked) = launch.blocked() {
+            // No request while the saved proxy cannot be loaded.
+            eprintln!("check update failed: {} {}", blocked.message(), blocked.advice());
+            return ExitCode::FAILURE;
+        }
         return check_update_command(auto_update);
     }
     let auto_update = auto_update.unwrap_or_else(|err| {
@@ -68,15 +84,21 @@ fn main() -> ExitCode {
         }
     };
 
-    let log = Arc::new(desktop_log::DesktopLog::open());
+    let log = Arc::new(desktop_log::DesktopLog::open(launch.redactor()));
+    log.line(&launch.log_line());
     // Only a config named with --config is passed on: without it the backend keeps the config in
     // agent.db.
     let backend_config = if explicit { config_path.clone() } else { None };
-    let supervisor = backend::Supervisor::spawn(backend::BackendConfig::new(backend_config), log.clone());
+    let supervisor =
+        backend::Supervisor::spawn(backend::BackendConfig::new(backend_config).with_env(launch.backend_env()), log.clone());
     let (ui_tx, mut ui_rx) = futures::channel::mpsc::unbounded();
-    let desktop = Arc::new(host::Desktop::new(log.clone(), started_at, config_path, auto_update, supervisor, ui_tx));
-    // The backend starts while the window opens.
-    shell::start_backend(&desktop);
+    let desktop =
+        Arc::new(host::Desktop::new(log.clone(), started_at, config_path, auto_update, supervisor, launch.clone(), ui_tx));
+    // The backend starts while the window opens; not at all while the saved proxy blocks the
+    // start (the window shows why, src/shell.rs).
+    if launch.blocked().is_none() {
+        shell::start_backend(&desktop);
+    }
     let assets = extract_assets(&log);
     set_ui_sets(vec![nsh_base::registry()]);
 

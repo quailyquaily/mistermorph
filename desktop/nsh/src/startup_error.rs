@@ -9,6 +9,9 @@ pub struct StartupError {
     pub detail: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub log_path: String,
+    /// The explicit network proxy the app runs with, by type, host and port; empty without one.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub proxy: String,
 }
 
 impl StartupError {
@@ -35,7 +38,14 @@ impl StartupError {
             message: message.to_owned(),
             detail,
             log_path: log_path.map(|p| p.display().to_string()).unwrap_or_default(),
+            proxy: String::new(),
         }
+    }
+
+    /// Names the explicit network proxy the start failed under.
+    pub fn with_proxy(mut self, proxy: Option<String>) -> StartupError {
+        self.proxy = proxy.unwrap_or_default();
+        self
     }
 
     /// What "Copy Diagnostics" copies.
@@ -71,5 +81,13 @@ mod tests {
         assert_eq!(json["kind"], "unknown");
         let none = StartupError::classify("x", None).diagnostics();
         assert!(!none.contains("log_path"));
+        assert!(!none.contains("proxy"));
+    }
+
+    #[test]
+    fn diagnostics_name_the_running_proxy() {
+        let info = StartupError::classify("x", None).with_proxy(Some("SOCKS5 proxy.example:1080".to_owned()));
+        let json: serde_json::Value = serde_json::from_str(&info.diagnostics()).unwrap();
+        assert_eq!(json["proxy"], "SOCKS5 proxy.example:1080");
     }
 }

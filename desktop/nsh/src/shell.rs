@@ -1,5 +1,6 @@
 //! The main window: the console (an nsh `AppView`) once the backend is ready, "Starting" before,
-//! and the startup error view when the backend does not start.
+//! the startup error view when the backend does not start, and the blocked view when the saved
+//! network proxy could not be loaded (nothing is started then).
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -30,7 +31,19 @@ enum State {
     Starting,
     Running,
     Failed { info: StartupError, copied: bool },
+    /// The saved network proxy could not be loaded: no backend, no Console, no request.
+    Blocked,
 }
+
+/// "Switch to System default and quit": it says what it will do before it acts.
+#[derive(Clone, PartialEq, Eq)]
+enum SwitchPrompt {
+    Idle,
+    Confirming,
+    Failed(String),
+}
+
+const SWITCH_WARNING: &str = "MisterMorph will then connect without the saved proxy: it follows the proxy settings of its environment, or connects directly when there are none. The saved fields and the stored password are kept. The app quits; reopen it afterwards.";
 
 pub struct Shell {
     desktop: Arc<Desktop>,
@@ -38,6 +51,7 @@ pub struct Shell {
     host: nsh_engine::HostChannel,
     bundle: Bundle,
     state: State,
+    switch: SwitchPrompt,
     save_pending: Option<gpui::Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -173,7 +187,8 @@ impl Shell {
             }),
         ];
         let host = app.read(cx).host();
-        Shell { desktop, app, host, bundle, state: State::Starting, save_pending: None, _subscriptions: subscriptions }
+        let state = if desktop.proxy.blocked().is_some() { State::Blocked } else { State::Starting };
+        Shell { desktop, app, host, bundle, state, switch: SwitchPrompt::Idle, save_pending: None, _subscriptions: subscriptions }
     }
 
     fn send_visibility(&self, window: &Window) {
@@ -185,9 +200,11 @@ impl Shell {
 
     /// Restarts the backend, then the app: from the console after setup, or the error view.
     fn restart(&mut self, cx: &mut Context<Self>) {
-        if matches!(self.state, State::Starting) {
+        // A restart starts the backend with the launch's state again; a blocked start has none.
+        if matches!(self.state, State::Starting | State::Blocked) {
             return;
         }
+        self.switch = SwitchPrompt::Idle;
         self.desktop.log.line("desktop_window restart");
         self.state = State::Starting;
         self.app.read(cx).stop();
@@ -238,7 +255,10 @@ impl Shell {
                 cx.notify();
             }
             Ui::BackendFailed(detail) => {
-                let info = StartupError::classify(&detail, self.desktop.log.path().map(|p| p.as_path()));
+                // The diagnostics go through the log's filter too.
+                let detail = self.desktop.log.redactor().text(&detail);
+                let info = StartupError::classify(&detail, self.desktop.log.path().map(|p| p.as_path()))
+                    .with_proxy(self.desktop.proxy.running_label());
                 self.state = State::Failed { info, copied: false };
                 cx.notify();
             }
@@ -273,9 +293,143 @@ impl Shell {
         });
     }
 
+    /// Writes System default to the settings file and quits; the user reopens the app.
+    fn switch_to_system_and_quit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.desktop.proxy.switch_to_system() {
+            Ok(()) => {
+                self.desktop.log.line("desktop_proxy switched to system default; quitting");
+                save_window_state(window);
+                cx.quit();
+            }
+            Err(err) => {
+                self.desktop.log.line(&format!("desktop_proxy switch to system default failed: {err}"));
+                self.switch = SwitchPrompt::Failed(err);
+                cx.notify();
+            }
+        }
+    }
+
+    /// The switch's part of a view: the button, and once it was pressed the warning with its
+    /// confirmation.
+    fn render_switch(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let set = |prompt: SwitchPrompt| {
+            cx.listener(move |this: &mut Shell, _: &gpui::ClickEvent, _, cx| {
+                this.switch = prompt.clone();
+                cx.notify();
+            })
+        };
+        match &self.switch {
+            SwitchPrompt::Confirming => div()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .child(div().id("switch-warning").text_size(px(13.)).text_color(rgb(0x7a4a00)).child(SWITCH_WARNING))
+                .child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap(px(8.))
+                        .child(
+                            button("switch-confirm", "Switch and quit", true, false)
+                                .on_click(cx.listener(|this, _, window, cx| this.switch_to_system_and_quit(window, cx))),
+                        )
+                        .child(button("switch-cancel", "Cancel", false, false).on_click(set(SwitchPrompt::Idle))),
+                ),
+            prompt => div()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .when_some(
+                    match prompt {
+                        SwitchPrompt::Failed(err) => Some(SharedString::from(format!("Could not switch to System default: {err}"))),
+                        _ => None,
+                    },
+                    |view, err| view.child(div().text_size(px(13.)).text_color(rgb(0xa1261c)).child(err)),
+                )
+                .child(
+                    div().flex().child(
+                        button("switch-system", "Switch to System default and quit", false, false)
+                            .on_click(set(SwitchPrompt::Confirming)),
+                    ),
+                ),
+        }
+    }
+
+    /// The view of a blocked start: why the saved proxy could not be loaded, by type, host and
+    /// port when they are known and never with a credential.
+    fn render_blocked(&self, blocked: &crate::proxy::Blocked, cx: &mut Context<Self>) -> AnyElement {
+        let has_log = self.desktop.log.path().is_some();
+        let known = match &blocked.known {
+            Some(proxy) => format!("Saved proxy: {proxy}"),
+            None => "Saved proxy: not known".to_owned(),
+        };
+        let detail = format!("{}\n{known}\n{}", blocked.message(), blocked.advice());
+        div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(rgb(0xf8f9f7))
+            .text_color(rgb(0x1f251f))
+            .child(
+                div()
+                    .w(px(620.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(18.))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(12.))
+                            .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child("MisterMorph did not start"))
+                            .child(div().text_size(px(14.)).text_color(rgb(0x566052)).child(
+                                "The saved network proxy could not be loaded. Nothing was started and no connection was made: the app does not fall back to a direct connection by itself.",
+                            )),
+                    )
+                    .child(
+                        div()
+                            .id("blocked-detail")
+                            .p(px(12.))
+                            .border_1()
+                            .border_color(rgba(0x1f251f24))
+                            .bg(rgb(0xffffff))
+                            .text_color(rgb(0x2c332b))
+                            .text_size(px(12.))
+                            .font_family(MONO)
+                            .child(SharedString::from(detail)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap(px(8.))
+                            .child(button("quit", "Quit", true, false).on_click(cx.listener(|_, _, window, cx| {
+                                save_window_state(window);
+                                cx.quit();
+                            })))
+                            .child(
+                                button("open-log", if has_log { "Open Log" } else { "Log Unavailable" }, false, !has_log)
+                                    .when(has_log, |b| {
+                                        b.on_click(cx.listener(|this, _, _, cx| {
+                                            if let Some(path) = this.desktop.log.path() {
+                                                cx.open_with_system(path);
+                                            }
+                                        }))
+                                    }),
+                            ),
+                    )
+                    .child(self.render_switch(cx)),
+            )
+            .into_any_element()
+    }
+
     fn render_error(&self, info: &StartupError, copied: bool, cx: &mut Context<Self>) -> AnyElement {
         let has_log = !info.log_path.is_empty();
         let diagnostics = info.diagnostics();
+        // Under an explicit proxy the view names it and offers the way out.
+        let proxy = (!info.proxy.is_empty()).then(|| SharedString::from(format!("Network proxy in use: {}", info.proxy)));
+        let switch = proxy.is_some().then(|| self.render_switch(cx));
         div()
             .size_full()
             .flex()
@@ -295,7 +449,10 @@ impl Shell {
                             .flex_col()
                             .gap(px(12.))
                             .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(SharedString::from(info.title.clone())))
-                            .child(div().text_size(px(14.)).text_color(rgb(0x566052)).child(SharedString::from(info.message.clone()))),
+                            .child(div().text_size(px(14.)).text_color(rgb(0x566052)).child(SharedString::from(info.message.clone())))
+                            .when_some(proxy, |view, proxy| {
+                                view.child(div().id("error-proxy").text_size(px(14.)).text_color(rgb(0x566052)).child(proxy))
+                            }),
                     )
                     .child(
                         div()
@@ -340,7 +497,8 @@ impl Shell {
                                 save_window_state(window);
                                 cx.quit();
                             }))),
-                    ),
+                    )
+                    .when_some(switch, |view, switch| view.child(switch)),
             )
             .into_any_element()
     }
@@ -391,6 +549,10 @@ impl Render for Shell {
                 let (info, copied) = (info.clone(), *copied);
                 self.render_error(&info, copied, cx)
             }
+            State::Blocked => match self.desktop.proxy.blocked().cloned() {
+                Some(blocked) => self.render_blocked(&blocked, cx),
+                None => div().size_full().into_any_element(),
+            },
         }
     }
 }

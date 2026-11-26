@@ -523,6 +523,78 @@ export async function restartDesktopApp() {
 export async function quitDesktopApp() {
   await hostChannel.call("morph.desktop.quit");
 }
+
+/* ---------- the desktop app's network proxy (`hasFeature("networkProxy")`) ---------- */
+
+export type NetworkProxyType = "http" | "socks5";
+
+/** The saved setting. The password never leaves the host: `hasPassword` says that one is stored. */
+export interface NetworkProxySaved {
+  mode: "system" | "explicit";
+  type: NetworkProxyType;
+  host: string;
+  port: number | null;
+  username: string;
+  hasPassword: boolean;
+}
+
+/** What the app runs with since it was opened; a saved change applies after a quit and reopen. */
+export interface NetworkProxyRunning {
+  mode: "system" | "explicit";
+  type?: NetworkProxyType;
+  host?: string;
+  port?: number;
+  username?: string;
+}
+
+export interface NetworkProxyState {
+  saved: NetworkProxySaved;
+  running: NetworkProxyRunning;
+  /** The saved setting differs from the running one. */
+  pending: boolean;
+  /** The system has a credential store for the password. */
+  credentialStore: boolean;
+}
+
+export interface NetworkProxyChange {
+  mode: "system" | "explicit";
+  type: NetworkProxyType;
+  host: string;
+  port: string;
+  username: string;
+  /** A new password; leave it out to keep the stored one. */
+  password?: string;
+  /** Removes the stored password. */
+  clearPassword?: boolean;
+}
+
+/** A save the host refused: nothing was saved. `fields` maps a field to its error code. */
+export class NetworkProxyError extends Error {
+  constructor(
+    readonly code: "validation" | "credential_store" | "write" | "request",
+    readonly fields: Record<string, string>,
+    message: string,
+  ) {
+    super(message);
+    this.name = "NetworkProxyError";
+  }
+}
+
+export async function networkProxy(): Promise<NetworkProxyState> {
+  return (await hostChannel.call("morph.desktop.networkProxy.get", {}, { timeout: 0 })) as NetworkProxyState;
+}
+
+/**
+ * Saves the setting and nothing else: no restart, no interruption; the running app keeps the
+ * route it started with. Rejects with a NetworkProxyError when the host refuses it.
+ */
+export async function saveNetworkProxy(change: NetworkProxyChange): Promise<NetworkProxyState> {
+  const answer = (await hostChannel.call("morph.desktop.networkProxy.set", change, { timeout: 0 })) as
+    | (NetworkProxyState & { ok: true })
+    | { ok: false; error: NetworkProxyError["code"]; fields?: Record<string, string>; message?: string };
+  if (!answer.ok) throw new NetworkProxyError(answer.error, answer.fields ?? {}, answer.message ?? "");
+  return { saved: answer.saved, running: answer.running, pending: answer.pending, credentialStore: answer.credentialStore };
+}
 export async function openDesktopLog() {
   await hostChannel.call("morph.desktop.openLog");
 }

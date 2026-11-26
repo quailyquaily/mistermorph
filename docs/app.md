@@ -101,6 +101,18 @@ auto_update:
 
 Without `--config` the config is in agent.db, and the shell reads `auto_update` from the backend once it runs. When the Console has a password, the shell reads it with the Console's login, so a desktop that is not logged in yet checks for updates after the login.
 
+### Network proxy
+
+Settings, General, "Network proxy" sets a proxy for the desktop app's own requests: System default (follow the proxy variables the app was started with) or an explicit HTTP or SOCKS5 proxy with an optional user name and password. The password is kept in the system's credential store. A change applies after you quit and reopen the app.
+
+- Through an explicit proxy: the agent's own HTTP, SSE and WebSocket connections (model providers, channels, `web_search`, MCP over HTTP, updates, skill installs, sign-ins), the app's update checks and downloads, and the Console's skill previews and remote images.
+- Blocked rather than proxied: `url_fetch` under the default guard settings. To let it reach host names through the proxy, set `guard.network.url_fetch.allow_proxy: true` and `guard.network.url_fetch.deny_private_ips: false` (and `allow_proxy: true` on an auth profile it uses). See [security.md](security.md) for what that gives up.
+- Not through the proxy: commands the agent runs and coder CLIs (unless the proxy variables are listed in `tools.bash.injected_env_vars`), links opened in the system browser, and requests to `localhost`. MCP stdio servers receive the proxy variables; whether they use them is theirs.
+- With a password, the proxy URL including the password is in the environment of the backend process, where other processes of the same user can read it.
+- If the saved proxy cannot be loaded (a damaged settings file, a password that cannot be read from the credential store), the app does not start and does not connect directly; the window offers "Switch to System default and quit".
+
+The full contract is in `desktop/nsh/README.md`.
+
 With this enabled, desktop startup checks the latest update manifest of the release channel, `https://downloads.mistermorph.com/<channel>/latest/update.json`, and downloads a verified update package into the user cache. `--check-update` also uses this setting to decide whether to download. It does not replace the running app yet: applying the update still needs a platform-specific install/relaunch step.
 
 ## Local Build and Run

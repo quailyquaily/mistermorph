@@ -8,7 +8,7 @@ import { Button as BaseButton } from "nsh/base";
 import { endpointState } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { buildSettingsSearchIndex, searchSettings } from "../../lib/core/settings-search.js";
-import { isBrowser, previousLocation } from "../../lib/platform";
+import { hasFeature, isBrowser, previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { useScrollMemory } from "../../lib/scrollMemory";
 import { isMobile, markMobileDetail } from "../../lib/shell";
@@ -268,6 +268,7 @@ export function SettingsPage() {
       channels: CHANNEL_ITEMS,
       tools: TOOL_ITEMS,
       app: isBrowser(),
+      networkProxy: hasFeature("networkProxy"),
     });
   const results = () => searchSettings(searchIndex(), query()) as any[];
   const searching = () => query().trim() !== "";

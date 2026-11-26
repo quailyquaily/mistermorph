@@ -1,15 +1,17 @@
 // General: this device's own settings, the same whichever agent is selected: the interface language,
 // the appearance (light or dark),
-// notifications, the console session, and, in a web browser, installing the selected agent as an app.
+// notifications, the desktop app's network proxy, the console session, and, in a web browser,
+// installing the selected agent as an app.
 import { Text, View } from "nsh";
 import { Button } from "../../../components/ui";
 import { localeState, themeState } from "../../../lib/stores/index.js";
 import { SettingSelect } from "../../../components/settings/SettingFields";
+import { NetworkProxySetting } from "../../../components/settings/NetworkProxySetting";
 import { SettingsAppPanel } from "../../../components/settings/SettingsAppPanel";
 import { TopicNotificationSetting } from "../../../components/settings/TopicNotificationSetting";
 import { SettingRow, SettingsCard } from "../../../components/settings-page/parts";
 import { isMobile } from "../../../lib/shell";
-import { isBrowser } from "../../../lib/platform";
+import { hasFeature, isBrowser } from "../../../lib/platform";
 import type { SettingsStore } from "../store";
 import { t } from "../i18n";
 
@@ -58,6 +60,10 @@ export function GeneralSection(props: { s: SettingsStore }) {
           <View class="border-t border-line-soft">
             <TopicNotificationSetting />
           </View>
+          {/* The desktop app's own proxy setting: only a host that has it shows the row. */}
+          <If when={hasFeature("networkProxy")}>
+            <NetworkProxySetting />
+          </If>
           <SettingRow title={t("settings_session_title")} note={t("settings_session_hint")}>
             <Button
               variant="outlined"

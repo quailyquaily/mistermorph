@@ -4,8 +4,8 @@
 import type { JSX } from "nsh";
 import { effect, host, mount, signal, Text, untracked, View } from "nsh";
 import { authState, configureApiBase, endpointApiFetch, endpointState } from "../../lib/core/context.js";
-import { boot } from "../../lib/platform";
-import { Button, NoticeHost } from "../../components/ui";
+import { boot, hasFeature } from "../../lib/platform";
+import { Button, ConfirmHost, NoticeHost } from "../../components/ui";
 import {
   CodexAuthDialog,
   ProAuthDialog,
@@ -17,6 +17,7 @@ import { WeChatLoginPanel, XLoginPanel } from "../../components/settings/Channel
 import { MCPSettingsPanel, type MCPServer } from "../../components/settings/MCPSettingsPanel";
 import { ConsoleEndpointsPanel, type ConsoleEndpointConfig } from "../../components/settings/ConsoleEndpointsPanel";
 import { ConsolePasswordPanel } from "../../components/settings/ConsolePasswordPanel";
+import { NetworkProxySetting } from "../../components/settings/NetworkProxySetting";
 import { SettingsAppPanel, SettingsUpdatePanel } from "../../components/settings/SettingsAppPanel";
 import { SettingsCreditsPanel } from "../../components/settings/SettingsCreditsPanel";
 import { TopicNotificationSetting } from "../../components/settings/TopicNotificationSetting";
@@ -332,6 +333,15 @@ const SCENARIOS: Record<string, () => JSX.Element> = {
   notifications: () => (
     <View class="p-4">
       <TopicNotificationSetting />
+    </View>
+  ),
+  // The row is shown where the host has the feature, as General shows it.
+  "network-proxy": () => (
+    <View class="p-4">
+      <If when={hasFeature("networkProxy")} else={<Text testID="no-network-proxy">no network proxy setting</Text>}>
+        <NetworkProxySetting />
+      </If>
+      <ConfirmHost />
     </View>
   ),
   image: ImageScenario,
