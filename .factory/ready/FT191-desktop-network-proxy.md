@@ -419,3 +419,109 @@ Regression matrix coverage:
 Manager independently reran the configured gofmt/vet/go test gate on the committed tree: passed. The two commits contain only this item; no forbidden paths changed. Branch pushed at 1707f05c. No native UI was viewed. No macOS/Windows compile, packaged Linux app run, or real-proxy/credential write test was performed; review must inspect those limitations and the narrower matrix coverage above.
 
 The coder also wrote build-memory notes outside its permitted worktree/TMPDIR and its harness wrote background-output files outside dir. This deviation is reported rather than hidden; no unrelated user files were removed. Newly observed top-level temporary paths were recorded in the run's outside list, not deleted. No user-level tool installs. Initial code push lacked credential HTTP path; retried with per-command credential.useHttpPath=true successfully.
+
+
+## factory · review · 2026-11-27 02:05
+head: 1707f05c83911431fa8b621681ca7a5485268b23
+verdict: pass
+notes:
+- [P2] desktop/nsh/src/proxy.rs:663: replacing the credential-store password before writing the settings file is not atomic. If the file write fails, the old proxy configuration remains but the new password is retained and is sent to the old proxy on next launch. Roll back the previous credential on persistence failure (or use versioned credentials plus an atomic pointer). Verified by the coder with an in-memory store and an unwritable settings directory. Manager classifies this as P2, not the coder's P3: concrete credential-integrity and wrong-endpoint exposure, conditional on local persistence failure. No P0/P1 was established.
+- [P3] tools/builtin/url_fetch_required_proxy.go:233: a guard-rejected redirect is wrapped as a proxy failure even though policy, not the proxy, refused it. Preserve policy errors without transport-failure wrapping.
+- The coder's spaced-NO_PROXY observation is a pre-existing behavior, explicitly reproduced on base, so it is not counted as an introduced finding. It remains an acceptance-coverage limitation for System default loopback bypass.
+- Configured Go formatting/vet/test gate, cargo test --locked, nsh check and the Console parallel test script passed. Extra node library tests had one pre-existing failure in unchanged solo.test.mjs/solo.js, outside the configured gate. Cargo required a temporary library/pkg-config shim; no installs.
+- Native UI was not viewed. macOS/Windows were not built/run; packaged Linux, real proxies and real credential-store writes were not exercised. The build's narrower integration coverage remains.
+- Review made no code changes or commits. The coder refreshed the lock; harness output and a memory note were written outside its allowed worktree/TMPDIR despite the task restriction. These are disclosed, not deleted. Newly observed top-level /tmp paths are tracked in outside; no /tmp deletion is performed.
+- Pass means no P0/P1 findings under factory policy, not absence of defects; the owner should read the P2 credential-persistence issue before shipping.
+
+### Coder review evidence
+
+# FT191 review: desktop network proxy (HTTP and SOCKS5)
+
+Review only. Range `origin/master...HEAD`, base `098d31de`, head `1707f05c83911431fa8b621681ca7a5485268b23` (2 commits, 35 files).
+
+**Verdict: no P0 or P1 findings. Three P3 findings.** The three required suites pass. Nothing here blocks factory progression.
+
+## Findings
+
+### [P3] A bypass list written with spaces keeps the Console's loopback requests on the proxy
+`desktop/nsh/src/proxy.rs:441`
+
+In System default with an inherited proxy, the shell adds `localhost,127.0.0.1,::1,[::1]` to its bypass list unless an entry is already there. The "already there" check trims each entry and ignores case. ureq 3.5.1 does neither trim (`NoProxy::try_from_env` splits on `,` and keeps the space), so an entry such as ` 127.0.0.1` counts as present for the app and matches nothing in ureq. The name is then not added, and nsh's `fetch` (the Console's requests to `http://127.0.0.1:<port>`) goes to the inherited proxy. The shell's own requests are not affected: they use `local_agent`.
+
+This is the same failure the base has for that environment, so it is not a regression. It is the item's row 19 and "System default" guarantee not holding for one common way of writing `NO_PROXY`.
+
+Example (both steps run): inherited `HTTP_PROXY=http://corp-proxy.example:3128`, `NO_PROXY="corp.example, localhost, 127.0.0.1"` -> `process_env(&State::System, …)` returns `NO_PROXY="corp.example, localhost, 127.0.0.1,::1,[::1]"`. A ureq 3.5.1 agent built from that environment requesting `http://127.0.0.1:<port>/health` sent `CONNECT` to the fake proxy and the backend saw nothing; with `corp.example,localhost,127.0.0.1,::1,[::1]` the backend answered 200 and the proxy saw nothing.
+
+Corrective action: compare entries the way ureq does (exact, untrimmed, lower-cased), or always append the four names. Add the spaced form to the System default tests.
+
+### [P3] A save refused with a write error has already replaced the stored password
+`desktop/nsh/src/proxy.rs:663`
+
+`Launch::save` writes a new password to the credential store before it writes the settings file (line 680). When the file write fails, the save answers `ok: false, error: "write"` and the README says "nothing is saved then", but the store now holds the new password while the file still names the old proxy. The next launch pairs the old host and user name with the new password, so a password typed for one proxy is sent to another.
+
+Example (run in a scratch copy with the in-memory store): file `{"mode":"explicit","type":"http","host":"old.example","port":8080,"username":"morph","hasPassword":true}`, store `old`, settings folder made read-only; save `socks5 new.example:1080`, user `other`, password `new` -> `Err(SaveError::Write)`, file unchanged, store `Some("new")`; the next `Launch::new` gives `HTTP old.example:8080 user=morph password=Some("new")`. With no configuration folder at all (`path = None`), a refused save likewise leaves the password in the store.
+
+Corrective action: on a write failure put the previous store content back (the earlier password, or delete the entry when there was none), and cover it with a test.
+
+### [P3] A redirect the guard refuses is reported as a proxy failure
+`tools/builtin/url_fetch_required_proxy.go:233`
+
+`requestError` wraps every error that is not a `requiredProxyRefusal` once a proxy was picked. The guard's `CheckRedirect` refusal is such an error, so the agent is told the proxy failed when the proxy worked and policy stopped the hop. Nothing is sent that should not be; only the message is wrong.
+
+Example (run): marker route set, guard `allowed_url_prefixes: ["http://target.test/"]`, `allow_proxy: true`; `url_fetch http://target.test/redirect-out` (302 to `http://other.test/landed`) -> `request through the required network proxy (HTTP 127.0.0.1:43113) failed: Get "http://other.test/landed": redirect url is not allowed by guard: non_allowlisted_domain`.
+
+Corrective action: return redirect-policy errors (the guard's, the profile's, the redirect limit) unwrapped; wrap only transport errors.
+
+## Review scope
+
+- All 35 changed files read: the Go `url_fetch` route and its tests, `desktop/nsh` (`proxy.rs`, `proxy_secret.rs`, `redact.rs`, `main.rs`, `backend.rs`, `http.rs`, `host.rs`, `shell.rs`, log, diagnostics, `Cargo.toml`), the Console row, dialog, host calls, search and strings, and the docs.
+- Not reviewed: supply-chain aspects of the new crates (outside the skill's scope).
+
+Security groups triggered, and what was checked:
+
+- **Secrets and credential storage**: the password is never in `network-proxy.json`, never in a host call answer or log line; `Explicit`'s `Debug` hides it; credential store errors that carry data are named, not printed (checked against `keyring-core` 1.1.0's `Display`). The macOS and Windows store calls match the crates' signatures by reading; they were not compiled.
+- **Fail-closed launch**: every file or store failure maps to `Blocked`; a blocked start has no backend environment, `Backend::start` refuses before it looks for or downloads a binary, the update check only starts after `BackendReady`, and `--check-update` exits with a failure before any request.
+- **Outbound requests (`url_fetch`)**: with the marker, the transport's proxy function runs the policy on every hop, and the dialer only opens the proxy's address or a loopback destination. Missing or invalid proxy variables refuse the request. No other core client sets its own transport or dialer (searched).
+- **No direct fallback in the shell**: ureq goes direct when it cannot parse a proxy URL, so I checked that every URL the app can build parses: empty password, special and non-ASCII credentials, 255-byte credentials, IPv6 hosts, a 253-byte host. All parsed, and IPv6 proxy hosts connect for both HTTP and SOCKS5.
+- **Log redaction**: line carry-over and the long-line cut were read and are covered by the crate's tests.
+- **UI host contract**: field names and types of `networkProxy.get` / `.set` match between `host.rs`, `proxy.rs` and `platform.ts`; all 43 strings exist in `en`, `zh`, `ja`; the shared secret field shows no "reveal" control without a `revealPath`.
+
+## Validation
+
+All commands ran with `TMPDIR` under the review folder and a throwaway `HOME` from `mktemp -d` (the `XDG_*` folders inside it). Go and Cargo used the shared module and registry caches, offline.
+
+| Command | Result |
+| --- | --- |
+| `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` | exit 0; gofmt empty; 172 packages `ok`, 0 failed |
+| `cargo test --locked` in `desktop/nsh` | exit 0; 98 passed, 0 failed, 5 ignored; `tests/nsh_features.rs` 1 passed |
+| `nsh check` in `web/console-nsh` | exit 0, no output |
+| `web/console-nsh/scripts/test.sh` | exit 0; 174 files, 0 failed, 263 s; no file needed the solo rerun |
+| `node --test $(find lib -name '*.test.mjs')` (extra, not a required suite) | 322 passed, 1 failed: `lib/core/solo.test.mjs` "a task's thread record" |
+
+- The `solo.test.mjs` failure is **pre-existing and not from this change**: `lib/core/solo.js` and its test are identical on base and head, and `test.sh` does not run that file. It is not a failure of the configured tests.
+- The first `cargo test` run stopped at the build script of `yeslogic-fontconfig-sys`: this machine has no `fontconfig.pc`. It passed after pointing `PKG_CONFIG_PATH` / `LIBRARY_PATH` at a folder of symlinks to the system's runtime libraries, under the review TMPDIR. This is a machine limit, not a defect of the change.
+- Probes (all in scratch copies under the review TMPDIR; the worktree is untouched and clean):
+  - a standalone ureq 3.5.1 crate: proxy URL parsing, IPv6 proxy hosts, `NO_PROXY` matching;
+  - two extra tests in a copy of `desktop/nsh` (findings 1 and 2);
+  - one extra test in a copy of the Go module (finding 3).
+
+## Residual risks
+
+- **No native UI was viewed**: no display here. The blocked view, the startup error view's proxy line and switch button, and the dialog in the real window are unseen; the dialog was exercised headless only.
+- **macOS and Windows were not built or run**: the Keychain and Credential Manager code, Windows' case-insensitive variable names, and the `windows-sys` re-resolution in `Cargo.lock`.
+- **No real credential store was touched**: saving, reading and deleting a real Secret Service, Keychain or Credential Manager entry is untested. On Linux, `networkProxy.get` reads the entry to learn whether a store exists; the store crate says a search over locked items prompts to unlock, so opening Settings with a locked keyring may prompt. Not observed.
+- **Launch-time store read and threads**: with a stored password on Linux, the D-Bus client may leave helper threads alive before `set_var` runs. No concrete race was found; it was not tested.
+- **The shell's own environment holds the proxy URL with the password** in explicit mode, so the children it starts inherit it: `xdg-open` for "Open Log" on Linux and the voice recorder. The docs name only the backend's environment. By the item's design; not counted as a defect.
+- **No real proxy and no packaged app run**: rows 19, 35 and 45 were not observed in a running app; rows 24 and 34 are narrower than written, as the coder's report says.
+- **Redaction covers the listed forms only**: a password containing `"` or `\` written by the backend in JSON-escaped or `%q` form would pass. The item scopes the filter to known forms.
+
+## Installs and paths written
+
+- Installs: none. No package was downloaded; the probe crate resolved from the shared cargo registry offline.
+- Written under the review TMPDIR only: the report, logs, Go and Cargo build caches and target folders, the library shim, the scratch copies and the throwaway homes.
+- Outside the worktree and TMPDIR:
+  - `<review-lock>` (timestamp refreshed);
+  - harness files for background commands under `<external-harness-output>`;
+  - harness copies of large tool outputs under `<local-harness-path>`;
+  - one memory note in `<local-harness-path>` (`desktop-cargo-test-libshim.md` and its line in `MEMORY.md`).
+
