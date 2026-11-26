@@ -46,3 +46,14 @@ Installs: none.
 Tests: configured gofmt, go vet ./... and go test ./... passed in coder and manager verification. nsh check passed. Console scripts/test.sh passed: 175 files, 0 failed (257s). Earlier chat-topic-drag parallel failure passed isolated retry. Stubbed-API Chrome checks covered desktop and 360/390pt, light/dark and en/zh/ja: no page errors or write requests.
 Unchecked: real Android/iOS hardware Back and native desktop window; not every screenshot inspected; focus appearance, Retry/read-only/remote endpoint only headless tested; live OAuth, Bedrock and Cloudflare re-entry not exercised.
 Outside-dir write reported by coder: one Claude project memory note plus index; no installs or source paths outside the item worktree. Manager observed temporary paths were recorded in the run outside list for owner-confirmed clean only. No base branch or tags pushed.
+
+## factory · review · 2026-11-27 08:22
+head: 8b46a45a50520fbe0c61715e11ed7f7a9ba02980
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/setup/setup-state.ts:494-495: A failed soul save leaves optimistic state looking saved; retry then takes the new unchanged-soul shortcut and advances without writing. Example: select the cat preset over an existing custom soul, make PUT /persona/identity return 500, then press Continue again: Done opens without a second PUT and the old soul remains. The same probe with no existing soul advances with an empty soul. Commit loaded-soul state only after successful persistence, or restore pending edits after failure, and add a retry regression test. Base stays on the soul step rather than taking this new skip path.
+
+Validation: Claude Code reviewed all nine changed files against origin/master at 289c27b3. Required gofmt, go vet ./... and go test ./... passed; nsh check passed; Console scripts/test.sh passed across 175 files (309s), with four parallel failures passing isolated retry. Head/base throwaway probes verified the P2 example. Worktree remained clean and head unchanged. No P0/P1 findings, so moved to ready/ under factory policy; the P2 is not a clean bill for the failed-save acceptance criterion.
+Installs: none.
+Unchecked: visual desktop/mobile layouts, focus, real hardware Back/native desktop, and live OAuth/Bedrock/Cloudflare flows. Re-entry marker/endpoint-derived return path and secret omission were inspected; no new backend/API/auth/storage implementation changed.
+Outside-dir writes: Claude harness background-task output under a shared temporary directory; recorded in the review outside list, not deleted. No memory notes reported. No code branch, base or tags pushed.
