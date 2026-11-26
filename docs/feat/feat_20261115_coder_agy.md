@@ -6,6 +6,8 @@ status: implemented
 
 # Coder: the Antigravity CLI (agy) as a third coder
 
+> Note (2026-11-26): the run described here, one-shot `agy --output-format stream-json`, was replaced on 2026-11-16 by a session on `agy acp` ([`feat_20261116_coder_sessions_everywhere.md`](feat_20261116_coder_sessions_everywhere.md)); `agent/coder_agy.go` is gone and the backend is `internal/codersessions/agy.go`. With it changed: agy keeps a session and asks for approval in the Console, a task's usage is the `session/prompt` result's `usage`, and rows carry the model agy names. The quota read (`agy -p /usage --output-format json`), the sign-in message, the lookup and the environment below still hold. The rest is kept as written.
+
 ## Goal
 
 Google moved its terminal agent from Gemini CLI to the Antigravity CLI (`agy`); for subscription users `agy` is the Google coder. The `coder` tool runs it beside Codex and Claude Code (`coder=agy`), records what its runs use, and shows its subscription quota, as [`feat_20261113_coder_usage_quota.md`](feat_20261113_coder_usage_quota.md) does for the other two.

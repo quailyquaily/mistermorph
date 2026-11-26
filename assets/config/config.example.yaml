@@ -506,14 +506,14 @@ tools:
       - "agent.db"
     # Extra directories prepended to PATH for bash execution.
     # Useful when the service manager starts mistermorph with a minimal PATH.
-    # The coder tool's CLIs (codex / claude) get them too, after tools.coder.path_extra.
+    # The coder tool's CLIs (codex / claude / agy) get them too, after tools.coder.path_extra.
     # path_extra:
     #   - "/opt/my-tools/bin"
     path_extra: []
     # Extra environment variables to inject into bash execution.
     # Each entry can be either a variable name (looked up from the parent process)
     # or an object with a fixed value written into config.yaml.
-    # The coder tool's CLIs (codex / claude) get them too, and nothing else from the service's
+    # The coder tool's CLIs (codex / claude / agy) get them too, and nothing else from the service's
     # environment: list here what they need, such as HTTPS_PROXY, CODEX_HOME, CLAUDE_CONFIG_DIR
     # or a provider key for API billing.
     # injected_env_vars:
@@ -573,7 +573,7 @@ tools:
       - "agent.db"
     # Extra environment variables to inject into powershell execution.
     # Each entry can be either a variable name or an object with name/value.
-    # On Windows the coder tool's CLIs (codex / claude) get them too.
+    # On Windows the coder tool's CLIs (codex / claude / agy) get them too.
     injected_env_vars: []
     # Windows: a command the agent marks `elevated: true` runs as administrator through UAC, after
     # the user approves the UAC prompt on this machine.

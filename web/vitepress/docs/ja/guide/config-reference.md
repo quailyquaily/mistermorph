@@ -121,6 +121,9 @@ Shell のデフォルト値はプラットフォームごとに分かれます�
 - `tools.spawn.enabled`
 - `tools.coder.enabled`
 - `tools.coder.path_extra`
+- `tools.coder.bypass_approvals.codex`
+- `tools.coder.bypass_approvals.claude`
+- `tools.coder.bypass_approvals.agy`
 - `tools.contacts_send.enabled`
 - `tools.todo_update.enabled`
 - `tools.plan_create.enabled`

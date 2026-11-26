@@ -123,6 +123,7 @@ Shell defaults are platform-specific:
 - `tools.coder.path_extra`
 - `tools.coder.bypass_approvals.codex`
 - `tools.coder.bypass_approvals.claude`
+- `tools.coder.bypass_approvals.agy`
 - `tools.contacts_send.enabled`
 - `tools.job_manage.enabled`
 - `tools.todo_update.enabled` (the earlier switch of `job_manage`; it applies while `tools.job_manage.enabled` is not set)

@@ -12,7 +12,7 @@ Subagent 适合这几类事情：
 - 一条 shell 命令很慢、输出很多，想把它和父 Loop 隔开。
 - 一段工作还是多步的，但依然想要用内置工具和配套的体系。
 - 希望任务只返回一个结果，而不是把中间噪声都回灌给父 Loop。
-- 子任务应该交给本机 Codex 或 Claude Code CLI。
+- 子任务应该交给本机 Codex、Claude Code 或 Antigravity（`agy`）CLI。
 
 ## Overview
 
@@ -21,7 +21,7 @@ Mister Morph 现在有三条隔离任务入口：
 | 入口 | 会不会使用 LLM | 更适合什么 | 返回什么 |
 |---|---|---|---|
 | `spawn` | 会 | 内部 subagent 还要自己调用工具和做推理 | JSON |
-| `coder` | 不会起本地内层 Mister Morph loop；会启动 Codex 或 Claude Code CLI | 本机 coding agent CLI 子任务 | JSON |
+| `coder` | 不会起本地内层 Mister Morph loop；会启动 Codex、Claude Code 或 Antigravity CLI | 本机 coding agent CLI 子任务 | JSON |
 | `bash.run_in_subtask=true` | 不会 | 单条 shell 命令，想隔离执行和输出 | JSON |
 
 共同点：
@@ -56,15 +56,16 @@ Subagent 解决隔离、收敛和结果回传的问题，不是完整的后台�
 
 参数：
 
-- `coder`：必填，`codex` 或 `claude`
+- `coder`：必填，`codex`、`claude` 或 `agy`（Antigravity CLI）
 - `task`：必填，交给 coding CLI 的任务
 - `cwd`：可选，工作目录覆盖
 
 当前行为：
 
-- `codex` 会运行 `codex app-server`
-- `claude` 会运行 `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`，并通过 stdin 传入 task
-- stdout 按 streaming JSON/JSONL 解析，文本增量会发成 tool-output event
+- 每个 CLI 都以 stdio 上的 session 运行，在所有运行时里方式相同：`codex` 用 `codex app-server`，`claude` 用 `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio --session-id <uuid>`，`agy` 用 `agy acp`
+- 一个 session 是一个依次接收任务的 CLI 进程：在 Console 对话里它随对话保留，其他地方只存在于一次 run
+- 只有 Console 对话的 session 会请用户批准操作并显示 CLI 自己的问题；其他运行都绕过审批（Claude Code：`--dangerously-skip-permissions`），CLI 在那里提出的问题会让任务失败，问题文本就是错误信息
+- CLI 工作时报告的内容会发成 tool-output event；不使用终端，也不读取 CLI 的屏幕
 - 最终结果会归一化成和 `spawn` 相同的 `SubtaskResult` envelope
 - 隔离子任务内部不会再暴露 `coder`
 
@@ -161,8 +162,9 @@ Mistermorph 现在不会按真实 schema 校验对象字段。
 ## 配置
 
 - `tools.spawn.enabled` 只控制显式 `spawn` 工具入口。
-- `tools.coder.enabled` 控制是否默认暴露显式 `coder` 工具入口。默认关闭，因为 Codex / Claude Code 子进程会绕过 approval 和 permission prompt。`$coder` 仍然可以只为当前任务暴露它。
-- `tools.coder.path_extra` 只在 `coder` 启动 `codex` 或 `claude` 时把目录加到 PATH 前面。
+- `tools.coder.enabled` 控制是否默认暴露显式 `coder` 工具入口。默认关闭，因为 Codex / Claude Code / Antigravity CLI 子进程会绕过 approval 和 permission prompt。`$coder` 仍然可以只为当前任务暴露它。
+- `tools.coder.path_extra` 只在 `coder` 启动 `codex`、`claude` 或 `agy` 时把目录加到 PATH 前面。
+- `tools.coder.bypass_approvals.codex`、`.claude`、`.agy`（默认 false）只作用于 Console：那里的 coder session 会请用户批准操作。设为 true 后，对应 CLI 启动时不再询问审批，也没有 sandbox（Codex：approval policy `never`、sandbox `danger-full-access`；Claude Code 和 Antigravity CLI：`--dangerously-skip-permissions`）。CLI 自己提出的问题仍会显示。
 - 即使 `tools.spawn.enabled=false`，`bash.run_in_subtask=true` 这种 direct path 仍然可以工作。
 
 ## Integration 开发
