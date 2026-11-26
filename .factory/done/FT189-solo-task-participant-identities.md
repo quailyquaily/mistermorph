@@ -109,3 +109,15 @@ Residual uncertainty, not confirmed defects: concurrent live activity readings m
 Process note: reviewer reports the CLI harness wrote background-task output under its own temporary directory outside the run directory; exact file was not supplied. Manager's top-level temporary inventory showed no new entries. This path is retained in the outside ledger; nothing there was deleted. No memory writes reported in this review.
 
 Move: review/ → ready/, round 1. Nothing merged, tagged or released. Owner should inspect live/device accessibility and the unverified high-worker-count resume cases before shipment.
+
+
+## factory · 2026-11-26 09:55
+Asked ship authorized by owner: “对，应该 ship”. This run selected FT189 only; no later ready items, new/review items, extra builds or reviews were included.
+
+Shipped to master at merge 0fe6f3cdb05cadab904570ff66f3f8f198b14bb5, branch head 15536f1ff0732d1473351550dde03a485afde815. Annotated release tag v0.3.138. Atomic push of master and tag succeeded; remote master and peeled tag both verified at the merge commit.
+
+Validation on merged base: affected Go package tests and Console participant tests passed; nsh check passed; configured gofmt/vet/full Go gate passed. First full Console run had one chat-attachments test fail even after its automatic isolated retry (composer send button covered). Baseline master passed that file. Re-merged the same item without code changes and repeated the full Go gate and required Console script: 173 files, zero failures (383s). No installs or dependency changes.
+
+No linked issues/PRs were identified in the item, so none were closed. Branch retained: configured ship actions default to merge/tag/push, without clean. No manual live Console, phone/localized/dark browser, native device or screen-reader checks in this ship run; review's documented limitations and existing SourceCollector limitation remain.
+
+Move: ready/ → done/.
