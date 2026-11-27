@@ -153,8 +153,8 @@ What goes through an explicit proxy:
 
 Blocked rather than proxied:
 
-- `url_fetch` under the default guard settings, and whenever `allow_proxy` is false or
-  `deny_private_ips` is true for a host name. See `docs/tools.md` and `docs/security.md`.
+- `url_fetch` under the default guard settings (`deny_private_ips` is true, which refuses
+  every host name), and whenever `allow_proxy` is false. See `docs/tools.md` and `docs/security.md`.
 
 Not through the proxy, and not claimed:
 

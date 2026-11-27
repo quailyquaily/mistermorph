@@ -64,7 +64,7 @@ guard:
       allowed_url_prefixes:
         - "https://api.example.com/v1/"
       deny_private_ips: true
-      allow_proxy: false
+      allow_proxy: true
       follow_redirects: false
 ```
 
@@ -76,7 +76,7 @@ Behavior:
 Hardening toggles:
 
 - `deny_private_ips`: blocks literal `localhost` / `127.0.0.1` / RFC1918 private IP targets to reduce SSRF risk. M1 does not resolve hostnames to IPs; enforce egress at the network/OS layer if you need stronger guarantees.
-- `allow_proxy`: when false, the HTTP client ignores `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` to avoid unexpected routing/MITM.
+- `allow_proxy` (default true): `url_fetch` uses `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` when they are set. When false, the HTTP client ignores them, to avoid unexpected routing/MITM.
 
 #### `url_fetch` when the desktop app requires a network proxy
 
@@ -89,17 +89,16 @@ With the marker, for every request and every redirect hop to a destination that 
 - `deny_private_ips` is honored: when it is true and the destination is a host name, the request is refused. The proxy would resolve the name, so the resolved address cannot be checked, and the name is not resolved locally to get around that. An IP literal is checked as before and, if allowed, sent through the proxy.
 - Everything else stays: allowed URL prefixes, the literal `localhost` and private-address checks, redirect rules and auth profile URL rules, on the first request and on every hop.
 
-`allow_proxy: false` and `deny_private_ips: true` are the defaults, so under the default guard settings `url_fetch` is refused for every host name while an explicit proxy is running. Nothing sets these automatically. An owner who wants `url_fetch` to reach host names through the proxy sets, by hand:
+`allow_proxy: true` and `deny_private_ips: true` are the defaults, so under the default guard settings `url_fetch` is still refused for every host name while an explicit proxy is running: `deny_private_ips` refuses them. Nothing changes that automatically. An owner who wants `url_fetch` to reach host names through the proxy sets, by hand:
 
 ```yaml
 guard:
   network:
     url_fetch:
-      allow_proxy: true
       deny_private_ips: false
 ```
 
-and, for requests with an auth profile, that profile's `allow.allow_proxy: true`.
+keeps `allow_proxy: true`, and, for requests with an auth profile, that profile's `allow.allow_proxy: true`.
 
 What turning `deny_private_ips` off gives up: the check that a URL does not name `localhost` or a private address, and the check that a host name does not resolve to one. Through a proxy the second check cannot be made at all, because the proxy resolves the name: a host name that points at an address inside the proxy's network is reachable for `url_fetch` if the proxy lets it through. Keep `allowed_url_prefixes` narrow, and restrict what the proxy itself may reach, if that matters.
 

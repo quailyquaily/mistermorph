@@ -313,8 +313,9 @@ guard:
       deny_private_ips: true
       # Redirects are a common allowlist bypass; keep disabled by default.
       follow_redirects: false
-      # Ignore HTTP(S)_PROXY by default to avoid unexpected routing/MITM.
-      allow_proxy: false
+      # Use HTTP(S)_PROXY / NO_PROXY when they are set. Set false to ignore them
+      # (avoids unexpected routing/MITM through an inherited proxy).
+      allow_proxy: true
   redaction:
     enabled: true
     # Optional additional regex patterns (built-in redactors always apply).

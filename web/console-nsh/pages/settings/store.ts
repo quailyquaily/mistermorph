@@ -198,7 +198,7 @@ const EMPTY_CHANNELS = {
     url_fetch_allowed_url_prefixes_text: "https://",
     deny_private_ips: true,
     follow_redirects: false,
-    allow_proxy: false,
+    allow_proxy: true,
     redaction_enabled: true,
     approvals_enabled: false,
   }),
@@ -2571,7 +2571,7 @@ export function createSettingsStore() {
       state.guard.url_fetch_allowed_url_prefixes_text = formatConfigList(guardURLFetch.allowed_url_prefixes);
       state.guard.deny_private_ips = typeof guardURLFetch.deny_private_ips === "boolean" ? guardURLFetch.deny_private_ips : true;
       state.guard.follow_redirects = typeof guardURLFetch.follow_redirects === "boolean" ? guardURLFetch.follow_redirects : false;
-      state.guard.allow_proxy = typeof guardURLFetch.allow_proxy === "boolean" ? guardURLFetch.allow_proxy : false;
+      state.guard.allow_proxy = typeof guardURLFetch.allow_proxy === "boolean" ? guardURLFetch.allow_proxy : true;
       state.guard.redaction_enabled = typeof guardRedaction.enabled === "boolean" ? guardRedaction.enabled : true;
       state.guard.approvals_enabled = typeof guardApprovals.enabled === "boolean" ? guardApprovals.enabled : false;
       consoleSettingsLoaded.set(true);

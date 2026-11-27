@@ -253,7 +253,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("guard.network.url_fetch.allowed_url_prefixes", []string{"https://"})
 	v.SetDefault("guard.network.url_fetch.deny_private_ips", true)
 	v.SetDefault("guard.network.url_fetch.follow_redirects", false)
-	v.SetDefault("guard.network.url_fetch.allow_proxy", false)
+	v.SetDefault("guard.network.url_fetch.allow_proxy", true)
 	v.SetDefault("guard.redaction.enabled", true)
 	v.SetDefault("guard.redaction.patterns", []map[string]any{})
 	v.SetDefault("guard.dir_name", "guard")

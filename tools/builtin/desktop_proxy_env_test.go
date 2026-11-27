@@ -113,7 +113,7 @@ func TestDesktopProxyEnvChild(t *testing.T) {
 			AllowedURLPrefixes: []string{"http://plain.invalid/"},
 			DenyPrivateIPs:     true,
 			FollowRedirects:    true,
-			AllowProxy:         false,
+			AllowProxy:         true,
 		})
 		_, err := tool.Execute(ctx, map[string]any{"url": "http://plain.invalid/fetch"})
 		childResult("url_fetch_defaults", fmt.Sprint(err))
@@ -184,7 +184,7 @@ func TestDesktopProxyEnv_HTTPProxy(t *testing.T) {
 			t.Fatalf("Proxy-Authorization decoded to %q", pair)
 		}
 	}
-	if !strings.Contains(got["url_fetch_defaults"], "guard.network.url_fetch.allow_proxy") {
+	if !strings.Contains(got["url_fetch_defaults"], "guard.network.url_fetch.deny_private_ips") {
 		t.Fatalf("url_fetch under the default guard settings = %q", got["url_fetch_defaults"])
 	}
 	if got["url_fetch_permitted"] != "true <nil>" {
