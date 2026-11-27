@@ -10,8 +10,11 @@ import { ProviderLogo } from "../../../components/settings/InferenceProviderPick
 import { LLMConfigForm } from "../../../components/settings/LLMConfigForm";
 import { ModelRoutesPanel } from "../../../components/settings/ModelRoutesPanel";
 import { SettingsPane } from "../../../components/settings/PaneTarget";
-import { DirtyDot, Fold, PlaceholderButton, SettingField, SettingsCard } from "../../../components/settings-page/parts";
+import { DirtyDot, Fold, PlaceholderButton, SettingField, SettingRow, SettingsCard } from "../../../components/settings-page/parts";
 import { useRevealRow } from "../../../components/settings-page/reveal";
+import { endpointRefFromRouteParam } from "../../../lib/core/endpoint-routes.js";
+import { setupReentryPath } from "../../../lib/core/setup.js";
+import { currentRoute, navigate } from "../../../lib/router";
 import type { LLMProfile, SettingsStore } from "../store";
 import { t } from "../i18n";
 
@@ -57,6 +60,39 @@ function ProfileRow(props: { s: SettingsStore; profile: LLMProfile }) {
       </If>
       <Icon name="PhCaretRight" size={12} color="muted-foreground" />
     </BaseButton>
+  );
+}
+
+/**
+ * Setup, for an agent that is set up already: opens its steps again with what is saved. It is the
+ * agent of this page's address, never another one; an agent whose settings cannot be changed here
+ * has no setup to run, and the row says why.
+ */
+function SetupCard(props: { s: SettingsStore }) {
+  const s = props.s;
+  const endpointRef = () => endpointRefFromRouteParam(currentRoute().params.endpoint_ref);
+  const blocked = () => (endpointRef() ? (s.agentSettingsReadOnly() ? s.agentSettingsReadOnlyMessage() : "") : t("msg_select_endpoint"));
+  return (
+    <SettingsCard title={t("settings_setup_title")} list testID="settings-setup">
+      <SettingRow
+        first
+        title={t("settings_setup_row_title")}
+        note={t("settings_setup_row_note")}
+        status={
+          <If when={blocked()}>
+            <InlineNotice type="warning" text={blocked()} testID="settings-setup-blocked" />
+          </If>
+        }
+      >
+        <Button
+          variant="outlined"
+          label={t("settings_setup_action")}
+          disabled={s.agentLoading() || s.agentSaving() || blocked() !== ""}
+          onPress={() => void navigate(setupReentryPath(untracked(endpointRef)))}
+          testID="settings-setup-open"
+        />
+      </SettingRow>
+    </SettingsCard>
   );
 }
 
@@ -227,6 +263,8 @@ export function AgentSection(props: { s: SettingsStore }) {
           />
         )}
       </Each>
+
+      <SetupCard s={s} />
     </View>
   );
 }

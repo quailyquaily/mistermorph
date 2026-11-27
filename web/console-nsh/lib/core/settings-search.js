@@ -38,6 +38,7 @@ const HAND_WRITTEN_FIELDS = {
     "settings_llm_reasoning_label",
     "settings_agent_profiles_title",
     "settings_agent_fallback_title",
+    "settings_setup_row_title",
   ],
   // The SKILLs & MCP page's Load skills switch.
   mcp: ["skills_enabled"],

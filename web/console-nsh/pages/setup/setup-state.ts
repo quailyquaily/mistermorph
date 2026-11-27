@@ -39,7 +39,14 @@ import {
 import { pickRandomPersonaSeed } from "../../lib/core/persona-seeds.js";
 import { openReentrantDialog } from "../../lib/core/reentrant-dialog.js";
 import { llmSecretConfigPath } from "../../lib/core/secret-storage.js";
-import { invalidateConsoleSetupReadiness, resolveConsoleSetupStage, setupStagePath } from "../../lib/core/setup.js";
+import {
+  invalidateConsoleSetupReadiness,
+  isSetupReentryRoute,
+  resolveConsoleSetupStage,
+  SETUP_REENTRY_FIRST_STAGE,
+  setupReentryReturnPath,
+  setupStagePath,
+} from "../../lib/core/setup.js";
 import {
   OPENAI_COMPATIBLE_API_BASE_OPTIONS,
   normalizeSetupProviderChoice,
@@ -240,6 +247,9 @@ export function useSetup() {
   const loading = signal(false);
   const saving = signal(false);
   const err = signal("");
+  // The step whose saved values could not be read. What it holds is then unknown, so the step is
+  // not saved (the form's blanks and defaults would replace it) until a load succeeds.
+  const loadFailedStage = signal<SetupStage | "">("");
 
   // A network failure is not about the form: it goes to the floating notice stack.
   effect(() => {
@@ -269,6 +279,9 @@ export function useSetup() {
   const personaAvatarURL = signal("");
   const personaAvatarBusy = signal(false);
   const llmForm = signal<LLMForm>(emptyLLMForm());
+  // The model form as the saved config filled it, null when nothing is saved: a step that still
+  // reads so has nothing to save.
+  const loadedLLMForm = signal<LLMForm | null>(null);
   const personaForm = signal<PersonaForm>({ name: "", creature: "", vibe: "", emoji: "" });
   const soulSelectionContent = signal("");
   const soulEditorDraft = signal(buildCustomSoulDocument());
@@ -321,6 +334,10 @@ export function useSetup() {
   const routeStage = () => normalizeStage(currentRoute().meta?.setupStage);
   const repairKey = () => String(currentRoute().query?.repair || "").trim();
   const inRepairMode = () => repairKey() !== "";
+  // Opened again from Settings on an agent that is set up (lib/core/setup.js): the same steps with
+  // the saved values, and a way back to Settings.
+  const inReentryMode = () => isSetupReentryRoute(currentRoute());
+  const loadFailed = () => loadFailedStage() !== "" && loadFailedStage() === routeStage();
   const stageMeta = () => STAGE_META[routeStage()] || STAGE_META.llm;
   const setupName = () => String(personaForm().name || "").trim() || t("setup_done_name_fallback");
   const stageTitle = () => t(stageMeta().titleKey, { name: setupName() });
@@ -445,6 +462,7 @@ export function useSetup() {
   const llmSaveDisabled = () =>
     loading() ||
     saving() ||
+    loadFailed() ||
     !hasLLMFieldValue("provider") ||
     !hasLLMFieldValue("model") ||
     authBlocked() ||
@@ -471,8 +489,15 @@ export function useSetup() {
     bedrockMissing() ||
     (showCloudflareAccountField() && !hasLLMFieldValue("cloudflare_api_token")) ||
     (showCloudflareAccountField() && !hasLLMFieldValue("cloudflare_account_id"));
-  const personaSaveDisabled = () => loading() || saving() || String(personaForm().name || "").trim() === "";
-  const soulSaveDisabled = () => loading() || saving() || (!soulEditMode() && String(soulPresetId() || "").trim() === "");
+  const personaSaveDisabled = () => loading() || saving() || loadFailed() || String(personaForm().name || "").trim() === "";
+  // The saved soul, shown as it is: Finish goes on with it, and writes nothing.
+  const soulKeepsSaved = () =>
+    !inRepairMode() && !soulEditMode() && soulSelectionKind() === "custom" && soulDocumentExists();
+  const soulSaveDisabled = () =>
+    loading() ||
+    saving() ||
+    loadFailed() ||
+    (!soulEditMode() && !soulKeepsSaved() && String(soulPresetId() || "").trim() === "");
 
   /* ---------- the soul ---------- */
 
@@ -501,7 +526,7 @@ export function useSetup() {
     }
     return null;
   };
-  const soulSaveVisible = () => soulEditMode() || soulSelectionKind() === "preset";
+  const soulSaveVisible = () => soulEditMode() || soulSelectionKind() === "preset" || soulKeepsSaved();
   const soulUsesCustomContent = () => soulDocumentExists();
 
   /* ---------- done ---------- */
@@ -532,6 +557,12 @@ export function useSetup() {
 
   async function enterChat() {
     await navigate(endpointRoutePath(routeEndpointRef(), "/chat"), { replace: true });
+  }
+
+  /** Leaves setup opened from Settings for the same agent's settings. Nothing is saved or cleared. */
+  async function backToSettings() {
+    const target = setupReentryReturnPath(routeEndpointRef());
+    if (target) await navigate(target, { replace: true });
   }
 
   /* ---------- loading ---------- */
@@ -609,11 +640,12 @@ export function useSetup() {
       llmSecretFields.set(secretFieldsPayload?.llm && typeof secretFieldsPayload.llm === "object" ? secretFieldsPayload.llm : {});
       if (untracked(loadedConfigSource) !== "config") {
         llmForm.set(emptyLLMForm());
+        loadedLLMForm.set(null);
         return;
       }
       const llm = normalized.llm as Record<string, unknown>;
       const text = (key: string) => String(llm[key] || "").trim();
-      llmForm.set({
+      const form: LLMForm = {
         provider: normalizeSetupProviderChoice(llm.inference_provider || llm.provider, { allowEmpty: true }),
         endpoint: text("endpoint"),
         model: text("model"),
@@ -624,7 +656,9 @@ export function useSetup() {
         bedrock_model_arn: text("bedrock_model_arn"),
         cloudflare_api_token: text("cloudflare_api_token"),
         cloudflare_account_id: text("cloudflare_account_id"),
-      });
+      };
+      llmForm.set(form);
+      loadedLLMForm.set({ ...form });
     });
   }
 
@@ -632,12 +666,16 @@ export function useSetup() {
     batch(() => {
       loading.set(true);
       err.set("");
+      loadFailedStage.set("");
     });
     try {
       const payload = await endpointApiFetch(routeEndpointRef(), "/settings/agent");
       applyLLMPayload(payload);
     } catch (error) {
-      err.set(errorMessage(error, "msg_load_failed"));
+      batch(() => {
+        err.set(errorMessage(error, "msg_load_failed"));
+        loadFailedStage.set("llm");
+      });
     } finally {
       loading.set(false);
     }
@@ -647,12 +685,16 @@ export function useSetup() {
     batch(() => {
       loading.set(true);
       err.set("");
+      loadFailedStage.set("");
     });
     try {
       applyPersonaRecord(await loadSetupPersonaRecord());
       await loadPersonaAvatar();
     } catch (error) {
-      err.set(errorMessage(error, "msg_load_failed"));
+      batch(() => {
+        err.set(errorMessage(error, "msg_load_failed"));
+        loadFailedStage.set("persona");
+      });
     } finally {
       loading.set(false);
     }
@@ -662,13 +704,17 @@ export function useSetup() {
     batch(() => {
       loading.set(true);
       err.set("");
+      loadFailedStage.set("");
     });
     try {
       const record = await loadSetupPersonaRecord();
       loadedPersonaRecord.set(record);
       applySoulContent(record.soulExists ? record.soul : null);
     } catch (error) {
-      err.set(errorMessage(error, "msg_load_failed"));
+      batch(() => {
+        err.set(errorMessage(error, "msg_load_failed"));
+        loadFailedStage.set("soul");
+      });
     } finally {
       loading.set(false);
     }
@@ -680,6 +726,12 @@ export function useSetup() {
     if (stage === "soul") return loadSoulForm();
     await loadPersonaForm();
     await loadSoulForm();
+  }
+
+  /** Reads the step's saved values again, after a load that failed. */
+  function reloadStage() {
+    if (untracked(loading) || untracked(saving)) return;
+    void loadStageForm(untracked(routeStage));
   }
 
   async function replaceRoute(path: string, query: Record<string, string>) {
@@ -699,7 +751,10 @@ export function useSetup() {
     }
     if (currentPagePath === "/setup") {
       const setupState = await resolveConsoleSetupStage(endpointState.items, { endpointRef });
-      const target = setupStagePath(setupState.stage === "ready" ? "done" : setupState.stage, endpointRef);
+      // An agent that is set up has nothing left to do, unless Settings opened setup again: then
+      // it starts over at the first step.
+      const readyStage = isSetupReentryRoute(route) ? SETUP_REENTRY_FIRST_STAGE : "done";
+      const target = setupStagePath(setupState.stage === "ready" ? readyStage : setupState.stage, endpointRef);
       await replaceRoute(target, route.query);
       return;
     }
@@ -835,6 +890,14 @@ export function useSetup() {
       err.set("");
     });
     try {
+      // The saved model, as it was loaded: nothing to write. A repair saves all the same, to
+      // rewrite the file it came to fix.
+      const loaded = untracked(loadedLLMForm);
+      const form = untracked(llmForm);
+      if (!untracked(inRepairMode) && loaded && LLM_FORM_FIELDS.every((field) => form[field] === loaded[field])) {
+        await finishStep();
+        return;
+      }
       const llm = buildLLMSettingsPayload();
       if (Object.keys(llm).length === 0) {
         await finishStep();
@@ -854,6 +917,16 @@ export function useSetup() {
     }
   }
 
+  function personaUnchanged() {
+    const record = untracked(loadedPersonaRecord);
+    if (record?.exists !== true) return false;
+    const saved = record.profile || {};
+    const form = untracked(personaForm);
+    return (["name", "creature", "vibe", "emoji"] as const).every(
+      (field) => String(form[field] || "").trim() === String(saved[field] || "").trim(),
+    );
+  }
+
   async function savePersona() {
     if (untracked(personaSaveDisabled)) return;
     batch(() => {
@@ -861,6 +934,11 @@ export function useSetup() {
       err.set("");
     });
     try {
+      // The saved persona, as it was loaded: nothing to write (a repair saves all the same).
+      if (!untracked(inRepairMode) && personaUnchanged()) {
+        await finishStep();
+        return;
+      }
       loadedPersonaRecord.set(await saveSetupPersonaRecord({ profile: untracked(personaForm) }));
       dispatchPersonaIdentityUpdated();
       invalidateConsoleSetupReadiness();
@@ -918,6 +996,10 @@ export function useSetup() {
       err.set("");
     });
     try {
+      if (untracked(soulKeepsSaved)) {
+        await finishStep();
+        return;
+      }
       const source = untracked(soulEditMode) ? untracked(soulEditorDraft) : untracked(soulSelectionContent);
       const content = normalizeSoulDocument(source);
       batch(() => {
@@ -1369,6 +1451,8 @@ export function useSetup() {
     stageKicker,
     progressSteps,
     showPrevious,
+    inReentryMode,
+    loadFailed,
     providerItems,
     providerItem,
     providerManagedField,
@@ -1410,6 +1494,7 @@ export function useSetup() {
     isCustomSoulSelected,
     customSoulCardIcon,
     soulSaveVisible,
+    soulKeepsSaved,
     doneStatusItems,
     // actions
     setLLMField,
@@ -1439,6 +1524,8 @@ export function useSetup() {
     goPrevious,
     goToStage,
     enterChat,
+    backToSettings,
+    reloadStage,
     openExternal,
   };
 }
