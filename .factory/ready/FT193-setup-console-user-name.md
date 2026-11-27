@@ -66,3 +66,19 @@ Review attention: FT192 is now ready but is not in the base; its SETUP_REENTRY_F
 Claude reported an unsolicited auto-memory write outside the run directory during its first call, then stopped further memory writes when instructed. Harness task logs were written outside dir under its shared temporary directory; tracked for owner inspection, not deleted. No unpinned installs.
 
 Move: new/ → review/; ready for independent review, not merged or shipped.
+
+## factory · review · 2026-11-27 09:04
+head: 691189afcf530ad536d4efae80208039f552109e
+verdict: pass
+notes:
+- [P3] cmd/mistermorph/configcmd/configcmd.go:190: Whole-document name validation blocks unrelated config set/unset when a legacy/repair-edited name is invalid. Verified example: an 81-character name makes setting llm.model fail with the name-length error and leaves the file unchanged. Validate only affected name writes or provide an actionable repair path.
+- [P3] web/console-nsh/pages/setup/setup-state.ts:932: Continue always writes the name, so an environment-managed console.user_name cannot continue even unchanged. Verified example: MISTER_MORPH_CONSOLE_USER_NAME=From Env and a same-name settings PUT returns 400 (managed by environment); the tested save-error path stays on the page. An invalid environment name also triggers the fresh-name route guard. Handle read-only environment-managed names without an impossible save.
+- [P3] internal/configsettings/fields.go:131: The new settings-only validation does not cover the existing authenticated repair editor (setup_repair.go:173). Verified example: replacing Prior through the config repair PUT with an 81-character name returns 200; auth/me then returns an empty user_name and Console User fallback. Apply the same normalization/validation to this writer without losing the prior value.
+
+Independent Claude Code review covered all 32 files in origin/master...HEAD (base 289c27b3), including authentication, config omission/persistence, Unicode parity, literal rendering, identity/history snapshots and Setup routes. No P0/P1 findings. Manager checked final worktree cleanliness and the finding locations. No code changes or commits made during review.
+
+Validation on reviewed head: gofmt clean; go vet ./... and go test ./... pass (173 packages); nsh check 0.6.0 passes; required Console scripts/test.sh passes (175 files, zero failures after runner retries). agent-favicon and chat-topic-drag failed parallel runs but passed the prescribed isolated retry. Exhaustive Go/JS code-point validation comparison found zero differences. Extra non-required node tests: 322/323 pass; unchanged lib/core/solo.test.mjs has a failing thread-record test, reported as previously observed by the reviewer, not independently re-run on base.
+
+Installs: none. Residual risks: no independent visual, real-device, desktop-window or live-server browser checks. Empty environment override, remote-Console TODO labels and contact-store markup handling were not fully verified. Runtime TODO labels still use fallback and are relabeled client-side. FT192 remains outside base; first-stage and Setup/locale integration must be checked when combining them. Template/legacy-copy writers remain unchecked at write time. Harness background-task outputs were written outside dir under its shared temporary folder; recorded for owner inspection, not deleted.
+
+Move: review/ → ready/. Low-priority notes do not block the configured factory gate. Not merged or shipped.
