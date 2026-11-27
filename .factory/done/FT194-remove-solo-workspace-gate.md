@@ -53,3 +53,6 @@ notes:
 - Engine-level migration probe: a pending approval generated on base resumes on head; approval permits the write without a new gate, denial prevents it. Existing pre-upgrade pending approvals are not silently discarded and can still expire once.
 - Residual risks: native coder/root prompts were read but not exercised live; powershell/coder/spawn/image tools use gate stand-ins. Migration was not exercised through a file-backed Console approval store/restart/expiry. No UI sources changed or visual inspection performed.
 - Installs: none. Worktree stayed clean and head unchanged. Coder harness reported a background output file outside dir under /tmp/claude-995; tracked in the run's outside list, not deleted. No new directly-owned /tmp entry observed by the manager.
+
+## factory · 2026-11-27 10:44
+Shipped on the owner's word ("merge the ready items, no new tag"). Merged into master as c7515fad. It conflicted with master in cmd/mistermorph/consolecmd/solo_test.go (the Solo test harness constructors); the coder resolved it in the merge commit with one shared body, `startSoloHarness`, behind `newSoloHarnessAt` and `newSoloHarnessWith`. The repository's test passed on the merged master. No tag was made, as the owner asked. No linked issue or PR to close. The branch was not deleted.
