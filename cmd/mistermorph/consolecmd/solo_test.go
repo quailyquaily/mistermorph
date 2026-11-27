@@ -24,22 +24,50 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/llm"
+	"github.com/spf13/viper"
 )
 
 // soloProvider is a fake model for Solo. The run's newest message picks what it does:
 //   - "solo-dispatch <dir>": call work_thread for "thread-block" work in <dir>, then answer;
 //   - "solo-recall <topic id>": find topic_read, read that topic, then answer from it;
 //   - "thread-block": wait until released, then answer "Report ready: 42 pages";
+//   - "thread-work": write out.txt, run a command that writes pwd.txt, then answer;
+//   - "thread-switch <dir>": find workspace_use, switch to <dir>, write switched.txt, then answer;
 //   - anything else: answer "answer for <message>" at once.
 type soloProvider struct {
 	mu       sync.Mutex
 	requests []string
-	entered  chan struct{}
-	release  chan struct{}
+	// threadTask is the task "solo-dispatch" gives its thread ("thread-block …" when empty).
+	threadTask string
+	entered    chan struct{}
+	release    chan struct{}
 }
 
 func newSoloProvider() *soloProvider {
 	return &soloProvider{entered: make(chan struct{}, 4), release: make(chan struct{})}
+}
+
+func (p *soloProvider) setThreadTask(task string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.threadTask = task
+}
+
+func (p *soloProvider) dispatchedTask() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.threadTask != "" {
+		return p.threadTask
+	}
+	return "thread-block build the report"
+}
+
+func soloWordAfter(text, keyword string) string {
+	word := strings.TrimSpace(text[strings.Index(text, keyword)+len(keyword):])
+	if cut := strings.IndexAny(word, " \n\"\\"); cut >= 0 {
+		word = word[:cut]
+	}
+	return word
 }
 
 func (p *soloProvider) snapshot() []string {
@@ -84,7 +112,7 @@ func (p *soloProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if cut := strings.IndexAny(dir, " \n\"\\"); cut >= 0 {
 				dir = dir[:cut]
 			}
-			args, _ := json.Marshal(map[string]any{"title": "Build report", "task": "thread-block build the report", "workspace": dir})
+			args, _ := json.Marshal(map[string]any{"title": "Build report", "task": p.dispatchedTask(), "workspace": dir})
 			writeSoloToolCall(w, "work_thread", string(args))
 			return
 		case strings.Contains(userText, "solo-recall") && toolResults == 0:
@@ -99,6 +127,26 @@ func (p *soloProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			args, _ := json.Marshal(map[string]any{"topic_id": id})
 			writeSoloToolCall(w, "topic_read", string(args))
 			return
+		case strings.Contains(userText, "thread-work") && toolResults == 0:
+			writeSoloToolCall(w, "write_file", `{"path":"out.txt","content":"made by the thread"}`)
+			return
+		case strings.Contains(userText, "thread-work") && toolResults == 1:
+			writeSoloToolCall(w, "bash", `{"cmd":"pwd > pwd.txt"}`)
+			return
+		case strings.Contains(userText, "thread-work"):
+			output = `{"type":"final","output":"Thread work done","is_lightweight":false}`
+		case strings.Contains(userText, "thread-switch") && toolResults == 0:
+			writeSoloToolCall(w, "tool_search", `{"query":"workspace_use"}`)
+			return
+		case strings.Contains(userText, "thread-switch") && toolResults == 1:
+			args, _ := json.Marshal(map[string]any{"path": soloWordAfter(userText, "thread-switch")})
+			writeSoloToolCall(w, "workspace_use", string(args))
+			return
+		case strings.Contains(userText, "thread-switch") && toolResults == 2:
+			writeSoloToolCall(w, "write_file", `{"path":"switched.txt","content":"made after the switch"}`)
+			return
+		case strings.Contains(userText, "thread-switch"):
+			output = `{"type":"final","output":"Switched work done","is_lightweight":false}`
 		case strings.Contains(userText, "thread-block"):
 			select {
 			case p.entered <- struct{}{}:
@@ -150,6 +198,12 @@ type soloHarness struct {
 
 func newSoloHarness(t *testing.T) soloHarness {
 	t.Helper()
+	return newSoloHarnessWith(t, nil)
+}
+
+// newSoloHarnessWith is newSoloHarness with settings of the test's own over the harness's.
+func newSoloHarnessWith(t *testing.T, configure func(*viper.Viper)) soloHarness {
+	t.Helper()
 	provider := newSoloProvider()
 	fake := httptest.NewServer(provider)
 	t.Cleanup(fake.Close)
@@ -167,6 +221,9 @@ func newSoloHarness(t *testing.T) soloHarness {
 	reader.Set("llm.api_key", "fake-solo-key")
 	reader.Set("llm.request_timeout", "10s")
 	reader.Set("logging.file.enabled", false)
+	if configure != nil {
+		configure(reader)
+	}
 	oldLogger := slog.Default()
 	rt, err := newConsoleLocalRuntime(serveConfig{}, reader)
 	if err != nil {
@@ -549,28 +606,6 @@ func TestSoloThreadSyncPostsFailuresOnceAndCatchesUpAfterRestart(t *testing.T) {
 				t.Fatalf("summaries = %d", n)
 			}
 		})
-	}
-}
-
-func TestSoloThreadAsksBeforeWritingOutsideSolosWorkspace(t *testing.T) {
-	rt, job, _ := newConsoleProgressPersistenceRuntime(t, nil, "work", false)
-	soloWS, other := t.TempDir(), t.TempDir()
-	rt.workspaceStore = workspace.NewStore(filepath.Join(t.TempDir(), "workspace_attachments.json"))
-	if _, _, err := rt.workspaceStore.Set(buildConsoleConversationKey(daemonruntime.ConsoleSoloTopicID), workspace.Attachment{WorkspaceDir: soloWS}); err != nil {
-		t.Fatal(err)
-	}
-	job.WorkspaceDir = other
-	sw := rt.soloThreadWorkspaceSwitch(context.Background(), job, "")
-	if dir, pending := sw.PendingApproval(); !pending || dir != other {
-		t.Fatalf("thread in another workspace: pending=%v dir=%q", pending, dir)
-	}
-	sw.Approve(other)
-	if _, pending := sw.PendingApproval(); pending {
-		t.Fatal("still pending after approval")
-	}
-	job.WorkspaceDir = soloWS
-	if _, pending := rt.soloThreadWorkspaceSwitch(context.Background(), job, "").PendingApproval(); pending {
-		t.Fatal("a thread in Solo's own workspace asks")
 	}
 }
 

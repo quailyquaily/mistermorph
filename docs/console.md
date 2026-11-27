@@ -177,11 +177,16 @@ task queue in the background, so Solo answers the next message meanwhile. `work_
 can also give an existing thread (or other ordinary topic) more work in its own
 workspace. Short work in a known workspace may run in Solo itself with `workspace_use`.
 
-- **Asking first.** The thread's workspace is required and checked as `workspace_use`
+- **Workspace.** The thread's workspace is required and checked as `workspace_use`
   checks a path (a known workspace or a folder the user named in the message; never a
-  denied path or the state folder); otherwise the agent is told to ask the user. A
-  thread's first write or command in a workspace other than Solo's asks for approval in
-  the thread, as after `workspace_use`.
+  denied path or the state folder); otherwise the agent is told to ask the user.
+  Starting the thread there is what authorizes the workspace: it is the thread's own, as
+  a topic's attached workspace is, whether or not it is Solo's, and the thread's writes
+  and commands in it ask for no workspace approval (so a thread is not held, or stopped
+  by an approval's expiry, for it). This holds for that thread's tasks only, and is not
+  remembered for other workspaces. Everything else asks as in any topic: Guard approvals,
+  a coding agent's own permission settings, and a `workspace_use` in the thread to
+  another workspace, whose first write or command asks as described above.
 - **Cards.** Solo shows a card for each thread it started: title, workspace and state
   (running, waiting for you, done, failed, stopped), followed live while the thread
   runs; pressing Open thread opens it. When the thread's task ends, Solo gets its summary

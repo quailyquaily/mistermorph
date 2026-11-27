@@ -19,8 +19,6 @@ type WorkspaceSwitch struct {
 	original string
 	current  string
 	approved map[string]bool
-	// originalPending makes the run's own workspace need approval too, as a switched one does.
-	originalPending bool
 }
 
 // WorkspaceSwitchState is what a paused run keeps of its switch, so a run resumed after an
@@ -34,15 +32,6 @@ type WorkspaceSwitchState struct {
 func NewWorkspaceSwitch(original string) *WorkspaceSwitch {
 	original = normalizeRoot(original)
 	return &WorkspaceSwitch{original: original, current: original, approved: map[string]bool{}}
-}
-
-// NewWorkspaceSwitchAwaitingApproval starts a run in dir, a workspace another run chose for it (a
-// work thread Solo started): until the user approves, the first write or command there asks, as
-// after a switch (workspace_use). Switching back to dir later asks the same way.
-func NewWorkspaceSwitchAwaitingApproval(dir string) *WorkspaceSwitch {
-	s := NewWorkspaceSwitch(dir)
-	s.originalPending = true
-	return s
 }
 
 // Original is the workspace the run started in.
@@ -93,7 +82,7 @@ func (s *WorkspaceSwitch) PendingApproval() (string, bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.approved[dirKey(s.current)] || (SameDir(s.current, s.original) && !s.originalPending) {
+	if s.approved[dirKey(s.current)] || SameDir(s.current, s.original) {
 		return "", false
 	}
 	return s.current, true

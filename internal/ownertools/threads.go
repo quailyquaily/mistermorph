@@ -71,7 +71,7 @@ func (t *WorkThreadTool) Description() string {
 		"workspace is required: a workspace from workspace_list (or a folder inside one), or a folder the user named in this message; when it is not clear which one the work belongs to, ask the user instead of guessing. " +
 		"Pass topic_id (from an earlier work_thread or topic_search) to give an existing thread more work in its own workspace. " +
 		"It returns at once with the thread's topic and task IDs; the thread's card in Solo shows its state and its summary arrives here when it ends, so do not wait for it. " +
-		"The first write or command in a workspace other than Solo's asks the user to approve, in the thread."
+		"The thread works in that workspace as its own, without a further approval for it: choosing the workspace is what authorizes it, so choose with care. Other approvals (a guarded action, a later switch to another workspace) are still asked in the thread."
 }
 
 func (t *WorkThreadTool) ParameterSchema() string {

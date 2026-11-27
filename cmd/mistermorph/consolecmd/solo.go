@@ -16,7 +16,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/ownertools"
 	"github.com/quailyquaily/mistermorph/internal/pagination"
-	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/solo"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 )
@@ -107,17 +106,6 @@ func consoleSoloRun(job consoleLocalTaskJob) bool {
 // consoleSoloThreadTask reports whether a task is a work thread's task that Solo started.
 func consoleSoloThreadTask(trigger daemonruntime.TaskTrigger) bool {
 	return strings.TrimSpace(trigger.Event) == daemonruntime.SoloThreadTriggerEvent
-}
-
-// soloThreadWorkspaceSwitch is the workspace of a work thread's task that Solo started: its
-// topic's, where the first write or command asks the user first unless it is Solo's own workspace
-// (the one Solo works in without asking).
-func (r *consoleLocalRuntime) soloThreadWorkspaceSwitch(ctx context.Context, job consoleLocalTaskJob, defaultWorkspaceDir string) *pathroots.WorkspaceSwitch {
-	solo, err := r.workspaceForTopic(ctx, daemonruntime.ConsoleSoloTopicID, defaultWorkspaceDir)
-	if err == nil && strings.TrimSpace(solo.WorkspaceDir) != "" && pathroots.SameDir(solo.WorkspaceDir, job.WorkspaceDir) {
-		return pathroots.NewWorkspaceSwitch(job.WorkspaceDir)
-	}
-	return pathroots.NewWorkspaceSwitchAwaitingApproval(job.WorkspaceDir)
 }
 
 // startSoloThread is work_thread's starter: it records the thread's task in its topic (a new one

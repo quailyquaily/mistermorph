@@ -256,23 +256,72 @@ func TestSubtaskExcludedToolsAreNotHandedToSubtasks(t *testing.T) {
 	}
 }
 
-// A work thread Solo started runs in the workspace Solo chose for it: its first write there asks,
-// like a write after a switch, and once approved the resumed run (a fresh context, as the Console
-// gives) asks nothing more.
-func TestDispatchedWorkspaceAsksBeforeTheFirstWrite(t *testing.T) {
+// threadCtx is the context of a work thread's run that Solo started: a switch started in the
+// workspace Solo chose for the thread, whatever Solo's own workspace is.
+func threadCtx() context.Context {
+	return pathroots.WithWorkspaceSwitch(context.Background(), pathroots.NewWorkspaceSwitch("/ws/thread"))
+}
+
+func (s *memoryApprovalStore) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.records)
+}
+
+// A work thread Solo started runs in the workspace Solo chose for it as its own: none of the
+// tools a switched workspace asks for asks there, and no approval is recorded (so none expires).
+func TestDispatchedWorkspaceNeedsNoWorkspaceApproval(t *testing.T) {
+	store := newMemoryApprovalStore()
+	e := New(nil, tools.NewRegistry(), Config{}, DefaultPromptSpec(), WithGuard(approvalsOnlyGuard(store)))
+	for name := range workspaceGatedTools {
+		t.Run(name, func(t *testing.T) {
+			ctx := threadCtx()
+			if dir, pending := workspaceApprovalPending(ctx, name); pending {
+				t.Fatalf("%s is pending approval in the thread's own workspace %s", name, dir)
+			}
+			st := &engineLoopState{runID: "r"}
+			observation, denied, approval, err := e.guardDecide(ctx, st, 1, &ToolCall{Name: name}, "")
+			if err != nil || denied || approval != nil || observation != "" {
+				t.Fatalf("decide in the thread's workspace = %q, %v, %v, %v", observation, denied, approval, err)
+			}
+			// The same tool after the thread switches to another workspace still asks.
+			sw, _ := pathroots.WorkspaceSwitchFromContext(ctx)
+			sw.Use("/ws/unrelated")
+			_, denied, approval, err = e.guardDecide(ctx, st, 2, &ToolCall{Name: name}, "")
+			if err != nil || denied || approval == nil || !approval.Forced ||
+				!strings.Contains(strings.Join(approval.Reasons, " "), guard.WorkspaceSwitchReason+": /ws/unrelated") {
+				t.Fatalf("decide after a switch = %v, %+v, %v", denied, approval, err)
+			}
+			if dir, pending := workspaceApprovalPending(ctx, name); !pending || dir != "/ws/unrelated" {
+				t.Fatalf("after a switch: pending=%v dir=%q", pending, dir)
+			}
+		})
+	}
+	if n := store.count(); n != 0 {
+		t.Fatalf("approvals recorded = %d, want none", n)
+	}
+}
+
+// The whole of a thread's run: it writes and runs commands in its own workspace with no approval,
+// a later workspace_use to another workspace asks as in any topic, and the run resumed after that
+// approval (a fresh context, as the Console gives) goes on there, then back in its own workspace,
+// asking nothing more.
+func TestDispatchedWorkspaceRunsAndALaterSwitchStillAsks(t *testing.T) {
 	store := newMemoryApprovalStore()
 	g := approvalsOnlyGuard(store)
-	reg, reader, writer, _ := wsRegistry()
+	reg, reader, writer, shell := wsRegistry()
 	client := newMockClient(
 		llm.Result{ToolCalls: []llm.ToolCall{call("r1", "read_file", nil)}},
 		llm.Result{ToolCalls: []llm.ToolCall{call("w1", "write_file", nil)}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("b1", "bash", nil)}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("s1", "workspace_use", map[string]any{"path": "/ws/unrelated"})}},
 		llm.Result{ToolCalls: []llm.ToolCall{call("w2", "write_file", nil)}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("b2", "bash", nil)}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("s2", "workspace_use", map[string]any{"path": "/ws/thread"})}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("w3", "write_file", nil)}},
 		finalResponse("done"),
 	)
-	engine := New(client, reg, Config{MaxSteps: 8}, DefaultPromptSpec(), WithGuard(g))
-	threadCtx := func() context.Context {
-		return pathroots.WithWorkspaceSwitch(context.Background(), pathroots.NewWorkspaceSwitchAwaitingApproval("/ws/thread"))
-	}
+	engine := New(client, reg, Config{MaxSteps: 12}, DefaultPromptSpec(), WithGuard(g))
 	pending, _, err := engine.Run(threadCtx(), "work in the thread", RunOptions{})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -280,13 +329,20 @@ func TestDispatchedWorkspaceAsksBeforeTheFirstWrite(t *testing.T) {
 	if got := reader.calls(); len(got) != 1 || got[0] != "/ws/thread" {
 		t.Fatalf("reads = %v", got)
 	}
-	if got := writer.calls(); len(got) != 0 {
-		t.Fatalf("wrote before approval: %v", got)
+	if got := writer.calls(); len(got) != 1 || got[0] != "/ws/thread" {
+		t.Fatalf("writes before the switch = %v, want one in the thread's workspace", got)
 	}
+	if got := shell.calls(); len(got) != 1 || got[0] != "/ws/thread" {
+		t.Fatalf("commands before the switch = %v, want one in the thread's workspace", got)
+	}
+	// The one approval of the run is the explicit switch's.
 	approvalID := pendingApprovalID(t, pending)
 	rec, ok, err := store.Get(context.Background(), approvalID)
-	if err != nil || !ok || !strings.Contains(strings.Join(rec.Reasons, " "), guard.WorkspaceSwitchReason+": /ws/thread") {
+	if err != nil || !ok || rec.ToolName != "write_file" || !strings.Contains(strings.Join(rec.Reasons, " "), guard.WorkspaceSwitchReason+": /ws/unrelated") {
 		t.Fatalf("approval = %+v, %v, %v", rec, ok, err)
+	}
+	if n := store.count(); n != 1 {
+		t.Fatalf("approvals recorded = %d, want the switch's alone", n)
 	}
 	if err := g.ResolveApproval(context.Background(), approvalID, guard.ApprovalApproved, "tester", ""); err != nil {
 		t.Fatal(err)
@@ -295,7 +351,89 @@ func TestDispatchedWorkspaceAsksBeforeTheFirstWrite(t *testing.T) {
 	if err != nil || final == nil || final.Output != "done" {
 		t.Fatalf("Resume() = %#v, %v", final, err)
 	}
-	if got := writer.calls(); len(got) != 2 || got[0] != "/ws/thread" || got[1] != "/ws/thread" {
+	if got := writer.calls(); len(got) != 3 || got[1] != "/ws/unrelated" || got[2] != "/ws/thread" {
+		t.Fatalf("writes = %v", got)
+	}
+	if got := shell.calls(); len(got) != 2 || got[1] != "/ws/unrelated" {
+		t.Fatalf("commands = %v", got)
+	}
+	if n := store.count(); n != 1 {
+		t.Fatalf("approvals recorded after the resume = %d, want 1", n)
+	}
+}
+
+// A switch denied in a thread runs nothing in the other workspace.
+func TestDispatchedWorkspaceDeniedSwitchDoesNotWrite(t *testing.T) {
+	store := newMemoryApprovalStore()
+	g := approvalsOnlyGuard(store)
+	reg, _, writer, _ := wsRegistry()
+	client := newMockClient(
+		llm.Result{ToolCalls: []llm.ToolCall{call("s1", "workspace_use", map[string]any{"path": "/ws/unrelated"})}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("w1", "write_file", nil)}},
+		finalResponse("done"),
+	)
+	engine := New(client, reg, Config{MaxSteps: 6}, DefaultPromptSpec(), WithGuard(g))
+	pending, _, err := engine.Run(threadCtx(), "work elsewhere", RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	approvalID := pendingApprovalID(t, pending)
+	if err := g.ResolveApproval(context.Background(), approvalID, guard.ApprovalDenied, "tester", ""); err != nil {
+		t.Fatal(err)
+	}
+	if final, _, err := engine.Resume(threadCtx(), approvalID); err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	} else if _, stillPending := final.Output.(PendingOutput); !stillPending {
+		t.Fatalf("denied resume final = %#v", final)
+	}
+	if got := writer.calls(); len(got) != 0 {
+		t.Fatalf("denied write ran: %v", got)
+	}
+}
+
+// The Guard's own approvals do not depend on the workspace: a thread's command in its own
+// workspace still asks when the Guard says so, and for the Guard's reason, and the resumed run
+// (which keeps no workspace state, having never switched) works on in the thread's workspace.
+func TestDispatchedWorkspaceKeepsGuardApprovals(t *testing.T) {
+	store := newMemoryApprovalStore()
+	g := approvalGuard(store, nil)
+	reg, _, writer, shell := wsRegistry()
+	client := newMockClient(
+		llm.Result{ToolCalls: []llm.ToolCall{call("w1", "write_file", nil)}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("b1", "bash", map[string]any{"cmd": "make"})}},
+		llm.Result{ToolCalls: []llm.ToolCall{call("w2", "write_file", nil)}},
+		finalResponse("done"),
+	)
+	engine := New(client, reg, Config{MaxSteps: 8}, DefaultPromptSpec(), WithGuard(g))
+	pending, _, err := engine.Run(threadCtx(), "build in the thread", RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got := writer.calls(); len(got) != 1 || got[0] != "/ws/thread" {
+		t.Fatalf("writes before the Guard asked = %v", got)
+	}
+	if got := shell.calls(); len(got) != 0 {
+		t.Fatalf("command ran before the Guard's approval: %v", got)
+	}
+	approvalID := pendingApprovalID(t, pending)
+	rec, ok, err := store.Get(context.Background(), approvalID)
+	if err != nil || !ok || rec.ToolName != "bash" {
+		t.Fatalf("approval = %+v, %v, %v", rec, ok, err)
+	}
+	if reasons := strings.Join(rec.Reasons, " "); strings.Contains(reasons, guard.WorkspaceSwitchReason) {
+		t.Fatalf("the Guard's approval names the workspace: %q", reasons)
+	}
+	if err := g.ResolveApproval(context.Background(), approvalID, guard.ApprovalApproved, "tester", ""); err != nil {
+		t.Fatal(err)
+	}
+	final, _, err := engine.Resume(threadCtx(), approvalID)
+	if err != nil || final == nil || final.Output != "done" {
+		t.Fatalf("Resume() = %#v, %v", final, err)
+	}
+	if got := shell.calls(); len(got) != 1 || got[0] != "/ws/thread" {
+		t.Fatalf("commands = %v", got)
+	}
+	if got := writer.calls(); len(got) != 2 || got[1] != "/ws/thread" {
 		t.Fatalf("writes = %v", got)
 	}
 }

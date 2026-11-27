@@ -460,7 +460,7 @@ Purpose: from Solo, the owner's one conversation, start work in a topic and work
 | `title` | `string` | For a new thread | None | The thread's title (at most 80 characters). |
 | `topic_id` | `string` | No | None | An existing topic to give more work, in its own workspace. Solo, Awareness, TODO and Agent Link topics are refused. |
 
-Creates the topic (marked `started_from: "_solo"`) with the workspace attached, or continues `topic_id`, records the thread's card in Solo and submits the task to the Console's queue; returns at once with `topic_id`, `task_id`, `title`, `workspace`, `state` (`running`), `continued` and a `note`. A missing, unknown or denied folder fails and starts nothing: the model asks the user which workspace. A topic still running a task is refused. The thread's first write or command in a workspace other than Solo's asks for approval in the thread. When the thread's task ends, Solo gets its summary. Codemode scripts cannot call it.
+Creates the topic (marked `started_from: "_solo"`) with the workspace attached, or continues `topic_id`, records the thread's card in Solo and submits the task to the Console's queue; returns at once with `topic_id`, `task_id`, `title`, `workspace`, `state` (`running`), `continued` and a `note`. A missing, unknown or denied folder fails and starts nothing: the model asks the user which workspace. A topic still running a task is refused. The thread works in its workspace as its own: no approval is asked for the workspace itself, whether or not it is Solo's. Guard approvals, a coding agent's own permissions and a later `workspace_use` in the thread ask as in any topic. When the thread's task ends, Solo gets its summary. Codemode scripts cannot call it.
 
 ## `todo_list`
 
