@@ -225,3 +225,7 @@ Required: `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`.
 Moved to `backlog/`: the mandatory real-CLI protocol spike is blocked. The manager and Claude Code independently found no installed `grok` executable on PATH or in customary user-level installation directories. No CLI version, authentication, permissions/questions/plan protocol, cancellation or usage behavior could be verified. The request explicitly forbids implementing from documentation alone when a signed-in CLI is unavailable.
 
 No product code was changed, no installs were made, no commits were made on the code branch, and no tests were run. The owner must make a signed-in Grok CLI available to the builder, then move this item to `new/` to retry. The existing design remains planned and unverified.
+
+## factory · 2026-11-27 11:54
+
+Owner request, quoted verbatim: “ok implement FT190”. Moved to `new/` on that word. What blocked the earlier build is gone: `grok 0.2.114` is installed at `~/.local/bin/grok`, and the owner signed in with `grok login` (`grok models` answers "You are logged in with grok.com"). Step 1, the protocol spike against the real CLI, can run.
