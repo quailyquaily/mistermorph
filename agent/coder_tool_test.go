@@ -372,7 +372,7 @@ func TestCoderToolBypassApprovalsPerBackend(t *testing.T) {
 func fakeCoderEnv(t *testing.T) shellenv.CoderEnv {
 	t.Helper()
 	dir := t.TempDir()
-	for _, name := range []string{"codex", "claude", "agy"} {
+	for _, name := range []string{"codex", "claude", "agy", "grok"} {
 		if runtime.GOOS == "windows" {
 			name += ".exe"
 		}
@@ -388,10 +388,43 @@ func fakeCoderEnv(t *testing.T) shellenv.CoderEnv {
 func TestCoderToolNeedsSessionsForEveryBackend(t *testing.T) {
 	t.Parallel()
 
-	for _, backend := range []string{coderBackendCodex, coderBackendClaude, coderBackendAgy} {
+	for _, backend := range []string{coderBackendCodex, coderBackendClaude, coderBackendAgy, coderBackendGrok} {
 		tool := newCoderTool(coderToolDeps{Runner: &execDirectSubtaskRunner{}, Env: fakeCoderEnv(t)})
 		_, err := tool.Execute(context.Background(), map[string]any{"coder": backend, "task": "t", "cwd": t.TempDir()})
 		if err == nil || !strings.Contains(err.Error(), "coder sessions unavailable") {
+			t.Fatalf("%s: error = %v", backend, err)
+		}
+	}
+}
+
+// The coder parameter takes the four coders and nothing else.
+func TestCoderToolBackends(t *testing.T) {
+	t.Parallel()
+
+	tool := newCoderTool(coderToolDeps{Runner: &execDirectSubtaskRunner{}, Env: fakeCoderEnv(t)})
+	var schema struct {
+		Properties struct {
+			Coder struct {
+				Enum []string `json:"enum"`
+			} `json:"coder"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal([]byte(tool.ParameterSchema()), &schema); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(schema.Properties.Coder.Enum, ","); got != "codex,claude,agy,grok" {
+		t.Fatalf("enum = %s", got)
+	}
+	cwd := t.TempDir()
+	for _, backend := range schema.Properties.Coder.Enum {
+		req, err := coderRequestFromParams(context.Background(), map[string]any{"coder": " " + strings.ToUpper(backend) + " ", "task": "t", "cwd": cwd}, pathroots.PathRoots{})
+		if err != nil || req.Backend != backend {
+			t.Fatalf("%s: request = %+v, %v", backend, req, err)
+		}
+	}
+	for _, backend := range []string{"grok-build", "xai", "cursor"} {
+		_, err := coderRequestFromParams(context.Background(), map[string]any{"coder": backend, "task": "t", "cwd": cwd}, pathroots.PathRoots{})
+		if err == nil || err.Error() != "unsupported coder: "+backend {
 			t.Fatalf("%s: error = %v", backend, err)
 		}
 	}

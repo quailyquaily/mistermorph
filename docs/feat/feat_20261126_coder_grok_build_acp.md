@@ -1,14 +1,68 @@
 ---
 date: 2026-11-26
 title: "Coder: Grok Build (grok) as a fourth coder, over ACP"
-status: planned
+status: implemented
 ---
 
 # Coder: Grok Build (grok) as a fourth coder, over ACP
 
-**Planned. Nothing in this document is implemented.** The `coder` tool supports `codex`, `claude` and `agy` today; `coder=grok` is rejected as `unsupported coder: grok` (`agent/coder_tool.go`, `internal/codersessions/sessions.go`). The user-facing docs and the config template keep saying three coders until the implementation lands.
+**Implemented on 2026-11-27**, built and checked against `grok 1.0.92 (b06756fd6256) [stable]` on Linux x86_64, signed in with `grok login`. The section below is what the protocol spike found on that CLI; where it differs from the plan further down (written from the documents, before any `grok` was run), the findings are what the code follows. The plan is kept as it was written.
 
 Follows [`feat_20261116_coder_sessions_everywhere.md`](feat_20261116_coder_sessions_everywhere.md) (the session path every coder uses), [`feat_20261113_coder_usage_quota.md`](feat_20261113_coder_usage_quota.md) and [`feat_20261115_coder_usage_console_and_chart.md`](feat_20261115_coder_usage_console_and_chart.md).
+
+## Findings of the protocol spike (grok 1.0.92, 2026-11-27)
+
+A throwaway client drove `grok agent --no-leader stdio` in an empty scratch folder with synthetic tasks. The lines below are sanitized: ids are placeholders, texts are short neutral ones. The raw capture was deleted. `~/.grok/auth.json` was never read.
+
+### What the code relies on
+
+- **Version.** The installed CLI was 0.2.114; its first prompt failed with `API error (status 426 Upgrade Required): Your Grok CLI version (0.2.114) is outdated`, and the CLI updated itself to 1.0.92 during that run. `--no-auto-update` is accepted before `agent` (`grok --no-auto-update agent ... stdio`); it is not an option of `grok agent`.
+- **Command.** `grok --no-auto-update agent --no-leader [--always-approve] stdio`. One JSON-RPC message per line. `--no-leader` conflicts with nothing seen.
+- **`initialize`** (`protocolVersion: 1`, empty `clientCapabilities`) answers `agentCapabilities: { loadSession: true, sessionCapabilities: { list: {}, resume: {}, close: {} }, ... }`, `authMethods` and `_meta.agentVersion`. (0.2.114 answered `sessionCapabilities: {}`.)
+- **Sign-in.**
+  - With a cached sign-in, `authMethods` is `cached_token`, `grok.com`, and `session/new` works without `authenticate`.
+  - Without one (an empty `GROK_HOME`), `authMethods` is `grok.com` only and `session/new` answers at once with `{"code": -32000, "message": "Authentication required", "data": "no auth method id provided"}`.
+  - With `XAI_API_KEY` set and no cached sign-in, `xai.api_key` is **not** listed, yet `authenticate` with `{ methodId: "xai.api_key", _meta: { headless: true } }` answers `{}` and `session/new` then works. The key is not checked at that point (a placeholder was accepted); no real key was available, so a task with a key was not run.
+  - So the backend calls `session/new` first; on the sign-in error it authenticates with `xai.api_key` only when `XAI_API_KEY` is in the coder's environment, else it fails with the sign-in message. It never uses `grok.com`, `x.ai/auth/*` or `--reauth`.
+- **`session/new`** with `{ cwd, mcpServers: [] }` answers `{ sessionId, models: { currentModelId }, configOptions, _meta }`.
+- **Notifications.** Extension methods carry ACP's underscore: `_x.ai/session/setup`, `_x.ai/session_notification`, `_x.ai/queue/changed`, `_x.ai/models/update`, `_x.ai/settings/update`, `_x.ai/announcements/update`, `_x.ai/sessions/changed`, `_x.ai/session/prompt_complete`, `_x.ai/mcp/servers_updated`, `_x.ai/mcp_initialized`. All are ignored. `session/update` kinds seen: `agent_message_chunk`, `agent_thought_chunk`, `user_message_chunk` (replay), `tool_call`, `tool_call_update`, `available_commands_update`, `session_info_update`, `current_mode_update`.
+- **Tool calls.** A call starts as `tool_call` with the tool's bare name as its title (`"title": "run_terminal_command"`, `_meta["x.ai/tool"].name` the same), then a `tool_call_update` gives `kind` and a title that says what it does (``Execute `echo one` ``, ``Read `/path` ``, `Plan: Enter`, `Ask: <question>`), then updates with only a `status`. The progress line is the titled update's title; the bare name is not a line.
+- **Approvals.** In a session that asks, a command that changes something arrives as the request `session/request_permission` (ids count from 0) with `toolCall.title` and four options: `always-allow` (`allow_always`), `allow-once` (`allow_once`), `reject-once` (`reject_once`), `reject-always` (`reject_always`). The answer is `{ outcome: { outcome: "selected", optionId } }`. Read-only tools (list, read) and some harmless commands ask nothing. A rejected approval ends the turn: `stopReason: "cancelled"` with `_meta.cancellationCategory: "PermissionRejected"`.
+- **Always-approve.** With `--always-approve`, and with `_meta.yoloMode: true` on `session/new`, no `session/request_permission` came for the same command. The agent's question still came.
+- **The agent's question** is the request `_x.ai/ask_user_question` with `{ sessionId, toolCallId, mode, questions: [{ question, options: [{ label, description }], multiSelect }] }`. Answers (wire types in `xai-grok-tools/.../ask_user_question/types.rs`): `{ outcome: "accepted", answers: { "<question text>": ["<label>"] } }`; a typed answer is `["Other"]` with `annotations: { "<question text>": { notes: "<text>" } }`; `{ outcome: "cancelled" }` when not answered. All three were answered by the model as expected. An error reply makes the tool fail and the turn go on.
+- **Plan approval** is the request `_x.ai/exit_plan_mode` with `{ sessionId, toolCallId, planContent }`. Answers (`.../exit_plan_mode/types.rs`): `{ outcome: "approved" }` (the agent went on, asked for the approval of its write, and wrote the file), `{ outcome: "cancelled", feedback }` and `{ outcome: "abandoned" }` (no file written in either). An error reply ends the turn as `cancelled` (`PermissionCancelled`).
+- **Cancel and what the agent started.** Grok runs a command in a session of its own (its pid, group and session differ from grok's).
+  - `session/cancel` during a command: the prompt answers at once with `stopReason: "cancelled"` (`MidTurnAbort`), and the command is gone.
+  - With a pending approval: answered `{ outcome: { outcome: "cancelled" } }`, then `session/cancel`: `cancelled`, nothing run.
+  - The end of its input (stdin closed): grok exits with 0 after about 1.5 s; a running command and a background task are gone.
+  - `SIGTERM`: exits after about 1.4 s; the command is gone.
+  - `SIGKILL` of grok's process group: **the command keeps running**. So the session is closed by ending its input and waiting up to 3 s before the kill (`rpc.grace`), and a cancelled task sends `session/cancel` first. What a kill still leaves behind (the runtime itself killed) is what `internal/proctrack` sweeps at the end of a run, as for the other coders.
+- **Reopening.** In a new process, `session/resume` with `{ sessionId, cwd, mcpServers: [] }` answers `{ models, configOptions, _meta }` and replays nothing; `session/load` replays the conversation as `session/update` (`user_message_chunk`, `agent_message_chunk`, `agent_thought_chunk`) before it answers. After either, the session remembered a word from the task that was killed. An unknown session id answers `{"code": -32603, "message": "Path not found.", "data": {"code": "FS_NOT_FOUND"}}` for both.
+- **Usage.** The prompt's result is `{ stopReason, _meta: { modelId, usage: { inputTokens, outputTokens, totalTokens, cachedReadTokens, cacheCreationTokens, reasoningTokens, modelCalls, costUsdTicks, modelUsage: { "<model>": { the same fields } }, numTurns } } }`. `usage` is the prompt's own, not a running total (two model calls in one prompt summed; the next prompt started again). `inputTokens` includes the cached reads. The per-model key is the served model (`grok-4.7-build` while `modelId` said `grok-4.7`). The rows use `modelUsage`; the CLI's `costUsdTicks` is not used (catalog pricing, as for the other coders).
+- **Errors.** A failed prompt is a JSON-RPC error `-32603 "Internal error"` whose `data.message` says what happened and `data.http_status` the status; the task's error quotes `data.message`. Status 401 is taken as a missing sign-in.
+- **Install location.** The installer keeps the CLI under `~/.grok` and links `~/.local/bin/grok`, which is already among the default install directories.
+- **Quota.** Nothing outside the interactive screen reports one.
+
+### Differences from the plan below
+
+- `xai.api_key` is not advertised, so "use only an advertised method" could not stand: see Sign-in.
+- The requests are `_x.ai/ask_user_question` and `_x.ai/exit_plan_mode` (with the underscore); the names without it are accepted too.
+- Closing the process is not a kill at once: its input is ended first (see Cancel).
+- A rejected approval ends the task as failed (grok ends the turn), where Claude Code goes on.
+- The progress line is the tool call's title alone, without the kind in front: the titles already start with what is done.
+
+### Not checked
+
+- macOS and Windows; a CLI installed any other way than the installer.
+- A real `XAI_API_KEY` (only that `authenticate` accepts the method and `session/new` then works).
+- The stop reasons `refusal`, `max_tokens` and `max_turn_requests`, a model error other than the outdated-version one, and a turn limit: none was provoked. The code treats every stop reason but `end_turn` as a failure.
+- `--no-plan`, `grok usage <session-id>`, leader mode (`--no-leader` is always passed), MCP servers for the session.
+- Whether `cacheCreationTokens` is inside `inputTokens` (it was 0 in every run).
+- Later versions of the CLI: the `x.ai` extension set and the `_meta` fields are the CLI's own and may change. A usage that cannot be read records nothing; an unknown request fails the task with its name.
+
+### Checked through the backend
+
+`MISTER_MORPH_CODER_SESSION_TEST=grok go test ./internal/codersessions -run TestInstalledCoderSession` passed on 1.0.92 (`model=grok-4.7-build`). A throwaway test also ran the backend itself against the CLI as a Console conversation would: an approval card with grok's four options (allowed: the file was written; rejected: not written, the task failed), a question answered with typed text, a plan rejected (no file), a task cancelled during `sleep` (cancelled in 1.7 s, the command gone), and the next task reopening the session.
 
 ## Goal
 

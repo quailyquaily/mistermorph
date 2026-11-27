@@ -1,5 +1,6 @@
 // Package codersessions owns the coding CLIs' sessions: one process per session, talking JSON
-// lines over stdin and stdout (`codex app-server`, `agy acp`, `claude -p` with JSON streams).
+// lines over stdin and stdout (`codex app-server`, `agy acp`, `grok agent stdio`, `claude -p` with
+// JSON streams).
 // It reads no screen: only what the CLIs report over an interface made for a host program, and
 // Codex's rollout files for its usage.
 package codersessions
@@ -35,7 +36,9 @@ type Sessions struct {
 }
 
 func (m *Sessions) Run(ctx context.Context, scope string, req Request) (output string, err error) {
-	if req.Backend != "codex" && req.Backend != "agy" && req.Backend != "claude" {
+	switch req.Backend {
+	case "codex", "claude", "agy", "grok":
+	default:
 		return "", fmt.Errorf("unsupported coder: %s", req.Backend)
 	}
 	if scope == "" {
@@ -101,8 +104,13 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (output s
 		output, run, quota, err = s.codex(ctx, req)
 	case "claude":
 		output, run, quota, err = s.claude(ctx, req)
-	default:
+	case "agy":
 		output, run, err = s.agy(ctx, req)
+	case "grok":
+		output, run, err = s.grok(ctx, req)
+	default:
+		// Checked above: a backend this switch does not know never runs as another one.
+		err = fmt.Errorf("unsupported coder: %s", req.Backend)
 	}
 	return
 }

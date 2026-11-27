@@ -150,6 +150,12 @@ func TestCoderProgressText(t *testing.T) {
 			want: "Antigravity CLI is still working (5 min so far). Now: running a command.",
 		},
 		{
+			name: "active grok",
+			run:  coderProgressRun{backend: "grok", started: start, lastActive: start.Add(4*time.Minute + 50*time.Second), step: "Execute `go test`"},
+			now:  start.Add(5 * time.Minute),
+			want: "Grok Build is still working (5 min so far). Now: Execute `go test`.",
+		},
+		{
 			name: "no step yet",
 			run:  coderProgressRun{backend: "claude", started: start, lastActive: start.Add(time.Minute)},
 			now:  start.Add(2 * time.Minute),

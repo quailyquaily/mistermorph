@@ -64,10 +64,10 @@ func TestInstalledCodexSchema(t *testing.T) {
 func TestInstalledCoderSession(t *testing.T) {
 	backend := os.Getenv("MISTER_MORPH_CODER_SESSION_TEST")
 	if backend == "" {
-		t.Skip("set MISTER_MORPH_CODER_SESSION_TEST to codex or agy")
+		t.Skip("set MISTER_MORPH_CODER_SESSION_TEST to codex, agy or grok")
 	}
-	if backend != "codex" && backend != "agy" {
-		t.Fatal("only codex and agy use protocol sessions")
+	if backend != "codex" && backend != "agy" && backend != "grok" {
+		t.Fatal("only codex, agy and grok use protocol sessions")
 	}
 	command, env, err := (shellenv.CoderEnv{}).Command(backend)
 	if err != nil {

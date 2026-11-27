@@ -22,6 +22,8 @@ const (
 	coderBackendClaude = "claude"
 	// The Antigravity CLI, Google's terminal agent.
 	coderBackendAgy = coderusage.BackendAgy
+	// Grok Build, xAI's terminal agent.
+	coderBackendGrok = coderusage.BackendGrok
 )
 
 type coderTool struct {
@@ -58,7 +60,7 @@ func newCoderTool(deps coderToolDeps) *coderTool {
 func (t *coderTool) Name() string { return coderToolName }
 
 func (t *coderTool) Description() string {
-	return "Delegate a repository coding task to local Codex, Claude Code (cc), or Antigravity (agy) when the user explicitly asks for that CLI. " +
+	return "Delegate a repository coding task to local Codex, Claude Code (cc), Antigravity (agy), or Grok Build (grok) when the user explicitly asks for that CLI. " +
 		"Each coder keeps one session per working directory within this run, or within a Console conversation, so a later task can build on an earlier one. " +
 		"Only a Console conversation's sessions ask the user to approve actions and show the coder's own questions; every other run has approvals bypassed, and a question the coder asks there fails the task with the question as its error. " +
 		"Returns a SubtaskResult envelope. " + coderUsageNote
@@ -74,8 +76,8 @@ func (t *coderTool) ParameterSchema() string {
 		"properties": map[string]any{
 			"coder": map[string]any{
 				"type":        "string",
-				"enum":        []string{coderBackendCodex, coderBackendClaude, coderBackendAgy},
-				"description": "CLI backend to run: use codex for Codex CLI; use claude for Claude Code or cc; use agy for the Antigravity CLI (Google's agy).",
+				"enum":        []string{coderBackendCodex, coderBackendClaude, coderBackendAgy, coderBackendGrok},
+				"description": "CLI backend to run: use codex for Codex CLI; use claude for Claude Code or cc; use agy for the Antigravity CLI (Google's agy); use grok for Grok Build (xAI's grok CLI).",
 			},
 			"task": map[string]any{
 				"type":        "string",
@@ -182,7 +184,8 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 
 // reportUsage records what a run used and the coder's quota, and says both in a line for the
 // result and the activity: Claude Code reports its quota during the task; Codex's is read from its
-// app server and the Antigravity CLI's from its /usage after the task (no quota used). A quota that
+// app server and the Antigravity CLI's from its /usage after the task (no quota used); Grok Build
+// reports none, and its line has no quota part. A quota that
 // cannot be read is left out: nothing is made up, and the run's own outcome stands. It returns ""
 // when there is nothing to say.
 func (t *coderTool) reportUsage(ctx context.Context, req CoderRequest, run coderusage.Run, quota *coderusage.Quota) string {
@@ -233,7 +236,7 @@ func coderRequestFromParams(ctx context.Context, params map[string]any, roots pa
 	if backend == "" {
 		return CoderRequest{}, fmt.Errorf("missing required param: coder")
 	}
-	if backend != coderBackendCodex && backend != coderBackendClaude && backend != coderBackendAgy {
+	if backend != coderBackendCodex && backend != coderBackendClaude && backend != coderBackendAgy && backend != coderBackendGrok {
 		return CoderRequest{}, fmt.Errorf("unsupported coder: %s", backend)
 	}
 	task, _ := params["task"].(string)

@@ -20,6 +20,7 @@ const (
 	hostCodex  = "codex-cli"
 	hostClaude = "claude-code"
 	hostAgy    = "antigravity-cli"
+	hostGrok   = "grok-build"
 )
 
 // Host is the usage host a coder's runs are recorded under.
@@ -29,6 +30,8 @@ func Host(backend string) string {
 		return hostClaude
 	case BackendAgy:
 		return hostAgy
+	case BackendGrok:
+		return hostGrok
 	}
 	return hostCodex
 }

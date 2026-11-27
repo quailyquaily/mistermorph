@@ -105,7 +105,7 @@ func runOK(t *testing.T, sessions *Sessions, req Request, want string) {
 // killer) is reaped at once, for every backend, not left a zombie until the scope's next task or
 // close. The next task opens the session again in a new process.
 func TestIdleServerThatEndsIsReaped(t *testing.T) {
-	for _, backend := range []string{"codex", "agy", "claude"} {
+	for _, backend := range []string{"codex", "agy", "claude", "grok"} {
 		for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
 			t.Run(backend+"/"+sig.String(), func(t *testing.T) {
 				var sessions Sessions
@@ -504,5 +504,78 @@ func TestGroupSignaledOnlyBeforeReaping(t *testing.T) {
 	// Each process's group is stopped when it ends, and by its close if it was still running.
 	if calls < len(*pids) {
 		t.Fatalf("%d group signals for %d processes", calls, len(*pids))
+	}
+}
+
+// grokCommandRequest is a request for a task of the Grok stand-in that leaves a command running
+// in a session of its own, as grok starts its commands; the command's pid goes to the file.
+func grokCommandRequest(t *testing.T, task string) (Request, string) {
+	t.Helper()
+	req := fakeRequest(t, "grok", task)
+	file := filepath.Join(t.TempDir(), "helper.pid")
+	req.Env = append(req.Env, "MM_GROK_HELPER="+file)
+	return req, file
+}
+
+// A kill of grok's group does not reach the commands it started: they run in sessions of their
+// own. grok stops them itself when it is told to cancel and when its input ends, so a cancelled
+// task tells it, and a closed session ends its input and gives it grokExitGrace before the kill.
+func TestGrokCommandsEndWithTheTask(t *testing.T) {
+	t.Run("cancelled task", func(t *testing.T) {
+		var sessions Sessions
+		defer sessions.Close()
+		req, file := grokCommandRequest(t, "command")
+		started := make(chan struct{}, 1)
+		req.Progress = func(string) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+		}
+		var server int
+		req.Process = func(pid int) { server = pid }
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { _, err := sessions.Run(ctx, "chat", req); done <- err }()
+		<-started
+		helper := helperPID(t, file)
+		if state := procState(helper); state == "" || state == "Z" {
+			t.Fatalf("command %d is not running (state %q)", helper, state)
+		}
+		cancel()
+		if err := <-done; err != context.Canceled {
+			t.Fatalf("err = %v", err)
+		}
+		if state := waitGone(helper, false, reapWithin); state != "" {
+			t.Fatalf("command %d is still in state %q after the task was cancelled", helper, state)
+		}
+		if state := waitGone(server, false, reapWithin); state != "" {
+			t.Fatalf("server %d is still in state %q after the task was cancelled", server, state)
+		}
+	})
+	for _, how := range []string{"reset", "close"} {
+		t.Run("idle session, "+how, func(t *testing.T) {
+			var sessions Sessions
+			defer sessions.Close()
+			req, file := grokCommandRequest(t, "background")
+			var server int
+			req.Process = func(pid int) { server = pid }
+			runOK(t, &sessions, req, "done")
+			helper := helperPID(t, file)
+			if state := procState(helper); state == "" || state == "Z" {
+				t.Fatalf("command %d is not running (state %q)", helper, state)
+			}
+			if how == "reset" {
+				sessions.Reset("chat")
+			} else {
+				sessions.Close()
+			}
+			if state := waitGone(helper, false, reapWithin); state != "" {
+				t.Fatalf("command %d is still in state %q after the session was closed", helper, state)
+			}
+			if state := waitGone(server, false, reapWithin); state != "" {
+				t.Fatalf("server %d is still in state %q after the session was closed", server, state)
+			}
+		})
 	}
 }

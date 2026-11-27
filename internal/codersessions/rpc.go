@@ -28,9 +28,19 @@ type message struct {
 	line []byte
 }
 type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
 }
+
+// callError is a call the server answered with an error: what it reads as is unchanged
+// ("method: message"); a backend that needs the code or the data takes them with errors.As.
+type callError struct {
+	method string
+	rpcError
+}
+
+func (e *callError) Error() string { return e.method + ": " + e.Message }
 
 // rpc has one consumer per session. Calls dispatch notifications and server requests while
 // waiting for their response, so an approval cannot deadlock a pending prompt.
@@ -59,6 +69,10 @@ type rpc struct {
 	next      int
 	err       error
 	stderr    stderrTail
+	// grace is how long close waits for the process to exit by itself, its input closed, before
+	// it is killed: a CLI that stops what it started when its input ends, and whose commands a
+	// kill of its group would not reach (Grok Build runs them in sessions of their own).
+	grace time.Duration
 }
 
 // stderrTail keeps the end of what the CLI wrote to stderr, for the error of a process that died.
@@ -212,6 +226,12 @@ func (r *rpc) close() {
 	r.once.Do(func() {
 		close(r.stopped)
 		r.in.Close()
+		if r.grace > 0 {
+			select {
+			case <-r.exit:
+			case <-time.After(r.grace):
+			}
+		}
 		r.kill()
 		_ = r.out.Close()
 		<-r.done
@@ -255,6 +275,9 @@ func (r *rpc) notify(method string, params any) error {
 func (r *rpc) reply(id json.RawMessage, result any) error {
 	return r.send(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
 }
+func (r *rpc) replyError(id json.RawMessage, code int, message string) error {
+	return r.send(map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": message}})
+}
 func (r *rpc) read(ctx context.Context) (message, error) {
 	select {
 	case <-ctx.Done():
@@ -296,7 +319,7 @@ func (r *rpc) call(ctx context.Context, method string, params any, handle func(m
 		}
 		if m.Method == "" && string(m.ID) == id {
 			if m.Error != nil {
-				return nil, fmt.Errorf("%s: %s", method, m.Error.Message)
+				return nil, &callError{method: method, rpcError: *m.Error}
 			}
 			return m.Result, nil
 		}
