@@ -233,3 +233,7 @@ Owner request, quoted verbatim: “ok implement FT190”. Moved to `new/` on tha
 ## factory · 2026-11-27 11:55
 
 Owner, quoted verbatim: “no move to factory. implement here.” Moved back to `backlog/`: the move to `new/` above was not what the owner asked for. No factory build ran, no branch was pushed. The owner has it implemented outside the factory, in their own checkout.
+
+## factory · 2026-11-27 15:46
+
+Moved to `done/` on the owner's word. Built outside the factory, in the owner's checkout, against the real CLI (grok 1.0.92): commit `5ea07a50`, merged into `master` as `1e5508cf` and pushed. No tag. No factory review ran. Findings and what was not checked are in `docs/feat/feat_20261126_coder_grok_build_acp.md`.
