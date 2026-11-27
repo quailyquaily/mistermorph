@@ -1,5 +1,5 @@
 // Package coderusage reads what the local coding CLIs the coder tool runs (Codex, Claude Code, the
-// Antigravity CLI) report about their use: what each run used (tokens, and Claude Code's cost), and how much of the
+// Antigravity CLI, Grok Build) report about their use: what each run used (tokens, and Claude Code's cost), and how much of the
 // user's subscription quota is left (the 5-hour and weekly windows). Runs go into usage.db as LLM
 // usage; the last quota of each coder is kept beside them (llmstats.UsageStore.PutCoderQuota).
 //
@@ -16,6 +16,10 @@
 //   - Antigravity CLI: an `agy acp` prompt's result carries its `usage` (tokens, no cost); its
 //     quota, per model group, comes from `agy -p /usage --output-format json` (ReadAgyQuota),
 //     which the CLI answers itself.
+//
+//   - Grok Build: a `grok agent stdio` prompt's result carries the prompt's usage per model
+//     (`_meta.usage.modelUsage`, tokens). It reports no subscription quota outside its
+//     interactive screen: none is read, kept or shown for it.
 //
 // Nothing here reads the CLIs' credentials or calls their services directly.
 package coderusage
@@ -36,9 +40,11 @@ const (
 	BackendCodex  = "codex"
 	BackendClaude = "claude"
 	BackendAgy    = "agy"
+	BackendGrok   = "grok"
 )
 
-// Backends are the coders, in the order they are listed.
+// Backends are the coders that report a subscription quota, in the order they are listed. Grok
+// Build reports none and is not among them: nothing looks for it or starts it for a quota.
 var Backends = []string{BackendCodex, BackendClaude, BackendAgy}
 
 // ModelUsage is what one run used of one model. InputTokens counts every input token, cached
@@ -80,7 +86,8 @@ type Run struct {
 	Models     []ModelUsage
 	Turns      int
 	DurationMs int64
-	// NotSignedIn says the run failed because the CLI had no sign-in (the Antigravity CLI).
+	// NotSignedIn says the run failed because the CLI had no sign-in (the Antigravity CLI, Grok
+	// Build).
 	NotSignedIn bool
 }
 

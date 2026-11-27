@@ -196,7 +196,7 @@ func WithEngineToolsConfig(cfg EngineToolsConfig) Option {
 	}
 }
 
-// WithCoderSessions runs the coder tool's tasks (Codex, Claude Code, Antigravity) in
+// WithCoderSessions runs the coder tool's tasks (Codex, Claude Code, Antigravity, Grok Build) in
 // runtime-owned sessions. Without it the coder tool reports that sessions are unavailable.
 func WithCoderSessions(run func(context.Context, CoderRequest) (string, error)) Option {
 	return func(e *Engine) { e.coderSessions = run }

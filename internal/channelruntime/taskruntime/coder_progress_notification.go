@@ -152,6 +152,8 @@ func coderProgressText(run *coderProgressRun, now time.Time) string {
 		name = "Codex"
 	case "agy":
 		name = "Antigravity CLI"
+	case "grok":
+		name = "Grok Build"
 	}
 	text := fmt.Sprintf("%s is still working (%s so far", name, coderProgressMinutes(now.Sub(run.started)))
 	quiet := now.Sub(run.lastActive)

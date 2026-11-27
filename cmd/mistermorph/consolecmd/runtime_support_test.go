@@ -90,12 +90,16 @@ func TestManagedRuntimeDepsExposeConsoleAwarenessRegistry(t *testing.T) {
 
 func TestConsoleEngineToolsConfigReadsCoderBypassApprovals(t *testing.T) {
 	reader := viper.New()
-	if cfg := consoleEngineToolsConfigFromReader(reader); cfg.CoderBypassApprovals["codex"] || cfg.CoderBypassApprovals["claude"] {
+	if cfg := consoleEngineToolsConfigFromReader(reader); cfg.CoderBypassApprovals["codex"] || cfg.CoderBypassApprovals["claude"] || cfg.CoderBypassApprovals["grok"] {
 		t.Fatalf("bypass on by default: %v", cfg.CoderBypassApprovals)
 	}
 	reader.Set("tools.coder.bypass_approvals.codex", true)
 	cfg := consoleEngineToolsConfigFromReader(reader)
-	if !cfg.CoderBypassApprovals["codex"] || cfg.CoderBypassApprovals["claude"] {
+	if !cfg.CoderBypassApprovals["codex"] || cfg.CoderBypassApprovals["claude"] || cfg.CoderBypassApprovals["grok"] {
 		t.Fatalf("bypass = %v, want codex only", cfg.CoderBypassApprovals)
+	}
+	reader.Set("tools.coder.bypass_approvals.grok", true)
+	if cfg = consoleEngineToolsConfigFromReader(reader); !cfg.CoderBypassApprovals["grok"] {
+		t.Fatalf("bypass = %v, want grok too", cfg.CoderBypassApprovals)
 	}
 }

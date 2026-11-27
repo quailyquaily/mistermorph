@@ -278,3 +278,49 @@ func TestCoderQuotaRoutesWithAgy(t *testing.T) {
 		t.Fatalf("failed refresh = %d %+v", code, payload)
 	}
 }
+
+// Grok Build reports no quota: with grok installed, the routes do not list it, a refresh does
+// not start it, and its quota is never read as another coder's.
+func TestCoderQuotaRoutesLeaveGrokAlone(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script stand-in")
+	}
+	paths := testRuntimePaths(t.TempDir())
+	binDir := t.TempDir()
+	ran := filepath.Join(binDir, "ran")
+	if err := os.WriteFile(filepath.Join(binDir, "grok"), []byte("#!/bin/sh\necho \"$@\" >> '"+ran+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "/usr/bin:/bin")
+	origEnv := coderEnvFromSettings
+	t.Cleanup(func() { coderEnvFromSettings = origEnv })
+	coderEnvFromSettings = func(settings agentsettings.Reader) shellenv.CoderEnv {
+		env := origEnv(settings)
+		env.DefaultDirs = func() []string { return []string{binDir} }
+		return env
+	}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{Mode: "serve", AuthToken: "token", RuntimePaths: paths})
+	for _, route := range [][2]string{{http.MethodGet, "/stats/coder/quota"}, {http.MethodPost, "/stats/coder/quota/refresh"}} {
+		req := httptest.NewRequest(route[0], route[1], nil)
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		var payload coderQuotaPayload
+		_ = json.Unmarshal(rec.Body.Bytes(), &payload)
+		if _, listed := payload.Available["grok"]; rec.Code != http.StatusOK || listed || len(payload.Available) != 3 || len(payload.Quotas) != 0 || payload.Errors["grok"] != "" {
+			t.Fatalf("%s %s = %d %+v", route[0], route[1], rec.Code, payload)
+		}
+	}
+	// Asked for directly, it is an error, not Codex's reader on the grok command.
+	env := coderEnvFromSettings(viper.New())
+	if _, _, err := findCoderCommand(coderusage.BackendGrok, env); err != nil {
+		t.Fatalf("the stand-in grok is not found: %v", err)
+	}
+	if _, err := readCoderQuota(context.Background(), coderusage.BackendGrok, env); err == nil || !strings.Contains(err.Error(), "reports no quota") {
+		t.Fatalf("readCoderQuota(grok) error = %v", err)
+	}
+	if data, err := os.ReadFile(ran); err == nil {
+		t.Fatalf("grok was started: %s", data)
+	}
+}

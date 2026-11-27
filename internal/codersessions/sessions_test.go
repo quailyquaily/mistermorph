@@ -25,6 +25,10 @@ func fakeServer() {
 		fakeClaude()
 		return
 	}
+	if isFakeGrok(os.Args[1:]) {
+		fakeGrok()
+		return
+	}
 	scan := bufio.NewScanner(os.Stdin)
 	write := func(v any) { b, _ := json.Marshal(v); fmt.Println(string(b)) }
 	reply := func(id json.RawMessage, v any) { write(map[string]any{"id": id, "result": v}) }
@@ -141,7 +145,7 @@ func fakeRequest(t *testing.T, backend, task string) Request {
 	return Request{Backend: backend, Command: os.Args[0], Env: append(os.Environ(), "MM_CODER_TEST_SERVER=1", "CODEX_HOME="+t.TempDir()), CWD: t.TempDir(), Task: task, BypassApprovals: true}
 }
 func TestSessionReuseUsageAndScope(t *testing.T) {
-	for _, backend := range []string{"codex", "agy", "claude"} {
+	for _, backend := range []string{"codex", "agy", "claude", "grok"} {
 		t.Run(backend, func(t *testing.T) {
 			var sessions Sessions
 			defer sessions.Close()
@@ -192,7 +196,7 @@ func TestSessionReuseUsageAndScope(t *testing.T) {
 	}
 }
 func TestSessionQuestionsFailureAndCancel(t *testing.T) {
-	for _, backend := range []string{"codex", "agy", "claude"} {
+	for _, backend := range []string{"codex", "agy", "claude", "grok"} {
 		t.Run(backend, func(t *testing.T) {
 			for _, task := range []string{"approve", "question", "wait", "fail", "interrupt"} {
 				if backend == "agy" && (task == "fail" || task == "interrupt") {
@@ -221,7 +225,7 @@ func TestSessionQuestionsFailureAndCancel(t *testing.T) {
 	}
 }
 func TestConsolePermissionAndResume(t *testing.T) {
-	for _, backend := range []string{"codex", "agy", "claude"} {
+	for _, backend := range []string{"codex", "agy", "claude", "grok"} {
 		t.Run(backend, func(t *testing.T) {
 			var sessions Sessions
 			defer sessions.Close()
@@ -260,7 +264,7 @@ func TestAgyNotSignedIn(t *testing.T) {
 	}
 }
 func TestResetCancelsBusySession(t *testing.T) {
-	for _, backend := range []string{"codex", "claude"} {
+	for _, backend := range []string{"codex", "claude", "grok"} {
 		t.Run(backend, func(t *testing.T) {
 			var sessions Sessions
 			defer sessions.Close()

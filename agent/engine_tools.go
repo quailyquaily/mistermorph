@@ -18,7 +18,7 @@ type EngineToolsConfig struct {
 	// bash tool's environment (the PowerShell tool's on Windows) with tools.coder.path_extra in
 	// front of its PATH (shellenv.CoderEnvFromConfig).
 	CoderEnv shellenv.CoderEnv
-	// CoderBypassApprovals names the backends ("codex", "claude", "agy") whose Console sessions start
+	// CoderBypassApprovals names the backends ("codex", "claude", "agy", "grok") whose Console sessions start
 	// without approval prompts or sandbox. Other runtimes bypass them regardless.
 	CoderBypassApprovals map[string]bool
 	// WorkerNameSet is the name set (see WorkerNameSets) a task started by this engine names

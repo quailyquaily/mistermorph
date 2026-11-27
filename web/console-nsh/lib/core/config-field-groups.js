@@ -164,6 +164,7 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
       { path: "tools.coder.bypass_approvals.codex", label: "Codex yolo mode", type: "bool", note: "In Console conversations, Codex runs every command without asking and without a sandbox (approval policy never, sandbox danger-full-access). Dangerous." },
       { path: "tools.coder.bypass_approvals.claude", label: "Claude Code skip permissions", type: "bool", note: "In Console conversations, Claude Code runs every tool without asking (--dangerously-skip-permissions). Dangerous." },
       { path: "tools.coder.bypass_approvals.agy", label: "Antigravity skip permissions", type: "bool", note: "In Console conversations, agy runs every tool without asking (--dangerously-skip-permissions). Dangerous." },
+      { path: "tools.coder.bypass_approvals.grok", label: "Grok Build always approve", type: "bool", note: "In Console conversations, Grok Build runs every tool without asking and its plans are approved without asking (--always-approve). Dangerous." },
     ],
   }],
   plan_create: [{

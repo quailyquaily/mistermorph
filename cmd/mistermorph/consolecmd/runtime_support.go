@@ -63,6 +63,7 @@ func consoleEngineToolsConfigFromReader(r interface {
 			"codex":  r.GetBool("tools.coder.bypass_approvals.codex"),
 			"claude": r.GetBool("tools.coder.bypass_approvals.claude"),
 			"agy":    r.GetBool("tools.coder.bypass_approvals.agy"),
+			"grok":   r.GetBool("tools.coder.bypass_approvals.grok"),
 		},
 		WorkerNameSet: agent.NormalizeWorkerNameSet(r.GetString("tools.agent_name_set")),
 	}

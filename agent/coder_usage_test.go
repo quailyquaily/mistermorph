@@ -288,3 +288,46 @@ func TestCoderSessionsReportAllBackends(t *testing.T) {
 		})
 	}
 }
+
+// Grok Build reports no quota: its run's usage line has no quota part, nothing is read or kept
+// for it, and its usage.db row is under its own host.
+func TestCoderGrokRunHasUsageAndNoQuota(t *testing.T) {
+	ctx := context.Background()
+	usagePath := filepath.Join(t.TempDir(), "usage.db")
+	recorder := coderusage.NewRecorder(usagePath, nil)
+	quotaReads := 0
+	tool := newCoderTool(coderToolDeps{Runner: &execDirectSubtaskRunner{}, Env: fakeCoderEnv(t), Usage: func() *coderusage.Recorder { return recorder }, RunSessions: func(_ context.Context, req CoderRequest) (string, error) {
+		req.Report(coderusage.Run{Turns: 1, Models: []coderusage.ModelUsage{{Model: "grok-4.7-build", InputTokens: 100, CachedInputTokens: 20, OutputTokens: 10}}}, nil)
+		return "done", nil
+	}, ReadAgyQuota: func(context.Context, shellenv.CoderEnv) (coderusage.Quota, error) {
+		quotaReads++
+		return coderusage.Quota{}, nil
+	}})
+	raw, err := tool.Execute(ctx, map[string]any{"coder": "grok", "task": "test", "cwd": t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result SubtaskResult
+	if err = json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(result.Usage, "grok run: 100 in") || strings.Contains(result.Usage, "quota") || strings.Contains(result.Usage, "% used") || quotaReads != 0 {
+		t.Fatalf("usage = %q, quota reads = %d", result.Usage, quotaReads)
+	}
+	store, err := llmstats.OpenUsageStore(ctx, usagePath, llmstats.UsageStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	records, err := store.Records(ctx, 10)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records = %+v, %v", records, err)
+	}
+	if r := records[0]; r.APIHost != "grok-build" || r.Provider != "grok-build" || r.Operation != llmstats.OperationCoder || r.Model != "grok-4.7-build" || r.InputTokens != 100 || r.CachedInputTokens != 20 {
+		t.Fatalf("record = %+v", r)
+	}
+	quotas, err := coderusage.LoadQuotas(ctx, store)
+	if err != nil || len(quotas) != 0 {
+		t.Fatalf("quotas = %+v, %v", quotas, err)
+	}
+}

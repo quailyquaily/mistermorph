@@ -283,6 +283,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.coder.bypass_approvals.codex", false)
 	v.SetDefault("tools.coder.bypass_approvals.claude", false)
 	v.SetDefault("tools.coder.bypass_approvals.agy", false)
+	v.SetDefault("tools.coder.bypass_approvals.grok", false)
 	v.SetDefault("tools.agent_name_set", "scientists")
 
 	// Platform-specific shell tool defaults:

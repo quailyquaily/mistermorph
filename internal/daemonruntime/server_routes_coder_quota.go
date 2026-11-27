@@ -3,6 +3,7 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -35,8 +36,11 @@ var (
 			return coderusage.ReadClaudeQuota(ctx, command, env)
 		case coderusage.BackendAgy:
 			return coderusage.ReadAgyQuota(ctx, command, env)
+		case coderusage.BackendCodex:
+			return coderusage.ReadCodexQuota(ctx, command, env)
 		}
-		return coderusage.ReadCodexQuota(ctx, command, env)
+		// A coder without a quota (Grok Build) is never read as another one's.
+		return coderusage.Quota{}, fmt.Errorf("%s reports no quota", backend)
 	}
 )
 

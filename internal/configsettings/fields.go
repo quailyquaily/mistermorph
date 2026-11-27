@@ -62,6 +62,7 @@ func AgentFields() []Field {
 		{Path: "tools.coder.bypass_approvals.codex", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.coder.bypass_approvals.claude", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.coder.bypass_approvals.agy", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.coder.bypass_approvals.grok", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		// The name set of new spawn and coder workers (agent.WorkerNameSets).
 		{Path: "tools.agent_name_set", Kind: KindString, ApplyMode: ApplyNextGeneration, Enum: []string{"scientists", "musicians", "artists"}},
 		{Path: "tools.contacts_send.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
