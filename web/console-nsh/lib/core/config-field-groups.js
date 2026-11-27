@@ -161,10 +161,10 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
     title: "coder",
     fields: [
       { path: "tools.coder.path_extra", label: "Coder PATH additions", type: "string_list", wide: true, editor: "rows", placeholder: "/opt/tools/bin", addLabel: "Add directory" },
-      { path: "tools.coder.bypass_approvals.codex", label: "Codex yolo mode", type: "bool", note: "In Console conversations, Codex runs every command without asking and without a sandbox (approval policy never, sandbox danger-full-access). Dangerous." },
-      { path: "tools.coder.bypass_approvals.claude", label: "Claude Code skip permissions", type: "bool", note: "In Console conversations, Claude Code runs every tool without asking (--dangerously-skip-permissions). Dangerous." },
-      { path: "tools.coder.bypass_approvals.agy", label: "Antigravity skip permissions", type: "bool", note: "In Console conversations, agy runs every tool without asking (--dangerously-skip-permissions). Dangerous." },
-      { path: "tools.coder.bypass_approvals.grok", label: "Grok Build always approve", type: "bool", note: "In Console conversations, Grok Build runs every tool without asking and its plans are approved without asking (--always-approve). Dangerous." },
+      { path: "tools.coder.bypass_approvals.codex", label: "Codex yolo mode", type: "bool", note: "Runs every command without asking, with no sandbox." },
+      { path: "tools.coder.bypass_approvals.claude", label: "Claude Code skip permissions", type: "bool", note: "Runs every tool without asking." },
+      { path: "tools.coder.bypass_approvals.agy", label: "Antigravity skip permissions", type: "bool", note: "Runs every tool without asking." },
+      { path: "tools.coder.bypass_approvals.grok", label: "Grok Build always approve", type: "bool", note: "Runs every tool and approves its plans without asking." },
     ],
   }],
   plan_create: [{
