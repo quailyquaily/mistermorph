@@ -43,3 +43,13 @@ Checks: coder and manager independently passed `test -z "$(gofmt -l .)" && go ve
 Not checked: coder-native and root/admin prompts end to end; real powershell/coder/spawn/image execution (stand-ins cover their gate); an upgrade with an already-pending old workspace approval. Such old pending approvals are intentionally not silently cleared. No visual UI inspection; no Console sources changed, so Console checks were not required.
 
 Installs: none. Coder reported one agent-memory note outside the worktree/TMPDIR (not part of the plan; exact location not reported). Manager observed no new directly-owned /tmp paths during coder or verification. Initial push needed a command-local credential.useHttpPath=true retry, which succeeded. No base branch or tag pushed.
+
+## factory · review · 2026-11-27 09:15
+head: 269eaefde9c4718c1f63570874fbf2218cabb448
+verdict: pass
+notes:
+- Claude Code reviewed all 10 changed files in origin/master...HEAD against the request and plan; no P0-P3 findings. Traced selection validation, explicit workspace switching, Guard decisions, dispatch/topic authorization and resume handling. No widening of workspace authority found.
+- Required check passed: `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` (172 packages passed, 19 without tests). New runtime tests fail against base and pass on head, confirming they detect the removed gate.
+- Engine-level migration probe: a pending approval generated on base resumes on head; approval permits the write without a new gate, denial prevents it. Existing pre-upgrade pending approvals are not silently discarded and can still expire once.
+- Residual risks: native coder/root prompts were read but not exercised live; powershell/coder/spawn/image tools use gate stand-ins. Migration was not exercised through a file-backed Console approval store/restart/expiry. No UI sources changed or visual inspection performed.
+- Installs: none. Worktree stayed clean and head unchanged. Coder harness reported a background output file outside dir under /tmp/claude-995; tracked in the run's outside list, not deleted. No new directly-owned /tmp entry observed by the manager.
