@@ -7,7 +7,7 @@ import { ObserveSection } from "../../components/observe/parts";
 import { endpointApiFetch, translate } from "../../lib/core/context.js";
 import { endpointRefFromRouteParam, endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { useNotice } from "../../lib/core/notices.js";
-import { fetchConsoleSetupIntegrity, invalidateConsoleSetupReadiness, setupStagePath } from "../../lib/core/setup.js";
+import { fetchConsoleSetupIntegrity, invalidateConsoleSetupReadiness, setupResumePath, setupStagePath } from "../../lib/core/setup.js";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { InlineNotice } from "../setup/InlineNotice";
 import { RawTextEditorDialog } from "./RawTextEditorDialog";
@@ -101,7 +101,7 @@ export function RepairPage() {
       const nextItems = (await fetchConsoleSetupIntegrity({ force: true, endpointRef })) as IntegrityItem[];
       items.set(nextItems);
       if (nextItems.length === 0) {
-        await navigate(endpointRoutePath(endpointRef, "/setup"), { replace: true });
+        await navigate(setupResumePath(endpointRef), { replace: true });
       }
     } catch (error) {
       err.set((error as Error)?.message || t("msg_load_failed"));

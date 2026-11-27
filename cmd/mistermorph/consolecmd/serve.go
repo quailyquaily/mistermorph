@@ -30,6 +30,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentlink"
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/consoleuser"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	serverpolicy "github.com/quailyquaily/mistermorph/internal/httpserver"
@@ -138,7 +139,9 @@ type server struct {
 	reloadRuntimeConfigFunc     func() error
 	runtimeConfigPollerWG       sync.WaitGroup
 	// configSaved wakes the config poller now, after the agent saved a config change.
-	configSaved     chan struct{}
+	configSaved chan struct{}
+	// userName reads the saved name of the Console's human (console.user_name).
+	userName        consoleUserNameSource
 	webSockets      consoleWebSocketHandlers
 	secretStore     secref.OSStore
 	settingsWriteMu sync.Mutex
@@ -413,6 +416,7 @@ func newServer(cfg serveConfig) (*server, error) {
 		secretStore:      secref.NewOSStore(),
 		configSaved:      make(chan struct{}, 1),
 	}
+	localRuntime.userDisplayName = srv.userName.displayName
 	localRuntime.skillEnabler = srv.enableSkill
 	localRuntime.configSaved = srv.noteConfigSaved
 	srv.agentLink = newAgentLinkSupervisor(srv)
@@ -946,10 +950,15 @@ func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires := strings.TrimSpace(r.Header.Get("X-Console-Token-Expires-At"))
+	// account is the fixed sign-in account. user_name is the saved name of the Console's human
+	// ("" when none is saved) and display_name the name to show: the same source new tasks use.
+	userName := s.userName.saved()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"authenticated": true,
 		"account":       "console",
 		"expires_at":    expires,
+		"user_name":     userName,
+		"display_name":  consoleuser.DisplayName(userName),
 	})
 }
 

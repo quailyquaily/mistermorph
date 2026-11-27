@@ -150,6 +150,13 @@ type soloHarness struct {
 
 func newSoloHarness(t *testing.T) soloHarness {
 	t.Helper()
+	return newSoloHarnessAt(t, t.TempDir(), t.TempDir(), t.TempDir())
+}
+
+// newSoloHarnessAt starts a Console runtime on the given folders: a second one on the same folders
+// is the Console after a restart.
+func newSoloHarnessAt(t *testing.T, stateDir, cacheDir, soloWS string) soloHarness {
+	t.Helper()
 	provider := newSoloProvider()
 	fake := httptest.NewServer(provider)
 	t.Cleanup(fake.Close)
@@ -160,7 +167,6 @@ func newSoloHarness(t *testing.T) soloHarness {
 			close(provider.release)
 		}
 	})
-	stateDir, cacheDir, soloWS := t.TempDir(), t.TempDir(), t.TempDir()
 	reader := consoleRuntimeBoundaryReader(stateDir, cacheDir)
 	reader.Set("workspace_dir", soloWS)
 	reader.Set("llm.endpoint", fake.URL+"/v1")

@@ -9,6 +9,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
+	"github.com/quailyquaily/mistermorph/internal/consoleuser"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 )
 
@@ -103,6 +104,24 @@ func taskPrecedes(task taskdomain.TaskInfo, job taskdomain.TaskInfo) bool {
 	return task.CreatedAt.UTC().Before(job.CreatedAt.UTC())
 }
 
+// taskConsoleUserName is the name the task recorded for the Console's human when it was accepted.
+// A task from before names could be saved recorded the default, and one with no record gets it.
+func taskConsoleUserName(task taskdomain.TaskInfo) string {
+	if task.Conversation != nil {
+		for _, participant := range task.Conversation.Participants {
+			if !strings.EqualFold(strings.TrimSpace(participant.ID), consoleuser.ParticipantKey) {
+				continue
+			}
+			if name := strings.TrimSpace(participant.Nickname); name != "" {
+				return name
+			}
+		}
+	}
+	return consoleuser.DefaultDisplayName
+}
+
+// TaskInbound is the person's message of a Console task, from the person as the task recorded
+// them: the stable console:user and console, and the name they had then.
 func TaskInbound(task taskdomain.TaskInfo) ChatHistoryItem {
 	return ChatHistoryItem{
 		Channel:   "console",
@@ -112,10 +131,10 @@ func TaskInbound(task taskdomain.TaskInfo) ChatHistoryItem {
 		MessageID: strings.TrimSpace(task.ID),
 		SentAt:    taskInboundSentAt(task),
 		Sender: ChatHistorySender{
-			UserID:     "console:user",
-			Username:   "console",
-			Nickname:   "Console User",
-			DisplayRef: "console:user",
+			UserID:     consoleuser.ParticipantKey,
+			Username:   consoleuser.Username,
+			Nickname:   taskConsoleUserName(task),
+			DisplayRef: consoleuser.ParticipantKey,
 		},
 		Text: strings.TrimSpace(task.Task),
 	}

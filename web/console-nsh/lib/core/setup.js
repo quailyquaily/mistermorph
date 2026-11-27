@@ -1,4 +1,5 @@
 import { sessionStore } from "../platform";
+import { consoleUserNameMissing, consoleUserNameSupported } from "./console-user";
 import { endpointApiFetch, runtimeApiFetchForEndpoint } from "./context";
 import { endpointRoutePath } from "./endpoint-routes";
 import { CONSOLE_LOCAL_ENDPOINT_REF, visibleEndpoints } from "./endpoints";
@@ -62,6 +63,9 @@ function setupStagePath(stage, endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
   if (stage === "repair") {
 	return endpointRoutePath(endpointRef, "/troubleshooting");
   }
+  if (stage === "user") {
+    return endpointRoutePath(endpointRef, "/setup/user");
+  }
   if (stage === "persona") {
     return endpointRoutePath(endpointRef, "/setup/persona");
   }
@@ -79,8 +83,6 @@ function setupStagePath(stage, endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
 // else; an address without it is the first-run setup, as before.
 const SETUP_REENTRY_QUERY = "reentry";
 const SETUP_REENTRY_SETTINGS = "settings";
-// The first step setup shows when it is opened again.
-const SETUP_REENTRY_FIRST_STAGE = "llm";
 
 function isSetupReentryRoute(routeLike) {
   const query = routeLike?.query;
@@ -90,19 +92,38 @@ function isSetupReentryRoute(routeLike) {
   return typeof query?.[SETUP_REENTRY_QUERY] === "string" && query[SETUP_REENTRY_QUERY].trim() === SETUP_REENTRY_SETTINGS;
 }
 
+// The first step setup shows when it is opened again: the name page where the server keeps a name
+// for the Console's user (lib/core/console-user.js), else the model.
+function setupReentryFirstStage() {
+  return consoleUserNameSupported() ? "user" : "llm";
+}
+
 // Where Settings opens setup again for `endpointRef`: its first step, editable, with the marker.
 function setupReentryPath(endpointRef) {
   const ref = typeof endpointRef === "string" ? endpointRef.trim() : "";
   if (!ref) {
     return "";
   }
-  return `${setupStagePath(SETUP_REENTRY_FIRST_STAGE, ref)}?${SETUP_REENTRY_QUERY}=${SETUP_REENTRY_SETTINGS}`;
+  return `${setupStagePath(setupReentryFirstStage(), ref)}?${SETUP_REENTRY_QUERY}=${SETUP_REENTRY_SETTINGS}`;
 }
 
 // Where setup opened from Settings goes back to: the same agent's Models settings, which has the entry.
 function setupReentryReturnPath(endpointRef) {
   const ref = typeof endpointRef === "string" ? endpointRef.trim() : "";
   return ref ? endpointRoutePath(ref, "/settings/agent") : "";
+}
+
+// Setup's entry, /setup, opened by a person starts at the first page (pages/setup/setup-state.ts).
+// A flow that only comes back to Setup, as a finished repair does, marks its link: it goes on at
+// the first unfinished step, or the last page when nothing is left.
+const SETUP_RESUME_QUERY = "resume";
+
+function setupResumePath(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
+  return `${endpointRoutePath(endpointRef, "/setup")}?${SETUP_RESUME_QUERY}=1`;
+}
+
+function isSetupResumeRoute(routeLike) {
+  return typeof routeLike?.query?.[SETUP_RESUME_QUERY] === "string" && routeLike.query[SETUP_RESUME_QUERY] !== "";
 }
 
 async function fetchConsoleSetupIntegrity(options = {}) {
@@ -353,7 +374,35 @@ async function resolveConsoleSetupStageUncached(items, endpointRef) {
   return { stage: "ready", setup };
 }
 
+// The first question of Setup is how to address the Console's user (stage "user"). A Setup that
+// is not finished starts there while no name is saved; a finished one is never sent back for it,
+// so a Console set up before the question existed keeps working without a name. The name is the
+// Console's (lib/core/console-user.js), read by the router's guard on every navigation, so it is
+// laid over the cached stage here and not cached with it.
+function withConsoleUserStage(state) {
+  if (state && state.stage !== "ready" && consoleUserNameMissing()) {
+    return { ...state, stage: "user" };
+  }
+  return state;
+}
+
+/**
+ * Whether a Setup page may not be opened yet because the name has not been asked: a step of a
+ * Setup that starts at the name page, other than that page and the entry that leads to it.
+ */
+function isSetupStageBeforeUserName(pagePath, stage) {
+  if (stage !== "user") {
+    return false;
+  }
+  const path = typeof pagePath === "string" ? pagePath.trim() : "";
+  return path.startsWith("/setup/") && path !== "/setup/user";
+}
+
 async function resolveConsoleSetupStage(items, options = {}) {
+  return withConsoleUserStage(await resolveConsoleSetupStageCached(items, options));
+}
+
+async function resolveConsoleSetupStageCached(items, options = {}) {
   const endpointRef = String(options.endpointRef || "").trim();
   const cacheKey = resourceKey(
     "setup",
@@ -399,10 +448,14 @@ export {
   invalidateConsoleSetupReadiness,
   isAllowedRepairSetupRoute,
   isSetupReentryRoute,
+  isSetupResumeRoute,
+  isSetupStageBeforeUserName,
   repairRouteForKey,
   resolveConsoleSetupStage,
-  SETUP_REENTRY_FIRST_STAGE,
+  setupReentryFirstStage,
   setupReentryPath,
   setupReentryReturnPath,
+  setupResumePath,
   setupStagePath,
+  SETUP_RESUME_QUERY,
 };

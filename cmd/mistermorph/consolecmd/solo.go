@@ -205,7 +205,7 @@ func (r *consoleLocalRuntime) startSoloThread(_ context.Context, req ownertools.
 
 // soloRecordInfo is a Solo record as a finished task of the Solo topic, its text what the agent
 // reads of it in Solo's history.
-func soloRecordInfo(id string, rec daemonruntime.SoloThread, text string, at time.Time) daemonruntime.TaskInfo {
+func soloRecordInfo(id string, rec daemonruntime.SoloThread, text string, at time.Time, userDisplayName string) daemonruntime.TaskInfo {
 	at = at.UTC()
 	finished := at
 	return daemonruntime.TaskInfo{
@@ -220,7 +220,7 @@ func soloRecordInfo(id string, rec daemonruntime.SoloThread, text string, at tim
 			buildConsoleConversationKey(daemonruntime.ConsoleSoloTopicID),
 			"private",
 			consoleParticipantKey,
-			consoleDisplayName,
+			userDisplayName,
 			"",
 			nil,
 		), audience.Owner()),
@@ -252,7 +252,7 @@ func soloCardText(rec daemonruntime.SoloThread) string {
 func (r *consoleLocalRuntime) writeSoloThreadCard(rec daemonruntime.SoloThread) error {
 	r.soloMu.Lock()
 	defer r.soloMu.Unlock()
-	info := soloRecordInfo(daemonruntime.SoloThreadCardID(rec.TaskID), rec, soloCardText(rec), time.Now())
+	info := soloRecordInfo(daemonruntime.SoloThreadCardID(rec.TaskID), rec, soloCardText(rec), time.Now(), r.consoleUserDisplayName())
 	return r.store.UpsertWithTrigger(info, daemonruntime.TaskTrigger{Source: "ui", Event: "solo_thread_card", Ref: rec.TopicID}, "")
 }
 
@@ -500,7 +500,7 @@ func (r *consoleLocalRuntime) postSoloSummaryLocked(rec daemonruntime.SoloThread
 	if quoted := solo.QuoteReply(rec.Summary); quoted != "" {
 		text += "\n\n" + quoted
 	}
-	info := soloRecordInfo(summaryID, rec, text, time.Now())
+	info := soloRecordInfo(summaryID, rec, text, time.Now(), r.consoleUserDisplayName())
 	if err := r.store.UpsertWithTrigger(info, daemonruntime.TaskTrigger{Source: "ui", Event: "solo_thread_summary", Ref: rec.TopicID}, ""); err != nil {
 		r.currentLogger().Warn("console_solo_summary_write_failed", "task_id", rec.TaskID, "error", err.Error())
 	}

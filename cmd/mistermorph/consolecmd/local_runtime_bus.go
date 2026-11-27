@@ -11,16 +11,19 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
+	"github.com/quailyquaily/mistermorph/internal/consoleuser"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/idempotency"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 )
 
+// The Console's human. The identifiers are fixed; the name shown is console.user_name when one is
+// saved (consoleUserDisplayName), and consoleDisplayName otherwise.
 const (
-	consoleParticipantKey = "console:user"
-	consoleUsername       = "console"
-	consoleDisplayName    = "Console User"
+	consoleParticipantKey = consoleuser.ParticipantKey
+	consoleUsername       = consoleuser.Username
+	consoleDisplayName    = consoleuser.DefaultDisplayName
 )
 
 func (r *consoleLocalRuntime) submitTaskViaBus(ctx context.Context, generation *consoleLocalRuntimeGeneration, task string, model string, llmProfile string, timeout time.Duration, topicID string, topicTitle string, workspaceDir string, fileReferences []daemonruntime.FileReference, trigger daemonruntime.TaskTrigger) (daemonruntime.SubmitTaskResponse, bool, error) {
@@ -145,6 +148,8 @@ func (r *consoleLocalRuntime) acceptTaskReplacing(generation *consoleLocalRuntim
 	if err != nil {
 		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, nil, err
 	}
+	// The name is recorded with the task: a later change of console.user_name does not rename it.
+	userDisplayName := r.consoleUserDisplayName()
 	info := daemonruntime.TaskInfo{
 		ID:             taskID,
 		Status:         daemonruntime.TaskQueued,
@@ -160,7 +165,7 @@ func (r *consoleLocalRuntime) acceptTaskReplacing(generation *consoleLocalRuntim
 			conversationKey,
 			"private",
 			consoleParticipantKey,
-			consoleDisplayName,
+			userDisplayName,
 			"",
 			nil,
 		), audience.Owner()),
@@ -178,6 +183,7 @@ func (r *consoleLocalRuntime) acceptTaskReplacing(generation *consoleLocalRuntim
 		TaskID:          taskID,
 		ConversationKey: conversationKey,
 		TopicID:         topicID,
+		UserDisplayName: userDisplayName,
 		WorkspaceDir:    resolvedWorkspaceDir,
 		Task:            strings.TrimSpace(task),
 		Model:           model,
@@ -217,6 +223,10 @@ func (r *consoleLocalRuntime) publishConsoleInbound(ctx context.Context, job con
 		return fmt.Errorf("context is required")
 	}
 	sessionID := consoleBusSessionID(job.TopicID)
+	userDisplayName := strings.TrimSpace(job.UserDisplayName)
+	if userDisplayName == "" {
+		userDisplayName = consoleDisplayName
+	}
 	payloadBase64, err := busruntime.EncodeMessageEnvelope(busruntime.TopicChatMessage, busruntime.MessageEnvelope{
 		MessageID: strings.TrimSpace(job.TaskID),
 		Text:      strings.TrimSpace(job.Task),
@@ -242,7 +252,7 @@ func (r *consoleLocalRuntime) publishConsoleInbound(ctx context.Context, job con
 			ChatType:        "private",
 			FromUserRef:     consoleParticipantKey,
 			FromUsername:    consoleUsername,
-			FromDisplayName: consoleDisplayName,
+			FromDisplayName: userDisplayName,
 		},
 	}
 	if err := r.bus.PublishValidated(ctx, msg); err != nil {
@@ -323,6 +333,7 @@ func (r *consoleLocalRuntime) handleConsoleBusInbound(ctx context.Context, msg b
 			TaskID:          stored.ID,
 			ConversationKey: buildConsoleConversationKey(stored.TopicID),
 			TopicID:         stored.TopicID,
+			UserDisplayName: consoleUserNameOfConversation(stored.Conversation),
 			WorkspaceDir:    "",
 			Task:            stored.Task,
 			Model:           stored.Model,

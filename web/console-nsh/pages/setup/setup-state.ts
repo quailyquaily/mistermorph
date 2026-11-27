@@ -1,6 +1,6 @@
-// The first-run setup's data and requests (the Vue console's SetupView, its script half): the
-// model, the persona and the soul, each saved to the route's endpoint, and where each step goes
-// next. SetupPage.tsx draws it.
+// The first-run setup's data and requests (the Vue console's SetupView, its script half): how to
+// address the user (saved to the Console itself), then the model, the persona and the soul, each
+// saved to the route's endpoint, and where each step goes next. SetupPage.tsx draws it.
 import { batch, cleanup, computed, effect, signal, untracked } from "nsh";
 import type { Signal } from "nsh";
 import { useProAuthFlow, useXAIAuthFlow, type DeviceAuthStatus } from "../../components/settings/AuthDialogs";
@@ -16,6 +16,14 @@ import {
   runtimeApiFetchForEndpoint,
   translate,
 } from "../../lib/core/context.js";
+import {
+  CONSOLE_USER_NAME_MAX,
+  consoleUserName,
+  consoleUserNameSupported,
+  loadConsoleUserName,
+  normalizeConsoleUserName,
+  saveConsoleUserName,
+} from "../../lib/core/console-user.js";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "../../lib/core/endpoints.js";
 import { endpointPagePath, endpointRefFromRouteParam, endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -42,9 +50,12 @@ import { llmSecretConfigPath } from "../../lib/core/secret-storage.js";
 import {
   invalidateConsoleSetupReadiness,
   isSetupReentryRoute,
+  isSetupResumeRoute,
   resolveConsoleSetupStage,
-  SETUP_REENTRY_FIRST_STAGE,
+  SETUP_RESUME_QUERY,
+  setupReentryFirstStage,
   setupReentryReturnPath,
+  setupResumePath,
   setupStagePath,
 } from "../../lib/core/setup.js";
 import {
@@ -75,14 +86,18 @@ import { uploadPersonaAvatar } from "./avatar-upload";
 
 export const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
-export type SetupStage = "llm" | "persona" | "soul" | "done";
+export type SetupStage = "user" | "llm" | "persona" | "soul" | "done";
 
-export const TOTAL_STEPS = 3;
-const PREVIOUS_STAGE: Partial<Record<SetupStage, SetupStage>> = { persona: "llm", soul: "persona" };
-const NEXT_STAGE: Partial<Record<SetupStage, SetupStage>> = { llm: "persona", persona: "soul", soul: "done" };
+/**
+ * The steps in order. "user" (how to address the Console's user) is first on a Console whose
+ * server keeps that name; a server from before it has the three steps it always had.
+ */
+const AGENT_STEPS: SetupStage[] = ["llm", "persona", "soul"];
+export function setupSteps(withUser: boolean): SetupStage[] {
+  return withUser ? ["user", ...AGENT_STEPS] : AGENT_STEPS;
+}
 
 export interface StageMeta {
-  index: number;
   titleKey: string;
   introKey: string;
   submitKey?: string;
@@ -91,16 +106,16 @@ export interface StageMeta {
 }
 
 export const STAGE_META: Record<SetupStage, StageMeta> = {
-  llm: { index: 1, titleKey: "setup_llm_title", introKey: "setup_llm_intro", submitKey: "setup_action_continue", tone: "llm" },
+  user: { titleKey: "setup_user_title", introKey: "setup_user_intro", submitKey: "setup_action_continue", tone: "user" },
+  llm: { titleKey: "setup_llm_title", introKey: "setup_llm_intro", submitKey: "setup_action_continue", tone: "llm" },
   persona: {
-    index: 2,
     titleKey: "setup_persona_title",
     introKey: "setup_persona_intro",
     submitKey: "setup_action_continue",
     tone: "persona",
   },
-  soul: { index: 3, titleKey: "setup_soul_title", introKey: "setup_soul_intro", submitKey: "setup_action_finish", tone: "soul" },
-  done: { index: TOTAL_STEPS, titleKey: "setup_done_title", introKey: "setup_done_intro", tone: "done", kickerKey: "setup_stage_done" },
+  soul: { titleKey: "setup_soul_title", introKey: "setup_soul_intro", submitKey: "setup_action_finish", tone: "soul" },
+  done: { titleKey: "setup_done_title", introKey: "setup_done_intro", tone: "done", kickerKey: "setup_stage_done" },
 };
 
 export const LLM_FORM_FIELDS = [
@@ -193,7 +208,7 @@ function normalizePayload(data: any) {
 }
 
 export function normalizeStage(value: unknown): SetupStage {
-  return value === "persona" || value === "soul" || value === "done" ? value : "llm";
+  return value === "user" || value === "persona" || value === "soul" || value === "done" ? value : "llm";
 }
 
 export function resolveDoneGreetingKey(date = new Date()) {
@@ -283,6 +298,8 @@ export function useSetup() {
   // reads so has nothing to save.
   const loadedLLMForm = signal<LLMForm | null>(null);
   const personaForm = signal<PersonaForm>({ name: "", creature: "", vibe: "", emoji: "" });
+  // The name field of the first page: what is typed, saved only by Continue.
+  const userNameDraft = signal("");
   const soulSelectionContent = signal("");
   const soulEditorDraft = signal(buildCustomSoulDocument());
   const soulPresetId = signal("");
@@ -309,6 +326,7 @@ export function useSetup() {
   const codexAuthStatus = signal<DeviceAuthStatus>({ ...CODEX_EMPTY_STATUS });
   let codexLoginPollTimer: ReturnType<typeof setTimeout> | undefined;
   let focusPersonaName: (() => void) | null = null;
+  let focusUserName: (() => void) | null = null;
 
   const setLLMField = (field: LLMFormField, value: string) => llmForm.update((form) => ({ ...form, [field]: value }));
   const setPersonaField = (field: keyof PersonaForm, value: string) =>
@@ -343,14 +361,45 @@ export function useSetup() {
   const stageTitle = () => t(stageMeta().titleKey, { name: setupName() });
   const stageIntro = () =>
     String(t(stageMeta().introKey, { name: setupName(), greeting: t(resolveDoneGreetingKey()) })).trim();
-  const previousStage = () => PREVIOUS_STAGE[routeStage()] || "";
+  // The name page is a step where the server keeps the name, and wherever it is the open page.
+  const steps = () => setupSteps(consoleUserNameSupported() || routeStage() === "user");
+  /** A step's number, from 1; the last page counts as the last step. */
+  const stageIndex = () => {
+    const at = steps().indexOf(routeStage());
+    return at < 0 ? steps().length : at + 1;
+  };
+  const previousStage = (): SetupStage | "" => {
+    const at = steps().indexOf(routeStage());
+    return at > 0 ? steps()[at - 1] : "";
+  };
+  const nextStage = (): SetupStage | "" => {
+    const at = steps().indexOf(routeStage());
+    if (at < 0) return "";
+    return steps()[at + 1] || "done";
+  };
   const showPrevious = () => !inRepairMode() && previousStage() !== "";
   const stageKicker = () =>
     `[[ ${t("setup_title")} // ${
-      stageMeta().kickerKey ? t(stageMeta().kickerKey!) : t("setup_stage_short", { current: stageMeta().index })
+      stageMeta().kickerKey ? t(stageMeta().kickerKey!) : t("setup_stage_short", { current: stageIndex() })
     } ]]`;
   const progressSteps = () =>
-    Array.from({ length: TOTAL_STEPS }, (_, index) => ({ index: index + 1, active: index + 1 <= stageMeta().index }));
+    Array.from({ length: steps().length }, (_, index) => ({ index: index + 1, active: index + 1 <= stageIndex() }));
+
+  /* ---------- the user's name ---------- */
+
+  const userNameCheck = () => normalizeConsoleUserName(userNameDraft());
+  /** What is wrong with the typed name, said so it can be fixed; "" while nothing is typed. */
+  const userNameError = () => {
+    if (userNameDraft() === "") return "";
+    const check = userNameCheck();
+    if (check.error === "empty") return t("setup_user_name_error_empty");
+    if (check.error === "invalid") return t("setup_user_name_error_invalid");
+    if (check.error === "too_long") {
+      return t("setup_user_name_error_too_long", { max: CONSOLE_USER_NAME_MAX, count: check.length });
+    }
+    return "";
+  };
+  const userSaveDisabled = () => loading() || saving() || userNameCheck().error !== "";
 
   /* ---------- the model ---------- */
 
@@ -532,6 +581,18 @@ export function useSetup() {
   /* ---------- done ---------- */
 
   const doneStatusItems = () => [
+    // The user's own name is shown as it is saved; the agent's parts say that they are ready.
+    ...(consoleUserNameSupported()
+      ? [
+          {
+            stage: "user" as SetupStage,
+            icon: "PhUserCircle",
+            key: t("setup_user_name_label"),
+            value: consoleUserName() || t("setup_done_user_unset"),
+            action: t("setup_action_edit_user"),
+          },
+        ]
+      : []),
     {
       stage: "llm" as SetupStage,
       icon: "PhGearSix",
@@ -720,7 +781,24 @@ export function useSetup() {
     }
   }
 
+  // The saved name, read from the server each time the page opens: what was typed and not saved
+  // on an earlier visit is gone, and a name saved from another client shows.
+  async function loadUserForm() {
+    batch(() => {
+      loading.set(true);
+      err.set("");
+    });
+    try {
+      userNameDraft.set(await loadConsoleUserName());
+    } catch (error) {
+      err.set(errorMessage(error, "msg_load_failed"));
+    } finally {
+      loading.set(false);
+    }
+  }
+
   async function loadStageForm(stage: SetupStage) {
+    if (stage === "user") return loadUserForm();
     if (stage === "llm") return loadLLMForm();
     if (stage === "persona") return loadPersonaForm();
     if (stage === "soul") return loadSoulForm();
@@ -750,12 +828,22 @@ export function useSetup() {
       await loadEndpoints();
     }
     if (currentPagePath === "/setup") {
+      // Setup's entry. Unfinished, it goes on at its first unfinished step (the name page while no
+      // name is saved). Finished and opened by a person, it starts over at the name page, with the
+      // saved name to edit; a flow that only comes back here (a finished repair) and a server that
+      // keeps no name get the last page.
       const setupState = await resolveConsoleSetupStage(endpointState.items, { endpointRef });
-      // An agent that is set up has nothing left to do, unless Settings opened setup again: then
-      // it starts over at the first step.
-      const readyStage = isSetupReentryRoute(route) ? SETUP_REENTRY_FIRST_STAGE : "done";
+      // The resume marker is used up here; the one of setup opened again from Settings stays, so
+      // every step and a reload keep the way back.
+      const { [SETUP_RESUME_QUERY]: _resume, ...query } = route.query;
+      // Settings opened setup again: it starts over at its first step, whatever else the link says.
+      const readyStage: SetupStage = isSetupReentryRoute(route)
+        ? setupReentryFirstStage()
+        : !isSetupResumeRoute(route) && consoleUserNameSupported()
+          ? "user"
+          : "done";
       const target = setupStagePath(setupState.stage === "ready" ? readyStage : setupState.stage, endpointRef);
-      await replaceRoute(target, route.query);
+      await replaceRoute(target, query);
       return;
     }
     if (options.onReady === "done" && currentPagePath !== "/setup/done") {
@@ -773,12 +861,16 @@ export function useSetup() {
   async function finishStep() {
     const endpointRef = routeEndpointRef();
     if (untracked(inRepairMode)) {
-      await replaceRoute(endpointRoutePath(endpointRef, "/setup"), {});
+      await navigate(setupResumePath(endpointRef), { replace: true });
       return;
     }
-    const nextStage = NEXT_STAGE[untracked(routeStage)];
-    if (nextStage) {
-      await replaceRoute(setupStagePath(nextStage, endpointRef), untracked(currentRoute).query);
+    const next = untracked(nextStage);
+    if (next && next !== "done") {
+      await replaceRoute(setupStagePath(next, endpointRef), untracked(currentRoute).query);
+      return;
+    }
+    if (next === "done" && untracked(routeStage) !== "done") {
+      await replaceRoute(setupStagePath("done", endpointRef), untracked(currentRoute).query);
       return;
     }
     await syncRoute({ loadStage: false, onReady: "done" });
@@ -881,6 +973,24 @@ export function useSetup() {
       copy("api_key");
     }
     return payload;
+  }
+
+  // Continue on the name page: the name goes to the server, and the next step opens only once the
+  // server has saved it. A failure stays here with what was typed, to press Continue again.
+  async function saveUser() {
+    if (untracked(userSaveDisabled)) return;
+    batch(() => {
+      saving.set(true);
+      err.set("");
+    });
+    try {
+      userNameDraft.set(await saveConsoleUserName(untracked(userNameDraft)));
+      await finishStep();
+    } catch (error) {
+      err.set(errorMessage(error, "msg_save_failed"));
+    } finally {
+      saving.set(false);
+    }
   }
 
   async function saveLLM() {
@@ -1355,6 +1465,11 @@ export function useSetup() {
     setTimeout(() => focusPersonaName?.(), 0);
   }
 
+  function focusUserNameField() {
+    if (untracked(routeStage) !== "user") return;
+    setTimeout(() => focusUserName?.(), 0);
+  }
+
   /* ---------- watchers ---------- */
 
   effect(() => {
@@ -1364,6 +1479,7 @@ export function useSetup() {
 
   effect(() => {
     if (routeStage() === "persona") untracked(focusPersonaNameField);
+    if (routeStage() === "user") untracked(focusUserNameField);
   });
 
   // Closing the Codex dialog abandons the sign-in.
@@ -1415,6 +1531,7 @@ export function useSetup() {
     spriteTick,
     llmForm,
     personaForm,
+    userNameDraft,
     soulEditorDraft,
     soulPresetId,
     soulEditMode,
@@ -1488,6 +1605,8 @@ export function useSetup() {
     llmSaveDisabled,
     testConnectionDisabled,
     personaSaveDisabled,
+    userSaveDisabled,
+    userNameError,
     soulSaveDisabled,
     soulPresetCards,
     selectedSoulCard,
@@ -1502,6 +1621,10 @@ export function useSetup() {
     setFocusPersonaName: (fn: () => void) => {
       focusPersonaName = fn;
     },
+    setFocusUserName: (fn: () => void) => {
+      focusUserName = fn;
+    },
+    saveUser,
     onProviderChange,
     openAPIBasePicker,
     applyAPIBaseOption,

@@ -98,3 +98,64 @@ func TestChildMessageHistoryText(t *testing.T) {
 		t.Fatalf("dropped = %q", dropped)
 	}
 }
+
+// A Console message is from the person as its task recorded them: the name saved when it was
+// sent, and the old name for a task that recorded none.
+func TestTaskInboundUsesTheRecordedConsoleUserName(t *testing.T) {
+	conversation := func(participants ...taskdomain.TaskParticipant) *taskdomain.TaskConversation {
+		return &taskdomain.TaskConversation{ConversationID: "console:topic", ConversationType: "private", Participants: participants}
+	}
+	cases := []struct {
+		name         string
+		conversation *taskdomain.TaskConversation
+		want         string
+	}{
+		{name: "no conversation", want: "Console User"},
+		{name: "no participants", conversation: conversation(), want: "Console User"},
+		{name: "legacy name", conversation: conversation(taskdomain.TaskParticipant{ID: "console:user", Nickname: "Console User"}), want: "Console User"},
+		{name: "no name recorded", conversation: conversation(taskdomain.TaskParticipant{ID: "console:user"}), want: "Console User"},
+		{name: "saved name", conversation: conversation(taskdomain.TaskParticipant{ID: "console:user", Nickname: "小明 🙂"}), want: "小明 🙂"},
+		{name: "markup stays text", conversation: conversation(taskdomain.TaskParticipant{ID: "console:user", Nickname: "<b>Bo</b>"}), want: "<b>Bo</b>"},
+		{name: "another participant", conversation: conversation(taskdomain.TaskParticipant{ID: "tg:42", Nickname: "Somebody"}), want: "Console User"},
+		{name: "mentions beside the user", conversation: conversation(taskdomain.TaskParticipant{ID: "tg:42", Nickname: "Somebody"}, taskdomain.TaskParticipant{ID: "console:user", Nickname: "Lyra"}), want: "Lyra"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			task := taskdomain.TaskInfo{ID: "task_1", TopicID: "topic", Task: "hello", Conversation: tc.conversation}
+			sender := TaskInbound(task).Sender
+			if sender.Nickname != tc.want {
+				t.Fatalf("nickname = %q, want %q", sender.Nickname, tc.want)
+			}
+			if sender.UserID != "console:user" || sender.Username != "console" || sender.DisplayRef != "console:user" {
+				t.Fatalf("sender = %+v, want the fixed identifiers", sender)
+			}
+			prompt := BuildPromptMessage(TaskInbound(task))
+			if prompt.Sender.Nickname != tc.want || prompt.Sender.Username != "console" {
+				t.Fatalf("prompt sender = %+v", prompt.Sender)
+			}
+		})
+	}
+}
+
+// A topic's history shows each message under the name its own task recorded.
+func TestBuildTaskHistoryKeepsEachTasksConsoleUserName(t *testing.T) {
+	at := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+	named := func(name string) *taskdomain.TaskConversation {
+		return &taskdomain.TaskConversation{Participants: []taskdomain.TaskParticipant{{ID: "console:user", Nickname: name}}}
+	}
+	tasks := []taskdomain.TaskInfo{
+		{ID: "t3", Task: "third", Status: taskdomain.TaskDone, CreatedAt: at.Add(2 * time.Minute), Conversation: named("Ming")},
+		{ID: "t2", Task: "second", Status: taskdomain.TaskDone, CreatedAt: at.Add(time.Minute), Conversation: named("小明")},
+		{ID: "t1", Task: "first", Status: taskdomain.TaskDone, CreatedAt: at},
+	}
+	history := BuildTaskHistory(tasks, taskdomain.TaskInfo{ID: "t4", CreatedAt: at.Add(3 * time.Minute)}, 10)
+	var got []string
+	for _, item := range history {
+		if item.Kind == KindInboundUser {
+			got = append(got, item.Text+"="+item.Sender.Nickname)
+		}
+	}
+	if want := "first=Console User,second=小明,third=Ming"; strings.Join(got, ",") != want {
+		t.Fatalf("history senders = %v, want %s", got, want)
+	}
+}

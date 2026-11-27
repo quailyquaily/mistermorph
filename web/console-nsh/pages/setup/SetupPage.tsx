@@ -1,6 +1,6 @@
-// First-run setup (the Vue console's SetupView): three steps on one sheet, each its own route
-// (/e/<ref>/setup/llm, /persona, /soul, then /done): the model and its credentials, the agent's
-// name and look, and its soul (a preset, or a document of one's own). Troubleshooting sends single
+// First-run setup (the Vue console's SetupView): its steps on one sheet, each its own route
+// (/e/<ref>/setup/user, /llm, /persona, /soul, then /done): how to address the user, the model and
+// its credentials, the agent's name and look, and its soul (a preset, or a document of one's own). Troubleshooting sends single
 // steps here with ?repair=<key>; those go back to it when saved. setup-state.ts holds the logic.
 import type { ImageAsset, InputRef, JSX } from "nsh";
 import { Image, Scroll, Text, token, View, windowSize } from "nsh";
@@ -31,6 +31,7 @@ type Token = "warn" | "warn-dark" | "ok" | "ink";
 
 /** Each step's accent, as the Vue sheet tinted it. */
 const STAGE_ACCENT: Record<SetupStage, Token> = {
+  user: "ok",
   llm: "warn",
   persona: "ok",
   soul: "warn-dark",
@@ -309,16 +310,25 @@ function LLMStage(props: { s: SetupState }) {
 
       <StageError s={s} />
 
-      <View class="mt-1.5 flex-row flex-wrap items-end justify-between gap-3">
-        <Button
-          variant="outlined"
-          size="md"
-          label={t("setup_llm_test_button")}
-          disabled={s.testConnectionDisabled()}
-          onPress={() => void s.openTestConnection()}
-          class="min-w-37"
-          testID="setup-test-connection"
-        />
+      {/* Back to the name page, where there is one, beside the test. Three buttons do not fit a
+          phone's row: there Continue takes the row below, at its full width. */}
+      <View
+        class={`mt-1.5 gap-3 ${
+          s.showPrevious() && windowSize().width <= NARROW ? "" : "flex-row flex-wrap items-end justify-between"
+        }`}
+      >
+        <View class="flex-row flex-wrap items-end gap-3">
+          <PreviousButton s={s} />
+          <Button
+            variant="outlined"
+            size="md"
+            label={t("setup_llm_test_button")}
+            disabled={s.testConnectionDisabled()}
+            onPress={() => void s.openTestConnection()}
+            class="min-w-37"
+            testID="setup-test-connection"
+          />
+        </View>
         <SubmitButton s={s} disabled={s.llmSaveDisabled()} onPress={() => void s.saveLLM()} />
       </View>
     </View>
@@ -366,6 +376,40 @@ function PreviousButton(props: { s: SetupState }) {
     <If when={props.s.showPrevious()}>
       <Button variant="outlined" size="md" label={t("setup_action_previous")} onPress={props.s.goPrevious} testID="setup-previous" />
     </If>
+  );
+}
+
+/* ---------- the user's name ---------- */
+
+/** The first page: one field for how to address the Console's user, saved by Continue. */
+function UserStage(props: { s: SetupState }) {
+  const s = props.s;
+  return (
+    <View class="gap-2.5 p-2" testID="setup-form-user">
+      <Field label={t("setup_user_name_label")}>
+        <TextField
+          value={s.userNameDraft()}
+          onChange={(value) => s.userNameDraft.set(value)}
+          onSubmit={() => void s.saveUser()}
+          placeholder={t("setup_user_name_placeholder")}
+          accessibilityLabel={t("setup_user_name_label")}
+          disabled={s.saving()}
+          testID="setup-user-name"
+          inputRef={(node) => s.setFocusUserName(() => node.focus())}
+        />
+        <If when={s.userNameError()}>
+          <View role="alert" testID="setup-user-name-error">
+            <Text class="text-sm text-danger">{s.userNameError()}</Text>
+          </View>
+        </If>
+      </Field>
+
+      <StageError s={s} />
+
+      <View class="mt-1.5 flex-row items-center justify-end gap-3">
+        <SubmitButton s={s} disabled={s.userSaveDisabled()} onPress={() => void s.saveUser()} />
+      </View>
+    </View>
   );
 }
 
@@ -656,8 +700,10 @@ function DoneStage(props: { s: SetupState }) {
                   <Icon name={item().icon as IconName} size={16} color="muted-foreground" />
                   <Text class="font-mono text-xs uppercase tracking-widest text-muted-foreground">{item().key}</Text>
                 </View>
-                <View class="flex-row items-center gap-2.5">
-                  <Text class={`text-sm font-semibold text-${accent}`}>{item().value}</Text>
+                <View class="min-w-0 shrink flex-row items-center gap-2.5">
+                  <View class="min-w-0 shrink" testID={`setup-done-value-${item().stage}`}>
+                    <Text class={`text-sm font-semibold text-${accent} line-clamp-1`}>{item().value}</Text>
+                  </View>
                   <Button
                     variant="plain"
                     size="xs"
@@ -734,7 +780,9 @@ export function SetupPage() {
 
           <Each of={[s.routeStage()]} key={(stage) => stage}>
             {(stage) =>
-              stage() === "llm" ? (
+              stage() === "user" ? (
+                <UserStage s={s} />
+              ) : stage() === "llm" ? (
                 <LLMStage s={s} />
               ) : stage() === "persona" ? (
                 <PersonaStage s={s} />

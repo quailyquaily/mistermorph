@@ -63,6 +63,9 @@ type Field struct {
 	Min       *float64
 	Max       *float64
 	Default   any
+	// Normalize, when set, checks a string value being saved and gives the form it is saved in.
+	// Every save of the field goes through it (the settings pages, config_set).
+	Normalize func(value string) (string, error)
 }
 
 type FieldState struct {
@@ -509,6 +512,9 @@ func decodeValue(raw json.RawMessage, field Field) (any, error) {
 		}
 		if len(field.Enum) > 0 && !containsString(field.Enum, text) {
 			return nil, fmt.Errorf("must be one of %s", strings.Join(field.Enum, ", "))
+		}
+		if field.Normalize != nil {
+			return field.Normalize(text)
 		}
 		return text, nil
 	case KindBool:

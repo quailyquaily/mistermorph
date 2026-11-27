@@ -83,9 +83,11 @@ const (
 )
 
 type consoleLocalTaskJob struct {
-	TaskID           string
-	ConversationKey  string
-	TopicID          string
+	TaskID          string
+	ConversationKey string
+	TopicID         string
+	// UserDisplayName is the name of the Console's human as the task recorded it when accepted.
+	UserDisplayName  string
 	WorkspaceDir     string
 	Task             string
 	Model            string
@@ -173,6 +175,9 @@ type consoleLocalRuntime struct {
 	handler               http.Handler
 	authToken             string
 	seq                   atomic.Uint64
+	// userDisplayName is the saved name of the Console's human for a task accepted now; set by the
+	// console server. Without it tasks record consoleDisplayName.
+	userDisplayName func() string
 	// skillEnabler writes skills.enabled/load after an install; set by the console server.
 	skillEnabler func(ctx context.Context, skillID string) error
 	// configSaved has the console reload the config now, after config_set saved a change; set by

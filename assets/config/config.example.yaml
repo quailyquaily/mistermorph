@@ -719,6 +719,12 @@ console:
   password_hash: "" # or set via MISTER_MORPH_CONSOLE_PASSWORD_HASH
   # Session TTL for console bearer token (7 days).
   session_ttl: "168h"
+  # How the Console's user is addressed: the first question of Setup. One line of 1 to 80
+  # characters; white space around it is dropped. It names the user on new Console tasks (their
+  # sender in what the agent reads, the Console contact) and in the Console itself. The user's
+  # identifiers (console:user, the console account) never change, and tasks already recorded keep
+  # the name they had. Empty: "Console User". Read again for every new task.
+  user_name: "" # or set via MISTER_MORPH_CONSOLE_USER_NAME
   # Max number of Console topics running a task at once (each topic remains serial; extra
   # topics wait in order). Local to the Console's own runtime: managed channel runtimes and cron
   # keep their own max_concurrency, and there is no process-wide total. Set 1 to run one topic

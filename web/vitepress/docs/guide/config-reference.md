@@ -190,11 +190,14 @@ Shell defaults are platform-specific:
 - `console.session_ttl`
 - `console.managed_runtimes`
 - `console.max_concurrency`
+- `console.user_name`
 - `console.endpoints[].name`
 - `console.endpoints[].url`
 - `console.endpoints[].auth_token`
 
 `console.max_concurrency` (default 8) is how many Console topics run a task at once. Tasks in one topic always run one after another; further topics wait in order for a free slot. The limit is local to the Console's own runtime: each channel has its own `<channel>.max_concurrency` (default 8, one slot per chat or conversation), the TODO scheduler has `cron.max_concurrency` (default 8), and there is no process-wide total. Set `1` to run one topic at a time; values below 1 fall back to the default.
+
+`console.user_name` is how the Console's user is addressed, asked on the first page of Setup: one line of 1 to 80 characters, with the white space around it dropped. New Console tasks record it as the name of their sender; the identifiers `console:user` and `console` stay as they are, and tasks already recorded keep the name they had. Empty (the default) means "Console User". It is read again for every new task, so a change needs no restart.
 
 ## Telegram
 

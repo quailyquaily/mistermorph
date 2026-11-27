@@ -356,3 +356,16 @@ func TestToolsAreDeferred(t *testing.T) {
 		}
 	}
 }
+
+// The name the Console's human is addressed by is theirs to set: the agent cannot change it.
+func TestSetRefusesTheConsoleUserName(t *testing.T) {
+	path := dbConfig(t, "console:\n  user_name: Lyra\n")
+	before := readConfig(t, path)
+	_, err := runSet(t, setTool(path, nil), ownerCtx(), map[string]any{"path": "console.user_name", "value": "Morph"})
+	if err == nil || !strings.Contains(err.Error(), "cannot be changed by the agent") {
+		t.Fatalf("config_set(console.user_name) error = %v, want a refusal", err)
+	}
+	if readConfig(t, path) != before {
+		t.Fatal("a refused change changed the config")
+	}
+}

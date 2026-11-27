@@ -13,9 +13,11 @@ import {
   blockingSetupIntegrityItems,
   fetchConsoleSetupIntegrity,
   isAllowedRepairSetupRoute,
+  isSetupStageBeforeUserName,
   resolveConsoleSetupStage,
   setupStagePath,
 } from "./core/setup.js";
+import { applyConsoleUserFromMe, clearConsoleUser } from "./core/console-user.js";
 import { CONSOLE_LOCAL_ENDPOINT_REF, isEndpointSelectable, rootEntryEndpoint } from "./core/endpoints.js";
 import {
   endpointPagePath,
@@ -96,6 +98,7 @@ const ROUTES: RouteDef[] = [
   { pattern: "/__ui-components", page: "uiComponents", meta: { shellless: true } },
   { pattern: "/overview", page: "overview" },
   { pattern: `${ENDPOINT_SCOPE}/setup`, page: "setup", meta: { endpointScoped: true } },
+  { pattern: `${ENDPOINT_SCOPE}/setup/user`, page: "setup", meta: { endpointScoped: true, setupStage: "user" } },
   { pattern: `${ENDPOINT_SCOPE}/setup/llm`, page: "setup", meta: { endpointScoped: true, setupStage: "llm" } },
   { pattern: `${ENDPOINT_SCOPE}/setup/persona`, page: "setup", meta: { endpointScoped: true, setupStage: "persona" } },
   { pattern: `${ENDPOINT_SCOPE}/setup/soul`, page: "setup", meta: { endpointScoped: true, setupStage: "soul" } },
@@ -121,6 +124,7 @@ const ROUTES: RouteDef[] = [
   { pattern: `${ENDPOINT_SCOPE}/settings/:section`, page: "settings", meta: { endpointScoped: true, mobileBottomNav: true } },
   { pattern: `${ENDPOINT_SCOPE}/settings`, page: "settings", meta: { endpointScoped: true } },
   { pattern: "/setup", redirect: "/setup" },
+  { pattern: "/setup/user", redirect: "/setup/user" },
   { pattern: "/setup/llm", redirect: "/setup/llm" },
   { pattern: "/setup/persona", redirect: "/setup/persona" },
   { pattern: "/setup/soul", redirect: "/setup/soul" },
@@ -151,6 +155,7 @@ const extensionSetupFreePaths: string[] = Array.isArray(routeExtensions.setupFre
 
 const SETUP_FREE_PATHS = new Set([
   "/setup",
+  "/setup/user",
   "/setup/llm",
   "/setup/persona",
   "/setup/soul",
@@ -291,11 +296,14 @@ async function guard(to: Route): Promise<true | string> {
     authState.account = me.account || "console";
     authState.expiresAt = me.expires_at || authState.expiresAt;
     authState.save();
+    // The name the Console's user is addressed by comes with the session, from the server.
+    applyConsoleUserFromMe(me);
   };
   try {
     await readMe();
   } catch {
     authState.clear();
+    clearConsoleUser();
     try {
       if (await ensureConsoleSession()) {
         await readMe();
@@ -327,6 +335,12 @@ async function guard(to: Route): Promise<true | string> {
   }
   const setupState = await resolveConsoleSetupStage(endpointState.items);
   if (setupState.stage !== "ready") {
+    // A Setup that has not asked the name yet starts there: its later steps do not open directly.
+    if (isSetupStageBeforeUserName(toPagePath, setupState.stage)) {
+      // A repair of one step is not a way past it either (and there is no file to repair here).
+      const { repair: _repair, ...query } = to.query;
+      return withQuery(setupStagePath(setupState.stage, requestedEndpointRef || undefined), query, to.hash);
+    }
     if (SETUP_FREE_PATHS.has(toPagePath)) {
       return true;
     }
