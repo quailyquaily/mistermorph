@@ -239,3 +239,24 @@ test("on a runtime from before agent.db, setup saves identity.yaml and soul.md",
   expect(state.soul.length).toBeGreaterThan(10);
   expect(calls.some((call) => call.method === "PUT" && call.uri === "/persona/identity")).toBe(false);
 });
+
+test("a history step that stays on the page (a dialog closing in a browser) keeps what was chosen", async () => {
+  const { api } = freshConsole();
+  const { app, calls } = await openConsole({ location: "/", api });
+  await app.waitFor("id:setup-stage-llm");
+  await app.press("id:setup-provider-trigger");
+  await app.waitFor("id:inference-provider-dialog");
+  await app.press("role:tab[API Access]");
+  await app.press("id:inference-provider-dialog >> label:Google Gemini");
+  await app.waitFor("id:inference-provider-dialog", { state: "gone" });
+  const loads = () => calls.filter((call) => call.method === "GET" && call.path === "/settings/agent").length;
+  const before = loads();
+  // The browser tells the page of the step back over the dialog's history entry.
+  await app.host.send("morph.pop", { location: lastLocation(app) });
+  await app.wait(300);
+  expect(loads()).toBe(before);
+  await app.press("id:setup-provider-trigger");
+  await app.waitFor("id:inference-provider-dialog");
+  const texts = app.texts();
+  expect(texts[texts.indexOf("SELECTED") - 1]).toBe("Google Gemini");
+});

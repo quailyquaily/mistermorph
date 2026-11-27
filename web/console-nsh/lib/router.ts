@@ -555,6 +555,11 @@ export function startRouter() {
     if (isVisible()) scheduleSessionExpiry();
   });
   onHistoryPop((location) => {
+    // A step between entries of the address shown is not a navigation: a browser tells the page
+    // of each one, also of those nsh makes for itself when a dialog closes (it keeps a history
+    // entry per dialog). Running the route again would load the page's values again, over what
+    // was just chosen in the dialog.
+    if (untracked(pending) === "" && untracked(current)?.fullPath === historyLocation(location)) return;
     // The history moved already: note which way, whatever the leave guard says.
     const motion = motionHistory.pop(historyLocation(location));
     const step: Step = { kind: "pop", motion };
