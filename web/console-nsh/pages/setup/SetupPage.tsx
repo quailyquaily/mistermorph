@@ -26,6 +26,7 @@ import { DEFAULT_AVATAR_MARKUP } from "./default-avatar";
 import { InlineNotice } from "./InlineNotice";
 import { t, useSetup, type LLMFormField, type SetupStage, type SetupState, type SoulCard } from "./setup-state";
 import { CARD_CORNERS, CONTROL_CORNERS } from "../../components/corners";
+import { NetworkProxyEntry } from "../../components/settings/NetworkProxySetting";
 
 type Token = "warn" | "warn-dark" | "ok" | "ink";
 
@@ -762,9 +763,17 @@ export function SetupPage() {
             </View>
           </If>
           <View class="gap-2 p-2">
-            <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground" testID="setup-kicker">
-              {s.stageKicker()}
-            </Text>
+            {/* The desktop app's network proxy, at the card's top right on every step (nothing
+                there in a browser or the phone app): the steps that reach a model provider may
+                need it, and it is the host's own setting, not the console's. */}
+            <View class="flex-row items-center justify-between gap-2">
+              <Text class="min-w-0 shrink font-mono text-xs uppercase tracking-wide text-muted-foreground" testID="setup-kicker">
+                {s.stageKicker()}
+              </Text>
+              <View class="-my-1 -mr-2 shrink-0">
+                <NetworkProxyEntry />
+              </View>
+            </View>
             <View class="flex-row gap-1.5" accessibilityElementsHidden>
               <Each of={s.progressSteps()} key={(step) => step.index}>
                 {(step) => <View class={`h-1 flex-1 rounded-full ${step().active ? `bg-${accent()}` : "bg-line-faint"}`} />}

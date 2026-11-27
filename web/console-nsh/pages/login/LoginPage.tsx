@@ -6,6 +6,7 @@ import { effect, Image, signal, Text, untracked, View, windowSize } from "nsh";
 // 48pt, 96 device pixels on most screens, where the app's 64px drawing looks coarse.
 import loginLogo from "../../assets/images/app_logo_128.svg";
 import { LanguageSelector } from "../../components/LanguageSelector";
+import { NetworkProxyEntry } from "../../components/settings/NetworkProxySetting";
 import { Button, TextField } from "../../components/ui";
 import { ObserveSection } from "../../components/observe/parts";
 import {
@@ -30,7 +31,8 @@ let loginWatcher: ((part: string, frame: Frame) => void) | null = null;
 
 /**
  * For tests: the frames of the card's parts, each in its parent, as they are laid out
- * ("column", "server", "server.change", "password.box", "password.end", "password.reveal").
+ * ("column", "server", "server.change", "password.box", "password.end", "password.reveal",
+ * "proxy", "language").
  * Read as the page is made; null stops it.
  */
 export function watchLoginLayout(watcher: ((part: string, frame: Frame) => void) | null) {
@@ -262,9 +264,16 @@ export function LoginPage() {
           </View>
         </ObserveSection>
         {/* Outside the card, on the card's edge as the brand mark is: the word ends where the card
-            does, its hover pill (px-2) reaching past it. */}
-        <View class="-mr-1.5 items-end">
-          <LanguageSelector />
+            does, its hover pill (px-2) reaching past it. The desktop app's network proxy is the
+            same on the card's other edge (nothing there in a browser or the phone app): a proxy
+            may be what reaching the console needs, so it is set before logging in. */}
+        <View class="-mx-1.5 flex-row flex-wrap items-center justify-between gap-2">
+          <View class="shrink-0" onLayout={probe ? (event) => probe("proxy", event.bounds) : undefined}>
+            <NetworkProxyEntry />
+          </View>
+          <View class="ml-auto shrink-0" onLayout={probe ? (event) => probe("language", event.bounds) : undefined}>
+            <LanguageSelector />
+          </View>
         </View>
       </View>
       <If when={isMobile()}>

@@ -95,6 +95,11 @@ export interface SecretInputProps {
   revealPath?: string;
   /** For a field taken from an environment variable: "NAME" or "NAME=value"; it then shows locked. */
   envName?: string;
+  /**
+   * False for a secret the console does not keep (the desktop app's own, on pages before a
+   * session too): the console is then not asked which store it uses, and the tag stays general.
+   */
+  consoleStore?: boolean;
   testID?: string;
   /**
    * Hears where its parts lie on the page (tests), by state (`stored`, `typing`, `env`, `picked`,
@@ -297,7 +302,7 @@ export function SecretInput(props: SecretInputProps) {
   const tooltip = () =>
     t("secret_stored_" + kind()) + (storeName() ? ` (${storeName()})` : "") + ". " + t("secret_stored_" + kind() + "_detail");
 
-  void (loadSecretInfo() as Promise<SecretInfo | null>).then((data) => info.set(data));
+  if (props.consoleStore !== false) void (loadSecretInfo() as Promise<SecretInfo | null>).then((data) => info.set(data));
 
   // Whether this field's reference is shared, for a field holding one (reloaded after a save).
   effect(() => {

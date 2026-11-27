@@ -1,23 +1,27 @@
 // The desktop app's network proxy: a row of Settings' General card and the dialog it opens. Only a
 // host with the `networkProxy` feature has it (the desktop app; not a browser, not the phone app).
+// The login and setup pages open the same dialog from a small entry (NetworkProxyEntry): the
+// setting is the host's, so it needs no console session, and a proxy may be what logging in needs.
 //
 // The host owns the setting (lib/platform.ts, desktop/nsh/src/proxy.rs). The row shows what the
 // app runs with since it was opened; a saved change applies when the user quits and reopens the
 // app, which this panel never does by itself: saving stores the setting and nothing else. The
 // password is write-only here: the host only says whether one is stored.
 import { batch, effect, signal, Text, untracked, View } from "nsh";
+import { cornersClass, fittingRadius, RADIUS } from "../corners";
 import { pushNotice } from "../../lib/core/notices.js";
 import {
   networkProxy,
   NetworkProxyError,
   type NetworkProxyRunning,
   type NetworkProxyState,
+  hasFeature,
   quitDesktopApp,
   saveNetworkProxy,
 } from "../../lib/platform";
 import { isMobile } from "../../lib/shell";
 import { SettingRow } from "../settings-page/parts";
-import { Button, confirm, MessageDialog, TextField } from "../ui";
+import { Button, confirm, Icon, MessageDialog, TextField, Tip, TipButton } from "../ui";
 import { InlineNotice, t } from "./DialogShell";
 import { SecretInput } from "./SecretInput";
 import { SettingDialog } from "./SettingDialog";
@@ -46,7 +50,8 @@ function fieldError(code: string | undefined) {
   return text === key ? code : text;
 }
 
-export function NetworkProxySetting() {
+/** The setting as the host has it, the dialog's draft, and saving it: one per row or entry. */
+function createNetworkProxy() {
   const state = signal<NetworkProxyState | null>(null);
   const loadError = signal("");
   const open = signal(false);
@@ -157,6 +162,18 @@ export function NetworkProxySetting() {
 
   const field = (name: string) => fieldError(errors()[name]);
 
+  return {
+    state, loadError, open, applyOpen, saving, quitting,
+    choice, host, port, username, password, clearPassword, saveError,
+    refresh, explicit, storedPassword, openDialog, save, quitNow, field,
+  };
+}
+
+type NetworkProxyModel = ReturnType<typeof createNetworkProxy>;
+
+export function NetworkProxySetting() {
+  const model = createNetworkProxy();
+  const { state, loadError, openDialog } = model;
   return (
     <>
       {/* A row of the card, found by the Settings search by its title. */}
@@ -194,7 +211,86 @@ export function NetworkProxySetting() {
           testID="network-proxy-open"
         />
       </SettingRow>
+      <NetworkProxyDialogs model={model} />
+    </>
+  );
+}
 
+/** The 24pt entry's corners, as the language menu's trigger beside it. */
+const ENTRY_CORNERS = cornersClass(fittingRadius(RADIUS.control, 24));
+
+/**
+ * The setting's entry on the pages before the console is entered (login, setup): a small button
+ * drawn as the language menu's trigger is, opening the dialog Settings opens. Nothing where the
+ * host has no such setting (a browser, the phone app).
+ */
+export function NetworkProxyEntry(props: { class?: string }) {
+  return (
+    <If when={hasFeature("networkProxy")}>
+      <NetworkProxyEntryButton class={props.class} />
+    </If>
+  );
+}
+
+function NetworkProxyEntryButton(props: { class?: string }) {
+  const model = createNetworkProxy();
+  const { state, loadError, openDialog, refresh } = model;
+  const opening = signal(false);
+
+  async function press() {
+    if (untracked(opening)) return;
+    // The setting did not load (the host was slow, or refused): ask again before saying so.
+    if (!untracked(state)) {
+      opening.set(true);
+      try {
+        await refresh();
+      } finally {
+        opening.set(false);
+      }
+    }
+    if (untracked(state)) openDialog();
+    else pushNotice({ type: "error", text: untracked(loadError) || t("network_proxy_title") });
+  }
+
+  const pending = () => Boolean(state()?.pending);
+  const name = () => (pending() ? `${t("network_proxy_title")}: ${t("network_proxy_pending")}` : t("network_proxy_title"));
+  // What the app runs with, and that a saved change waits for the app to be reopened.
+  const tip = () => {
+    if (!state()) return undefined;
+    const running = t("network_proxy_running", { proxy: runningProxyLabel(state()?.running) });
+    return pending() ? `${running} · ${t("network_proxy_pending")}` : running;
+  };
+  return (
+    <>
+      <TipButton
+        accessibilityLabel={name()}
+        tooltip={tip() ? <Tip text={tip()!} /> : undefined}
+        hitSlop={6}
+        class={`flex-row items-center gap-1.5 ${ENTRY_CORNERS} px-2 py-1 hover:bg-hover focus-visible:bg-hover ${props.class ?? ""}`}
+        onPress={() => void press()}
+        testID="network-proxy-entry"
+      >
+        <Icon name="PhNetwork" size={14} color="muted-foreground" />
+        <Text class="text-xs text-subtle">{t("network_proxy_title")}</Text>
+        <If when={pending()}>
+          <View class="size-1.5 rounded-full bg-warn" testID="network-proxy-entry-pending" />
+        </If>
+      </TipButton>
+      {/* Before a session the console is asked nothing: not its secret store's name either. */}
+      <NetworkProxyDialogs model={model} hostOnly />
+    </>
+  );
+}
+
+/** The setting's dialog, and the one that says a saved change applies when the app is reopened. */
+function NetworkProxyDialogs(props: { model: NetworkProxyModel; hostOnly?: boolean }) {
+  const {
+    state, open, applyOpen, saving, quitting,
+    choice, host, port, username, password, clearPassword, saveError,
+    explicit, storedPassword, save, quitNow, field,
+  } = props.model;
+  return (
+    <>
       <SettingDialog
         open={open()}
         onOpenChange={(value) => open.set(value)}
@@ -262,6 +358,7 @@ export function NetworkProxySetting() {
                 status={{ configured: storedPassword(), source: "os", editable: true }}
                 placeholder={t("network_proxy_optional")}
                 disabled={!explicit() || saving()}
+                consoleStore={!props.hostOnly}
                 testID="network-proxy-password"
               />
               <If when={field("password")}>
