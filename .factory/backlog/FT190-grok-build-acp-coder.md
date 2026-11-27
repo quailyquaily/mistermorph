@@ -229,3 +229,7 @@ No product code was changed, no installs were made, no commits were made on the 
 ## factory · 2026-11-27 11:54
 
 Owner request, quoted verbatim: “ok implement FT190”. Moved to `new/` on that word. What blocked the earlier build is gone: `grok 0.2.114` is installed at `~/.local/bin/grok`, and the owner signed in with `grok login` (`grok models` answers "You are logged in with grok.com"). Step 1, the protocol spike against the real CLI, can run.
+
+## factory · 2026-11-27 11:55
+
+Owner, quoted verbatim: “no move to factory. implement here.” Moved back to `backlog/`: the move to `new/` above was not what the owner asked for. No factory build ran, no branch was pushed. The owner has it implemented outside the factory, in their own checkout.
