@@ -2836,11 +2836,9 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	soloRun := ownerRun && daemonruntime.IsSoloTopicID(job.TopicID)
 	var workspaceSwitch *pathroots.WorkspaceSwitch
 	if ownerRun {
+		// A work thread Solo started is such a run too: the workspace Solo chose for it (checked by
+		// work_thread, attached to its topic) is the run's own, and asks nothing more.
 		workspaceSwitch = pathroots.NewWorkspaceSwitch(job.WorkspaceDir)
-		if consoleSoloThreadTask(job.Trigger) {
-			// A work thread Solo started: the workspace Solo chose asks before its first write.
-			workspaceSwitch = r.soloThreadWorkspaceSwitch(ctx, job, generation.reader.GetString("workspace_dir"))
-		}
 		ctx = pathroots.WithWorkspaceSwitch(ctx, workspaceSwitch)
 		if strings.TrimSpace(job.ResumeApprovalID) == "" {
 			r.recordWorkspaceUse(job.WorkspaceDir)
