@@ -72,3 +72,15 @@ notes:
 - Residual risks: existing manual-workspace replacement attachment-reference behavior; unchanged vendor backslash/non-UTF-8 path handling; broadened local host file-URL API has no identified untrusted JS entry. These were not established as new actionable defects.
 - Installs: none. Working tree clean apart from ignored Console build output. No reported project-memory/settings writes. Coder harness output in a generic /tmp location was recorded for owner-confirmed cleanup only; not deleted. Shared package caches reused.
 Move: review/ → ready/. P3 is non-blocking under factory policy. Not merged or shipped.
+
+
+## factory · 2026-11-28 13:46
+Asked ship authorized by owner: “另外 morph 可以 ship”. Selected the currently ready FT195 and FT196 with valid passing reviews matching their remote branch heads. FT189 was explicitly excluded from this run; live remote already has it in done/ from its earlier v0.3.138 release, so its record and existing base history were left unchanged.
+
+Shipped to master at merge edc867e91698084f894e916db21d96190575a90c. Release tag v0.3.145 points to final base 31a944fb9cea0666e25188cfd3ad3a76d1dfddcb. Atomic push of master and annotated tag succeeded; remote master and peeled tag independently verified at that final commit. No conflicts, coder fixes, deployment or user-checkout changes.
+
+Validation: configured gofmt cleanliness, go vet ./... and go test ./... passed after each item merge and on final merged base (173 tested packages). Console nsh check and required scripts/test.sh passed after FT195: 178 files, zero final failures; settings-integrations-channels passed its isolated retry. FT196 has no Console source changes. Desktop cargo test --locked --offline passed on final base: 102 passed, 5 ignored, plus nsh_features 1 passed. Initial Rust build lacked fontconfig pkg-config metadata; a run-local shim linked existing system runtime libraries, with no system installation or repository change. Automated tests used throwaway HOME/XDG directories. No installs or dependency/lockfile changes; no new direct /tmp paths observed.
+
+No linked issues/PRs identified; none closed. Branch retained because configured ship actions default to merge/tag/push without clean. No manual live Console, real desktop file-manager drops, native highlight/modal interaction, Windows/macOS/Linux display-server or screen-reader verification. Review limitations and FT195 non-blocking P3 same-draft drop-order finding remain; no claim of those being fixed.
+
+Move: ready/ → done/.
