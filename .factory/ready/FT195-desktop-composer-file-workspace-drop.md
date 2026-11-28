@@ -60,3 +60,15 @@ Built and pushed commit 09042436 (feat(desktop): drop files and folders on the c
 - Outside allowed work areas: Claude Code also wrote an item memory file and a memory-index entry in its own user-home memory area. No new direct /tmp entries were observed. No machine paths are recorded here.
 - Claude Code reports a reached weekly overage quota; no further coder call was attempted. Provider-reported reset interval at return: 4 days 2 hours.
 Move: new/ → review/. Round 1. Await independent factory review; not merged or shipped.
+
+## factory · review · 2026-11-28 13:01
+head: 090424361c279aacd4ef0f4ebbe7683c92914263
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/chat/fileDrop.ts:109-128: Concurrent drops on the same draft apply in host-answer order rather than drop order. A slow earlier directory drop can overwrite a later workspace selection. Example: drop A (directory a plus f1) is delayed; drop B (directory b plus f2) completes first; A then completes, selecting a after f2 was uploaded into b. A focused scratch-copy handler probe confirmed the reversed workspace/file application order; the mismatched send references were traced in the controller. Serialize same-draft drop application or otherwise preserve event order. The full-app delayed-host probe timed out, so that portion is source-traced, not end-to-end verified.
+- Independent Claude Code review of origin/master...HEAD covered all 12 changed files, native target/modal isolation, path/upload trust boundaries, workspace and attachment lifetime, async scope changes and restriction rechecks. No P0/P1 findings; no product files changed and no commits made by the reviewer.
+- Required Go check passed: gofmt cleanliness, go vet ./..., go test ./... (173 tested packages). Console nsh check passed; scripts/test.sh: 178 files, zero final failures (contacts passed isolated retry). Rust cargo test --locked --offline with environment library shim: 102 passed, 5 ignored, plus one passed; all four new host drop tests passed. Tests used throwaway HOME/XDG directories.
+- Additional non-required lib node test sweep: one pre-existing failure in lib/core/solo.test.mjs, reproduced without this change. Vendored GPUI tests could not run from this workspace; pinned rustfmt unavailable. No live desktop drag/drop, Linux X11/Wayland, macOS permissions, Windows paths, native modal/highlight lifecycle or visual verification.
+- Residual risks: existing manual-workspace replacement attachment-reference behavior; unchanged vendor backslash/non-UTF-8 path handling; broadened local host file-URL API has no identified untrusted JS entry. These were not established as new actionable defects.
+- Installs: none. Working tree clean apart from ignored Console build output. No reported project-memory/settings writes. Coder harness output in a generic /tmp location was recorded for owner-confirmed cleanup only; not deleted. Shared package caches reused.
+Move: review/ → ready/. P3 is non-blocking under factory policy. Not merged or shipped.
