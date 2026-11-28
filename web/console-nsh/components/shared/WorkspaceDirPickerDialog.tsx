@@ -6,7 +6,7 @@ import { batch, computed, effect, Image, List, signal, Text, untracked, View, wi
 import type { InputRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { runtimeApiFetch, runtimeApiFetchForEndpoint, endpointState, translate } from "../../lib/core/context.js";
-import { CONSOLE_LOCAL_ENDPOINT_REF } from "../../lib/core/endpoints.js";
+import { localDirectoryUsable } from "../chat/fileDrop";
 import { pushNotice } from "../../lib/core/notices.js";
 import { loadRecentWorkspaceDirs, rememberRecentWorkspaceDir } from "../../lib/core/recent-workspace-dirs.js";
 import { workspaceTreeIcon } from "../../lib/core/workspace-icons.js";
@@ -175,7 +175,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
   const effectiveEndpointRef = () => text(props.endpointRef) || text(endpointState.selectedRef);
   // The native picker chooses on this machine: only the desktop app's own agent sees those paths.
   const canPickNative = () =>
-    isDesktop() && hasFeature("pickDirectory") && effectiveEndpointRef() === CONSOLE_LOCAL_ENDPOINT_REF;
+    hasFeature("pickDirectory") && localDirectoryUsable(effectiveEndpointRef());
 
   function fetchRuntime(pathname: string, options: Record<string, unknown> = {}) {
     const endpointRef = text(untracked(() => props.endpointRef));

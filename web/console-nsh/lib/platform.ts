@@ -108,7 +108,7 @@ export const origin = () => config.origin;
 /** The browser's `isSecureContext`, or null when the host did not report it. */
 export const secureContext = (): boolean | null =>
   typeof config.secureContext === "boolean" ? config.secureContext : null;
-/** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`, `voiceRecord`, `voicePreview`, `backgroundTaskNotifications`. */
+/** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`, `voiceRecord`, `voicePreview`, `backgroundTaskNotifications`, `fileDrop`. */
 export const hasFeature = (name: string) => config.features.includes(name);
 
 /* ---------- the hardware keyboard (phone app) ---------- */
@@ -432,6 +432,38 @@ export function pickRequest(options: PickOptions = {}): PickOptions {
 export async function pickFiles(options: PickOptions = {}): Promise<PickedFile[]> {
   const picked = await hostChannel.call("morph.file.pick", pickRequest(options), { timeout: 0 });
   return Array.isArray(picked) ? (picked as PickedFile[]) : [];
+}
+
+/**
+ * What the host made of a drop from the file manager (`morph.file.drop`). It looks at every entry
+ * before any is used: `ok` with the files in the order they were dropped, held by the host as
+ * picked files are (upload them with `uploadFile`, give back the unused with `releaseFile`), and
+ * the one directory's path on this machine, or "". Else nothing of the drop is used and nothing is
+ * held: `reason` is `invalid` (not a local path), `unreadable` (gone, no permission, neither a file
+ * nor a directory) or `multiple_directories`, and `names` the entries it is about.
+ */
+export type DroppedFiles =
+  | { ok: true; files: PickedFile[]; directory: string }
+  | { ok: false; reason: "invalid" | "unreadable" | "multiple_directories" | string; names: string[] };
+
+/**
+ * Asks the host what the `file:` URLs of an `onFileDrop` are (feature `fileDrop`: the desktop app,
+ * where the paths are this machine's). Only the host can tell a directory from a file.
+ */
+export async function resolveDroppedFiles(uris: string[]): Promise<DroppedFiles> {
+  const answer = ((await hostChannel.call("morph.file.drop", { uris }, { timeout: 0 })) ?? {}) as Record<string, unknown>;
+  if (answer.ok !== true) {
+    return {
+      ok: false,
+      reason: String(answer.reason || "invalid"),
+      names: Array.isArray(answer.names) ? answer.names.map((name) => String(name)) : [],
+    };
+  }
+  return {
+    ok: true,
+    files: Array.isArray(answer.files) ? (answer.files as PickedFile[]) : [],
+    directory: String(answer.directory || "").trim(),
+  };
 }
 
 const progressListeners = new Map<string, (loaded: number, total: number) => void>();

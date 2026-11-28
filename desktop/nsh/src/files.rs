@@ -122,6 +122,88 @@ pub fn accepts(accept: &str, picked: &Picked) -> bool {
     })
 }
 
+/// The local path a dropped `file:` URL names (nsh reports drops as such URLs, percent-encoded:
+/// spaces, Unicode); `None` for anything else, a relative path or a URL of another machine. On
+/// Windows `file:///C:/a/b` is `C:\a\b` and `file://server/share/a` the UNC path.
+pub fn dropped_path(uri: &str) -> Option<PathBuf> {
+    let url = url::Url::parse(uri.trim()).ok()?;
+    if url.scheme() != "file" {
+        return None;
+    }
+    url.to_file_path().ok().filter(|path| path.is_absolute())
+}
+
+/// What a drop from the file manager holds, once all of it was looked at (`morph.file.drop`).
+#[derive(Debug)]
+pub enum Dropped {
+    /// Every entry can be used: the files in the order they were dropped, and at most one
+    /// directory (its path as `morph.desktop.pickDirectory` writes one).
+    Batch { files: Vec<Picked>, directory: Option<String> },
+    /// Nothing of the drop is used. `reason`: `invalid` (not a local path), `unreadable` (gone,
+    /// no permission, neither a file nor a directory) or `multiple_directories`; `names`: the
+    /// entries it is about.
+    Rejected { reason: &'static str, names: Vec<String> },
+}
+
+fn dropped_name(path: &Path) -> String {
+    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string())
+}
+
+/// Looks at every entry of a drop before any of it is used: a batch with one bad entry is refused
+/// whole, so a drop never half-applies. Symbolic links count as what they point to. A file must
+/// open for reading and a directory must list (macOS answers "no permission" for a protected
+/// folder the user did not grant; a file deleted since the drag began is gone); pipes, sockets and
+/// devices are not files.
+pub fn classify_drop(uris: &[String]) -> Dropped {
+    let mut invalid = Vec::new();
+    let mut unreadable = Vec::new();
+    let mut files = Vec::new();
+    let mut directories: Vec<(String, String)> = Vec::new();
+    for uri in uris.iter().filter(|uri| !uri.trim().is_empty()) {
+        let Some(path) = dropped_path(uri) else {
+            invalid.push(uri.trim().to_owned());
+            continue;
+        };
+        let name = dropped_name(&path);
+        match std::fs::metadata(&path) {
+            Ok(meta) if meta.is_dir() => match (std::fs::read_dir(&path), path.to_str()) {
+                (Ok(_), Some(dir)) => directories.push((dir.to_owned(), name)),
+                // A path that is not Unicode cannot be told to the agent as text.
+                (Ok(_), None) => invalid.push(name),
+                (Err(_), _) => unreadable.push(name),
+            },
+            Ok(meta) if meta.is_file() => match std::fs::File::open(&path).and_then(|_| Picked::describe(&path)) {
+                Ok(file) => files.push(file),
+                Err(_) => unreadable.push(name),
+            },
+            _ => unreadable.push(name),
+        }
+    }
+    if !invalid.is_empty() {
+        return Dropped::Rejected { reason: "invalid", names: invalid };
+    }
+    if !unreadable.is_empty() {
+        return Dropped::Rejected { reason: "unreadable", names: unreadable };
+    }
+    if directories.len() > 1 {
+        return Dropped::Rejected { reason: "multiple_directories", names: directories.into_iter().map(|(_, name)| name).collect() };
+    }
+    Dropped::Batch { files, directory: directories.pop().map(|(dir, _)| dir) }
+}
+
+/// What `morph.file.drop` answers (`DroppedFiles` in platform.ts): the batch with its files
+/// given ids by `register`, or why none of it is used. Nothing is registered for a refused drop.
+pub fn drop_answer(dropped: Dropped, mut register: impl FnMut(Picked) -> Value) -> Value {
+    match dropped {
+        Dropped::Batch { files, directory } => json!({
+            "ok": true,
+            "files": files.into_iter().map(&mut register).collect::<Vec<_>>(),
+            "directory": directory.unwrap_or_default(),
+        }),
+        Dropped::Rejected { reason, names } => json!({ "ok": false, "reason": reason, "names": names }),
+    }
+}
+
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 pub struct UploadRequest {
@@ -382,6 +464,155 @@ mod tests {
         let path = dir.join(name);
         std::fs::write(&path, bytes).unwrap();
         path
+    }
+
+    fn file_uri(path: &Path) -> String {
+        url::Url::from_file_path(path).unwrap().to_string()
+    }
+
+    fn drop_dir(name: &str) -> tempfile::TempDir {
+        tempfile::Builder::new().prefix(name).tempdir().unwrap()
+    }
+
+    #[test]
+    fn dropped_urls_become_local_paths() {
+        if cfg!(windows) {
+            assert_eq!(dropped_path("file:///C:/Users/a%20b/%E6%96%87.txt"), Some(PathBuf::from(r"C:\Users\a b\文.txt")));
+            assert_eq!(dropped_path("file://server/share/a.txt"), Some(PathBuf::from(r"\\server\share\a.txt")));
+        } else {
+            assert_eq!(dropped_path("file:///tmp/a%20b/%E6%96%87%20%F0%9F%93%81.txt"), Some(PathBuf::from("/tmp/a b/文 📁.txt")));
+            assert_eq!(dropped_path(" file:///tmp/a%23b%25.txt "), Some(PathBuf::from("/tmp/a#b%.txt")));
+            // Another machine's file is not a local path.
+            assert_eq!(dropped_path("file://server/share/a.txt"), None);
+        }
+        for other in ["", "relative.txt", "/tmp/plain-path", "https://example.com/a.txt", "data:text/plain,hi"] {
+            assert_eq!(dropped_path(other), None, "{other:?}");
+        }
+    }
+
+    #[test]
+    fn a_drop_is_classified_whole_and_in_order() {
+        let root = drop_dir("morph-drop-");
+        let first = root.path().join("b 文档.txt");
+        let second = root.path().join("a.png");
+        let third = root.path().join("c");
+        std::fs::write(&first, b"one").unwrap();
+        std::fs::write(&second, b"png!").unwrap();
+        std::fs::write(&third, b"").unwrap();
+        let dir = root.path().join("project 目录");
+        std::fs::create_dir(&dir).unwrap();
+        let other = root.path().join("other");
+        std::fs::create_dir(&other).unwrap();
+        let uris = |paths: &[&Path]| paths.iter().map(|p| file_uri(p)).collect::<Vec<_>>();
+
+        // An empty drop is an empty batch.
+        assert!(matches!(classify_drop(&[]), Dropped::Batch { files, directory: None } if files.is_empty()));
+        assert!(matches!(classify_drop(&["  ".to_owned()]), Dropped::Batch { files, directory: None } if files.is_empty()));
+
+        // Files keep the order of the drop, around the one directory.
+        let Dropped::Batch { files, directory } = classify_drop(&uris(&[&first, &dir, &second, &third])) else {
+            panic!("the batch was refused");
+        };
+        assert_eq!(files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["b 文档.txt", "a.png", "c"]);
+        assert_eq!(files.iter().map(|f| f.size).collect::<Vec<_>>(), [3, 4, 0]);
+        assert_eq!(directory.as_deref(), dir.to_str());
+
+        // The same file twice is two attachments, as two picks are.
+        let Dropped::Batch { files, .. } = classify_drop(&uris(&[&first, &first])) else {
+            panic!("the batch was refused");
+        };
+        assert_eq!(files.len(), 2);
+
+        // Two directories: neither is chosen, and the files are not taken either.
+        let Dropped::Rejected { reason, names } = classify_drop(&uris(&[&dir, &first, &other])) else {
+            panic!("two directories were taken");
+        };
+        assert_eq!((reason, names), ("multiple_directories", vec!["project 目录".to_owned(), "other".to_owned()]));
+
+        // A deleted entry refuses the whole drop and is named.
+        let gone = root.path().join("gone.txt");
+        let Dropped::Rejected { reason, names } = classify_drop(&uris(&[&first, &gone, &dir])) else {
+            panic!("a missing file was taken");
+        };
+        assert_eq!((reason, names), ("unreadable", vec!["gone.txt".to_owned()]));
+
+        // What is not a local file URL is named as it came; it goes before the other reasons.
+        let mut mixed = uris(&[&first, &gone]);
+        mixed.push("https://example.com/a.txt".to_owned());
+        let Dropped::Rejected { reason, names } = classify_drop(&mixed) else {
+            panic!("a web address was taken");
+        };
+        assert_eq!((reason, names), ("invalid", vec!["https://example.com/a.txt".to_owned()]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_drop_follows_links_and_refuses_what_cannot_be_read() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = drop_dir("morph-drop-unix-");
+        let file = root.path().join("real.txt");
+        std::fs::write(&file, b"text").unwrap();
+        let dir = root.path().join("real");
+        std::fs::create_dir(&dir).unwrap();
+        let file_link = root.path().join("link.txt");
+        let dir_link = root.path().join("link");
+        let dangling = root.path().join("dangling");
+        std::os::unix::fs::symlink(&file, &file_link).unwrap();
+        std::os::unix::fs::symlink(&dir, &dir_link).unwrap();
+        std::os::unix::fs::symlink(root.path().join("nowhere"), &dangling).unwrap();
+
+        // A link is what it points to, under its own name and path.
+        let Dropped::Batch { files, directory } = classify_drop(&[file_uri(&file_link), file_uri(&dir_link)]) else {
+            panic!("the links were refused");
+        };
+        assert_eq!(files.iter().map(|f| (f.name.as_str(), f.size)).collect::<Vec<_>>(), [("link.txt", 4)]);
+        assert_eq!(directory.as_deref(), dir_link.to_str());
+        assert!(matches!(classify_drop(&[file_uri(&dangling)]), Dropped::Rejected { reason: "unreadable", .. }));
+
+        // A pipe is neither a file nor a directory, and is never opened (that would wait for a writer).
+        let pipe = root.path().join("pipe");
+        let c_path = std::ffi::CString::new(std::os::unix::ffi::OsStrExt::as_bytes(pipe.as_os_str())).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+        assert!(matches!(classify_drop(&[file_uri(&pipe)]), Dropped::Rejected { reason: "unreadable", .. }));
+
+        // No permission (root reads everything: nothing to check then).
+        let secret = root.path().join("secret.txt");
+        std::fs::write(&secret, b"x").unwrap();
+        std::fs::set_permissions(&secret, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let locked = root.path().join("locked");
+        std::fs::create_dir(&locked).unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::File::open(&secret).is_err() {
+            let Dropped::Rejected { reason, names } = classify_drop(&[file_uri(&file), file_uri(&secret), file_uri(&locked)]) else {
+                panic!("unreadable entries were taken");
+            };
+            assert_eq!((reason, names), ("unreadable", vec!["secret.txt".to_owned(), "locked".to_owned()]));
+        }
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    #[test]
+    fn a_refused_drop_registers_nothing() {
+        let root = drop_dir("morph-drop-answer-");
+        let file = root.path().join("notes.txt");
+        std::fs::write(&file, b"hello").unwrap();
+        let dir = root.path().join("project");
+        std::fs::create_dir(&dir).unwrap();
+        let registry = std::cell::RefCell::new(Registry::default());
+        let mut register = |picked: Picked| {
+            let id = registry.borrow_mut().add(picked.clone());
+            picked.to_json(&id)
+        };
+        let refused = drop_answer(classify_drop(&[file_uri(&file), file_uri(&root.path().join("gone"))]), &mut register);
+        assert_eq!(refused, json!({ "ok": false, "reason": "unreadable", "names": ["gone"] }));
+        let taken = drop_answer(classify_drop(&[file_uri(&file), file_uri(&dir)]), &mut register);
+        assert_eq!(taken["ok"], true);
+        assert_eq!(taken["directory"], dir.to_str().unwrap());
+        assert_eq!(taken["files"], json!([{ "id": "1", "name": "notes.txt", "size": 5, "type": "text/plain", "preview": "" }]));
+        assert_eq!(registry.borrow().get("1").unwrap().path, file);
+        assert!(registry.borrow().get("2").is_none());
+        let files_only = drop_answer(classify_drop(&[file_uri(&file)]), &mut register);
+        assert_eq!(files_only["directory"], "");
     }
 
     #[test]

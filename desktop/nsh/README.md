@@ -93,7 +93,7 @@ folders, `~/.config` and `~/.cache` on Linux):
 
 | Call | Desktop behaviour |
 | --- | --- |
-| `morph.boot` | `runtime: "desktop"`, `origin: http://127.0.0.1:<port>`, `basePath: "/"`, the last location, `kv.json`, the system's languages, the version, all ten features |
+| `morph.boot` | `runtime: "desktop"`, `origin: http://127.0.0.1:<port>`, `basePath: "/"`, the last location, `kv.json`, the system's languages, the version, all eleven features |
 | `morph.kv.set` | `local` is written to `kv.json`; `session` lives as long as the process |
 | `morph.history` | Remembers the location for the next launch (no back/forward: `morph.pop` is never sent) |
 | `morph.title` | The window title |
@@ -102,6 +102,7 @@ folders, `~/.config` and `~/.cache` on Linux):
 | `morph.notify.state` / `request` | No desktop notification service asks an app permission, so both answer whether one is there. Linux: `"granted"` when a freedesktop notification service answers `GetServerInformation` on the session bus, `"unsupported"` when none does (the console then shows nothing and says so in Settings; the log notes the change once). macOS and Windows: `"granted"` (they tell an app nothing it could read: notifications the user turned off for the app are not seen) |
 | `morph.notify.show`, `morph.notify.press` (event) | notify-rust, once per call (a failure rejects; nothing tries again). Pressing the notification (Linux: its default action, shown as "Open"; Windows: the toast's body) brings the window forward and sends `morph.notify.press`, which opens a task's topic. macOS reports no press |
 | `morph.file.pick` / `release` | GPUI's open dialog (the desktop portal on Linux); `accept` filters the chosen files afterwards, since the dialog has no type filter. Images (up to 16 MB) get a `data:` preview of the picked bytes: nsh refuses `file://` images under `capabilities.network`, so only the chosen file is shown |
+| `morph.file.drop` | Feature `fileDrop`. `{ uris }`: the `file:` URLs of an `onFileDrop` (see "Dropping files and folders on the composer"). Looks at every entry on a thread of its own and answers for the whole drop: `{ ok: true, files, directory }` with the files registered as picked ones are (same ids, previews, `morph.file.upload` and `release`) in the order of the drop and the path of at most one directory, or `{ ok: false, reason, names }` with nothing registered: `invalid` (not a local path), `unreadable` (gone, no permission, neither a file nor a directory) or `multiple_directories` |
 | `morph.file.upload` | Multipart (`field`, `fields`) or the raw file, chunked, with `morph.file.progress` events. With `image`, the picture is cropped, scaled (Lanczos3) and re-encoded first: **WebP is lossless** (the `image` crate has no lossy WebP encoder; `quality` applies to JPEG only) |
 | `morph.file.save` | Fetches (`url` + `headers`) or decodes (`text`, `base64`) first, then GPUI's save dialog in the Downloads folder |
 | `morph.desktop.pickDirectory` | GPUI's folder dialog (`title` and `current` are not passed: GPUI's dialog takes neither) |
@@ -113,6 +114,49 @@ folders, `~/.config` and `~/.cache` on Linux):
 
 Closing the window quits (Linux, Windows) or hides the app (macOS), as before. Ctrl+Q / Cmd+Q
 quits.
+
+## Dropping files and folders on the composer
+
+Files and folders dragged from the system's file manager can be dropped on the chat composer:
+files become attachments of the draft (the same upload, progress, retry and removal as files
+picked with Upload Files), and one folder becomes the workspace of the next message, shown in the
+composer until the message is sent, exactly as Attach Workspace chooses one. A drop never sends
+anything.
+
+- **Only the composer takes the drop.** nsh gives a drop to the closest view under the pointer
+  that listens to `onFileDrop`, within its modal (`vendor/nsh-platform-gpui/src/input.rs`,
+  `file_drop_target`): the composer's frame listens, the page and the window do not. A drop
+  anywhere else does nothing, another part's drop target keeps its own drops, and an open dialog
+  blocks the composer behind it. The frame shows a ring while files are dragged over it; it goes
+  when the drag leaves, is dropped or is cancelled.
+- **The whole drop or none of it.** The host looks at every entry first (`src/files.rs`,
+  `classify_drop`). A drop with an entry that cannot be read or is not a local path, or with
+  more than one folder, is refused whole with a message naming the entries; the draft, its files and
+  its workspace stay as they were.
+- **A folder is a workspace only for this app's own agent.** Any other agent runs on another
+  machine, where the path names nothing: a dropped folder is refused there (files are still
+  taken), and the path is not sent.
+- **Late answers land nowhere.** If the conversation or agent changes, or the draft is sent,
+  before the host has answered, the answer is dropped and its files are released.
+- The browser Console and the phone apps take no such drops: a page is never told where a dropped
+  file is.
+
+Platform notes:
+
+- **Windows.** `file:///C:/Users/me/a%20b.txt` is `C:\Users\me\a b.txt`; a share
+  (`file://server/share/a.txt`) is the UNC path `\\server\share\a.txt`. A folder's path goes to
+  the agent as Windows writes it, as the folder dialog's does. A shortcut (`.lnk`) is a file, not
+  the folder it points to.
+- **macOS.** A folder under Desktop, Documents, Downloads, an external or a network volume lists
+  only once the user has allowed the app to (the system asks on first use); until then, and after
+  a refusal, the drop is refused as unreadable. Allow it in System Settings > Privacy & Security >
+  Files and Folders, then drop again. An alias is a file; a symbolic link counts as what it
+  points to (on every system).
+- **Linux.** GPUI reports drops on X11 (XDND) and on Wayland (`text/uri-list`); what a file
+  manager offers besides local files (a `trash:` or `smb:` location that is not mounted as a path)
+  is not a local path and is refused. A sandboxed build (Flatpak, Snap) would see only the paths
+  its sandbox shows; the packages here are not sandboxed. Paths that are not Unicode can be
+  attached as files but not used as a workspace.
 
 ## Network proxy
 
@@ -267,5 +311,10 @@ executable in release) but was built and run only on Linux; the macOS and Window
   twice on NSUserNotificationCenter), and "granted" is assumed on both;
 - macOS: that the signed and notarized bundle from `packaging/package-darwin.sh` launches and
   shows notifications;
+- dropping files and folders on the composer: the drop's reading and handling are covered by
+  tests (`src/files.rs`, `web/console-nsh/tests/chat-file-drop.test.tsx`, and the runtime's own
+  window test of which view hears a drop), but no drag from a real file manager was made on any
+  system, Linux included (X11 and Wayland): the ring while dragging, the Windows paths and macOS's
+  folder permission prompt are unverified;
 - Windows: a backend left running if the app is killed (no job object yet; Linux uses
   `PR_SET_PDEATHSIG`), and the icon `build.rs` embeds.
