@@ -61,3 +61,15 @@ Installs: none. No dependency manifest/lockfile changes.
 Not checked live: interactive browser/LLM, actual coder/spawn, Windows PowerShell, or approvals written by the old binary (legacy records simulated in tests). Console end-to-end behavior is covered by the in-process runtime/HTTP harness, not a live interactive run.
 
 Exception: coder reported automatic Claude project-memory writes outside the worktree/TMPDIR (FT196 note and FT194/index updates). No out-of-plan product changes committed. Manager did not change or delete those files. No new /tmp entries observed around coder/verification. Initial code push credential-path error resolved on the single retry with per-command credential.useHttpPath=true; no user git settings changed.
+
+## factory · review · 2026-11-28 13:22
+head: ec41f49a1fb071e22d8aa269bd8a6a2883ebcd08
+verdict: pass
+notes:
+- Claude Code reviewed all 20 changed files against origin/master b5e63aac. No qualifying findings. Branch merges cleanly with that base.
+- Required check passed: test -z "$(gofmt -l .)" && go vet ./... && go test ./... . Throwaway HOME/XDG/tool caches used; all 173 tested packages passed. No installs or repository modifications.
+- Verified removal of workspace-only approval across seven formerly gated tools, batch/codemode and repeat switches; owner Console and Solo runtime harnesses; unchanged path validation and independent Guard/forced/admin/coder policies; legacy pending approve/reject/expiry lifecycle and workspace restore. New agent tests fail against the prior base in a scratch mutation check. That scratch check excluded web assets, causing one unrelated worker-pool test failure; pathroots test is incompatible with the old struct by design.
+- Residual compatibility note: removed exported guard helper names/Result.Forced may break external Go consumers using them; no actual in-repository or demo consumer found. An unchanged local_subtask_runner.go comment still describes the removed switched-workspace approval.
+- Not checked live: interactive browser/LLM, real coder/spawn, Windows PowerShell, or approvals produced by an actual old binary (simulated in tests). No TSX changes; nsh checks not applicable.
+- Written outside dir: Claude harness background output in /tmp/claude-995 (recorded for owner-directed clean only; not deleted). No project-memory writes reported in this review.
+- Moved review/ → ready/ for owner approval/shipping; no code merge, tag or base push performed.
