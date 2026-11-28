@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import com.longbridge.nsh.ModalKeyboardRoom;
 import com.longbridge.nsh.NshHostReply;
 import com.longbridge.nsh.NshView;
+import com.longbridge.nsh.PasteNotices;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
@@ -39,6 +40,10 @@ import java.util.concurrent.Executors;
  *
  * <p>And the dialogs' fields over the software keyboard: {@link ModalKeyboardRoom} takes back the
  * room nsh 0.6.0 leaves under them.
+ *
+ * <p>And pasted images the runtime could not read (too large, an expired grant; the patched
+ * InputBox's {@link PasteNotices}): it tells the console (`morph.paste.refused`, the reason and how
+ * many), which says so next to the composer.
  */
 public final class MorphApplication extends Application implements Application.ActivityLifecycleCallbacks {
     private final Map<Activity, Attached> attached = new WeakHashMap<>();
@@ -51,13 +56,15 @@ public final class MorphApplication extends Application implements Application.A
         // Saves download on their own thread: a long one does not hold up a voice upload.
         final ExecutorService saves;
         final AndroidHardwareKeyboard keyboard;
+        final PasteNotices.Listener pastes;
 
-        Attached(VoiceController voice, ExecutorService executor, NshView view, ExecutorService saves, AndroidHardwareKeyboard keyboard) {
+        Attached(VoiceController voice, ExecutorService executor, NshView view, ExecutorService saves, AndroidHardwareKeyboard keyboard, PasteNotices.Listener pastes) {
             this.voice = voice;
             this.executor = executor;
             this.view = view;
             this.saves = saves;
             this.keyboard = keyboard;
+            this.pastes = pastes;
         }
     }
 
@@ -136,7 +143,15 @@ public final class MorphApplication extends Application implements Application.A
         }));
         AndroidHardwareKeyboard keyboard = new AndroidHardwareKeyboard(activity, view);
         view.handle("morph.keyboard.state", (data, reply) -> reply.resolve(keyboard.answer()));
-        Attached result = new Attached(voice, executor, view, saves, keyboard);
+        // Heard on the UI thread, in the paste the user made: nothing of the image is sent.
+        PasteNotices.Listener pastes = (reason, count) -> {
+            Map<String, Object> refused = new java.util.HashMap<>();
+            refused.put("reason", reason);
+            refused.put("count", count);
+            view.send("morph.paste.refused", refused);
+        };
+        PasteNotices.listen(pastes);
+        Attached result = new Attached(voice, executor, view, saves, keyboard, pastes);
         attached.put(activity, result);
         return result;
     }
@@ -209,6 +224,7 @@ public final class MorphApplication extends Application implements Application.A
         if (current == null) return;
         current.voice.close();
         current.keyboard.close();
+        PasteNotices.stop(current.pastes);
         current.executor.shutdown();
         // A save under way still finishes (its document is the user's); nothing new starts.
         current.saves.shutdown();
