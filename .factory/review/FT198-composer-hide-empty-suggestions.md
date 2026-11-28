@@ -1,3 +1,7 @@
+---
+branch: factory/FT198-composer-hide-empty-suggestions
+round: 1
+---
 # Composer: hide the suggestion popup when there is nothing to suggest
 
 ## factory · 2026-11-28 14:59
@@ -80,3 +84,28 @@ Owner request, translated: when the matched commands, matched skills and similar
 
 ### Unverified
 No build, test, device or browser run in this intake. All behaviour above is from source. Native keyboard Return on Android/iOS with `submitBehavior` "submit" vs "newline" is inferred from nsh props and has not been observed. Screen-reader output for the hidden and shown popup has not been checked.
+
+
+## factory · plan · 2026-11-28 16:47
+
+### Behaviour
+Keep detecting command/skill trigger context even with zero matches. Show the shared suggestion popup only with candidates or intentional skill loading/error feedback. Use this predicate for rendering, popup tracking, keyboard bindings and Enter handling. Hidden results leave normal field/page behaviour untouched; new matching text or asynchronously arriving data restores results with a valid fresh selection. Retain existing dismissal, disabled, blur and IME semantics.
+
+### Scope
+Change the shared Console composer and focused regression tests (including page Escape integration). Do not alter matching/providers, request frequency, Todo skills wiring, translations, native runtimes or unrelated image-paste work.
+
+### Decisions
+Use one derived visibility predicate, not clearing context on zero matches. Reset selection when the candidate identity sequence changes so provider updates cannot select stale results. Preserve existing skill loading/error text, but when no candidates exist expose feedback without an empty listbox (e.g. status role); candidate lists retain listbox/options. The source instructions saying queue-only describe the prior intake; this scheduled build implements its explicit Requirement. Keep unused empty labels unless cleanup is necessary. No manual platform result may be inferred from automated tests.
+
+### Checking
+Add coverage for command paths and unmatched skills, desktop send versus shortcuts-off newline, normal key/history/edit Escape behaviour, page Escape precedence, shown/hidden transitions, caret movement, async provider changes and selection reset, loading/error feedback, single-category accessibility and disable/topic reset where fixtures permit. Run nsh check and the required parallel Console scripts/test.sh suite, plus configured gofmt/vet/go-test command. Report Web, desktop, Android, iOS and screen-reader manual checks separately as NOT TESTED unless actually observed.
+
+## factory · 2026-11-28 16:47
+
+Built commit `96aa4496`: hidden zero-match command/skill suggestions no longer intercept Enter, arrows, Tab or Escape. Skill loading/error feedback remains, without an empty listbox. Candidate selection resets when its context or candidate sequence changes. External draft changes close stale suggestions. Matching/provider requests and Todo skill wiring are unchanged.
+
+Checks: manager independently verified protected paths unchanged; configured gofmt + go vet ./... + go test ./... passed; nsh check passed; full Console scripts/test.sh passed (179 files, 0 failures). Coder added command/skill, keyboard/Enter, async/provider-selection, topic-switch, edit and side-panel regressions. No installs.
+
+Not checked: manual Web (Linux host), desktop (macOS/Windows/Linux), Android, iOS and screen-reader interaction: NOT TESTED; no browser/device/runtime session was opened. Native caret movement is not exercised by the headless runner; endpoint switching not tested (topic switching covered). Per-keystroke command requests and Todo missing skills feed remain out of scope.
+
+Coder reported two out-of-scope memory writes under its own Claude project memory (item note plus MEMORY.md); no machine paths committed. No newly observed /tmp entries. Initial branch push required command-local credential.useHttpPath=true; retry succeeded. Branch is ready for review, not shipped.
