@@ -43,9 +43,10 @@
 // key that arrives, not the software keyboard staying hidden.
 //
 // A pasted image the runtime could not read is the native part's to tell too (`morph.paste.refused`,
-// android/src/com/longbridge/nsh/InputBox.java, nsh 0.6.0's field patched): one larger than the
-// model takes is not read past 5 MiB, and one whose content URI cannot be read (an expired grant, a
-// failing provider) no longer goes by with a log line. Only the reason and how many are told.
+// android/src/com/longbridge/nsh/InputBox.java, nsh 0.6.0's field patched): an image larger than an
+// upload takes (128 MiB) is not read past that, nor a paste's images past 256 MiB together, and one
+// whose content URI cannot be read (an expired grant, a failing provider) no longer goes by with a
+// log line. Only the reason and how many are told.
 import { effect, host, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
 
 /** The saved address of the console server, `https://host[:port][/base]`. */

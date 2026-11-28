@@ -53,17 +53,21 @@ public final class PasteReadsTest {
         check(PasteReads.readAtMost(new ByteArrayInputStream(new byte[0]), 2).length == 0, "an empty stream is empty bytes");
 
         long max = PasteReads.MAX_IMAGE_BYTES;
-        check(max == 5L * 1024 * 1024, "the bound is the model's 5 MiB");
-        Counted exact = new Counted(max);
-        byte[] whole = PasteReads.readAtMost(exact, max);
-        check(whole != null && whole.length == max, "an image of exactly 5 MiB is read");
+        check(max == 134_217_728L, "the bound is the upload budget, 128 MiB");
+        check(PasteReads.MAX_BATCH_BYTES == 268_435_456L, "a paste's bound is 256 MiB");
+        // Exact bounds on a small scale (a 128 MiB array is not what this test should allocate).
+        long bound = 3L * 1024 * 1024 + 7;
+        Counted exact = new Counted(bound);
+        byte[] whole = PasteReads.readAtMost(exact, bound);
+        check(whole != null && whole.length == bound, "a stream of exactly the bound is read whole");
+        check(PasteReads.readAtMost(new Counted(bound + 1), bound) == null, "one byte past the bound is refused");
         Counted huge = new Counted(1L << 40);
-        check(PasteReads.readAtMost(huge, max) == null, "a terabyte stream is refused");
+        check(PasteReads.readAtMost(huge, max) == null, "a terabyte stream is refused at 128 MiB");
         check(huge.read <= max + 64 * 1024, "and no more than one chunk past the bound is read of it (read " + huge.read + ")");
 
         check(!PasteReads.tooLarge(-1), "an unknown declared size is read (within the bound)");
-        check(!PasteReads.tooLarge(max), "a declared 5 MiB is read");
-        check(PasteReads.tooLarge(max + 1), "a declared size past 5 MiB is not read at all");
+        check(!PasteReads.tooLarge(max), "a declared 128 MiB is read");
+        check(PasteReads.tooLarge(max + 1), "a declared size past 128 MiB is not read at all");
 
         List<String> heard = new ArrayList<>();
         PasteNotices.refused(PasteNotices.TOO_LARGE, 1);
@@ -72,11 +76,12 @@ public final class PasteReadsTest {
         PasteNotices.refused(PasteNotices.TOO_LARGE, 2);
         PasteNotices.refused(PasteNotices.UNREADABLE, 0);
         PasteNotices.refused(PasteNotices.UNREADABLE, 1);
+        PasteNotices.refused(PasteNotices.BATCH_TOO_LARGE, 2);
         PasteNotices.stop((reason, count) -> heard.add("other"));
         PasteNotices.refused(PasteNotices.UNREADABLE, 1);
         PasteNotices.stop(listener);
         PasteNotices.refused(PasteNotices.UNREADABLE, 1);
-        check(heard.toString().equals("[too_large:2, unreadable:1, unreadable:1]"), "the listener hears refusals while it listens, none of 0 (" + heard + ")");
+        check(heard.toString().equals("[too_large:2, unreadable:1, batch_too_large:2, unreadable:1]"), "the listener hears refusals while it listens, none of 0 (" + heard + ")");
 
         if (failures > 0) {
             System.out.println(failures + " checks failed");

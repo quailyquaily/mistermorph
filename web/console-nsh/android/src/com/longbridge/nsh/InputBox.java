@@ -2,7 +2,8 @@
 // 58f60c767691e27046aa6d77b3aa4be487e8838b2c5fa13941692d6cbca3c4a9; the same file in the crates.io
 // nsh-platform-android 0.6.0 package), Apache-2.0, Copyright Longbridge. Changed by Mister Morph for
 // pasted images (FT197): an image is read from its content URI only up to PasteReads.MAX_IMAGE_BYTES
-// (the size the provider declares is checked first), and one too large or unreadable (an expired
+// (128 MiB, the upload budget; the size the provider declares is checked first) and a paste's images
+// up to PasteReads.MAX_BATCH_BYTES (256 MiB) together, and one too large or unreadable (an expired
 // grant, a provider that fails) is told to the app (PasteNotices: `morph.paste.refused`) instead of
 // a log line alone; before Android 12 the edit menu's Paste of a clipboard with an image inserts its
 // text items alone, never an image's URI as text. scripts/android-host.sh builds it into the APK in
@@ -285,7 +286,8 @@ final class InputBox extends FrameLayout implements Node {
         java.util.ArrayList<byte[]> images = new java.util.ArrayList<>();
         java.util.ArrayList<String> uris = new java.util.ArrayList<>();
         android.content.ContentResolver resolver = getContext().getContentResolver();
-        int tooLarge = 0, unreadable = 0;
+        int tooLarge = 0, unreadable = 0, overBatch = 0;
+        long batch = 0;
         for (int i = 0; i < clip.getItemCount(); i++) {
             android.content.ClipData.Item item = clip.getItemAt(i);
             android.net.Uri uri = item.getUri();
@@ -306,16 +308,27 @@ final class InputBox extends FrameLayout implements Node {
                 continue;
             }
             if (type != null && type.startsWith("image/")) {
-                // The size the provider declares, when it does: a larger image is not read at all.
-                if (PasteReads.tooLarge(declaredSize(resolver, uri))) {
+                // The size the provider declares, when it does: a larger image is not read at all,
+                // nor one that would take the paste past its budget.
+                long declared = declaredSize(resolver, uri);
+                if (PasteReads.tooLarge(declared)) {
                     tooLarge++;
                     continue;
                 }
+                if (declared > 0 && batch + declared > PasteReads.MAX_BATCH_BYTES) {
+                    overBatch++;
+                    continue;
+                }
                 try (java.io.InputStream in = resolver.openInputStream(uri)) {
-                    byte[] bytes = in == null ? null : PasteReads.readAtMost(in, PasteReads.MAX_IMAGE_BYTES);
+                    long room = Math.min(PasteReads.MAX_IMAGE_BYTES, PasteReads.MAX_BATCH_BYTES - batch);
+                    byte[] bytes = in == null ? null : PasteReads.readAtMost(in, room);
                     if (in == null) unreadable++;
+                    else if (bytes == null && room < PasteReads.MAX_IMAGE_BYTES) overBatch++;
                     else if (bytes == null) tooLarge++;
-                    else images.add(bytes);
+                    else {
+                        images.add(bytes);
+                        batch += bytes.length;
+                    }
                 } catch (java.io.IOException | SecurityException | OutOfMemoryError e) {
                     // Never the URI or the bytes: what failed is all the log says.
                     android.util.Log.w("nsh", "a pasted image could not be read: " + e.getClass().getSimpleName());
@@ -328,6 +341,7 @@ final class InputBox extends FrameLayout implements Node {
         }
         mounter.paste(id, text.toString(), images.toArray(new byte[0][]), uris.toArray(new String[0]));
         PasteNotices.refused(PasteNotices.TOO_LARGE, tooLarge);
+        PasteNotices.refused(PasteNotices.BATCH_TOO_LARGE, overBatch);
         PasteNotices.refused(PasteNotices.UNREADABLE, unreadable);
         return true;
     }

@@ -10,6 +10,7 @@ public final class PasteNotices {
     private PasteNotices() {}
 
     public static final String TOO_LARGE = "too_large";
+    public static final String BATCH_TOO_LARGE = "batch_too_large";
     public static final String UNREADABLE = "unreadable";
 
     /** Hears how many images of a paste were refused, and why. */

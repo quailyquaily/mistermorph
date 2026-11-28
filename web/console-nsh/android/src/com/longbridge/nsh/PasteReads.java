@@ -6,15 +6,20 @@ import java.io.InputStream;
 
 /**
  * Reading a pasted image's bytes from its content URI within a bound (InputBox, patched for
- * FT197). nsh 0.6.0 read the whole stream, however large, into memory. The bound is the most the
- * console's agent shows the model of one image (5 MiB, web/console-nsh/components/chat/imagePaste.ts
- * MODEL_IMAGE_MAX_BYTES): the app refuses anything larger, so more is never read.
+ * FT197). nsh 0.6.0 read the whole stream, however large, into memory. The bounds are the
+ * console's: an upload takes at most 128 MiB a file (internal/daemonruntime upload_limits.go) and
+ * a paste at most 256 MiB of images (web/console-nsh/components/chat/uploads.ts), so more is never
+ * read. They bound what is read, not what the device can spare: a large image still takes its
+ * size in memory, and a failed allocation is told as unreadable.
  */
 public final class PasteReads {
     private PasteReads() {}
 
     /** The most bytes of one pasted image read. */
-    public static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
+    public static final long MAX_IMAGE_BYTES = 128L * 1024 * 1024;
+
+    /** The most bytes of one paste's images read together. */
+    public static final long MAX_BATCH_BYTES = 256L * 1024 * 1024;
 
     /** Whether a size a provider declares is over the bound (-1, unknown, is not). */
     public static boolean tooLarge(long declared) {
