@@ -15,6 +15,7 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
+import { pushNotice } from "../../lib/core/notices.js";
 import { useScrollMemory } from "../../lib/scrollMemory";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
 import { BarRoom, glassBarClass, glassBarStyle, underBar } from "../frame/glassBar";
@@ -261,6 +262,8 @@ export function TodoIndex(props: {
                 // A job is written in words alone: no workspace or file to add, so no add button.
                 attachDisabled
                 attachHidden
+                // A pasted image is not taken: the paste's text still goes in, and this says why.
+                onPasteImages={() => pushNotice({ type: "warning", text: t("todo_compose_paste_images") })}
                 onSubmit={() => void state.composeJob()}
                 // A desktop: the other way to make a job, an empty form, is the toolbar's last
                 // button, a primary circle the size of Send (a phone has the floating Add).

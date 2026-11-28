@@ -41,6 +41,11 @@
 // APK without the native part, the iOS app, an answer that is not understood or a call that fails
 // all leave it "unknown", which is never "connected". Nothing else is taken for a keyboard: not a
 // key that arrives, not the software keyboard staying hidden.
+//
+// A pasted image the runtime could not read is the native part's to tell too (`morph.paste.refused`,
+// android/src/com/longbridge/nsh/InputBox.java, nsh 0.6.0's field patched): one larger than the
+// model takes is not read past 5 MiB, and one whose content URI cannot be read (an expired grant, a
+// failing provider) no longer goes by with a log line. Only the reason and how many are told.
 import { effect, host, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
 
 /** The saved address of the console server, `https://host[:port][/base]`. */
@@ -365,6 +370,9 @@ async function bootData() {
     // A pressed notification brought the app back: the console takes its topic.
     host.on("morph.notify.opened", (data: unknown) => emit("morph.notify.opened", data));
   }
+  // Pasted images the native part's runtime could not read (android/src/.../InputBox.java). An
+  // APK without the native part, or the iOS app, never sends it.
+  host.on("morph.paste.refused", (data: unknown) => emit("morph.paste.refused", data));
   if (nativeVoice) {
     // The native part ended a recording by itself: the app left the foreground, or the recorder failed.
     host.on("morph.voice.ended", (data: unknown) => {

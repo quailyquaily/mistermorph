@@ -117,7 +117,8 @@ function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (h
         files: t("chat_composer_upload_file"),
         filesHint: t("chat_composer_upload_file_hint"),
       }}
-      onAttachFiles={(files) => void c.uploadComposerFileList(files)}
+      // Pasted images (components/chat/imagePaste.ts): checked, then attached as picked files are.
+      onPasteImages={(files) => void c.pasteOnComposer(files)}
       // Drops from the file manager, on the desktop app only (components/chat/fileDrop.ts).
       onDropFiles={c.composerFileDropEnabled ? (uris) => void c.dropOnComposer(uris) : undefined}
       dropLabel={t("chat_composer_drop_hint")}

@@ -93,7 +93,7 @@ function ComposerDemo(props: { mode: "default" | "files" | "sending" | "disabled
       onAttach={() => act("ChatComposer", "attach")}
       onUpload={() => act("ChatComposer", "upload")}
       onUploadFrom={(source) => act("ChatComposer upload from", source)}
-      onAttachFiles={(picked) => act("ChatComposer files", picked.length)}
+      onPasteImages={(picked) => act("ChatComposer pasted images", picked.length)}
       onRetryFile={(item) => act("ChatComposer retry", item.name)}
       onVoice={() => act("ChatComposer", "voice")}
       onVoiceCancel={() => act("ChatComposer", "voice cancel")}

@@ -49,6 +49,7 @@ import { AttachSourceSheet, type AttachSource, type AttachSourceLabels } from ".
 import { draftFilePillClass, fileIcon } from "./filePill";
 import { draftFilePreviewable } from "./filePreview";
 import { droppedURIs } from "./fileDrop";
+import { pastedImageCandidates } from "./imagePaste";
 
 // Around the 38-point mic, for a 44-point touch target.
 /** The gap between the composer's edge and a list beyond it (the profile picker's, the add menu's). */
@@ -155,7 +156,12 @@ export interface ChatComposerProps {
    */
   onUploadFrom?: (source: AttachSource) => void;
   uploadSourceLabels?: AttachSourceLabels;
-  onAttachFiles?: (files: File[]) => void;
+  /**
+   * Images were pasted into the field (imagePaste.ts `pastedImageCandidates`: files of an image
+   * type or of none, in the paste's order), whatever the composer can take now: the handler checks
+   * them and says why it takes none. The paste's text goes into the field as before.
+   */
+  onPasteImages?: (files: File[]) => void;
   /**
    * Files or directories dragged in from the system's file manager were dropped on the composer
    * (fileDrop.ts): their `file:` URLs, in the order of the drop. Set only where the host can read
@@ -188,18 +194,6 @@ type TokenName = Parameters<typeof token>[0];
 
 function sameContext(a: any, b: any) {
   return a?.type === b?.type && a?.query === b?.query && a?.start === b?.start && a?.end === b?.end;
-}
-
-/** Images pasted without a name get one, as the Vue console's clipboardImageFiles did. */
-function namedImages(files: File[]) {
-  return files
-    .filter((file) => String(file?.type || "").startsWith("image/"))
-    .map((file, index) => {
-      if (file.name) return file;
-      const subtype = file.type.slice("image/".length).split("+")[0];
-      const extension = subtype === "jpeg" ? "jpg" : subtype.replace(/[^a-z0-9]/gi, "");
-      return new File([file], `clipboard-image-${index + 1}.${extension || "img"}`, { type: file.type });
-    });
 }
 
 /**
@@ -1165,9 +1159,8 @@ export function ChatComposer(props: ChatComposerProps) {
               }}
               onSubmit={onSubmitKey}
               onPaste={(event) => {
-                if (props.disabled || props.attachDisabled) return;
-                const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
-                if (files.length) props.onAttachFiles?.(files);
+                const files = pastedImageCandidates(event);
+                if (files.length) props.onPasteImages?.(files);
               }}
               class={COMPOSER_INPUT_CLASS}
               style={fieldBox()}

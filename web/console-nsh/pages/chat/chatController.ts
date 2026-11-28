@@ -111,6 +111,7 @@ import {
   hasFocus,
   isVisible,
   localStore,
+  onPasteRefused,
   onVisibilityChange,
   pickFiles,
   releaseFile,
@@ -119,6 +120,7 @@ import {
   type PickSource,
 } from "../../lib/platform";
 import { createComposerDrop, fileDropAvailable, localDirectoryUsable } from "../../components/chat/fileDrop";
+import { createComposerPaste, draftImageLimitMessage, isModelImageName } from "../../components/chat/imagePaste";
 import { currentRoute, locationOf, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { shortcutsEligible } from "../../lib/shortcutPolicy";
@@ -1580,6 +1582,9 @@ export function createChatController() {
       path: "",
       error: "",
       sourceFile: file,
+      // Its size as the device knows it, then as the agent saved it: the send checks images against
+      // the model's limit (draftImageLimitMessage).
+      sizeBytes: Number((file as { size?: number })?.size) || 0,
       // The chosen, not yet sent workspace this upload goes into (removePendingWorkspace).
       pendingWorkspaceDir: String(untracked(pendingWorkspaceDir) || "").trim(),
     }));
@@ -1623,6 +1628,7 @@ export function createChatController() {
                     dirName,
                     path,
                     error: "",
+                    sizeBytes: Number(uploaded?.size_bytes) > 0 ? Number(uploaded.size_bytes) : item.sizeBytes,
                     sourceFile: localImageSource(item) ? item.sourceFile : undefined,
                   }
                 : item,
@@ -1671,6 +1677,12 @@ export function createChatController() {
 
   const composerFileDropEnabled = fileDropAvailable();
 
+  /**
+   * Names the draft on screen now, for drops and pastes answered later: another conversation or
+   * agent, a sent draft or a page left give another name.
+   */
+  const composerDraftName = () => `${viewActive ? "" : "gone:"}${composerDropGeneration}:${composerFileDraftKey(untracked(composerDraftScope))}`;
+
   /** Why the composer takes nothing now, or "": what closes its add button closes drops too. */
   function composerDropBlockedMessage(): string {
     if (untracked(messageEdit)) return t("chat_composer_drop_editing");
@@ -1700,7 +1712,7 @@ export function createChatController() {
   const composerDrop = createComposerDrop({
     resolve: resolveDroppedFiles,
     release: releaseFile,
-    draft: () => `${viewActive ? "" : "gone:"}${composerDropGeneration}:${composerFileDraftKey(untracked(composerDraftScope))}`,
+    draft: composerDraftName,
     blocked: composerDropBlockedMessage,
     workspaceRefusal: droppedWorkspaceRefusal,
     takeWorkspace: (dir) => {
@@ -1718,6 +1730,43 @@ export function createChatController() {
   async function dropOnComposer(uris: string[]) {
     if (composerFileDropEnabled) await composerDrop(uris);
   }
+
+  /* ---------- images pasted into the field (components/chat/imagePaste.ts) ---------- */
+
+  /** Why the composer takes no pasted image now, or "": the add button's rule, said for a paste. */
+  function composerPasteBlockedMessage(): string {
+    if (untracked(messageEdit)) return t("chat_composer_paste_editing");
+    if (untracked(sending)) return t("chat_composer_paste_busy");
+    return untracked(submitBlockedMessage) || (String(untracked(submitEndpointRef) || "").trim() ? "" : t("msg_select_endpoint"));
+  }
+
+  /**
+   * Images pasted into the composer: checked by their bytes and the model's limits, then attached
+   * in the order of the pastes through the upload every picked file takes. A paste the composer
+   * cannot take now, or an image it refuses, says why; the draft's text and files stay as they are.
+   */
+  const composerPaste = createComposerPaste({
+    draft: composerDraftName,
+    blocked: composerPasteBlockedMessage,
+    imageCount: () => untracked(composerFiles).filter((item) => isModelImageName(item.name)).length,
+    takeFiles: (files) => void uploadComposerFileList(files),
+    refuse: (text, type) => pushNotice({ type, text }),
+    text: (key, values) => t(key, values),
+  });
+
+  function pasteOnComposer(files: File[]) {
+    return composerPaste(files);
+  }
+
+  // Images the phone app's runtime could not read, in a paste into a field (lib/platform's
+  // onPasteRefused): said while the composer has the focus, as the paste was made there.
+  cleanup(
+    onPasteRefused(({ reason, count }) => {
+      if (!composer?.focused()) return;
+      const key = reason === "too_large" ? "chat_composer_paste_native_too_large" : "chat_composer_paste_unreadable";
+      pushNotice({ type: "error", text: t(key, { count: String(count) }) });
+    }),
+  );
 
   function retryComposerFile(item: ComposerFileItem) {
     if (item?.sourceFile) void uploadComposerFileList([item.sourceFile as PickedFile | File], item.id);
@@ -3466,6 +3515,12 @@ export function createChatController() {
     const draftText = direct ? String(options.text) : String(untracked(taskInput) || "");
     const task = draftText.trim();
     if (!task || untracked(sending) || (!direct && untracked(composerFilesPending))) return false;
+    // Images the model cannot take would fail the task (or not be shown): the draft stays to fix.
+    const imageLimit = direct || untracked(messageEdit) ? "" : draftImageLimitMessage(untracked(composerFiles), (key, values) => t(key, values));
+    if (imageLimit) {
+      err.set(imageLimit);
+      return false;
+    }
     const submittedScope = untracked(composerDraftScope);
     const usesTopics = untracked(consoleTopicsEnabled);
     let accepted = false;
@@ -4261,6 +4316,7 @@ export function createChatController() {
     uploadComposerFileList,
     composerFileDropEnabled,
     dropOnComposer,
+    pasteOnComposer,
     pendingWorkspaceDisplay,
     removePendingWorkspace,
     retryComposerFile,
