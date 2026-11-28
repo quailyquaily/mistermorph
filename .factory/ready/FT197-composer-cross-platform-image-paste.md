@@ -146,3 +146,14 @@ Tests: manager independently reran gofmt/vet/full Go gate on final head: PASS. C
 Remaining coverage/limitations: ALL real OS paste/menu/device/consent paths, actual deployment/ingress/provider API calls, packaged mobile runtime equivalence and APK/IPA packaging remain NOT TESTED. Native Web/desktop/iOS pre-JS full-image allocation remains outside application admission bounds. Known lower provider request budgets are documented but not dynamically enforced because provider identity is unavailable in this Console path; review must assess this gap. No claim of universal provider acceptance or real device acceptance. No deployment or ship performed.
 
 Installs unchanged: all task-only and removed at end; no new persistent installations. Outside-dir writes in amendment round: lock heartbeat and JVM performance files only, per coder; unrequested first-round personal memory note remains and was not deleted. Review should inspect scope, native resource handling, cache preflight, provider-budget gap and transport boundary/error tests.
+
+## factory · review · 2026-11-28 16:15
+head: ec3e3cd54d1dce52fc948225b9e1e26bcfd7d266
+verdict: pass
+notes:
+- Claude Code reviewed all 57 changed files against origin/master (merge base 31a944fb); no verified P0/P1/P2/P3 findings. Branch merges cleanly with current base. No tracked code edits or commits during review.
+- Required gofmt/vet/full Go gate passed (173 packages); nsh check passed; Console scripts/test.sh passed (180 files, zero failures after the required solo retry, plus Chrome paste harness). chat-topic-drag failed in parallel and passed solo. Desktop cargo test --locked passed (102 unit + 1 feature + 5 paste tests; 5 ignored), using temporary library metadata shims.
+- Android JVM/native compilation was NOT rerun in review (no JDK); build reports those checks passed. APK/IPA packaging, real OS/browser clipboard/menu/keyboard/consent/device paths, mobile packaged-runtime equivalence, device-memory safety at maximum sizes, actual deployment ingress and live provider calls remain NOT TESTED. Headless/browser injection does not establish OS acceptance.
+- Lower provider-specific encoded/request budgets remain unenforced and can still reject otherwise eligible images. Reviewer traced this to unchanged backend 5 MiB/three-image limits, not an introduced regression; documentation discloses the gap. Review pass is not universal provider/device acceptance.
+- No installs. Test artifacts were limited to ignored worktree outputs, task temporary files and authorized lock heartbeat; Claude runtime session artifacts are maintained by the harness. No new top-level /tmp entries detected.
+- Moved review/ → ready/; not merged, tagged, deployed or shipped.
