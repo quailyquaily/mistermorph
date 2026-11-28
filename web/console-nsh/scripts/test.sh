@@ -15,6 +15,8 @@ logs=$(mktemp -d)
 all=0
 [ $# -gt 0 ] || { all=1; set -- tests/*.test.tsx; }
 started=$(date +%s)
+# Fixtures too large to commit (a 19 MiB pasted image): written once, kept for the next run.
+node scripts/make-paste-fixtures.mjs
 printf '%s\n' "$@" | LOGS="$logs" xargs -P "$jobs" -I {} sh -c '
   log="$LOGS/$(basename "$1").log"
   if nsh test --web-host tests/noHost.js "$1" >"$log" 2>&1; then

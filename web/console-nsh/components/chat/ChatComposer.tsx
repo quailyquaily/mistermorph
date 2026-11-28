@@ -1024,9 +1024,16 @@ export function ChatComposer(props: ChatComposerProps) {
                           {item().status === "uploading" ? fileLabels().uploading : item().error || fileLabels().failed}
                         </Text>
                       </If>
+                      {/* Stored, but not what the model is shown (an image over its size). */}
+                      <If when={item().status === "ready" && item().note}>
+                        <Text class="max-w-60 text-xs text-warn-dark line-clamp-2" testID="chat-composer-file-note">
+                          {String(item().note)}
+                        </Text>
+                      </If>
                     </View>
                   </TipButton>
-                  <If when={item().status === "failed" && item().sourceFile}>
+                  {/* No Retry for a refusal the same bytes would meet again (a size over a limit). */}
+                  <If when={item().status === "failed" && item().sourceFile && item().retryable !== false}>
                     <Button
                       variant="plain"
                       size="xxs"

@@ -18,9 +18,19 @@ import {
   imageIntact,
   isModelImageName,
   MODEL_IMAGE_MAX_BYTES,
+  modelImageNote,
   pastedImageCandidates,
   sniffImage,
 } from "../components/chat/imagePaste";
+import {
+  createUploadGate,
+  formatLimit,
+  missingReferenceIndexes,
+  PASTE_BATCH_MAX_BYTES,
+  UPLOAD_MAX_FILE_BYTES,
+  UPLOAD_MAX_REQUEST_BYTES,
+  uploadFailure,
+} from "../components/chat/uploads";
 import { openConsole, type ApiRequest } from "./harness";
 
 const FIXTURES = "tests/fixtures/paste";
@@ -115,16 +125,86 @@ test("accepted images keep the paste's order and are named and typed after their
   expect((await checkPastedImages([right])).accepted[0]).toBe(right);
 });
 
-test("an image of exactly 5 MiB is taken, one byte more is not; three images a message at most, counting the draft's", async () => {
-  const atLimit = await checkPastedImages([png("max.png", MODEL_IMAGE_MAX_BYTES), png("over.png", MODEL_IMAGE_MAX_BYTES + 1)]);
-  expect(atLimit.accepted.map((file) => file.name)).toEqual(["max.png"]);
-  expect(atLimit.refused).toEqual([{ name: "over.png", reason: "too_large" }]);
-  const counted = await checkPastedImages([png("a.png"), png("b.png"), png("c.png")], { existingImages: 1 });
-  expect(counted.accepted.map((file) => file.name)).toEqual(["a.png", "b.png"]);
-  expect(counted.refused).toEqual([{ name: "c.png", reason: "too_many" }]);
-  // A refused image takes no place: the next one still fits.
-  const skipping = await checkPastedImages([png("big.png", MODEL_IMAGE_MAX_BYTES + 1), png("small.png")], { existingImages: 2 });
-  expect(skipping.accepted.map((file) => file.name)).toEqual(["small.png"]);
+/**
+ * A PNG-shaped file that says it holds `size` bytes without holding them (a size stub): its first
+ * and last bytes are a PNG's, which is all the check reads.
+ */
+function pngOfSize(name: string, size: number): File {
+  const head = new Uint8Array(64);
+  head.set(PNG_HEAD, 0);
+  const tail = new Uint8Array(64);
+  tail.set(PNG_END, 64 - PNG_END.length);
+  return {
+    name,
+    size,
+    type: "image/png",
+    slice: (start = 0, end = size) => new Blob([start === 0 ? head.slice(0, end - start) : tail.slice(64 - (end - start))]),
+  } as unknown as File;
+}
+
+test("a pasted file of exactly 128 MiB is taken and one byte more is not, before any upload; the model's 5 MiB is no paste limit", async () => {
+  expect(UPLOAD_MAX_FILE_BYTES).toBe(134_217_728);
+  const checked = await checkPastedImages([pngOfSize("max.png", 134_217_728), pngOfSize("over.png", 134_217_729), png("model-max.png", MODEL_IMAGE_MAX_BYTES + 1)]);
+  expect(checked.accepted.map((file) => `${file.name}|${file.size}`)).toEqual(["max.png|134217728", `model-max.png|${MODEL_IMAGE_MAX_BYTES + 1}`]);
+  expect(checked.refused).toEqual([{ name: "over.png", reason: "too_large" }]);
+});
+
+test("a paste attaches up to 256 MiB of images in all, in its order: exactly 256 MiB is taken, one byte more refuses the file that passes it", async () => {
+  expect(PASTE_BATCH_MAX_BYTES).toBe(268_435_456);
+  const half = 134_217_728;
+  const exact = await checkPastedImages([pngOfSize("a.png", half), pngOfSize("b.png", half)]);
+  expect(exact.accepted.map((file) => file.name)).toEqual(["a.png", "b.png"]);
+  expect(exact.refused).toEqual([]);
+  const over = await checkPastedImages([pngOfSize("a.png", half), pngOfSize("b.png", half - 100), pngOfSize("c.png", 101), pngOfSize("d.png", 100)]);
+  // c takes the paste one byte past its budget: refused, and named; d, which still fits, is taken.
+  expect(over.accepted.map((file) => file.name)).toEqual(["a.png", "b.png", "d.png"]);
+  expect(over.refused).toEqual([{ name: "c.png", reason: "batch_too_large" }]);
+  // Many images: no count limit at the paste (the send checks the model's three).
+  const many = await checkPastedImages([png("1.png"), png("2.png"), png("3.png"), png("4.png"), png("5.png")]);
+  expect(many.accepted.length).toBe(5);
+});
+
+test("uploads of a composer run two at a time in their order, and a refusal over a size is never retried", async () => {
+  const gate = createUploadGate();
+  const started: string[] = [];
+  const releases: Record<string, () => void> = {};
+  const job = (name: string) => () =>
+    new Promise<string>((resolve) => {
+      started.push(name);
+      releases[name] = () => resolve(name);
+    });
+  const done = ["a", "b", "c", "d"].map((name) => gate.run(job(name)));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(started).toEqual(["a", "b"]);
+  expect(gate.state()).toEqual({ running: 2, waiting: 2 });
+  releases.b();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(started).toEqual(["a", "b", "c"]);
+  releases.a();
+  releases.c();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  releases.d();
+  expect(await Promise.all(done)).toEqual(["a", "b", "c", "d"]);
+  expect(gate.state()).toEqual({ running: 0, waiting: 0 });
+
+  const words = (key: string, values?: Record<string, string>) => `${key}${values ? JSON.stringify(values) : ""}`;
+  const fail = (status: number, message: string, code?: string) => uploadFailure(Object.assign(new Error(message), { status, code }), words, "upload failed");
+  expect(fail(413, "file \"x\" exceeds 128 MiB (134217728 bytes)", "upload_file_too_large")).toEqual({
+    message: 'chat_composer_upload_file_refused{"limit":"128 MiB (134,217,728 bytes)"}',
+    retryable: false,
+  });
+  expect(fail(413, "upload request exceeds 129 MiB (135266304 bytes)", "upload_request_too_large").retryable).toBe(false);
+  // An ingress page, or no words at all: who refused, and that no limit was given.
+  expect(fail(413, "<html><body>413 Request Entity Too Large</body></html>")).toEqual({ message: "chat_composer_upload_refused_size_unknown", retryable: false });
+  expect(fail(413, "HTTP 413").message).toBe("chat_composer_upload_refused_size_unknown");
+  // An agent from before FT197 says its own limit, which is shown as it said it.
+  expect(fail(413, "upload exceeds 64 MiB")).toEqual({ message: 'chat_composer_upload_refused_size{"message":"upload exceeds 64 MiB"}', retryable: false });
+  expect(fail(503, "the console is receiving other uploads", "upload_busy")).toEqual({ message: "chat_composer_upload_busy", retryable: true });
+  expect(fail(504, "the agent did not take the upload in time")).toEqual({ message: "chat_composer_upload_timeout", retryable: true });
+  expect(fail(0, "network down").retryable).toBe(true);
+  expect(formatLimit(UPLOAD_MAX_REQUEST_BYTES)).toBe("129 MiB (135,266,304 bytes)");
+  expect(missingReferenceIndexes(Object.assign(new Error("file_references[1]: file does not exist"), { status: 400 }))).toEqual([1]);
+  expect(missingReferenceIndexes(Object.assign(new Error("file_references[1]: file does not exist"), { status: 500 }))).toEqual([]);
 });
 
 test("a file whose bytes cannot be read is refused as unreadable, the others are still taken", async () => {
@@ -155,7 +235,6 @@ function pasteHost(overrides: Partial<Parameters<typeof createComposerPaste>[0]>
   const host = {
     draft: () => draft,
     blocked: () => blocked,
-    imageCount: () => taken.flat().length,
     takeFiles: (files: File[]) => void taken.push(files.map((file) => file.name)),
     refuse: (text: string, type: string) => void refused.push({ text, type }),
     text: (key: string, values: Record<string, string>) => `${key}(${values.names})`,
@@ -182,9 +261,9 @@ test("pastes are attached in the order they were made, though a later one's byte
   expect(await firstDone).toBe("taken");
   expect(await secondDone).toBe("taken");
   expect(host.taken).toEqual([["first.png"], ["second.png", "third.png"]]);
-  // A fourth image is past the three.
-  expect(await host.paste([png("fourth.png")])).toBe("refused");
-  expect(host.refused).toEqual([{ text: "chat_composer_paste_too_many(fourth.png)", type: "error" }]);
+  // A fourth image is attached too: the model's three are the send's to check.
+  expect(await host.paste([png("fourth.png")])).toBe("taken");
+  expect(host.refused).toEqual([]);
 });
 
 test("a paste for a draft no longer on screen is dropped; one the composer cannot take says why and takes nothing", async () => {
@@ -216,11 +295,17 @@ test("a paste for a draft no longer on screen is dropped; one the composer canno
 });
 
 test("a draft is not sent with an image over 5 MiB or with more than three images", () => {
-  const text = (key: string, values: Record<string, string>) => `${key}:${JSON.stringify(values)}`;
+  const text = (key: string, values?: Record<string, string>) => `${key}:${JSON.stringify(values)}`;
   const item = (name: string, sizeBytes = 100) => ({ name, status: "ready", sizeBytes });
   expect(draftImageLimitMessage([item("a.png"), item("b.jpg"), item("c.webp"), item("notes.txt", 99e6)], text)).toBe("");
   expect(draftImageLimitMessage([item("a.png", MODEL_IMAGE_MAX_BYTES)], text)).toBe("");
-  expect(draftImageLimitMessage([item("a.png", MODEL_IMAGE_MAX_BYTES + 1)], text)).toBe('chat_composer_images_too_large:{"names":"a.png"}');
+  expect(draftImageLimitMessage([item("a.png", MODEL_IMAGE_MAX_BYTES + 1)], text)).toBe(
+    'chat_composer_images_too_large:{"names":"a.png","limit":"5 MiB (5,242,880 bytes)"}',
+  );
+  // The pill of a large original says it is stored, not shown to the model.
+  expect(modelImageNote("a.png", MODEL_IMAGE_MAX_BYTES + 1, text)).toBe('chat_composer_file_model_too_large:{"limit":"5 MiB (5,242,880 bytes)"}');
+  expect(modelImageNote("a.png", MODEL_IMAGE_MAX_BYTES, text)).toBe("");
+  expect(modelImageNote("a.zip", 1e9, text)).toBe("");
   expect(draftImageLimitMessage([item("a.png"), item("b.png"), item("c.png"), item("d.png")], text)).toBe(
     'chat_composer_images_too_many:{"count":"4","max":"3","extra":"1"}',
   );
@@ -234,6 +319,8 @@ interface Upload {
   name: string;
   type: string;
   fields: string;
+  /** When the request came (ms). */
+  at: number;
 }
 
 /** The parts of a multipart upload: the file's name and type, the form's other fields. */
@@ -243,12 +330,13 @@ function uploadOf(request: ApiRequest): Upload {
     name: /filename="([^"]+)"/.exec(body)?.[1] ?? "",
     type: /filename="[^"]+"\r?\nContent-Type: ([^\r\n]+)/i.exec(body)?.[1] ?? "",
     fields: [...body.matchAll(/name="([a-z_]+)"\r?\n\r?\n([^\r\n]*)/g)].map((m) => `${m[1]}=${m[2]}`).join("&"),
+    at: Date.now(),
   };
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function openChat(options: { location?: string; delay?: (upload: Upload) => number; fail?: (upload: Upload, attempt: number) => { status: number; body: unknown } | null; extraApi?: Record<string, any>; host?: Record<string, unknown> } = {}) {
+async function openChat(options: { location?: string; delay?: (upload: Upload) => number; fail?: (upload: Upload, attempt: number) => { status: number; body: unknown; headers?: Record<string, string> } | null; extraApi?: Record<string, any>; host?: Record<string, unknown> } = {}) {
   const uploads: Upload[] = [];
   const posts: any[] = [];
   let created = false;
@@ -297,7 +385,7 @@ test("an image pasted into an empty draft becomes a pending attachment, uploaded
   await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/red.png`] });
   await app.waitFor("label:Preview file: red.png");
   await app.waitUntil(() => uploads.length === 1);
-  expect(uploads[0]).toEqual({ name: "red.png", type: "image/png", fields: "topic_id=topic-1" });
+  expect({ ...uploads[0], at: 0 }).toEqual({ name: "red.png", type: "image/png", fields: "topic_id=topic-1", at: 0 });
   const upload = calls.find((call) => call.uri === "/files/upload");
   expect(upload?.endpoint).toBe("ep_console_local");
   expect(upload?.headers?.authorization ?? upload?.headers?.Authorization).toBe("Bearer token-1");
@@ -383,7 +471,7 @@ test("a pasted image whose upload fails can be retried with the same bytes; refu
   expect(posts).toEqual([]);
 });
 
-test("a fourth image is refused at the paste, and a draft holding an image over 5 MiB is not sent", async () => {
+test("a fourth image and a large original are attached, but the send says why the model cannot take them and keeps the draft", async () => {
   const big = { id: "p1", name: "huge.png", size: MODEL_IMAGE_MAX_BYTES + 1, type: "image/png", preview: "" };
   const { app, uploads, posts } = await openChat({
     host: {
@@ -392,31 +480,135 @@ test("a fourth image is refused at the paste, and a draft holding an image over 
       "morph.file.release": null,
     },
   });
-  await app.type("id:chat-composer-input", "three of them");
+  await app.type("id:chat-composer-input", "four of them");
   await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/red.png`, `${FIXTURES}/green.jpg`] });
   await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/blue.webp`, `${FIXTURES}/mislabelled.png`] });
-  await app.waitFor("text:/^Not added: mislabelled\\.png\\. A message shows the model at most 3 images/");
-  await app.waitUntil(() => uploads.length === 3);
-  expect(uploads.map((upload) => upload.name)).toEqual(["red.png", "green.jpg", "blue.webp"]);
-  await dismissNotices(app);
-  await app.press("role:button[Remove from task: green.jpg]");
-  // A picked image over the model's limit (its size from the device, then the agent's answer).
-  await app.press("id:chat-composer-add");
-  await app.press("Upload Files");
-  await app.waitFor("label:Preview file: huge.png");
+  await app.waitUntil(() => uploads.length === 4);
+  expect(uploads.map((upload) => upload.name)).toEqual(["red.png", "green.jpg", "blue.webp", "mislabelled.jpg"]);
   await app.waitUntil(() => app.enabled("id:chat-composer-send"));
   await app.press("id:chat-composer-send");
-  await app.waitFor("text:/^Not sent: huge\\.png is larger than 5 MB/");
+  await app.waitFor("Not sent: the message has 4 images, and the model takes at most 3. Remove 1 to send.");
   await dismissNotices(app);
   await sleep(200);
   expect(posts).toEqual([]);
-  expect(app.value("id:chat-composer-input")).toBe("three of them");
+  await app.press("role:button[Remove from task: green.jpg]");
+  // A picked image over the model's limit is uploaded, and its pill says the model cannot see it.
+  await app.press("id:chat-composer-add");
+  await app.press("Upload Files");
+  await app.waitFor("label:Preview file: huge.png");
+  await app.waitFor("text:/^Uploaded\\. Over 5 MiB \\(5,242,880 bytes\\): the model cannot be shown it/");
+  await app.waitUntil(() => app.enabled("id:chat-composer-send"));
+  await app.press("id:chat-composer-send");
+  await app.waitFor("text:/^Not sent: huge\\.png is uploaded, but larger than 5 MiB \\(5,242,880 bytes\\)/");
+  await dismissNotices(app);
+  await sleep(200);
+  expect(posts).toEqual([]);
+  expect(app.value("id:chat-composer-input")).toBe("four of them");
   // Removed, the draft goes.
   await app.press("role:button[Remove from task: huge.png]");
   await app.waitFor("label:Preview file: huge.png", { state: "gone" });
   await app.press("id:chat-composer-send");
   await app.waitUntil(() => posts.length === 1);
-  expect(posts[0].file_references.map((reference: any) => reference.path)).toEqual(["red.png", "blue.webp"]);
+  expect(posts[0].file_references.map((reference: any) => reference.path)).toEqual(["red.png", "blue.webp", "mislabelled.jpg"]);
+});
+
+test("a picked file over 128 MiB is refused on the device with no upload and no Retry; one of exactly 128 MiB is uploaded", async () => {
+  const picks = [
+    [{ id: "p1", name: "too-big.mov", size: 134_217_729, type: "video/quicktime", preview: "" }],
+    [{ id: "p2", name: "max.mov", size: 134_217_728, type: "video/quicktime", preview: "" }],
+  ];
+  const hostUploads: string[] = [];
+  const { app } = await openChat({
+    host: {
+      "morph.file.pick": () => picks.shift() ?? [],
+      "morph.file.upload": (data: any) => {
+        hostUploads.push(data.id);
+        return { ok: true, status: 200, statusText: "OK", body: JSON.stringify({ files: [{ name: "max.mov", dir_name: "workspace_dir", path: "max.mov", size_bytes: 134_217_728 }] }) };
+      },
+      "morph.file.release": null,
+    },
+  });
+  await app.type("id:chat-composer-input", "two videos");
+  await app.press("id:chat-composer-add");
+  await app.press("Upload Files");
+  await app.waitFor("Not uploaded: larger than 128 MiB (134,217,728 bytes), the most one upload takes.");
+  expect(app.count("role:button[Retry upload]")).toBe(0);
+  await app.press("id:chat-composer-add");
+  await app.press("Upload Files");
+  await app.waitUntil(() => hostUploads.length === 1);
+  expect(hostUploads).toEqual(["p2"]);
+  expect(app.value("id:chat-composer-input")).toBe("two videos");
+});
+
+test("an agent's or a proxy's refusal over a size says which limit and offers no Retry; a busy console may be retried", async () => {
+  const { app, uploads } = await openChat({
+    fail: (upload, attempt) => {
+      if (upload.name === "red.png") return { status: 413, body: { error: 'file "red.png" exceeds 128 MiB (134217728 bytes)', code: "upload_file_too_large", limit_bytes: 134217728 } };
+      if (upload.name === "green.jpg") return { status: 413, headers: { "content-type": "text/html" }, body: "<html><body><h1>413 Request Entity Too Large</h1></body></html>" } as any;
+      if (upload.name === "blue.webp" && attempt === 1) return { status: 503, headers: { "Retry-After": "5" }, body: { error: "the console is receiving other uploads; try again in a few seconds", code: "upload_busy" } } as any;
+      return null;
+    },
+  });
+  await app.type("id:chat-composer-input", "keep");
+  await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/red.png`, `${FIXTURES}/green.jpg`, `${FIXTURES}/blue.webp`] });
+  await app.waitFor("The agent refused the file: it takes at most 128 MiB (134,217,728 bytes) per file.");
+  await app.waitFor("text:/^The server, or a proxy in front of it, refused the upload as too large \\(HTTP 413\\) and gave no limit/");
+  await app.waitFor("text:/^The console is receiving other uploads\\./");
+  // Only the busy one has Retry.
+  expect(app.count("role:button[Retry upload]")).toBe(1);
+  await app.press("role:button[Retry upload]");
+  await app.waitUntil(() => uploads.filter((upload) => upload.name === "blue.webp").length === 2);
+  await app.waitUntil(() => app.count("role:button[Retry upload]") === 0);
+  expect(app.value("id:chat-composer-input")).toBe("keep");
+});
+
+test("at most two of a composer's uploads run at once, the next starts as one ends, in the order of the pastes", async () => {
+  const { app, uploads, posts } = await openChat({ delay: () => 700 });
+  await app.type("id:chat-composer-input", "three");
+  await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/red.png`] });
+  await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/green.jpg`] });
+  await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/blue.webp`] });
+  await app.waitUntil(() => uploads.length === 2);
+  await sleep(300);
+  // The third waits for one of the first two.
+  expect(uploads.length).toBe(2);
+  await app.waitUntil(() => uploads.length === 3, { timeout: 4000 });
+  expect(uploads[2].at - uploads[0].at).toBeGreaterThan(500);
+  expect(uploads.map((upload) => upload.name)).toEqual(["red.png", "green.jpg", "blue.webp"]);
+  await app.waitUntil(() => app.enabled("id:chat-composer-send"), { timeout: 4000 });
+  await app.press("id:chat-composer-send");
+  await app.waitUntil(() => posts.length === 1);
+  expect(posts[0].file_references.map((reference: any) => reference.path)).toEqual(["red.png", "green.jpg", "blue.webp"]);
+});
+
+test("a send refused because the agent's file cache let an attachment go marks it to upload again and keeps the draft", async () => {
+  let refuseOnce = true;
+  const sent: any[] = [];
+  const { app, uploads } = await openChat({
+    extraApi: {
+      "POST /proxy:/tasks": (request: ApiRequest) => {
+        if (refuseOnce) {
+          refuseOnce = false;
+          return { status: 400, body: { error: "file_references[0]: file does not exist" } };
+        }
+        sent.push(request.json);
+        return { body: { id: "task-1", status: "queued", topic_id: "topic-1" } };
+      },
+    },
+  });
+  await app.type("id:chat-composer-input", "about this");
+  await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/red.png`] });
+  await app.waitUntil(() => app.enabled("id:chat-composer-send"));
+  await app.press("id:chat-composer-send");
+  await app.waitFor("text:/^The agent no longer has this file \\(its file cache let it go\\)\\. Upload it again with Retry upload\\./");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "about this");
+  await dismissNotices(app);
+  await app.press("role:button[Retry upload]");
+  await app.waitUntil(() => uploads.length === 2);
+  await app.waitUntil(() => app.enabled("id:chat-composer-send"));
+  await app.press("id:chat-composer-send");
+  await app.waitUntil(() => sent.length === 1);
+  expect(sent[0].file_references).toEqual([{ dir_name: "workspace_dir", path: "red.png" }]);
 });
 
 test("while a message is edited a pasted image is refused with the reason, and the edit and the draft are kept", async () => {
@@ -498,12 +690,14 @@ test("in the Android app, images the runtime could not read are said next to the
   expect(app.texts().some((text) => text.startsWith("Not added"))).toBe(false);
   await app.type("id:chat-composer-input", "draft stays");
   await app.host.send("morph.paste.refused", { reason: "too_large", count: 1 });
-  await app.waitFor("Not added: the pasted image is larger than 5 MB, the most the model takes for one image. Make it smaller, then paste it.");
+  await app.waitFor("Not added: the pasted image is larger than 128 MiB (134,217,728 bytes), the most one upload takes.");
+  await app.host.send("morph.paste.refused", { reason: "batch_too_large", count: 3 });
+  await app.waitFor("text:/^Not added: the pasted images are larger than 256 MiB \\(268,435,456 bytes\\) in all/");
   await app.host.send("morph.paste.refused", { reason: "unreadable", count: 2 });
   await app.waitFor("Not added: the pasted image could not be read. Copy it again, then paste.");
   // What the native part does not say this way is not taken for a refusal.
   await app.host.send("morph.paste.refused", { reason: "content://media/42", count: 1 });
   await sleep(200);
-  expect(app.texts().filter((text) => text.startsWith("Not added")).length).toBe(2);
+  expect(app.texts().filter((text) => text.startsWith("Not added")).length).toBe(3);
   expect(app.value("id:chat-composer-input")).toBe("draft stays");
 });

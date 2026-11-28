@@ -12,9 +12,14 @@
 // with their own extension; GIF, BMP, TIFF, HEIC, AVIF and SVG are refused with the formats that
 // work (no conversion here; the desktop app turns BMP and TIFF into PNG before they get here); bytes
 // that are no image, an empty file or a truncated PNG/WebP are refused as unreadable. An image over
-// the model's 5 MiB, or past the message's three images, is refused before it is uploaded: the
-// console's agent fails a task with a larger image and shows the model no more than three
-// (cmd/mistermorph/consolecmd console_file_references.go).
+// the upload budget (128 MiB, uploads.ts) is refused before it is uploaded, and a paste attaches at
+// most 256 MiB of images in all: the ones past that are refused, the others are taken. Size is
+// checked on what the platform delivered (after a native conversion, which may make it larger).
+//
+// What the model is shown is another matter: a large original is attached all the same. The
+// console's agent shows the model at most three images of a message, each at most 5 MiB, and fails
+// a task with a larger one (cmd/mistermorph/consolecmd console_file_references.go), so the send
+// refuses such a draft (draftImageLimitMessage) and the pill says why (modelImageNote).
 //
 // Pastes are taken one after another in the order the user made them: each waits for the one
 // before, so a large first image read slowly never lands after a later small one, and the files of
@@ -22,6 +27,7 @@
 // longer on screen when its check ends (another conversation, a sent draft, a page left) is
 // dropped without a word.
 import { droppedNames } from "./fileDrop";
+import { formatLimit, PASTE_BATCH_MAX_BYTES, UPLOAD_MAX_FILE_BYTES } from "./uploads";
 
 /** The console agent's limits for the images a message shows the model (consolecmd consoleLLMMaxImage*). */
 export const MODEL_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -122,7 +128,7 @@ export function pastedImageCandidates(event: unknown): File[] {
   });
 }
 
-export type PasteRefusalReason = "empty" | "unreadable" | "unsupported" | "corrupt" | "too_large" | "too_many";
+export type PasteRefusalReason = "empty" | "unreadable" | "unsupported" | "corrupt" | "too_large" | "batch_too_large";
 
 export interface PasteRefusal {
   name: string;
@@ -138,10 +144,10 @@ export interface CheckedPaste {
 }
 
 export interface CheckOptions {
-  /** Model images the draft has already: a paste adds up to MODEL_IMAGE_MAX_COUNT with them. */
-  existingImages?: number;
+  /** The most bytes of one file (UPLOAD_MAX_FILE_BYTES). */
   maxBytes?: number;
-  maxCount?: number;
+  /** The most bytes of the paste's accepted files together (PASTE_BATCH_MAX_BYTES). */
+  maxBatchBytes?: number;
   /** The number the next unnamed image is named after (`clipboard-image-<n>.png`). */
   nextNumber?: () => number;
 }
@@ -160,13 +166,14 @@ function imageName(name: string, extension: string, nextNumber: () => number): s
 }
 
 /**
- * Looks at the bytes of pasted files: the images the model can be shown, within its limits, are
- * accepted (in their order, named and typed after their bytes); every other one is refused with
- * its reason. Reads only the first and last bytes of each file.
+ * Looks at the bytes of pasted files: PNG, JPEG and WebP images within the upload budget are
+ * accepted (in their order, named and typed after their bytes) while the paste's total stays
+ * within its budget; every other one is refused with its reason. Reads only the first and last
+ * bytes of each file.
  */
 export async function checkPastedImages(files: File[], options: CheckOptions = {}): Promise<CheckedPaste> {
-  const maxBytes = options.maxBytes ?? MODEL_IMAGE_MAX_BYTES;
-  const maxCount = options.maxCount ?? MODEL_IMAGE_MAX_COUNT;
+  const maxBytes = options.maxBytes ?? UPLOAD_MAX_FILE_BYTES;
+  const maxBatchBytes = options.maxBatchBytes ?? PASTE_BATCH_MAX_BYTES;
   let counter = 0;
   const nextNumber = options.nextNumber ?? (() => ++counter);
   const looks = await Promise.all(
@@ -185,7 +192,7 @@ export async function checkPastedImages(files: File[], options: CheckOptions = {
   );
   const accepted: File[] = [];
   const refused: PasteRefusal[] = [];
-  let images = Math.max(0, options.existingImages ?? 0);
+  let total = 0;
   for (const look of looks) {
     if ("refusal" in look && look.refusal) {
       refused.push(look.refusal);
@@ -212,11 +219,13 @@ export async function checkPastedImages(files: File[], options: CheckOptions = {
       refused.push({ name, reason: "too_large" });
       continue;
     }
-    if (images >= maxCount) {
-      refused.push({ name, reason: "too_many" });
+    // In the paste's order: one that would take the paste past its budget is refused, a later
+    // smaller one may still fit.
+    if (total + size > maxBatchBytes) {
+      refused.push({ name, reason: "batch_too_large" });
       continue;
     }
-    images += 1;
+    total += size;
     const named = imageName(name, format.extension, nextNumber);
     accepted.push(named === file.name && file.type === format.mime ? file : new File([file], named, { type: format.mime }));
   }
@@ -230,8 +239,8 @@ export function pasteRefusalKey(reason: PasteRefusalReason): string {
       return "chat_composer_paste_unsupported";
     case "too_large":
       return "chat_composer_paste_too_large";
-    case "too_many":
-      return "chat_composer_paste_too_many";
+    case "batch_too_large":
+      return "chat_composer_paste_batch_too_large";
     case "unreadable":
       return "chat_composer_paste_unreadable";
     default:
@@ -253,7 +262,8 @@ export function pasteRefusalLines(refused: PasteRefusal[], text: (key: string, v
     text(key, {
       names: droppedNames(group.names),
       format: group.formats.join(", "),
-      max: String(MODEL_IMAGE_MAX_COUNT),
+      limit: formatLimit(UPLOAD_MAX_FILE_BYTES),
+      batch: formatLimit(PASTE_BATCH_MAX_BYTES),
     }),
   );
 }
@@ -264,8 +274,6 @@ export interface ComposerPasteHost {
   draft: () => string;
   /** Why the composer takes no images now (editing, sending, no agent, the TODO list), or "". */
   blocked: () => string;
-  /** Model images the draft has (pending, uploaded or failed). */
-  imageCount: () => number;
   /** Adds the images to the draft and uploads them, as picked files are; adds them before it returns. */
   takeFiles: (files: File[]) => void;
   /** Tells the user why images were not taken. */
@@ -297,7 +305,7 @@ export function createComposerPaste(host: ComposerPasteHost) {
     }
     const run = queue.then(async (): Promise<PasteOutcome> => {
       if (draft !== host.draft()) return "stale";
-      const checked = await checkPastedImages(list, { existingImages: host.imageCount(), nextNumber });
+      const checked = await checkPastedImages(list, { nextNumber });
       if (draft !== host.draft()) return "stale";
       // What held as the paste came may not hold now (a send began, an edit opened).
       const nowBlocked = host.blocked();
@@ -315,6 +323,13 @@ export function createComposerPaste(host: ComposerPasteHost) {
   };
 }
 
+/** What an attachment's pill says of the model: an image over its size is stored, not shown to it. */
+export function modelImageNote(name: unknown, sizeBytes: unknown, text: (key: string, values?: Record<string, string>) => string): string {
+  return isModelImageName(name) && Number(sizeBytes) > MODEL_IMAGE_MAX_BYTES
+    ? text("chat_composer_file_model_too_large", { limit: formatLimit(MODEL_IMAGE_MAX_BYTES) })
+    : "";
+}
+
 /** The draft's images over the model's limits, as the send refuses them: why, or "". */
 export function draftImageLimitMessage(
   items: { name?: unknown; status?: unknown; sizeBytes?: unknown }[],
@@ -322,7 +337,7 @@ export function draftImageLimitMessage(
 ): string {
   const images = (Array.isArray(items) ? items : []).filter((item) => isModelImageName(item?.name));
   const large = images.filter((item) => Number(item?.sizeBytes) > MODEL_IMAGE_MAX_BYTES).map((item) => String(item?.name || ""));
-  if (large.length) return text("chat_composer_images_too_large", { names: droppedNames(large) });
+  if (large.length) return text("chat_composer_images_too_large", { names: droppedNames(large), limit: formatLimit(MODEL_IMAGE_MAX_BYTES) });
   if (images.length > MODEL_IMAGE_MAX_COUNT) {
     return text("chat_composer_images_too_many", { count: String(images.length), max: String(MODEL_IMAGE_MAX_COUNT), extra: String(images.length - MODEL_IMAGE_MAX_COUNT) });
   }

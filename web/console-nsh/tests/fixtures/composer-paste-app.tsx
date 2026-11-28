@@ -5,7 +5,7 @@
 // paste is a real ClipboardEvent the page's runtime reads (nsh.js `pasted`).
 import { mount, signal, Text, View } from "nsh";
 import { ChatComposer } from "../../components/chat/ChatComposer";
-import { createComposerPaste, isModelImageName } from "../../components/chat/imagePaste";
+import { createComposerPaste } from "../../components/chat/imagePaste";
 
 const draft = signal("");
 const attached = signal<string[]>([]);
@@ -15,7 +15,6 @@ const sent = signal(0);
 const paste = createComposerPaste({
   draft: () => "draft",
   blocked: () => "",
-  imageCount: () => attached().filter((entry) => isModelImageName(entry.split("|")[0])).length,
   takeFiles: (files) => attached.update((all) => [...all, ...files.map((file) => `${file.name}|${file.type}|${file.size}`)]),
   refuse: (text) => refusals.update((all) => [...all, text]),
   text: (key, values) => `${key}:${values.names ?? ""}:${values.format ?? ""}`,

@@ -45,11 +45,10 @@ test("the images of one paste keep their order; a mislabelled one is renamed, ot
   const refusal = state(app, "refusals")[0] as string;
   // Markup under an image's name is never taken for one: it is refused as SVG, as a GIF is.
   expect(refusal).toBe("chat_composer_paste_unsupported:dark.gif, drawing.png:GIF, SVG");
-  // A fourth image is past the message's three.
+  // A fourth image is attached too: the model's three images are the send's to check.
   await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/red.png`] });
-  await app.waitUntil(() => state(app, "refusals")?.length === 2);
-  expect(state(app, "refusals")[1]).toContain("chat_composer_paste_too_many:red.png:");
-  expect(state(app, "attached").length).toBe(3);
+  await app.waitUntil(() => state(app, "attached")?.length === 4);
+  expect(state(app, "refusals").length).toBe(1);
 });
 
 test("text and an image pasted together: the text goes into the field, the image is attached", async () => {
@@ -79,4 +78,18 @@ test("pastes made one after another are attached in their order", async () => {
   await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/red.png`] });
   await app.waitUntil(() => state(app, "attached")?.length === 2);
   expect(state(app, "attached")).toEqual(["green.jpg|image/jpeg|633", "red.png|image/png|78"]);
+});
+
+// A 19 MiB original, as a phone or camera makes them (scripts/make-paste-fixtures.mjs writes it;
+// scripts/test.sh runs that first): attached whole, its bytes as pasted, with no model limit at the
+// paste. In Chrome the ClipboardEvent carries all 19 MiB.
+test("a 19 MiB pasted original is attached whole", async () => {
+  const app = await openComposer();
+  await app.type("id:chat-composer-input", "big one");
+  await app.paste("id:chat-composer-input", { files: [`${FIXTURES}/large/photo-19MiB.png`] });
+  await app.waitUntil(() => state(app, "attached")?.length === 1 || state(app, "refusals")?.length === 1, { timeout: 20000 });
+  expect(state(app, "refusals")).toEqual([]);
+  expect(state(app, "attached")).toEqual([`photo-19MiB.png|image/png|${19 * 1024 * 1024}`]);
+  expect(state(app, "draft")).toBe("big one");
+  expect(state(app, "sent")).toBe(0);
 });
