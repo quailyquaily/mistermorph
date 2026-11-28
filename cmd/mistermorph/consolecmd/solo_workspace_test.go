@@ -8,16 +8,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/ownertools"
 	"github.com/quailyquaily/mistermorph/internal/solo"
+	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/spf13/viper"
 )
 
 // Solo starting a work thread in a workspace is what authorizes that workspace for the thread: the
 // thread's writes and commands there ask for no workspace approval, whatever Solo's own workspace
-// is. What else asks (the Guard, a later switch to another workspace) asks as in any topic.
+// is. A later switch to another workspace (workspace_use) asks for none either, in a thread as in
+// any owner chat. What asks anywhere (the Guard, forced-approval tools) asks as in any topic.
+
+// legacyWorkspaceSwitchReason is the reason the removed workspace approval was asked with (before
+// FT196); no approval asked now names it.
+const legacyWorkspaceSwitchReason = "workspace_switch_requires_approval"
 
 // dispatch sends Solo a message that starts a thread in dir and returns the thread's card.
 func (h soloHarness) dispatch(t *testing.T, dir string) daemonruntime.SoloThread {
@@ -146,61 +151,138 @@ func TestSoloThreadWorksInItsWorkspaceWithoutApproval(t *testing.T) {
 	}
 }
 
-// A thread that switches to another workspace on its own (workspace_use) is asked as any topic's
-// run is: the dispatch authorized the thread's workspace, not this one. The run resumed after the
-// approval goes on there.
-func TestSoloThreadSwitchToAnotherWorkspaceStillAsks(t *testing.T) {
-	for _, decision := range []string{"approve", "deny"} {
-		t.Run(decision, func(t *testing.T) {
+// switchedWorkDone checks what "thread-switch" leaves: switched.txt and a command's output naming
+// the workspace it switched to as its working directory, and neither in the run's own workspace.
+func switchedWorkDone(t *testing.T, switched, own string) {
+	t.Helper()
+	if out, err := os.ReadFile(filepath.Join(switched, "switched.txt")); err != nil || string(out) != "made after the switch" {
+		t.Fatalf("switched.txt in %s = %q, %v", switched, out, err)
+	}
+	pwd, err := os.ReadFile(filepath.Join(switched, "switched-pwd.txt"))
+	if err != nil {
+		t.Fatalf("switched-pwd.txt in %s: %v", switched, err)
+	}
+	want, _ := filepath.EvalSymlinks(switched)
+	if got, _ := filepath.EvalSymlinks(strings.TrimSpace(string(pwd))); got != want {
+		t.Fatalf("command ran in %q, want %s", pwd, switched)
+	}
+	for _, file := range []string{"switched.txt", "switched-pwd.txt"} {
+		if _, err := os.Stat(filepath.Join(own, file)); err == nil {
+			t.Fatalf("%s landed in the run's own workspace %s", file, own)
+		}
+	}
+}
+
+// A thread that switches to another workspace on its own (workspace_use) writes and runs a command
+// there at once, asking nothing; the thread's topic keeps its workspace, and its next task works
+// there.
+func TestSoloThreadSwitchToAnotherWorkspaceAsksNothing(t *testing.T) {
+	h := newSoloHarness(t)
+	project, unrelated := t.TempDir(), t.TempDir()
+	h.provider.setThreadTask("thread-switch " + unrelated + " and work there")
+	thread := h.dispatch(t, project)
+	h.neverPending(t, thread.TaskID)
+	switchedWorkDone(t, unrelated, project)
+	if card := h.waitRecord(t, daemonruntime.SoloThreadCardID(thread.TaskID), daemonruntime.SoloThreadDone); !strings.Contains(card.Summary, "Switched work done") {
+		t.Fatalf("card = %+v", card)
+	}
+	var ws daemonruntime.WorkspaceResolution
+	h.client.ok("GET", "/workspace?topic_id="+thread.TopicID, nil, &ws)
+	if ws.WorkspaceDir != project {
+		t.Fatalf("thread workspace after the switch = %+v, want %s", ws, project)
+	}
+	next, err := h.rt.startSoloThread(context.Background(), ownertools.ThreadRequest{TopicID: thread.TopicID, Task: "thread-work write the report", WorkspaceDir: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.neverPending(t, next.TaskID)
+	threadWorkDone(t, project)
+	h.rt.soloSyncs.Wait()
+}
+
+// ownerTopic is one of the owner's ordinary Console topics, with dir attached as its workspace.
+func (h soloHarness) ownerTopic(t *testing.T, dir string) string {
+	t.Helper()
+	topic, err := h.rt.store.CreateNamedTopic("Project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.rt.currentWorkspaceStore().Set(buildConsoleConversationKey(topic.ID), workspace.Attachment{WorkspaceDir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	return topic.ID
+}
+
+// The owner's own Console chat switching workspace mid-run writes and runs a command in the new
+// one at once, asking nothing, and the topic keeps its attachment.
+func TestOwnerChatSwitchToAnotherWorkspaceAsksNothing(t *testing.T) {
+	h := newSoloHarness(t)
+	project, unrelated := t.TempDir(), t.TempDir()
+	topicID := h.ownerTopic(t, project)
+	sent := h.chat(topicID, "thread-switch "+unrelated+" and work there")
+	h.neverPending(t, sent.ID)
+	switchedWorkDone(t, unrelated, project)
+	if dir, err := workspace.LookupWorkspaceDir(h.rt.currentWorkspaceStore(), buildConsoleConversationKey(topicID)); err != nil || dir != project {
+		t.Fatalf("attachment after the switch = %q, %v", dir, err)
+	}
+}
+
+// workspace_use still refuses what it refused before: a missing folder and the agent's state folder
+// (and, through ownertools' tests, unknown and deny_paths folders). The run stays in its own
+// workspace, so the write and the command after the refused switch land there.
+func TestOwnerChatRefusedSwitchStaysInTheTopicWorkspace(t *testing.T) {
+	for name, target := range map[string]func(h soloHarness) string{
+		"missing folder": func(soloHarness) string { return filepath.Join(t.TempDir(), "gone") },
+		"state folder":   func(h soloHarness) string { return h.stateDir },
+	} {
+		t.Run(name, func(t *testing.T) {
 			h := newSoloHarness(t)
-			project, unrelated := t.TempDir(), t.TempDir()
-			h.provider.setThreadTask("thread-switch " + unrelated + " and write there")
-			thread := h.dispatch(t, project)
-
-			pending := h.client.wait(thread.TaskID, daemonruntime.TaskPending)
-			var approval daemonruntime.ApprovalInfo
-			h.client.ok("GET", "/approvals/"+pending.ApprovalRequestID, nil, &approval)
-			reasons := strings.Join(approval.Reasons, " ")
-			if approval.TaskID != thread.TaskID || approval.ToolName != "write_file" || !strings.Contains(reasons, guard.WorkspaceSwitchReason+": "+unrelated) {
-				t.Fatalf("approval = %+v", approval)
+			project := t.TempDir()
+			topicID := h.ownerTopic(t, project)
+			dir := target(h)
+			sent := h.chat(topicID, "thread-switch "+dir+" and work there")
+			h.neverPending(t, sent.ID)
+			if _, err := os.Stat(filepath.Join(dir, "switched.txt")); err == nil {
+				t.Fatalf("wrote in the refused folder %s", dir)
 			}
-			if _, err := os.Stat(filepath.Join(unrelated, "switched.txt")); err == nil {
-				t.Fatal("wrote in the other workspace before the approval")
+			if out, err := os.ReadFile(filepath.Join(project, "switched.txt")); err != nil || string(out) != "made after the switch" {
+				t.Fatalf("switched.txt in the topic's workspace = %q, %v", out, err)
 			}
-			h.waitRecord(t, daemonruntime.SoloThreadCardID(thread.TaskID), daemonruntime.SoloThreadWaiting)
-
-			h.client.ok("POST", "/approvals/"+pending.ApprovalRequestID+"/"+decision, map[string]string{"actor": "owner"}, nil)
-			if decision == "deny" {
-				h.client.wait(thread.TaskID, daemonruntime.TaskCanceled)
-				if _, err := os.Stat(filepath.Join(unrelated, "switched.txt")); err == nil {
-					t.Fatal("a denied write ran")
-				}
-				h.rt.soloSyncs.Wait()
-				return
-			}
-			h.client.wait(thread.TaskID, daemonruntime.TaskDone)
-			if out, err := os.ReadFile(filepath.Join(unrelated, "switched.txt")); err != nil || string(out) != "made after the switch" {
-				t.Fatalf("switched.txt = %q, %v", out, err)
-			}
-			if _, err := os.Stat(filepath.Join(project, "switched.txt")); err == nil {
-				t.Fatal("the write landed in the thread's own workspace")
-			}
-			// The approval was for that run: the thread's topic keeps its workspace, and its next
-			// task works there without asking.
-			var ws daemonruntime.WorkspaceResolution
-			h.client.ok("GET", "/workspace?topic_id="+thread.TopicID, nil, &ws)
-			if ws.WorkspaceDir != project {
-				t.Fatalf("thread workspace after the switch = %+v, want %s", ws, project)
-			}
-			next, err := h.rt.startSoloThread(context.Background(), ownertools.ThreadRequest{TopicID: thread.TopicID, Task: "thread-work write the report", WorkspaceDir: project})
-			if err != nil {
-				t.Fatal(err)
-			}
-			h.neverPending(t, next.TaskID)
-			threadWorkDone(t, project)
-			h.rt.soloSyncs.Wait()
 		})
 	}
+}
+
+// With the Guard on, a switched thread's command still asks, for the Guard's reason (the switch adds
+// none), and the run resumed after the approval runs it in the workspace it had switched to.
+func TestSoloThreadGuardApprovalAfterASwitchResumesThere(t *testing.T) {
+	h := newSoloHarnessWith(t, func(reader *viper.Viper) {
+		reader.Set("guard.enabled", true)
+		reader.Set("guard.approvals.enabled", true)
+	})
+	project, unrelated := t.TempDir(), t.TempDir()
+	h.provider.setThreadTask("thread-switch " + unrelated + " and work there")
+	thread := h.dispatch(t, project)
+
+	pending := h.client.wait(thread.TaskID, daemonruntime.TaskPending)
+	var approval daemonruntime.ApprovalInfo
+	h.client.ok("GET", "/approvals/"+pending.ApprovalRequestID, nil, &approval)
+	if approval.TaskID != thread.TaskID || approval.ToolName != "bash" {
+		t.Fatalf("approval = %+v", approval)
+	}
+	if reasons := strings.Join(approval.Reasons, " "); strings.Contains(reasons, legacyWorkspaceSwitchReason) || strings.Contains(reasons, unrelated) {
+		t.Fatalf("the Guard's approval names the workspace: %q", reasons)
+	}
+	// The write after the switch needed nothing; the command has not run.
+	if out, err := os.ReadFile(filepath.Join(unrelated, "switched.txt")); err != nil || string(out) != "made after the switch" {
+		t.Fatalf("switched.txt = %q, %v", out, err)
+	}
+	if _, err := os.Stat(filepath.Join(unrelated, "switched-pwd.txt")); err == nil {
+		t.Fatal("the command ran before the Guard's approval")
+	}
+	h.client.ok("POST", "/approvals/"+pending.ApprovalRequestID+"/approve", map[string]string{"actor": "owner"}, nil)
+	h.client.wait(thread.TaskID, daemonruntime.TaskDone)
+	switchedWorkDone(t, unrelated, project)
+	h.rt.soloSyncs.Wait()
 }
 
 // The Guard's approvals are its own: with the Guard on, a thread's command asks for the Guard's
@@ -226,7 +308,7 @@ func TestSoloThreadGuardApprovalStillAsks(t *testing.T) {
 			if approval.TaskID != thread.TaskID || approval.ToolName != "bash" {
 				t.Fatalf("approval = %+v", approval)
 			}
-			if reasons := strings.Join(approval.Reasons, " "); strings.Contains(reasons, guard.WorkspaceSwitchReason) {
+			if reasons := strings.Join(approval.Reasons, " "); strings.Contains(reasons, legacyWorkspaceSwitchReason) {
 				t.Fatalf("the Guard's approval names the workspace: %q", reasons)
 			}
 			// The write before the command needed nothing; the command has not run.

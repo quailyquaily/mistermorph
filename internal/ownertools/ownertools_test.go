@@ -276,8 +276,9 @@ func TestWorkspaceUseMovesFileToolsAndShellButNotTheAttachment(t *testing.T) {
 	if dir, _ := pathroots.WorkspaceDirFromContext(ctx); dir != other {
 		t.Fatalf("workspace = %q", dir)
 	}
-	if dir, pending := f.sw.PendingApproval(); !pending || dir != other {
-		t.Fatalf("pending = %q, %v", dir, pending)
+	// The result says the file and shell tools work there now, and asks for no approval.
+	if note, _ := out["note"].(string); strings.Contains(strings.ToLower(note), "approv") || !strings.Contains(note, "work here now") {
+		t.Fatalf("note = %q", note)
 	}
 	// The topic keeps its attachment.
 	if dir, err := workspace.LookupWorkspaceDir(f.ws, ConsoleScopePrefix+topicID); err != nil || dir != f.topicWS {
@@ -307,13 +308,10 @@ func TestWorkspaceUseMovesFileToolsAndShellButNotTheAttachment(t *testing.T) {
 	if len(uses) == 0 || uses[0].WorkspaceDir != other {
 		t.Fatalf("uses = %+v", uses)
 	}
-	// Back to the topic's own workspace: nothing pending.
+	// Back to the topic's own workspace.
 	out = f.mustCall(WorkspaceUseName, map[string]any{"path": f.topicWS})
-	if out["is_topic_own"] != true {
+	if out["is_topic_own"] != true || f.sw.Switched() {
 		t.Fatalf("back = %v", out)
-	}
-	if _, pending := f.sw.PendingApproval(); pending {
-		t.Fatal("pending in the topic's own workspace")
 	}
 }
 

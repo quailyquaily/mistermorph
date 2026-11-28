@@ -32,7 +32,8 @@ import (
 //   - "solo-recall <topic id>": find topic_read, read that topic, then answer from it;
 //   - "thread-block": wait until released, then answer "Report ready: 42 pages";
 //   - "thread-work": write out.txt, run a command that writes pwd.txt, then answer;
-//   - "thread-switch <dir>": find workspace_use, switch to <dir>, write switched.txt, then answer;
+//   - "thread-switch <dir>": find workspace_use, switch to <dir>, write switched.txt, run a command
+//     that writes switched-pwd.txt, then answer (in any owner topic, not only a thread);
 //   - anything else: answer "answer for <message>" at once.
 type soloProvider struct {
 	mu       sync.Mutex
@@ -144,6 +145,9 @@ func (p *soloProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		case strings.Contains(userText, "thread-switch") && toolResults == 2:
 			writeSoloToolCall(w, "write_file", `{"path":"switched.txt","content":"made after the switch"}`)
+			return
+		case strings.Contains(userText, "thread-switch") && toolResults == 3:
+			writeSoloToolCall(w, "bash", `{"cmd":"pwd > switched-pwd.txt"}`)
 			return
 		case strings.Contains(userText, "thread-switch"):
 			output = `{"type":"final","output":"Switched work done","is_lightweight":false}`

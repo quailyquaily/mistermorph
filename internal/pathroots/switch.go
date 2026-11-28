@@ -3,35 +3,35 @@ package pathroots
 import (
 	"context"
 	"path/filepath"
-	"slices"
-	"strings"
 	"sync"
 )
 
 // WorkspaceSwitch is the workspace of one run that may change while it runs (workspace_use): the
-// workspace the run started in (its topic's), the one it uses now, and the workspaces in which the
-// user already approved writes and commands for this run. Tools read the current one through
-// WorkspaceDirFromContext, so a switch moves read_file, write_file, the shells and every other
-// tool that resolves paths from the context. Nothing here is stored: the topic's attachment does
-// not change.
+// workspace the run started in (its topic's) and the one it uses now. Tools read the current one
+// through WorkspaceDirFromContext, so a switch moves read_file, write_file, the shells and every
+// other tool that resolves paths from the context. A switch asks for no approval of its own: the
+// tools work in the current workspace as they would in the topic's, under the same Guard and tool
+// policies. Nothing here is stored: the topic's attachment does not change.
 type WorkspaceSwitch struct {
 	mu       sync.Mutex
 	original string
 	current  string
-	approved map[string]bool
 }
 
 // WorkspaceSwitchState is what a paused run keeps of its switch, so a run resumed after an
 // approval goes on in the same workspace.
+//
+// Versions before FT196 also kept "approved", the workspaces the user had approved writes and
+// commands in. That field is no longer read: a resume state that has it decodes as before, and
+// the list neither grants nor withholds anything.
 type WorkspaceSwitchState struct {
-	Current  string   `json:"current,omitempty"`
-	Approved []string `json:"approved,omitempty"`
+	Current string `json:"current,omitempty"`
 }
 
 // NewWorkspaceSwitch starts a run's switch in its own workspace.
 func NewWorkspaceSwitch(original string) *WorkspaceSwitch {
 	original = normalizeRoot(original)
-	return &WorkspaceSwitch{original: original, current: original, approved: map[string]bool{}}
+	return &WorkspaceSwitch{original: original, current: original}
 }
 
 // Original is the workspace the run started in.
@@ -74,30 +74,6 @@ func (s *WorkspaceSwitch) Switched() bool {
 	return !SameDir(s.current, s.original)
 }
 
-// PendingApproval returns the current workspace when the run uses one other than its own in which
-// writes and commands are not approved yet.
-func (s *WorkspaceSwitch) PendingApproval() (string, bool) {
-	if s == nil {
-		return "", false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.approved[dirKey(s.current)] || SameDir(s.current, s.original) {
-		return "", false
-	}
-	return s.current, true
-}
-
-// Approve records that the user approved writes and commands in dir for this run.
-func (s *WorkspaceSwitch) Approve(dir string) {
-	if s == nil || strings.TrimSpace(dir) == "" {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.approved[dirKey(dir)] = true
-}
-
 // State is the switch as a paused run keeps it; the zero state when the run never switched.
 func (s *WorkspaceSwitch) State() WorkspaceSwitchState {
 	if s == nil {
@@ -105,15 +81,10 @@ func (s *WorkspaceSwitch) State() WorkspaceSwitchState {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if SameDir(s.current, s.original) && len(s.approved) == 0 {
+	if SameDir(s.current, s.original) {
 		return WorkspaceSwitchState{}
 	}
-	out := WorkspaceSwitchState{Current: s.current}
-	for dir := range s.approved {
-		out.Approved = append(out.Approved, dir)
-	}
-	slices.Sort(out.Approved)
-	return out
+	return WorkspaceSwitchState{Current: s.current}
 }
 
 // Restore puts back what State returned before a pause. The original workspace stays the one the
@@ -126,11 +97,6 @@ func (s *WorkspaceSwitch) Restore(state WorkspaceSwitchState) {
 	defer s.mu.Unlock()
 	if current := normalizeRoot(state.Current); current != "" {
 		s.current = current
-	}
-	for _, dir := range state.Approved {
-		if strings.TrimSpace(dir) != "" {
-			s.approved[dirKey(dir)] = true
-		}
 	}
 }
 

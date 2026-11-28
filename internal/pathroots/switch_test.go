@@ -2,6 +2,7 @@ package pathroots
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -14,9 +15,6 @@ func TestWorkspaceSwitchMovesTheContextWorkspace(t *testing.T) {
 	if sw.Switched() {
 		t.Fatal("switched before any switch")
 	}
-	if _, pending := sw.PendingApproval(); pending {
-		t.Fatal("the topic's own workspace needs no approval")
-	}
 	sw.Use("/work/other/")
 	if dir, _ := WorkspaceDirFromContext(ctx); dir != "/work/other" {
 		t.Fatalf("after switch = %q", dir)
@@ -24,33 +22,21 @@ func TestWorkspaceSwitchMovesTheContextWorkspace(t *testing.T) {
 	if roots := Resolve(ctx, New("/ignored", "/cache", "/state")); roots.WorkspaceDir != "/work/other" || roots.FileCacheDir != "/cache" {
 		t.Fatalf("roots = %+v", roots)
 	}
-	if dir, pending := sw.PendingApproval(); !pending || dir != "/work/other" {
-		t.Fatalf("pending = %q, %v", dir, pending)
-	}
-	sw.Approve("/work/other")
-	if _, pending := sw.PendingApproval(); pending {
-		t.Fatal("approved workspace still pending")
-	}
 
-	// A paused run keeps the switch and its approvals; a fresh switch takes them back.
+	// A paused run keeps the workspace it switched to; a fresh switch takes it back.
 	state := sw.State()
+	if state != (WorkspaceSwitchState{Current: "/work/other"}) {
+		t.Fatalf("state = %+v", state)
+	}
 	fresh := NewWorkspaceSwitch("/work/topic")
 	fresh.Restore(state)
-	if fresh.Current() != "/work/other" || fresh.Original() != "/work/topic" {
+	if fresh.Current() != "/work/other" || fresh.Original() != "/work/topic" || !fresh.Switched() {
 		t.Fatalf("restored = %q from %q", fresh.Current(), fresh.Original())
 	}
-	if _, pending := fresh.PendingApproval(); pending {
-		t.Fatal("restored approval lost")
-	}
-	// Another workspace asks again.
-	fresh.Use("/work/third")
-	if _, pending := fresh.PendingApproval(); !pending {
-		t.Fatal("a third workspace was approved by the second's approval")
-	}
-	// Back home needs nothing.
+	// Back home is not a switch, and keeps nothing.
 	fresh.Use("/work/topic/")
-	if _, pending := fresh.PendingApproval(); pending || fresh.Switched() {
-		t.Fatal("the topic's own workspace needs approval after switching back")
+	if fresh.Switched() || fresh.State() != (WorkspaceSwitchState{}) {
+		t.Fatalf("back home: switched=%v state=%+v", fresh.Switched(), fresh.State())
 	}
 
 	// A fixed directory set over the switch wins, as for a subtask.
@@ -63,9 +49,37 @@ func TestWorkspaceSwitchMovesTheContextWorkspace(t *testing.T) {
 	}
 }
 
+// A state kept by a version that still asked before writes in a switched workspace has the
+// workspaces approved then: it decodes, restores the current workspace, and the list changes
+// nothing.
+func TestLegacyApprovedStateRestoresTheWorkspaceOnly(t *testing.T) {
+	var state WorkspaceSwitchState
+	if err := json.Unmarshal([]byte(`{"current":"/work/other","approved":["/work/other","/work/third"]}`), &state); err != nil {
+		t.Fatalf("decode legacy state: %v", err)
+	}
+	sw := NewWorkspaceSwitch("/work/topic")
+	sw.Restore(state)
+	if sw.Current() != "/work/other" || sw.Original() != "/work/topic" {
+		t.Fatalf("restored = %q from %q", sw.Current(), sw.Original())
+	}
+	if got := sw.State(); got != (WorkspaceSwitchState{Current: "/work/other"}) {
+		t.Fatalf("state after a legacy restore = %+v", got)
+	}
+	// An approvals-only legacy state (back in the topic's workspace) restores nothing.
+	var back WorkspaceSwitchState
+	if err := json.Unmarshal([]byte(`{"approved":["/work/other"]}`), &back); err != nil {
+		t.Fatal(err)
+	}
+	home := NewWorkspaceSwitch("/work/topic")
+	home.Restore(back)
+	if home.Current() != "/work/topic" || home.Switched() {
+		t.Fatalf("approvals-only legacy state moved the run to %q", home.Current())
+	}
+}
+
 func TestUnswitchedStateIsEmpty(t *testing.T) {
 	sw := NewWorkspaceSwitch("/a")
-	if state := sw.State(); state.Current != "" || len(state.Approved) != 0 {
+	if state := sw.State(); state.Current != "" {
 		t.Fatalf("state = %+v", state)
 	}
 	var none *WorkspaceSwitch

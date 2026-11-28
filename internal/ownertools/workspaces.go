@@ -199,7 +199,7 @@ func (t *workspaceUseTool) CodeModeExcluded() bool { return true }
 func (t *workspaceUseTool) Description() string {
 	return "Switches this task to another workspace for the rest of the task: read_file, write_file, bash/powershell's working directory, send_file and workspace_dir/ paths then work there. " +
 		"The path must be a workspace from workspace_list (or a folder inside one), or a folder the user named in this message. The topic's own attached workspace does not change; pass the topic's workspace to switch back. " +
-		"Reading needs no approval; the first write or command in a workspace other than the topic's asks the user to approve, once per workspace in this task."
+		"The switch itself asks for no approval: writes and commands then work there as in the topic's own workspace."
 }
 
 func (t *workspaceUseTool) ParameterSchema() string {
@@ -257,7 +257,6 @@ func (t *workspaceUseTool) Execute(ctx context.Context, params map[string]any) (
 	}
 	display := displayPath(dir, d.HomeDir)
 	own := sameRealDir(dir, d.Switch.Original())
-	_, pending := d.Switch.PendingApproval()
 	out := map[string]any{
 		"workspace_dir":   dir,
 		"display":         display,
@@ -265,13 +264,10 @@ func (t *workspaceUseTool) Execute(ctx context.Context, params map[string]any) (
 		"topic_workspace": displayPath(d.Switch.Original(), d.HomeDir),
 		"is_topic_own":    own,
 	}
-	switch {
-	case own:
+	if own {
 		out["note"] = "Back in the topic's own workspace."
-	case pending:
-		out["note"] = "Reads work now. The first write or command here asks the user to approve, once for this task; the topic's attached workspace is unchanged."
-	default:
-		out["note"] = "Writes and commands here were already approved in this task; the topic's attached workspace is unchanged."
+	} else {
+		out["note"] = "Your file and shell tools work here now; the topic's attached workspace is unchanged."
 	}
 	return result(out)
 }

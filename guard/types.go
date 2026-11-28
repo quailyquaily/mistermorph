@@ -65,10 +65,6 @@ type Result struct {
 	RiskLevel RiskLevel
 	Decision  Decision
 	Reasons   []string
-	// Forced marks an approval that is asked whatever guard.enabled and guard.approvals.enabled
-	// say (EvaluateForced, EvaluateWorkspaceSwitch): RequestForcedApproval takes it on an
-	// approvals-only guard too.
-	Forced bool
 
 	RedactedContent string
 	RedactedValue   any

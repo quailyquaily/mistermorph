@@ -109,21 +109,6 @@ func (g *Guard) Evaluate(ctx context.Context, meta Meta, a Action) (Result, erro
 func (g *Guard) RequestApproval(ctx context.Context, meta Meta, a Action, pre Result, actionSummaryRedacted string, resumeState []byte) (string, error) {
 	// Forced-approval tools can always ask, including on an approvals-only guard.
 	forced := a.Type == ActionToolCallPre && RequiresForcedApproval(a.ToolName)
-	return g.requestApproval(ctx, meta, a, pre, actionSummaryRedacted, resumeState, forced)
-}
-
-// RequestForcedApproval requests approval for a call that must ask whatever guard.enabled and
-// guard.approvals.enabled say, the way forced-approval tools do: one the engine decided with
-// EvaluateWorkspaceSwitch (pre.Forced). It needs the approval store, and refuses a pre-decision
-// that is not forced.
-func (g *Guard) RequestForcedApproval(ctx context.Context, meta Meta, a Action, pre Result, actionSummaryRedacted string, resumeState []byte) (string, error) {
-	if !pre.Forced || pre.Decision != DecisionRequireApproval {
-		return "", fmt.Errorf("approval is not forced")
-	}
-	return g.requestApproval(ctx, meta, a, pre, actionSummaryRedacted, resumeState, a.Type == ActionToolCallPre)
-}
-
-func (g *Guard) requestApproval(ctx context.Context, meta Meta, a Action, pre Result, actionSummaryRedacted string, resumeState []byte, forced bool) (string, error) {
 	if g == nil || (!g.cfg.Enabled && !forced) {
 		return "", fmt.Errorf("guard is disabled")
 	}

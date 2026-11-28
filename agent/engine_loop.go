@@ -15,7 +15,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
-	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -993,24 +992,15 @@ func (e *Engine) guardDecide(ctx context.Context, st *engineLoopState, step int,
 		ToolParams: tc.Params,
 	}
 	meta := guard.Meta{RunID: st.runID, Step: step, Time: time.Now().UTC()}
-	workspaceDir, workspacePending := workspaceApprovalPending(ctx, tc.Name)
 	var gr guard.Result
 	switch {
 	case guard.RequiresForcedApproval(tc.Name):
 		// Always asks the user, even with the guard off; denied when approvals cannot be stored.
 		gr, err = guard.EvaluateForced(ctx, e.guard, meta, action)
 	case e.guard == nil || !e.guard.Enabled():
-		if !workspacePending {
-			return "", false, nil, nil
-		}
-		gr = guard.Result{Decision: guard.DecisionAllow}
+		return "", false, nil, nil
 	default:
 		gr, err = e.guard.Evaluate(ctx, meta, action)
-	}
-	if err == nil && workspacePending {
-		// The first write or command in a workspace the run switched to asks the user, whatever
-		// the guard's settings, like a forced-approval tool.
-		gr, err = e.withWorkspaceApproval(ctx, meta, action, gr, workspaceDir)
 	}
 	if err != nil {
 		return "", false, nil, fmt.Errorf("evaluate tool call %q: %w", tc.Name, err)
@@ -1021,12 +1011,6 @@ func (e *Engine) guardDecide(ctx context.Context, st *engineLoopState, step int,
 	case guard.DecisionRequireApproval:
 		if approvalIdentity != "" && approvalIdentity == st.approvedActionIdentity {
 			st.approvedActionIdentity = ""
-			if workspacePending {
-				// Approved once: writes and commands in that workspace no longer ask in this run.
-				if sw, ok := pathroots.WorkspaceSwitchFromContext(ctx); ok {
-					sw.Approve(workspaceDir)
-				}
-			}
 			return "", false, nil, nil
 		}
 		// A tool that describes its approval checks the call first: a refused call is not asked.
@@ -1092,12 +1076,7 @@ func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, s
 	if err != nil {
 		return nil, fmt.Errorf("marshal approval resume state: %w", err)
 	}
-	request := e.guard.RequestApproval
-	if pre.Forced {
-		// A workspace switch's first write asks even on an approvals-only guard.
-		request = e.guard.RequestForcedApproval
-	}
-	id, err := request(ctx, guard.Meta{RunID: st.runID, Step: step, Time: time.Now().UTC()}, guard.Action{
+	id, err := e.guard.RequestApproval(ctx, guard.Meta{RunID: st.runID, Step: step, Time: time.Now().UTC()}, guard.Action{
 		Type:       guard.ActionToolCallPre,
 		Identity:   pending.ApprovalIdentity,
 		ToolName:   pending.ToolCall.Name,
@@ -1127,11 +1106,6 @@ func (e *Engine) executeTool(ctx context.Context, st *engineLoopState, step int,
 
 // executeFoundTool runs a tool already found for the call, with the run's context values.
 func (e *Engine) executeFoundTool(ctx context.Context, st *engineLoopState, step int, tc *ToolCall, tool tools.Tool) (string, error) {
-	// A call checked before the run switched workspace (later in the same batch as
-	// workspace_use) must not write or run commands there before the user approves.
-	if dir, pending := workspaceApprovalPending(ctx, tc.Name); pending {
-		return workspaceApprovalPendingObservation(tc.Name, dir)
-	}
 	activityID := toolActivityID(step, tc)
 	toolCtx := withToolActivity(withWorkerScope(ctx, e.engineToolsConfig.WorkerNameSet), activityID, tc.ParentID)
 	if tc.Name == "spawn" || tc.Name == "coder" {
