@@ -227,6 +227,20 @@ test("Escape closes the composer's suggestions shown before the panel opened, th
   expect(app.value("id:chat-composer-input")).toBe("/");
 });
 
+test("a path in the composer shows no suggestions, so the first Escape closes the panel", async () => {
+  const { app } = await openChat({
+    api: { "GET /commands": { body: { items: [{ value: "/alpha", title: "/alpha", description: "First" }] } } },
+  });
+  await app.type("id:chat-composer-input", "/home/x/y");
+  await app.press("id:chat-status-plan");
+  await app.waitFor("id:chat-detail-panel");
+  expect(app.shows("id:chat-composer-suggestions")).toBe(false);
+  await app.press("id:chat-composer-input");
+  await app.keyboard.press("escape");
+  await app.waitFor("id:chat-detail-panel", { state: "gone" });
+  expect(app.value("id:chat-composer-input")).toBe("/home/x/y");
+});
+
 // The entry that opened the panel takes the keyboard focus back as it closes (its `focus` effect,
 // ChatStatusCard's Column, ChatWorkerRoster's chip). Headless steps cannot tell which view has the
 // keyboard focus, nor press a focused button from the keyboard: the request is checked as those

@@ -192,6 +192,34 @@ test("Cancel and Escape give the draft back and send nothing", async () => {
   }
 });
 
+test("Escape leaves an edit whose text ends in a path: no suggestions hold it back", async () => {
+  const runtime = topicRuntime();
+  const { app } = await openTopic(runtime, { api: { ...runtime.api, "GET /commands": { body: { items: [{ value: "/alpha", title: "/alpha" }] } } } });
+  await app.type("id:chat-composer-input", "half a thought");
+  await app.press("id:chat-edit >> nth=0");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "What is a fox?");
+  await app.type("id:chat-composer-input", " see /home/fox/notes");
+  await app.wait(300);
+  expect(app.shows("id:chat-composer-suggestions")).toBe(false);
+  await app.keyboard.press("escape");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "half a thought");
+  expect(app.shows("id:chat-composer-edit-quote")).toBe(false);
+  expect(runtime.edits.length).toBe(0);
+});
+
+test("Enter sends an edit whose text ends in a path, as it is", async () => {
+  const runtime = topicRuntime();
+  const { app } = await openTopic(runtime);
+  await app.press("id:chat-edit >> nth=2");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "Name a famous fox");
+  await app.type("id:chat-composer-input", " in /Users/me/foxes");
+  await app.wait(300);
+  expect(app.shows("id:chat-composer-suggestions")).toBe(false);
+  await app.keyboard.press("enter");
+  await app.waitUntil(() => runtime.edits.length === 1);
+  expect(runtime.edits[0].json.task).toBe("Name a famous fox in /Users/me/foxes");
+});
+
 test("in a browser's phone layout Escape and Enter are not the edit's: Cancel leaves it, the button sends it", async () => {
   // No application shortcuts there (lib/shortcutPolicy.ts), with a hardware keyboard's keys too.
   const runtime = topicRuntime();
