@@ -205,7 +205,27 @@ run's steps) with token counts that add up to the reported total. When the provi
 count tokens, the first look counts the parts with it; otherwise they are estimated locally.
 
 Upload with `POST /files/upload`, using multipart field `files` once per file.
-The entire request is limited to 64 MiB. Destination precedence is explicit
+Each file may be up to 128 MiB (134,217,728 bytes) and the whole multipart
+request up to 129 MiB (135,266,304 bytes): the extra MiB is room for the framing
+and ordinary fields of a largest file, and several files in one request share
+the request's budget. Both are checked by the runtime on its own (and by the
+Console's proxy in front of it); a refusal is `413` with JSON `error` (the limit
+in MiB and bytes), `code` (`upload_request_too_large` or
+`upload_file_too_large`) and `limit_bytes`. A request whose declared length is
+over the budget is refused before its body is read. Parts over 8 MiB are
+written to temporary files while the request is parsed, removed when it ends.
+The body may take up to five minutes to arrive. These are built-in defaults
+with no configuration key; runtimes before them took 64 MiB per request in all.
+Through the Console (`/api/proxy?uri=/files/upload`, what the Console's
+composer uses on every platform) the body is streamed to the endpoint as it
+arrives, never held whole in memory; at most four uploads stream at once across
+the Console process, and another is refused with `503`, `code: upload_busy` and
+`Retry-After: 5`. Forwarding an upload to a remote runtime may take five
+minutes (an ordinary proxied call keeps 20 seconds). A reverse proxy or ingress
+in front of the Console or a remote runtime must allow 129 MiB request bodies
+and a five-minute request; a lower limit there shows as its own 413 or timeout,
+which the Console reports as the server's or proxy's refusal.
+Destination precedence is explicit
 `workspace_dir`, resolved topic workspace, runtime default workspace, then the
 Console subdirectory of the file cache. Repeated filenames are renamed rather
 than overwritten. Use the returned `dir_name` and `path` as `file_references`
@@ -292,7 +312,8 @@ task query with `status: failed` is an execution failure, not an HTTP failure.
 Task submission, workspace mutations and approval JSON decoding read up to
 1 MiB; text-file and schedule replacement read up to 4 MiB. These decoder
 limits are not a promise of a 413 response: invalid or truncated JSON usually
-returns 400. Upload enforces 64 MiB, persona avatar writes enforce 2 MiB, and
+returns 400. Upload enforces 128 MiB per file and 129 MiB per request (with a
+413), persona avatar writes enforce 2 MiB, and
 `/poke` enforces 10 KiB. `/poke` accepts nonblank textual content rather than
 a task envelope, returns 202, and does not return a task ID.
 

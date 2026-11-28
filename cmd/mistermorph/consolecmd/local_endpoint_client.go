@@ -66,6 +66,40 @@ func (c *inProcessRuntimeEndpointClient) Proxy(ctx context.Context, method, endp
 	return status, raw, err
 }
 
+// ProxyUpload hands an upload to the in-process runtime as it arrives: the runtime's multipart
+// parser reads `body` (parts over 8 MiB go to temporary files), so the proxy holds none of it.
+func (c *inProcessRuntimeEndpointClient) ProxyUpload(ctx context.Context, endpointPath string, body io.Reader, contentLength int64, contentType string) (int, []byte, error) {
+	view, err := c.currentView()
+	if err != nil {
+		return 0, nil, err
+	}
+	if view.authToken == "" {
+		return 0, nil, fmt.Errorf("daemon server auth token is not configured")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointPath = strings.TrimSpace(endpointPath)
+	if !strings.HasPrefix(endpointPath, "/") {
+		endpointPath = "/" + endpointPath
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointPath, body)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.ContentLength = contentLength
+	if contentLength <= 0 {
+		req.ContentLength = -1
+	}
+	req.Header.Set("Authorization", "Bearer "+view.authToken)
+	if strings.TrimSpace(contentType) != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	rec := newBufferedResponseWriter()
+	view.handler.ServeHTTP(rec, req)
+	return rec.StatusCode(), rec.Body(), nil
+}
+
 func (c *inProcessRuntimeEndpointClient) Download(ctx context.Context, endpointPath string) (runtimeEndpointDownload, error) {
 	view, err := c.currentView()
 	if err != nil {

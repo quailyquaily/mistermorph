@@ -1257,12 +1257,18 @@ func (s *server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodPost && parsedURI.Path == "/files/upload" {
+		// Streamed, never buffered whole (proxy_upload.go).
+		s.handleProxyUpload(w, r, endpoint, parsedURI)
+		return
+	}
+
 	var body []byte
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
 		maxBodyBytes := int64(4 << 20)
 		switch parsedURI.Path {
 		case "/files/upload":
-			maxBodyBytes = 64 << 20
+			maxBodyBytes = daemonruntime.FileUploadMaxRequestBytes
 		case "/voice/transcribe":
 			maxBodyBytes = 26 << 20
 		}

@@ -215,11 +215,7 @@ var (
 	ErrCronBusy = errors.New("cron task already running")
 )
 
-const (
-	runtimeAPIPath              = "/runtime"
-	fileUploadMaxBytes    int64 = 64 << 20
-	fileUploadMemoryBytes int64 = 8 << 20
-)
+const runtimeAPIPath = "/runtime"
 
 type badRequestError struct {
 	msg string

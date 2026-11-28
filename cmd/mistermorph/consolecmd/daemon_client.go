@@ -20,7 +20,18 @@ type daemonTaskClient struct {
 	authToken      string
 	client         *http.Client
 	downloadClient *http.Client
+	// uploadClient forwards POST /files/upload: a large file takes longer than an API call.
+	uploadClient *http.Client
 }
+
+const (
+	// daemonProxyTimeout bounds an ordinary API call forwarded to a remote runtime.
+	daemonProxyTimeout = 20 * time.Second
+	// daemonUploadTimeout bounds forwarding an upload (POST /files/upload) to a remote runtime,
+	// from the first byte sent to the answer read: the body-read allowance of the upload
+	// (internal/httpserver UploadBodyReadTimeout), as the body is forwarded while it arrives.
+	daemonUploadTimeout = 5 * time.Minute
+)
 
 func newDaemonTaskClient(baseURL, authToken string) *daemonTaskClient {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
@@ -30,9 +41,47 @@ func newDaemonTaskClient(baseURL, authToken string) *daemonTaskClient {
 	return &daemonTaskClient{
 		baseURL:        baseURL,
 		authToken:      authToken,
-		client:         &http.Client{Timeout: 20 * time.Second},
+		client:         &http.Client{Timeout: daemonProxyTimeout},
 		downloadClient: &http.Client{Transport: downloadTransport},
+		uploadClient:   &http.Client{Timeout: daemonUploadTimeout},
 	}
+}
+
+// ProxyUpload forwards an upload to the remote runtime as it arrives (`body` is read once, to its
+// end or to an error), within daemonUploadTimeout; the caller's cancellation stops it.
+func (c *daemonTaskClient) ProxyUpload(ctx context.Context, endpointPath string, body io.Reader, contentLength int64, contentType string) (int, []byte, error) {
+	if err := c.ready(); err != nil {
+		return 0, nil, err
+	}
+	endpointPath = strings.TrimSpace(endpointPath)
+	if !strings.HasPrefix(endpointPath, "/") {
+		endpointPath = "/" + endpointPath
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+endpointPath, body)
+	if err != nil {
+		return 0, nil, err
+	}
+	if contentLength > 0 {
+		req.ContentLength = contentLength
+	}
+	req.Header.Set("Authorization", "Bearer "+c.authToken)
+	if remote, ok := daemonruntime.ClientRemoteFromContext(ctx); ok {
+		req.Header.Set(daemonruntime.RemoteHeader, remote)
+	}
+	if strings.TrimSpace(contentType) != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	client := c.uploadClient
+	if client == nil {
+		client = &http.Client{Timeout: daemonUploadTimeout}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	return resp.StatusCode, raw, nil
 }
 
 func (c *daemonTaskClient) readyBaseURL() error {
