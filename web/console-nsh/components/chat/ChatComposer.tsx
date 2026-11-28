@@ -270,13 +270,15 @@ export function ChatComposer(props: ChatComposerProps) {
   // An input method's composition under way: its text is not in the draft yet on every platform.
   const composing = signal(false);
   const suggestionContext = signal<any>(null);
-  const suggestionIndex = signal(0);
+  // The candidate chosen with the arrows, for the list it was chosen in (suggestionIdentity).
+  const suggestionIndex = signal({ identity: "", index: 0 });
   const historyIndex = signal(-1);
   const measures = signal(INITIAL_MEASURES);
   const actionsWidth = signal(0);
   let applyingHistory = false;
 
   const value = () => String(props.value ?? "");
+  let fieldText = untracked(value);
   const history = () => (Array.isArray(props.inputHistory) ? props.inputHistory : []).map((item) => String(item ?? "").trim()).filter(Boolean);
   const labels = () => props.suggestionLabels ?? { commands: "Commands", skills: "Skills", loading: "Loading...", empty: "No matches" };
   const fileLabels = () =>
@@ -286,17 +288,32 @@ export function ChatComposer(props: ChatComposerProps) {
   const voiceLabels = () =>
     props.voiceLabels ?? { recording: "Listening...", transcribing: "Transcribing...", discard: "Discard recording", previewOn: "Show live text", previewOff: "Hide live text" };
   const suggestionItems = (): any[] => (buildComposerSuggestionItems as (options: unknown) => any[])({ context: suggestionContext(), commands: props.commands, skills: props.skills });
-  const suggestionsVisible = () => suggestionContext() !== null;
+  // What the list says while it has no candidates: the skills' loading or their load error. Else
+  // nothing; commands have neither (they fall back to the built-in list).
+  const suggestionFeedback = () => {
+    if (suggestionContext()?.type !== "skill") return "";
+    if (props.skillsLoading) return labels().loading;
+    return String(props.skillsError ?? "");
+  };
+  // The token before the caret is a `/` or `$` one (the context stays while it is), but the popup
+  // shows only with something in it: candidates, or the skills' feedback. A path (`/home/x`) or a
+  // token nothing matches shows nothing and leaves every key to the field and the page.
+  const suggestionsVisible = () => suggestionContext() !== null && (suggestionItems().length > 0 || suggestionFeedback() !== "");
+  // The candidates as one sequence with their context: a new token, a narrower query or a list
+  // that arrived meanwhile starts again at the first, never at a candidate chosen before.
+  const suggestionIdentity = () => {
+    const context = suggestionContext();
+    if (!context) return "";
+    const keys = suggestionItems().map((item) => String(item.key));
+    return JSON.stringify([context.type, context.query, context.start, context.end, keys]);
+  };
   const activeIndex = () => {
     const count = suggestionItems().length;
-    return count === 0 ? 0 : Math.min(suggestionIndex(), count - 1);
+    const chosen = suggestionIndex();
+    if (count === 0 || chosen.identity !== suggestionIdentity()) return 0;
+    return Math.min(chosen.index, count - 1);
   };
   const suggestionTitle = () => (suggestionContext()?.type === "skill" ? labels().skills : labels().commands);
-  const suggestionEmpty = () => {
-    if (suggestionContext()?.type === "skill" && props.skillsLoading) return labels().loading;
-    if (suggestionContext()?.type === "skill" && props.skillsError) return props.skillsError;
-    return labels().empty;
-  };
   const voiceActive = () => props.voiceState === "recording" || props.voiceState === "transcribing";
   const voiceElapsedText = () => {
     const total = Math.max(0, Math.floor(Number(props.voiceElapsed) || 0));
@@ -339,7 +356,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
   function closeSuggestions() {
     suggestionContext.set(null);
-    suggestionIndex.set(0);
+    suggestionIndex.set({ identity: "", index: 0 });
   }
 
   function syncSuggestions(text: string, cursor: number) {
@@ -352,7 +369,7 @@ export function ChatComposer(props: ChatComposerProps) {
       closeSuggestions();
       return;
     }
-    if (!sameContext(untracked(suggestionContext), next)) suggestionIndex.set(0);
+    if (!sameContext(untracked(suggestionContext), next)) suggestionIndex.set({ identity: "", index: 0 });
     suggestionContext.set(next);
     if (next.type === "command") props.onRequestCommands?.();
     else if (next.type === "skill") props.onRequestSkills?.();
@@ -458,7 +475,7 @@ export function ChatComposer(props: ChatComposerProps) {
     if (suggestionsVisible()) {
       const move = (step: number) => {
         const count = suggestionItems().length;
-        if (count > 0) suggestionIndex.set((untracked(activeIndex) + step + count) % count);
+        if (count > 0) suggestionIndex.set({ identity: untracked(suggestionIdentity), index: (untracked(activeIndex) + step + count) % count });
       };
       cleanup(
         keymap.bind(
@@ -504,6 +521,16 @@ export function ChatComposer(props: ChatComposerProps) {
 
   effect(() => {
     if (props.disabled) untracked(closeSuggestions);
+  });
+
+  // The text the field itself reported last. A value from elsewhere (another topic's draft, an
+  // edit's text, a send clearing the field) is not the text the token was found in: the
+  // suggestions close, and the next keystroke or caret move finds the token again.
+  effect(() => {
+    const text = value();
+    if (text === fieldText) return;
+    fieldText = text;
+    untracked(closeSuggestions);
   });
 
   props.onReady?.({ focus, focused: () => untracked(focused), insertText, closeSuggestions });
@@ -950,7 +977,21 @@ export function ChatComposer(props: ChatComposerProps) {
         onPress={() => focus({ preserveSelection: true })}
         {...dropTarget}
       >
-        <If when={suggestionsVisible()}>
+        {/* The candidates are a listbox of options; the skills' feedback alone (loading, a load
+            error) is text under the same title, not an empty listbox. */}
+        <If when={suggestionsVisible() && suggestionItems().length === 0}>
+          <View
+            class="gap-0.5 border-b border-line-faint p-1.5"
+            android={{ accessibilityLiveRegion: "polite" }}
+            testID="chat-composer-suggestions"
+          >
+            <Text class="px-2 font-mono text-xs uppercase text-muted-foreground">{suggestionTitle()}</Text>
+            <Text class="px-2 py-1 text-xs text-muted-foreground" testID="chat-composer-suggestions-feedback">
+              {suggestionFeedback()}
+            </Text>
+          </View>
+        </If>
+        <If when={suggestionsVisible() && suggestionItems().length > 0}>
           <View role="listbox" accessibilityLabel={suggestionTitle()} class="gap-0.5 border-b border-line-faint p-1.5" testID="chat-composer-suggestions">
             <Text class="px-2 font-mono text-xs uppercase text-muted-foreground">{suggestionTitle()}</Text>
             <Each of={suggestionItems()} key={(item) => item.key}>
@@ -969,9 +1010,6 @@ export function ChatComposer(props: ChatComposerProps) {
                 </BaseButton>
               )}
             </Each>
-            <If when={!suggestionItems().length}>
-              <Text class="px-2 py-1 text-xs text-muted-foreground">{suggestionEmpty()}</Text>
-            </If>
           </View>
         </If>
         <If when={(props.fileItems ?? []).length || props.workspaceItem}>
@@ -1154,6 +1192,7 @@ export function ChatComposer(props: ChatComposerProps) {
               }}
               onCompositionChange={({ composing: active, text }) => composing.set(active && text !== "")}
               onChange={({ value: next }) => {
+                fieldText = next;
                 resetHistory();
                 props.onChange(next);
                 const range = untracked(selection);
