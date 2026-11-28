@@ -542,6 +542,16 @@ Headless tests prove behaviour, not the look.
   it names every other one: with only `js`, from v0.3.119 to v0.3.136 every fetch failed with "this
   host has no network stack", the desktop app stayed on the login page even without a password,
   and SVG images were blank. Nothing headless or in a browser shows it; run the built app.
+- A paste's `onPaste` files are `File`s with the platform's word for what they are, which is not
+  to be trusted: nsh names an image of bytes it does not know `image.png` (`PastedFile::image`),
+  so markup or noise arrive as a "PNG"; `nsh/test`'s `app.paste` types its files by a short
+  extension table (a `.bmp` or `.tiff` is `application/octet-stream`). The composer reads the
+  bytes (components/chat/imagePaste.ts). Android's runtime read a pasted image's content URI
+  whole, logged a failed read and went on, and before Android 12 its menu Paste left the URI to
+  TextView's own paste: the app builds a patched InputBox
+  (android/src/com/longbridge/nsh/InputBox.java). `nsh test --target web` runs `app.paste` as a
+  real ClipboardEvent in Chrome; Chrome refuses to start under a long TMPDIR (its socket path), a
+  short or relative one works. See `docs/feat/feat_20261128_composer_image_paste.md`.
 - `Picker.pickFiles` leaves a file over 512 MiB unread (`file: null`, `status: "tooLarge"`);
   `lib/mobileHost.ts` leaves it out.
 - A tooltip goes out over a few frames as the next one comes in, so for a moment both show.
