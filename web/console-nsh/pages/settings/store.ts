@@ -25,11 +25,11 @@ import {
   normalizeSetupProviderChoice,
   SETUP_PROVIDER_BEDROCK,
   SETUP_PROVIDER_CLOUDFLARE,
-  SETUP_PROVIDER_MISTERMORPH_PRO,
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_OPTIONS,
   SETUP_PROVIDER_XAI_OAUTH,
   setupOpenAICodexUsesAPIKey,
+  setupProviderSupportsModelLookup,
   setupProfileBenchmarkIds,
   setupProfileDecisionOnly,
   setupProviderEvaluateOnly,
@@ -56,6 +56,8 @@ import {
   savePersonaRecord,
 } from "../../lib/core/persona-profile.js";
 import { modelPickerItemsFromPayload } from "../../lib/core/setup-picker.js";
+import { modelIDsFromPayload } from "../../lib/core/provider-models.js";
+import { createProviderModelFill } from "../../components/settings/providerModelFill";
 import { reactiveRecord } from "../../lib/stores/reactive-record.js";
 import { DEFAULT_WORKER_NAME_SET, normalizeWorkerNameSet } from "../../lib/core/worker-identity.js";
 import { hasFeature, isDesktop, restartDesktopApp } from "../../lib/platform";
@@ -487,6 +489,8 @@ export function createSettingsStore() {
   const agentSettingsLoaded = signal(false);
   const llmEnvManaged = signal<Record<string, any>>({});
   const llmSecretFields = signal<Record<string, any>>({});
+  // The model last set for each provider on this agent (its settings' `llm_last_models`).
+  const llmLastModels = signal<Record<string, string>>({});
   const llmSecretDirty = signal<Set<string>>(new Set());
 
   /* --- console --- */
@@ -972,13 +976,6 @@ export function createSettingsStore() {
       await loadAgentSettings(endpointRef);
     },
   });
-  const proAuth = createDeviceAuthFlow({
-    kind: "pro",
-    getEndpointRef: () => untracked(settingsEndpointRef),
-    onSettingsUpdated: async (_payload, endpointRef) => {
-      await loadAgentSettings(endpointRef);
-    },
-  });
 
   /* --- sections --- */
   const selectedSectionID = signal("persona");
@@ -1235,13 +1232,8 @@ export function createSettingsStore() {
       hasLLMFieldOrSecretValue(state.llm, llmEnvManaged(), llmSecretFields(), "api_key"),
     ),
   );
-  const defaultCodexAuthDisabled = computed(
-    () =>
-      trimText(llmFieldValue(state.llm, llmEnvManaged(), "endpoint")) !== "" &&
-      hasLLMFieldOrSecretValue(state.llm, llmEnvManaged(), llmSecretFields(), "api_key"),
-  );
+  const defaultCodexAuthDisabled = computed(() => false);
   const defaultIsXAIProvider = computed(() => defaultProviderChoice() === SETUP_PROVIDER_XAI_OAUTH);
-  const defaultIsProProvider = computed(() => defaultProviderChoice() === SETUP_PROVIDER_MISTERMORPH_PRO);
 
   function profileUsesCodexAPIKey(profile: any) {
     const envManaged = llmProfileEnvManaged(profile);
@@ -1263,11 +1255,6 @@ export function createSettingsStore() {
   const showCodexAuthCard = computed(
     () => defaultIsCodexProvider() || state.llm.profiles.some((profile) => profileProviderChoice(profile) === SETUP_PROVIDER_OPENAI_CODEX),
   );
-  const showProAuthCard = computed(() => {
-    if (!selectedEndpointIsConsole()) return false;
-    if (defaultIsProProvider()) return true;
-    return state.llm.profiles.some((profile) => profileProviderChoice(profile) === SETUP_PROVIDER_MISTERMORPH_PRO);
-  });
   const showXAIAuthCard = computed(() => {
     if (!selectedEndpointIsConsole()) return false;
     if (defaultIsXAIProvider()) return true;
@@ -1343,7 +1330,6 @@ export function createSettingsStore() {
   );
 
   const xaiReady = () => xaiAuth.ready();
-  const proLoggedIn = () => proAuth.status().logged_in;
   const codexLoggedIn = () => codexAuth.status().logged_in;
 
   const testConnectionDisabled = computed(
@@ -1355,7 +1341,6 @@ export function createSettingsStore() {
       !hasLLMFieldValue(state.llm, llmEnvManaged(), "model") ||
       (defaultIsCodexProvider() && !defaultCodexUsesAPIKey() && !codexLoggedIn()) ||
       (selectedEndpointIsConsole() && defaultIsXAIProvider() && !xaiReady()) ||
-      (selectedEndpointIsConsole() && defaultIsProProvider() && !proLoggedIn()) ||
       (setupProviderRequiresAPIKey(defaultProviderChoice()) &&
         !hasLLMFieldOrSecretValue(state.llm, llmEnvManaged(), llmSecretFields(), defaultCredentialFieldName())) ||
       (defaultShowBedrockFields() && !hasLLMFieldOrSecretValue(state.llm, llmEnvManaged(), llmSecretFields(), "bedrock_aws_key")) ||
@@ -1377,7 +1362,6 @@ export function createSettingsStore() {
       !llmDirty() ||
       (defaultIsCodexProvider() && !defaultCodexUsesAPIKey() && !codexLoggedIn()) ||
       (selectedEndpointIsConsole() && defaultIsXAIProvider() && !xaiReady()) ||
-      (selectedEndpointIsConsole() && defaultIsProProvider() && !proLoggedIn()) ||
       (setupProviderRequiresAPIKey(defaultProviderChoice()) &&
         !hasLLMFieldOrSecretValue(state.llm, llmEnvManaged(), llmSecretFields(), defaultCredentialFieldName())) ||
       (defaultShowBedrockFields() && !hasLLMFieldOrSecretValue(state.llm, llmEnvManaged(), llmSecretFields(), "bedrock_aws_key")) ||
@@ -1396,8 +1380,7 @@ export function createSettingsStore() {
       !profileDirty(profile) ||
       profileValidationError(profile) !== "" ||
       (provider === SETUP_PROVIDER_OPENAI_CODEX && !profileUsesCodexAPIKey(profile) && !codexLoggedIn()) ||
-      (selectedEndpointIsConsole() && provider === SETUP_PROVIDER_XAI_OAUTH && !xaiReady()) ||
-      (selectedEndpointIsConsole() && provider === SETUP_PROVIDER_MISTERMORPH_PRO && !proLoggedIn())
+      (selectedEndpointIsConsole() && provider === SETUP_PROVIDER_XAI_OAUTH && !xaiReady())
     );
   }
   const toolsSaveDisabled = computed(() => agentLoading() || agentSaving() || agentSettingsReadOnly() || !toolsDirty());
@@ -1690,6 +1673,7 @@ export function createSettingsStore() {
       applyMCPPayload(data?.mcp);
       llmEnvManaged.set(obj(envManagedPayload.llm));
       llmSecretFields.set(obj(secretFieldsPayload.llm));
+      llmLastModels.set(obj(data?.llm_last_models) as Record<string, string>);
       llmSecretDirty.set(new Set());
       agentValidationVisible.set(false);
       agentSettingsLoaded.set(true);
@@ -1958,8 +1942,9 @@ export function createSettingsStore() {
       payload.bedrock_model_arn = llmFieldEnvRawValue(envManaged, "bedrock_model_arn") || trimText(profile.bedrock_model_arn);
       clear("api_key", "cloudflare_api_token", "cloudflare_account_id");
     } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
-      payload.api_key = secret("api_key");
+      // Codex signs in with the account: a key saved for it before goes.
       clear(
+        "api_key",
         "cloudflare_api_token",
         "cloudflare_account_id",
         "bedrock_aws_key",
@@ -1969,7 +1954,7 @@ export function createSettingsStore() {
         "bedrock_region",
         "bedrock_model_arn",
       );
-    } else if (provider === SETUP_PROVIDER_XAI_OAUTH || provider === SETUP_PROVIDER_MISTERMORPH_PRO) {
+    } else if (provider === SETUP_PROVIDER_XAI_OAUTH) {
       clear(
         "api_key",
         "cloudflare_api_token",
@@ -2049,9 +2034,8 @@ export function createSettingsStore() {
       secret("cloudflare_api_token");
       plain("cloudflare_account_id");
     } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
-      secret("api_key");
-      clear("cloudflare_api_token", "cloudflare_account_id", "bedrock_aws_key", "bedrock_aws_secret", "bedrock_region", "bedrock_model_arn");
-    } else if (provider === SETUP_PROVIDER_XAI_OAUTH || provider === SETUP_PROVIDER_MISTERMORPH_PRO) {
+      clear("api_key", "cloudflare_api_token", "cloudflare_account_id", "bedrock_aws_key", "bedrock_aws_secret", "bedrock_region", "bedrock_model_arn");
+    } else if (provider === SETUP_PROVIDER_XAI_OAUTH) {
       clear("api_key", "cloudflare_api_token", "cloudflare_account_id", "bedrock_aws_key", "bedrock_aws_secret", "bedrock_region", "bedrock_model_arn");
     } else {
       secret("api_key");
@@ -2099,9 +2083,8 @@ export function createSettingsStore() {
       secret("cloudflare_api_token");
       plain("cloudflare_account_id");
     } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
-      secret("api_key");
-      clear("cloudflare_api_token", "cloudflare_account_id", "bedrock_aws_key", "bedrock_aws_secret", "bedrock_region", "bedrock_model_arn");
-    } else if (provider === SETUP_PROVIDER_XAI_OAUTH || provider === SETUP_PROVIDER_MISTERMORPH_PRO) {
+      clear("api_key", "cloudflare_api_token", "cloudflare_account_id", "bedrock_aws_key", "bedrock_aws_secret", "bedrock_region", "bedrock_model_arn");
+    } else if (provider === SETUP_PROVIDER_XAI_OAUTH) {
       clear("api_key", "cloudflare_api_token", "cloudflare_account_id", "bedrock_aws_key", "bedrock_aws_secret", "bedrock_region", "bedrock_model_arn");
     } else {
       secret("api_key");
@@ -2134,18 +2117,12 @@ export function createSettingsStore() {
   function profileUsesCodexProvider(profile: any) {
     return profileProviderChoice(profile) === SETUP_PROVIDER_OPENAI_CODEX;
   }
-  function profileCodexAuthDisabled(profile: any) {
-    const envManaged = llmProfileEnvManaged(profile);
-    return (
-      trimText(llmFieldValue(profile, envManaged, "endpoint")) !== "" &&
-      hasLLMFieldOrSecretValue(profile, envManaged, llmProfileSecretFields(profile), "api_key")
-    );
+  // Codex has no key of its own in the forms any more, so its sign-in is never off for one.
+  function profileCodexAuthDisabled(_profile: any) {
+    return false;
   }
   function profileUsesXAIProvider(profile: any) {
     return selectedEndpointIsConsole() && profileProviderChoice(profile) === SETUP_PROVIDER_XAI_OAUTH;
-  }
-  function profileUsesProProvider(profile: any) {
-    return selectedEndpointIsConsole() && profileProviderChoice(profile) === SETUP_PROVIDER_MISTERMORPH_PRO;
   }
   function hasResolvableProfileTestTarget(profile: any) {
     const name = trimText(profile?.name);
@@ -2155,7 +2132,6 @@ export function createSettingsStore() {
   function profileModelLookupCredentialsReady(profile: any) {
     const provider = profileProviderChoice(profile);
     const envManaged = llmProfileEnvManaged(profile);
-    if (provider === SETUP_PROVIDER_MISTERMORPH_PRO) return !selectedEndpointIsConsole() || proLoggedIn();
     if (provider === SETUP_PROVIDER_OPENAI_CODEX) return profileUsesCodexAPIKey(profile) || codexLoggedIn();
     if (provider === SETUP_PROVIDER_XAI_OAUTH) return !selectedEndpointIsConsole() || xaiReady();
     if (provider === SETUP_PROVIDER_CLOUDFLARE) {
@@ -2176,7 +2152,6 @@ export function createSettingsStore() {
     if (!hasLLMFieldValue(profile, envManaged, "model")) return true;
     if (provider === SETUP_PROVIDER_OPENAI_CODEX) return !profileUsesCodexAPIKey(profile) && !codexLoggedIn();
     if (provider === SETUP_PROVIDER_XAI_OAUTH) return selectedEndpointIsConsole() && !xaiReady();
-    if (provider === SETUP_PROVIDER_MISTERMORPH_PRO) return selectedEndpointIsConsole() && !proLoggedIn();
     if (provider === SETUP_PROVIDER_BEDROCK) {
       return (
         !hasLLMFieldOrSecretValue(profile, envManaged, secrets, "bedrock_aws_key") ||
@@ -2380,23 +2355,9 @@ export function createSettingsStore() {
     state.llm.endpoint = nextEndpoint;
   }
 
-  async function openModelPicker(profileKey = "") {
-    if (untracked(agentLoading) || untracked(agentSaving) || untracked(agentSettingsReadOnly)) return;
-    const normalizedProfileKey = String(profileKey || "").trim();
-    const targetProfile = normalizedProfileKey
-      ? untracked(() => state.llm.profiles.find((profile) => profile._key === normalizedProfileKey)) || null
-      : null;
-    if (normalizedProfileKey && !targetProfile) return;
-    if (targetProfile && !untracked(() => profileModelLookupCredentialsReady(targetProfile))) return;
-    batch(() => {
-      modelPickerTargetProfileKey.set(targetProfile?._key || "");
-      modelPickerOpen.set(true);
-      modelPickerLoading.set(true);
-      modelPickerError.set("");
-      modelPickerItems.set([]);
-    });
-    const target = currentRef();
-    const body = untracked(() => {
+  /** What the models route takes for the default model's form, or a profile's: the provider and what it signs in with. */
+  function modelLookupBody(targetProfile: any) {
+    return untracked(() => {
       const env = llmEnvManaged();
       const targetEnv = targetProfile ? llmProfileEnvManaged(targetProfile) : null;
       const provider = targetProfile
@@ -2415,9 +2376,75 @@ export function createSettingsStore() {
             ? llmFieldValue(targetProfile || state.llm, targetEnv || env, "cloudflare_account_id")
             : "",
         endpoint: setupProviderSupportsCustomAPIBase(providerChoice) ? endpoint : "",
-        api_key: providerChoice === SETUP_PROVIDER_MISTERMORPH_PRO ? "" : apiKeyRaw || apiKey,
+        api_key: apiKeyRaw || apiKey,
       };
     });
+  }
+
+  // A form's provider changed (LLMConfigForm): its model becomes the one last set for that
+  // provider, or the provider's default, checked against the provider's list. The form is named by
+  // its profile's key; "" is the default model's.
+  const profileByKey = (key: string) => (key ? state.llm.profiles.find((profile) => profile._key === key) || null : null);
+  const defaultModelLookupReady = () => {
+    const provider = defaultProviderChoice();
+    const env = llmEnvManaged();
+    if (provider === SETUP_PROVIDER_OPENAI_CODEX) return codexLoggedIn();
+    if (provider === SETUP_PROVIDER_CLOUDFLARE) {
+      return hasLLMFieldOrSecretValue(state.llm, env, llmSecretFields(), "cloudflare_api_token") && hasLLMFieldValue(state.llm, env, "cloudflare_account_id");
+    }
+    if (!setupProviderRequiresAPIKey(provider)) return true;
+    return hasLLMFieldOrSecretValue(state.llm, env, llmSecretFields(), "api_key");
+  };
+  const modelFill = createProviderModelFill({
+    lastModels: llmLastModels,
+    providerTitle: (provider) => providerItems.find((item) => item.value === provider)?.title || provider,
+    canList: (key, provider) => {
+      if (agentSettingsReadOnly() || !setupProviderSupportsModelLookup(provider)) return false;
+      const profile = profileByKey(key);
+      if (key && !profile) return false;
+      return profile ? profileModelLookupCredentialsReady(profile) : defaultModelLookupReady();
+    },
+    listModels: async (key) =>
+      modelIDsFromPayload(await endpointApiFetch(currentRef(), "/settings/agent/models", { method: "POST", body: modelLookupBody(untracked(() => profileByKey(key))) })),
+    provider: (key) => {
+      const profile = profileByKey(key);
+      return key ? (profile ? profileProviderChoice(profile) : "") : defaultProviderChoice();
+    },
+    model: (key) => trimText(key ? profileByKey(key)?.model : state.llm.model),
+    setModel: (key, model) => (key ? updateProfileField(key, { field: "model", value: model }) : updateDefaultLLMField({ field: "model", value: model })),
+    choose: (key) => void openModelPicker(key),
+  });
+  /** LLMConfigForm's `onProviderChanged`, for the default model's form ("") or a profile's. */
+  function providerChanged(profileKey: string, provider: string) {
+    if (untracked(agentSettingsReadOnly)) return;
+    modelFill.providerChanged(String(profileKey || "").trim(), provider);
+  }
+  // Signed in to Codex: the forms that took a Codex model meanwhile can check it against its list.
+  effect(() => {
+    if (!codexLoggedIn()) return;
+    untracked(() => {
+      modelFill.settle("");
+      for (const profile of state.llm.profiles) modelFill.settle(profile._key);
+    });
+  });
+
+  async function openModelPicker(profileKey = "") {
+    if (untracked(agentLoading) || untracked(agentSaving) || untracked(agentSettingsReadOnly)) return;
+    const normalizedProfileKey = String(profileKey || "").trim();
+    const targetProfile = normalizedProfileKey
+      ? untracked(() => state.llm.profiles.find((profile) => profile._key === normalizedProfileKey)) || null
+      : null;
+    if (normalizedProfileKey && !targetProfile) return;
+    if (targetProfile && !untracked(() => profileModelLookupCredentialsReady(targetProfile))) return;
+    batch(() => {
+      modelPickerTargetProfileKey.set(targetProfile?._key || "");
+      modelPickerOpen.set(true);
+      modelPickerLoading.set(true);
+      modelPickerError.set("");
+      modelPickerItems.set([]);
+    });
+    const target = currentRef();
+    const body = modelLookupBody(targetProfile);
     try {
       const payload = await endpointApiFetch(target, "/settings/agent/models", { method: "POST", body });
       modelPickerItems.set(modelPickerItemsFromPayload(payload, currentLocale()));
@@ -3294,7 +3321,6 @@ export function createSettingsStore() {
       closeDeleteProfileDialog();
       codexAuth.dialogOpen.set(false);
       xaiAuth.dialogOpen.set(false);
-      proAuth.dialogOpen.set(false);
     });
   }
 
@@ -3320,7 +3346,6 @@ export function createSettingsStore() {
       if (previousEndpointRef !== undefined && previousEndpointRef !== next) {
         codexAuth.resetEndpointState();
         xaiAuth.resetEndpointState();
-        proAuth.resetEndpointState();
         discardSettingsDrafts();
         ensureSettingsSectionData(selectedSectionID());
       }
@@ -3351,21 +3376,11 @@ export function createSettingsStore() {
       xaiCardShown = visible;
     });
   });
-  let proCardShown = false;
-  effect(() => {
-    const visible = showProAuthCard();
-    untracked(() => {
-      if (visible) void proAuth.loadStatus();
-      else if (proCardShown) proAuth.resetFlow();
-      proCardShown = visible;
-    });
-  });
 
   function dispose() {
     disposed = true;
     codexAuth.dispose();
     xaiAuth.dispose();
-    proAuth.dispose();
     discardSettingsDrafts();
     setPersonaAvatarObjectURL("");
   }
@@ -3451,7 +3466,6 @@ export function createSettingsStore() {
     profileUsesCodexProvider,
     profileCodexAuthDisabled,
     profileUsesXAIProvider,
-    profileUsesProProvider,
     defaultCodexAuthDisabled,
     openProfileKey,
     openedProfile,
@@ -3494,10 +3508,11 @@ export function createSettingsStore() {
     modelPickerItems,
     modelPickerSelectedValue,
     openModelPicker,
+    modelFill,
+    providerChanged,
     applyModelOption,
     codexAuth,
     xaiAuth,
-    proAuth,
     // advanced dialog
     advancedSettingsOpen,
     advancedSettingsTitle,

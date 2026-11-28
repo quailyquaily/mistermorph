@@ -6,8 +6,7 @@
 //
 // Vue to nsh: each emit is an `on...` prop: `update-field` is `onUpdateField({ field, value })`,
 // `open-api-base-picker` is `onOpenApiBasePicker()`, `open-model-picker` `onOpenModelPicker()`,
-// `open-codex-auth` `onOpenCodexAuth()`, `open-xai-auth` `onOpenXaiAuth()`, `open-pro-auth`
-// `onOpenProAuth()`.
+// `open-codex-auth` `onOpenCodexAuth()`, `open-xai-auth` `onOpenXaiAuth()`.
 import type { JSX } from "nsh";
 import { Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
@@ -26,7 +25,6 @@ import {
   resolveSetupAPIKeyHelp,
   SETUP_PROVIDER_BEDROCK,
   SETUP_PROVIDER_CLOUDFLARE,
-  SETUP_PROVIDER_MISTERMORPH_PRO,
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_XAI_OAUTH,
   setupProfileAbilities,
@@ -85,15 +83,13 @@ export interface LLMConfigFormProps {
   showXAIAuthAction?: boolean;
   xaiAuthState?: LLMAuthState;
   xaiAuthTitle?: string;
-  showProAuthAction?: boolean;
-  proAuthState?: LLMAuthState;
-  proAuthTitle?: string;
   onUpdateField?: (change: { field: string; value: string }) => void;
+  /** The provider was changed to another one (its normalized id): the page gives the form that provider's model. */
+  onProviderChanged?: (provider: string) => void;
   onOpenApiBasePicker?: () => void;
   onOpenModelPicker?: () => void;
   onOpenCodexAuth?: () => void;
   onOpenXaiAuth?: () => void;
-  onOpenProAuth?: () => void;
   testID?: string;
 }
 
@@ -169,7 +165,6 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
   const showCloudflareAccountField = () => effectiveProvider() === SETUP_PROVIDER_CLOUDFLARE;
   const showCodexOAuthFields = () => effectiveProvider() === SETUP_PROVIDER_OPENAI_CODEX;
   const showXAIOAuthFields = () => effectiveProvider() === SETUP_PROVIDER_XAI_OAUTH;
-  const showProOAuthFields = () => effectiveProvider() === SETUP_PROVIDER_MISTERMORPH_PRO;
   const showBedrockFields = () => effectiveProvider() === SETUP_PROVIDER_BEDROCK;
   const showAzureFields = () => effectiveProvider() === "azure";
   // Evaluate-only providers (TypeSafe) have only the decision ability, locked.
@@ -180,7 +175,6 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
   const showCredentialFields = () =>
     !showBedrockFields() &&
     !showXAIOAuthFields() &&
-    !showProOAuthFields() &&
     (showCloudflareAccountField() || Boolean(setupProviderSupportsAPIKey(effectiveProvider())));
   const credentialLabelKey = () =>
     showCloudflareAccountField() ? "settings_agent_cloudflare_api_token_label" : "settings_agent_api_key_label";
@@ -201,18 +195,16 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
     Boolean(setupProviderSupportsModelLookup(effectiveProvider())) && Boolean(props.enableAPIBasePicker || props.enableModelPicker);
   const providerHasAuthAction = () =>
     Boolean(
-      (props.showCodexAuthAction && showCodexOAuthFields()) ||
-        (props.showXAIAuthAction && showXAIOAuthFields()) ||
-        (props.showProAuthAction && showProOAuthFields()),
+      (props.showCodexAuthAction && showCodexOAuthFields()) || (props.showXAIAuthAction && showXAIOAuthFields()),
     );
   const codexAuthNeedsLogin = () => String(props.codexAuthState || "signed-out").trim() === "signed-out";
   const xaiAuthNeedsLogin = () => ["signed-out", "expired"].includes(String(props.xaiAuthState || "signed-out").trim());
-  const proAuthNeedsLogin = () => ["signed-out", "expired"].includes(String(props.proAuthState || "signed-out").trim());
   const modelLookupCredentialsReady = () => {
     if (props.modelLookupCredentialsReady !== null && props.modelLookupCredentialsReady !== undefined) {
       return props.modelLookupCredentialsReady === true;
     }
-    if (showProOAuthFields()) return !proAuthNeedsLogin();
+    // Codex: signed in with the account, or a key of its own.
+    if (showCodexOAuthFields() && !codexAuthNeedsLogin()) return true;
     const credentialField = showCloudflareAccountField() ? "cloudflare_api_token" : "api_key";
     return hasLLMFieldValue(props.config, props.envManaged, credentialField) || isSecretConfigured(credentialField);
   };
@@ -256,6 +248,11 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
     props.onUpdateField?.({ field, value: String(value || "") });
   };
 
+  // Another provider: the page fills in that provider's own model (`onProviderChanged`).
+  const providerChanged = (next: string, previous: string) => {
+    const provider = normalizeSetupProviderChoice(next, { allowEmpty: true }) as string;
+    if (provider !== normalizeSetupProviderChoice(previous, { allowEmpty: true })) props.onProviderChanged?.(provider);
+  };
   const onProviderChange = (item: ProviderItem) => {
     if (!item || typeof item !== "object") return;
     const nextProvider = String(item.value || "").trim();
@@ -267,11 +264,13 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
       setupProviderSupportsCustomAPIBase(currentProvider) &&
       currentEndpoint !== ""
     ) {
+      providerChanged(nextProvider, currentProvider);
       return;
     }
     updateField("endpoint", "");
     const normalized = normalizeSetupProviderChoice(nextProvider, { allowEmpty: true });
-    if (normalized === SETUP_PROVIDER_XAI_OAUTH || normalized === SETUP_PROVIDER_MISTERMORPH_PRO) {
+    // The providers that sign in with an account take no API base or key of their own.
+    if (normalized === SETUP_PROVIDER_XAI_OAUTH || normalized === SETUP_PROVIDER_OPENAI_CODEX) {
       for (const field of [
         "api_key",
         "cloudflare_api_token",
@@ -286,7 +285,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
         updateField(field, "");
       }
     }
-    if (normalized === SETUP_PROVIDER_XAI_OAUTH) updateField("model", "grok-4.5");
+    providerChanged(nextProvider, currentProvider);
   };
 
   /** A text field, or the variable it comes from. */
@@ -373,18 +372,6 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
                     refreshable
                     testID="llm-xai-auth"
                     onPress={() => props.onOpenXaiAuth?.()}
-                  />
-                </If>
-                <If when={props.showProAuthAction && showProOAuthFields()}>
-                  <AuthAction
-                    state={String(props.proAuthState || "signed-out")}
-                    needsLogin={proAuthNeedsLogin()}
-                    loginLabel={t("settings_pro_auth_login_pro")}
-                    title={props.proAuthTitle || ""}
-                    disabled={props.busy}
-                    refreshable
-                    testID="llm-pro-auth"
-                    onPress={() => props.onOpenProAuth?.()}
                   />
                 </If>
               </>,

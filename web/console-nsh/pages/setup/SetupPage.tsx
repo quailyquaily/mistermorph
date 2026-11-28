@@ -6,10 +6,11 @@ import type { ImageAsset, InputRef, JSX } from "nsh";
 import { Image, Scroll, Text, token, View, windowSize } from "nsh";
 import { shadowColor } from "../../components/solidLook";
 import { Button as BaseButton } from "nsh/base";
-import { CodexAuthDialog, ProAuthDialog, XAIAuthDialog } from "../../components/settings/AuthDialogs";
+import { CodexAuthDialog, XAIAuthDialog } from "../../components/settings/AuthDialogs";
 import { EnvManagedField } from "../../components/settings/EnvManagedField";
 import { ImageUploadField } from "../../components/settings/ImageUploadField";
 import { InferenceProviderPicker } from "../../components/settings/InferenceProviderPicker";
+import { MissingModelDialog } from "../../components/settings/providerModelFill";
 import { SecretInput } from "../../components/settings/SecretInput";
 import { SetupConnectionTestDialog } from "../../components/settings/SetupConnectionTestDialog";
 import { SetupPickerDialog } from "../../components/settings/SetupPickerDialog";
@@ -169,17 +170,6 @@ function LLMStage(props: { s: SetupState }) {
                     disabled={busy()}
                     onPress={() => void s.xai.openXAIAuthDialog()}
                     testID="setup-xai-auth"
-                  />
-                </If>
-                <If when={s.showProOAuthFields()}>
-                  <AuthActionButton
-                    state={s.pro.proAuthButtonState()}
-                    needsLogin={s.pro.proAuthNeedsLogin()}
-                    loginLabel={t("settings_pro_auth_login_pro")}
-                    title={s.pro.proAuthButtonTitle()}
-                    disabled={busy()}
-                    onPress={() => void s.pro.openProAuthDialog()}
-                    testID="setup-pro-auth"
                   />
                 </If>
               </>
@@ -816,6 +806,7 @@ export function SetupPage() {
         emptyText={t("setup_llm_api_base_picker_empty")}
         onSelect={(item) => s.applyAPIBaseOption(item)}
       />
+      <MissingModelDialog fill={s.modelFill} />
       <SetupPickerDialog
         open={s.modelPickerOpen()}
         onOpenChange={(open) => s.modelPickerOpen.set(open)}
@@ -876,20 +867,6 @@ export function SetupPage() {
         loginExpiresLabel={s.xai.xaiLoginExpiresLabel()}
         onLogin={() => s.xai.reloginXAIAuth()}
         onLogout={() => void s.xai.logoutXAIAuth()}
-      />
-      <ProAuthDialog
-        open={s.pro.proAuthDialogOpen()}
-        onOpenChange={(open) => s.pro.proAuthDialogOpen.set(open)}
-        loading={s.pro.proAuthLoading()}
-        busy={s.pro.proAuthBusy()}
-        error={s.pro.proAuthError()}
-        status={s.pro.proAuthStatus()}
-        summary={s.pro.proAuthSummary()}
-        loginSession={s.pro.proLoginSession()}
-        verificationURL={s.pro.proLoginVerificationURL()}
-        userCode={s.pro.proLoginUserCode()}
-        loginExpiresLabel={s.pro.proLoginExpiresLabel()}
-        onLogout={() => void s.pro.logoutProAuth()}
       />
     </View>
   );

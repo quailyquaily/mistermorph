@@ -16,7 +16,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmbench"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
-	"github.com/quailyquaily/mistermorph/internal/proaccount"
 	"github.com/quailyquaily/mistermorph/internal/testhttp"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/spf13/viper"
@@ -1143,52 +1142,6 @@ func TestAgentSettingsYAMLManagedFieldIgnoresConnectionCredentialsForXAIOAuth(t 
 	for _, field := range []string{"endpoint", "api_key", "cloudflare_api_token", "cloudflare_account_id"} {
 		if got, ok := agentSettingsYAMLManagedField(node, "xai_oauth", field); ok {
 			t.Fatalf("%s must not be managed for xai_oauth: %#v", field, got)
-		}
-	}
-}
-
-func TestWriteAgentSettingsUpdateProDefaultKeepsOnlyInferenceProvider(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(configPath, []byte(
-		"llm:\n  inference_provider: openai\n  provider: openai_resp\n  endpoint: https://api.openai.com/v1\n  model: gpt-5.2\n  api_key: sk-old\n  azure:\n    deployment: old\n  bedrock:\n    region: us-east-1\n  cloudflare:\n    account_id: acc-old\n",
-	), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	inferenceProvider := llmutil.InferenceProviderMisterMorphPro
-	model := proaccount.DefaultModel
-	empty := ""
-	serialized, err := writeAgentSettingsUpdate(configPath, agentSettingsUpdatePayload{
-		LLM: llmSettingsUpdatePayload{
-			LLMConfigFieldsUpdate: llmConfigFieldsUpdatePayload{
-				InferenceProvider:   &inferenceProvider,
-				Model:               &model,
-				Endpoint:            &empty,
-				APIKey:              &empty,
-				CloudflareAPIToken:  &empty,
-				CloudflareAccountID: &empty,
-				BedrockAWSKey:       &empty,
-				BedrockAWSSecret:    &empty,
-				BedrockRegion:       &empty,
-				BedrockModelARN:     &empty,
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("writeAgentSettingsUpdate() error = %v", err)
-	}
-	out := string(serialized)
-	for _, want := range []string{
-		"inference_provider: " + llmutil.InferenceProviderMisterMorphPro,
-		"model: " + proaccount.DefaultModel,
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("serialized config missing %q: %s", want, out)
-		}
-	}
-	for _, notWant := range []string{"\n  provider:", "\n  endpoint:", "api_key:", "azure:", "bedrock:", "cloudflare:"} {
-		if strings.Contains(out, notWant) {
-			t.Fatalf("serialized config should remove %q: %s", notWant, out)
 		}
 	}
 }

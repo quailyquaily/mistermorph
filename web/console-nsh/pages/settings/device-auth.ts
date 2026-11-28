@@ -1,6 +1,6 @@
-// The device sign-in flows of the Settings page: Mister Morph Pro and xAI (the Vue console's
-// useProAuthFlow and useXAIAuthFlow), and OpenAI Codex (inline in SettingsView.js). Each asks the
-// endpoint for a login session, opens the verification URL, then polls until the user approved it.
+// The device sign-in flows of the Settings page: xAI (the Vue console's useXAIAuthFlow) and
+// OpenAI Codex (inline in SettingsView.js). Each asks the endpoint for a login session, opens the
+// verification URL, then polls until the user approved it.
 // Every request carries a generation and the endpoint it went to: a reply that comes after the
 // user switched endpoints, closed the dialog or started over changes nothing.
 import { batch, computed, effect, signal, untracked } from "nsh";
@@ -22,12 +22,8 @@ function emptyStatus() {
     access_token_present: false,
     refresh_token_present: false,
     access_token_expired: false,
-    subscription_api_key_present: false,
-    subscription: "",
     expires_at: "",
-    scope: "",
     account_id: "",
-    user: {} as Record<string, unknown>,
     file_mode_ok: true,
     file_mode_warning: "",
   };
@@ -41,20 +37,16 @@ function normalizeStatus(payload: any): DeviceAuthStatus {
     access_token_present: status?.access_token_present === true,
     refresh_token_present: status?.refresh_token_present === true,
     access_token_expired: status?.access_token_expired === true,
-    subscription_api_key_present: status?.subscription_api_key_present === true,
-    subscription: typeof status?.subscription === "string" ? status.subscription : "",
     expires_at: typeof status?.expires_at === "string" ? status.expires_at : "",
-    scope: typeof status?.scope === "string" ? status.scope : "",
     account_id: typeof status?.account_id === "string" ? status.account_id : "",
-    user: status?.user && typeof status.user === "object" ? status.user : {},
     file_mode_ok: status?.file_mode_ok !== false,
     file_mode_warning: typeof status?.file_mode_warning === "string" ? status.file_mode_warning : "",
   };
 }
 
 export interface DeviceAuthOptions {
-  /** "pro", "xai" or "codex": the /auth/<kind>/... routes and the i18n keys. */
-  kind: "pro" | "xai" | "codex";
+  /** "xai" or "codex": the /auth/<kind>/... routes and the i18n keys. */
+  kind: "xai" | "codex";
   getEndpointRef: () => string;
   onSettingsUpdated: (payload: any, endpointRef: string) => Promise<void> | void;
   /** Codex: refreshes an expired token after loading the status, when OAuth is in use. */
@@ -231,7 +223,7 @@ export function createDeviceAuthFlow(options: DeviceAuthOptions) {
       busy.set(true);
       error.set("");
     });
-    const setDefaultValue = kind === "pro" ? true : kind === "xai" ? untracked(setDefault) : false;
+    const setDefaultValue = kind === "xai" ? untracked(setDefault) : false;
     try {
       const payload: any = await endpointApiFetch(target, `/auth/${kind}/login/poll`, {
         method: "POST",

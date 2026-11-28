@@ -425,3 +425,104 @@ for (const [locale, label, row] of [
     await app.waitFor(`text:${label}`);
   });
 }
+
+/* ---------- the model follows the provider ---------- */
+
+/** A set-up agent with a record of the models last set per provider, and a list for the models route. */
+function modelConsole(lastModels: Record<string, string>, models: string[], extra: Record<string, ApiHandler> = {}) {
+  const local = agent();
+  return readyConsole({
+    local,
+    extra: {
+      "GET /settings/agent": () => ({ body: { ...settingsBody(local), llm_last_models: lastModels } }),
+      "POST /settings/agent/models": { body: { items: models, models: models.map((id) => ({ id })) } },
+      ...extra,
+    },
+  });
+}
+
+/** Opens the model step with its saved values and picks `title` from the provider dialog's `tab`. */
+async function pickProvider(app: Awaited<ReturnType<typeof openConsole>>["app"], tab: string, title: string) {
+  await app.press("id:setup-provider-trigger");
+  await app.waitFor("id:inference-provider-dialog");
+  await app.press(`role:tab[${tab}]`);
+  await app.press(`id:inference-provider-dialog >> label:${title}`);
+  await app.waitFor("id:inference-provider-dialog", { state: "gone" });
+}
+
+const MODEL_STEP = "/e/default/setup/llm?reentry=settings";
+
+test("another provider takes the model last set for it, when its list still has it", async () => {
+  const { api } = modelConsole({ openai: "gpt-old" }, ["gpt-6.2-sol", "gpt-old"]);
+  const { app, calls } = await openConsole({ location: MODEL_STEP, api });
+  await app.waitUntil(() => app.value("id:setup-model") === "saved-model");
+  await pickProvider(app, "API Access", "OpenAI");
+  await app.waitUntil(() => app.value("id:setup-model") === "gpt-old");
+  await app.waitUntil(() => calls.some((call) => call.path === "/settings/agent/models"));
+  await app.wait(300);
+  expect(app.value("id:setup-model")).toBe("gpt-old");
+  expect(app.count("id:model-missing-dialog")).toBe(0);
+});
+
+test("a remembered model that is gone from the provider's list is reported, with its replacement one press away", async () => {
+  const { api } = modelConsole({ openai: "gpt-gone" }, ["gpt-6.2-sol", "gpt-x"]);
+  const { app } = await openConsole({ location: MODEL_STEP, api });
+  await app.waitUntil(() => app.value("id:setup-model") === "saved-model");
+  await pickProvider(app, "API Access", "OpenAI");
+  await app.waitFor("id:model-missing-dialog");
+  expect(app.shows("id:model-missing-dialog >> text:OpenAI no longer lists gpt-gone, the model last used with it.")).toBe(true);
+  // Until then the field keeps the remembered model.
+  expect(app.value("id:setup-model")).toBe("gpt-gone");
+  await app.press("id:model-missing-dialog >> text:Use gpt-6.2-sol");
+  await app.waitFor("id:model-missing-dialog", { state: "gone" });
+  expect(app.value("id:setup-model")).toBe("gpt-6.2-sol");
+});
+
+test("a provider nobody set a model for takes its default; one without a default is left to the user", async () => {
+  // The list has the default: it stays.
+  const listed = modelConsole({}, ["claude-sonnet-5-5", "claude-x"]);
+  const first = await openConsole({ location: MODEL_STEP, api: listed.api });
+  await first.app.waitUntil(() => first.app.value("id:setup-model") === "saved-model");
+  await pickProvider(first.app, "API Access", "Claude AI");
+  await first.app.waitUntil(() => first.app.value("id:setup-model") === "claude-sonnet-5-5");
+  // This account's list does not have it: the field is left empty, with no notice.
+  const unlisted = modelConsole({}, ["claude-x"]);
+  const second = await openConsole({ location: MODEL_STEP, api: unlisted.api });
+  await second.app.waitUntil(() => second.app.value("id:setup-model") === "saved-model");
+  await pickProvider(second.app, "API Access", "Claude AI");
+  await second.app.waitUntil(() => second.app.value("id:setup-model") === "");
+  expect(second.app.count("id:model-missing-dialog")).toBe(0);
+  // No default known for OpenRouter: the other provider's model does not stay.
+  const none = modelConsole({}, ["a/b"]);
+  const third = await openConsole({ location: MODEL_STEP, api: none.api });
+  await third.app.waitUntil(() => third.app.value("id:setup-model") === "saved-model");
+  await pickProvider(third.app, "API Access", "OpenRouter");
+  await third.app.waitUntil(() => third.app.value("id:setup-model") === "");
+});
+
+test("a provider that lists no models takes its remembered model unchecked", async () => {
+  const { api } = modelConsole({ xai_oauth: "grok-mine" }, ["never-asked"]);
+  const { app, calls } = await openConsole({ location: MODEL_STEP, api });
+  await app.waitUntil(() => app.value("id:setup-model") === "saved-model");
+  await pickProvider(app, "Account Sign-in", "xAI Grok OAuth");
+  await app.waitUntil(() => app.value("id:setup-model") === "grok-mine");
+  await app.wait(300);
+  expect(calls.some((call) => call.path === "/settings/agent/models")).toBe(false);
+});
+
+test("Codex signs in with the account: no API base or key, and its model is its own list's first", async () => {
+  const { api } = modelConsole({}, ["gpt-first", "gpt-second"], {
+    "GET /auth/codex/status": { body: { logged_in: true, access_token_present: true, refresh_token_present: true } },
+  });
+  const { app, calls } = await openConsole({ location: MODEL_STEP, api });
+  await app.waitUntil(() => app.value("id:setup-model") === "saved-model");
+  expect(app.shows("id:setup-endpoint")).toBe(true);
+  await pickProvider(app, "Account Sign-in", "OpenAI Codex");
+  await app.waitUntil(() => app.value("id:setup-model") === "gpt-first");
+  expect(app.count("id:setup-endpoint")).toBe(0);
+  expect(app.count("id:setup-api-key-input")).toBe(0);
+  const request = calls.find((call) => call.path === "/settings/agent/models");
+  expect(request?.json?.inference_provider).toBe("openai_codex");
+  expect(request?.json?.endpoint).toBe("");
+  expect(request?.json?.api_key).toBe("");
+});

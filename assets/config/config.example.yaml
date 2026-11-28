@@ -35,7 +35,7 @@ auto_update:
 
 llm:
   # Human-facing inference provider. This derives the protocol provider and API Base.
-  # Supported: openai|magpie|cc_switch|openai_codex|gemini|anthropic|bedrock|cloudflare|mistermorph_pro|xai|xai_oauth|meta|deepseek|kimi|openrouter|groq|sakana|openai_chat_compatible|openai_response_compatible|anthropic_compatible.
+  # Supported: openai|magpie|cc_switch|openai_codex|gemini|anthropic|bedrock|cloudflare|xai|xai_oauth|meta|deepseek|kimi|openrouter|groq|sakana|openai_chat_compatible|openai_response_compatible|anthropic_compatible.
   inference_provider: openai
   # Protocol provider. Usually derived from inference_provider; kept for older configs and advanced overrides.
   provider: openai_resp

@@ -6,13 +6,7 @@ import { effect, host, mount, signal, Text, untracked, View } from "nsh";
 import { authState, configureApiBase, endpointApiFetch, endpointState } from "../../lib/core/context.js";
 import { boot, hasFeature } from "../../lib/platform";
 import { Button, ConfirmHost, NoticeHost } from "../../components/ui";
-import {
-  CodexAuthDialog,
-  ProAuthDialog,
-  useProAuthFlow,
-  useXAIAuthFlow,
-  XAIAuthDialog,
-} from "../../components/settings/AuthDialogs";
+import { CodexAuthDialog, useXAIAuthFlow, XAIAuthDialog } from "../../components/settings/AuthDialogs";
 import { WeChatLoginPanel, XLoginPanel } from "../../components/settings/ChannelLoginPanels";
 import { MCPSettingsPanel, type MCPServer } from "../../components/settings/MCPSettingsPanel";
 import { ConsoleEndpointsPanel, type ConsoleEndpointConfig } from "../../components/settings/ConsoleEndpointsPanel";
@@ -40,11 +34,6 @@ function AuthScenario() {
   // The page's endpoint; a test switches it with `app.host.send("morph.fixture.endpoint", ref)`.
   const endpointRef = signal(LOCAL);
   host.on("morph.fixture.endpoint", (ref: unknown) => endpointRef.set(String(ref || "")));
-  const pro = useProAuthFlow({
-    request: endpointApiFetch,
-    getEndpointRef: () => endpointRef(),
-    onSettingsUpdated: (payload) => report("pro.settingsUpdated", payload),
-  });
   const xai = useXAIAuthFlow({
     request: endpointApiFetch,
     getEndpointRef: () => endpointRef(),
@@ -53,27 +42,11 @@ function AuthScenario() {
   const codexOpen = signal(false);
   return (
     <View class="gap-2 p-4">
-      <Button label="Open Pro" onPress={() => void pro.openProAuthDialog()} />
       <Button label="Open xAI" onPress={() => void xai.openXAIAuthDialog()} />
       <Button label="Load xAI" onPress={() => void xai.loadXAIAuthStatus()} />
       <Button label="Open Codex" onPress={() => codexOpen.set(true)} />
-      <Text testID="pro-state">{`pro:${pro.proAuthButtonState()}`}</Text>
       <Text testID="xai-state">{`xai:${xai.xaiAuthButtonState()}`}</Text>
       <Text testID="xai-default">{`default:${xai.xaiSetDefault()}`}</Text>
-      <ProAuthDialog
-        open={pro.proAuthDialogOpen()}
-        onOpenChange={(open) => pro.proAuthDialogOpen.set(open)}
-        loading={pro.proAuthLoading()}
-        busy={pro.proAuthBusy()}
-        error={pro.proAuthError()}
-        status={pro.proAuthStatus()}
-        summary={pro.proAuthSummary()}
-        loginSession={pro.proLoginSession()}
-        verificationURL={pro.proLoginVerificationURL()}
-        userCode={pro.proLoginUserCode()}
-        loginExpiresLabel={pro.proLoginExpiresLabel()}
-        onLogout={() => void pro.logoutProAuth()}
-      />
       <XAIAuthDialog
         open={xai.xaiAuthDialogOpen()}
         onOpenChange={(open) => xai.xaiAuthDialogOpen.set(open)}

@@ -50,7 +50,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/ownertools"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/personautil"
-	"github.com/quailyquaily/mistermorph/internal/proaccount"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
@@ -921,16 +920,6 @@ func (r *consoleLocalRuntime) Close() {
 }
 
 func consoleLLMCredentialsWarning(route llmutil.ResolvedRoute) string {
-	if strings.EqualFold(strings.TrimSpace(route.Values.InferenceProvider), llmutil.InferenceProviderMisterMorphPro) {
-		status := proaccount.ReadStatus(route.Values.FileStateDir, time.Now().UTC())
-		if !status.LoggedIn || !status.SubscriptionAPIKeyPresent {
-			return "sign in with MisterMorph Pro to enable Console Local chat submit"
-		}
-		if !status.FileModeOK {
-			return "fix MisterMorph Pro session file permissions to enable Console Local chat submit"
-		}
-		return ""
-	}
 	provider := strings.ToLower(strings.TrimSpace(route.ClientConfig.Provider))
 	switch provider {
 	case "bedrock":

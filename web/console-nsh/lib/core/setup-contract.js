@@ -15,7 +15,6 @@ const SETUP_PROVIDER_BEDROCK = "bedrock";
 const SETUP_PROVIDER_CLOUDFLARE = "cloudflare";
 const SETUP_PROVIDER_OPENAI_CODEX = "openai_codex";
 const SETUP_PROVIDER_XAI_OAUTH = "xai_oauth";
-const SETUP_PROVIDER_MISTERMORPH_PRO = "mistermorph_pro";
 const SETUP_PROVIDER_XAI = "xai";
 const SETUP_PROVIDER_META = "meta";
 const SETUP_PROVIDER_DEEPSEEK = "deepseek";
@@ -35,7 +34,6 @@ const SETUP_PROVIDER_OPTIONS = [
   { title: "Claude AI", value: SETUP_PROVIDER_ANTHROPIC, group: "api" },
   { title: "AWS Bedrock", value: SETUP_PROVIDER_BEDROCK, group: "api" },
   { title: "Cloudflare", value: SETUP_PROVIDER_CLOUDFLARE, group: "api" },
-  { title: "MisterMorph Pro", value: SETUP_PROVIDER_MISTERMORPH_PRO, group: "account" },
   { title: "xAI", value: SETUP_PROVIDER_XAI, group: "api" },
   { title: "Meta", value: SETUP_PROVIDER_META, group: "api" },
   { title: "Deepseek", value: SETUP_PROVIDER_DEEPSEEK, group: "api" },
@@ -53,13 +51,14 @@ const SETUP_PROVIDER_UI_META = {
   [SETUP_PROVIDER_OPENAI]: { supportsModelLookup: true },
   [SETUP_PROVIDER_MAGPIE]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
   [SETUP_PROVIDER_CC_SWITCH]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
-  [SETUP_PROVIDER_OPENAI_CODEX]: { supportsCustomAPIBase: true, supportsAPIKey: true },
+  // Signed in with the account, as xAI Grok OAuth: no API base or key of its own in the forms.
+  // Its models are the account's, listed by the local Codex CLI.
+  [SETUP_PROVIDER_OPENAI_CODEX]: { supportsModelLookup: true },
   [SETUP_PROVIDER_XAI_OAUTH]: {},
   [SETUP_PROVIDER_GEMINI]: { supportsModelLookup: true },
   [SETUP_PROVIDER_ANTHROPIC]: { supportsModelLookup: true },
   [SETUP_PROVIDER_BEDROCK]: {},
   [SETUP_PROVIDER_CLOUDFLARE]: { supportsModelLookup: true },
-  [SETUP_PROVIDER_MISTERMORPH_PRO]: { supportsModelLookup: true },
   [SETUP_PROVIDER_XAI]: { supportsModelLookup: true },
   [SETUP_PROVIDER_META]: {},
   [SETUP_PROVIDER_DEEPSEEK]: { supportsModelLookup: true },
@@ -214,10 +213,6 @@ function normalizeSetupProviderChoice(provider, options = {}) {
       return SETUP_PROVIDER_OPENAI_CODEX;
     case SETUP_PROVIDER_XAI_OAUTH:
       return SETUP_PROVIDER_XAI_OAUTH;
-    case SETUP_PROVIDER_MISTERMORPH_PRO:
-    case "mistermorph":
-    case "mister_morph_pro":
-      return SETUP_PROVIDER_MISTERMORPH_PRO;
     case SETUP_PROVIDER_XAI:
       return SETUP_PROVIDER_XAI;
     case SETUP_PROVIDER_META:
@@ -260,8 +255,12 @@ function setupProviderSupportsAPIKey(choice) {
   return SETUP_PROVIDER_UI_META[provider]?.supportsAPIKey === true || setupProviderRequiresAPIKey(provider);
 }
 
+// The forms no longer offer Codex an API base and key of its own (the account signs in): a saved
+// pair is cleared with the next save, so Codex never counts as using a key.
 function setupOpenAICodexUsesAPIKey(endpoint, hasAPIKey) {
-  return String(endpoint || "").trim() !== "" && hasAPIKey === true;
+  void endpoint;
+  void hasAPIKey;
+  return false;
 }
 
 function setupProviderSupportsModelLookup(choice) {
@@ -308,7 +307,6 @@ function setupProviderRequiresAPIKey(choice) {
     SETUP_PROVIDER_BEDROCK,
     SETUP_PROVIDER_OPENAI_CODEX,
     SETUP_PROVIDER_XAI_OAUTH,
-    SETUP_PROVIDER_MISTERMORPH_PRO,
   ].includes(provider);
 }
 
@@ -318,7 +316,6 @@ function resolveSetupAPIKeyHelp(choice, endpoint) {
   if (
     normalizedChoice === SETUP_PROVIDER_OPENAI_CODEX ||
     normalizedChoice === SETUP_PROVIDER_XAI_OAUTH ||
-    normalizedChoice === SETUP_PROVIDER_MISTERMORPH_PRO ||
     setupProviderRequiresAPIBase(normalizedChoice)
   ) {
     return null;
@@ -340,7 +337,6 @@ export {
   SETUP_PROVIDER_META,
   SETUP_PROVIDER_MAGPIE,
   SETUP_PROVIDER_CC_SWITCH,
-  SETUP_PROVIDER_MISTERMORPH_PRO,
   SETUP_PROVIDER_OPENAI,
   SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE,
   SETUP_PROVIDER_OPENAI_CODEX,

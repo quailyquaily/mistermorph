@@ -4,92 +4,88 @@ import { openFixture } from "./fixtures/integrations-harness";
 
 const SIGNED_OUT = { status: { logged_in: false } };
 
-test("Pro: opening while signed out starts a sign-in, polls until done, and reports the new settings", async () => {
+test("xAI: opening while signed out starts a sign-in, polls until done, and reports the new settings", async () => {
   let polls = 0;
   const { app, calls, eventsNamed } = await openFixture({
     view: "auth",
     api: {
-      "GET /auth/pro/status": { body: SIGNED_OUT },
-      "POST /auth/pro/login/start": {
+      "GET /auth/xai/status": { body: SIGNED_OUT },
+      "POST /auth/xai/login/start": {
         body: {
           session_id: "s-1",
-          verification_url_complete: "https://router.example/device?code=ABCD",
+          verification_url_complete: "https://auth.example/device?code=ABCD",
           user_code: "ABCD-1234",
           expires_at: "2030-01-01T00:00:00Z",
           interval_seconds: 1,
         },
       },
-      "POST /auth/pro/login/poll": () => {
+      "POST /auth/xai/login/poll": () => {
         polls += 1;
         return polls === 1
           ? { body: { pending: true, interval_seconds: 1 } }
-          : { body: { status: { logged_in: true, user: { name: "Ada" } }, settings_updated: true } };
+          : { body: { status: { logged_in: true }, settings_updated: true } };
       },
     },
   });
-  await app.press("Open Pro");
-  await app.waitFor("id:pro-auth-dialog");
+  await app.press("Open xAI");
+  await app.waitFor("id:xai-auth-dialog");
   await app.waitFor("ABCD-1234");
   expect(app.texts()).toContain("Finish authorization in the browser with this code.");
-  expect(app.openedUrls()).toContain("https://router.example/device?code=ABCD");
-  await app.waitUntil(() => eventsNamed("pro.settingsUpdated").length === 1, { timeout: 8000 });
-  await app.waitFor("Account: Ada");
+  expect(app.openedUrls()).toContain("https://auth.example/device?code=ABCD");
+  await app.waitUntil(() => eventsNamed("xai.settingsUpdated").length === 1, { timeout: 8000 });
   await app.waitFor("Signed in");
   expect(app.shows("ABCD-1234")).toBe(false);
-  const pollCalls = calls.filter((call) => call.path === "/auth/pro/login/poll");
+  const pollCalls = calls.filter((call) => call.path === "/auth/xai/login/poll");
   expect(pollCalls.length).toBe(2);
-  expect(pollCalls[0].json).toEqual({ session_id: "s-1", set_default: true });
-  expect(app.texts()).toContain("View Pro Usage");
-  await app.press("View Pro Usage");
-  expect(app.openedUrls()).toContain("https://router.mistermorph.com/console/usage");
+  expect(pollCalls[0].json).toEqual({ session_id: "s-1", set_default: false });
 });
 
-test("Pro: a failing sign-in start shows the server's error and no code", async () => {
+test("xAI: a failing sign-in start shows the server's error and no code", async () => {
   const { app } = await openFixture({
     view: "auth",
     api: {
-      "GET /auth/pro/status": { body: SIGNED_OUT },
-      "POST /auth/pro/login/start": { status: 500, body: { error: "router unreachable" } },
+      "GET /auth/xai/status": { body: SIGNED_OUT },
+      "POST /auth/xai/login/start": { status: 500, body: { error: "auth server unreachable" } },
     },
   });
-  await app.press("Open Pro");
+  await app.press("Open xAI");
   await app.waitFor("id:device-auth-error");
-  expect(app.texts()).toContain("router unreachable");
+  expect(app.texts()).toContain("auth server unreachable");
   expect(app.shows("id:device-auth-user-code")).toBe(false);
   expect(app.texts()).toContain("Signed out");
 });
 
-test("Pro: closing the dialog abandons the sign-in", async () => {
+test("xAI: closing the dialog abandons the sign-in", async () => {
   const { app, calls } = await openFixture({
     view: "auth",
     api: {
-      "GET /auth/pro/status": { body: SIGNED_OUT },
-      "POST /auth/pro/login/start": { body: { session_id: "s-2", user_code: "WXYZ", interval_seconds: 2 } },
-      "POST /auth/pro/login/poll": { body: { pending: true } },
+      "GET /auth/xai/status": { body: SIGNED_OUT },
+      "POST /auth/xai/login/start": { body: { session_id: "s-2", user_code: "WXYZ", interval_seconds: 2 } },
+      "POST /auth/xai/login/poll": { body: { pending: true } },
     },
   });
-  await app.press("Open Pro");
+  await app.press("Open xAI");
   await app.waitFor("WXYZ");
   await app.press("label:Close");
-  await app.waitFor("id:pro-auth-dialog", { state: "gone" });
+  await app.waitFor("id:xai-auth-dialog", { state: "gone" });
   await app.wait(2500);
-  expect(calls.some((call) => call.path === "/auth/pro/login/poll")).toBe(false);
+  expect(calls.some((call) => call.path === "/auth/xai/login/poll")).toBe(false);
 });
 
-test("Pro: a sign-in stays on the endpoint it started on; switching endpoints abandons it", async () => {
+test("xAI: a sign-in stays on the endpoint it started on; switching endpoints abandons it", async () => {
   const { app, calls } = await openFixture({
     view: "auth",
     api: {
-      "GET /auth/pro/status": { body: SIGNED_OUT },
-      "POST /auth/pro/login/start": { body: { session_id: "s-3", user_code: "MOVE-1", interval_seconds: 1 } },
-      "POST /auth/pro/login/poll": { body: { pending: true, interval_seconds: 1 } },
+      "GET /auth/xai/status": { body: SIGNED_OUT },
+      "POST /auth/xai/login/start": { body: { session_id: "s-3", user_code: "MOVE-1", interval_seconds: 1 } },
+      "POST /auth/xai/login/poll": { body: { pending: true, interval_seconds: 1 } },
     },
   });
-  await app.press("Open Pro");
+  await app.press("Open xAI");
   await app.waitFor("MOVE-1");
   await app.host.send("morph.fixture.endpoint", "ep_remote");
   await app.waitFor("MOVE-1", { state: "gone", timeout: 4000 });
-  expect(calls.some((call) => call.path === "/auth/pro/login/poll")).toBe(false);
+  expect(calls.some((call) => call.path === "/auth/xai/login/poll")).toBe(false);
   expect(calls.some((call) => call.path === "/proxy")).toBe(false);
 });
 

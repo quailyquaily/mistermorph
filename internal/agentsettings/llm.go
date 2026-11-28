@@ -64,6 +64,9 @@ type ModelLookupConfig struct {
 	CloudflareAccountID string
 	Endpoint            string
 	APIKey              string
+	// CodexCLI: the Codex account sign-in has no key to ask a models address with; the local
+	// Codex CLI lists the account's models instead.
+	CodexCLI bool
 }
 
 func SettingsPayloadFromRuntimeValues(values llmutil.RuntimeValues) LLMSettingsPayload {
@@ -206,14 +209,8 @@ func SanitizeProviderSpecificLLMFields(
 	fields LLMConfigFieldsPayload,
 	effectiveProvider string,
 ) LLMConfigFieldsPayload {
-	isMisterMorphPro := strings.EqualFold(strings.TrimSpace(fields.InferenceProvider), llmutil.InferenceProviderMisterMorphPro)
-	if isMisterMorphPro {
-		fields.Provider = ""
-		fields.Endpoint = ""
-		fields.APIKey = ""
-	}
 	provider := strings.ToLower(strings.TrimSpace(effectiveProvider))
-	if isMisterMorphPro || provider != "bedrock" {
+	if provider != "bedrock" {
 		fields.BedrockAWSKey = ""
 		fields.BedrockAWSSecret = ""
 		fields.BedrockAWSSessionToken = ""
@@ -221,12 +218,9 @@ func SanitizeProviderSpecificLLMFields(
 		fields.BedrockRegion = ""
 		fields.BedrockModelARN = ""
 	}
-	if isMisterMorphPro || provider != "cloudflare" {
+	if provider != "cloudflare" {
 		fields.CloudflareAPIToken = ""
 		fields.CloudflareAccountID = ""
-	}
-	if isMisterMorphPro {
-		return fields
 	}
 	switch provider {
 	case "cloudflare", "bedrock":
@@ -415,6 +409,10 @@ func ResolveModelLookup(
 		}
 	}
 	apiKey := strings.TrimSpace(llmutil.APIKeyForProviderWithValues(provider, resolved))
+	if apiKey == "" && provider == "openai_codex" {
+		// Signed in with the account, not a key.
+		return ModelLookupConfig{Provider: provider, CodexCLI: true}, nil
+	}
 	if apiKey == "" {
 		return ModelLookupConfig{}, fmt.Errorf("api key is required")
 	}

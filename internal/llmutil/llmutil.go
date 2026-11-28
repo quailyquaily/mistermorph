@@ -12,7 +12,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/pricingutil"
-	"github.com/quailyquaily/mistermorph/internal/proaccount"
 	"github.com/quailyquaily/mistermorph/internal/xaiauth"
 	"github.com/quailyquaily/mistermorph/llm"
 	codexProvider "github.com/quailyquaily/mistermorph/providers/codex"
@@ -373,11 +372,6 @@ func APIKeyForProviderWithValues(provider string, values RuntimeValues) string {
 		return firstNonEmpty(values.APIKey, "magpie")
 	case InferenceProviderCCSwitch:
 		return firstNonEmpty(values.APIKey, "PROXY_MANAGED")
-	case InferenceProviderMisterMorphPro:
-		if apiKey, ok, err := proaccount.ReadSubscriptionAPIKey(values.FileStateDir); err == nil && ok {
-			return apiKey
-		}
-		return ""
 	}
 	switch provider {
 	case xaiauth.ProviderName:

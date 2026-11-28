@@ -432,6 +432,7 @@ function LLM() {
             config.update((current) => ({ ...current, [field]: value }));
             log(`${field}=${value}`);
           }}
+          onProviderChanged={(provider) => log(`provider-changed=${provider}`)}
           onOpenModelPicker={() => log("model-picker")}
           onOpenXaiAuth={() => log("xai-auth")}
         />
