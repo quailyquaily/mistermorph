@@ -134,15 +134,20 @@ get four tools that reach past that topic:
   follow it. The path must be a known workspace (or a folder inside one) or a folder
   the user named in the message (an absolute or `~/` path). The topic's attachment
   does not change. The run's activity shows the switch (`Using ~/proj/api`).
-  Reading needs no approval. The first write or command in a workspace other than
-  the topic's (`write_file`, `bash`, `powershell`, `coder`, `spawn`, `image_generate`,
-  `image_edit`) asks for approval on the usual approval card, with the reason
-  `workspace_switch_requires_approval: <path>`; once approved, writes and commands in
-  that workspace do not ask again in this task (another workspace asks again). The
-  approval is asked whatever `guard.enabled` and `guard.approvals.enabled` say; a
-  denied approval runs nothing. A run resumed after the approval goes on in the
-  workspace it switched to. `tools.read_file.deny_paths`, the protected state files
-  and the agent's state folder cannot be a workspace, by path or through a symlink.
+  The switch asks for no approval of its own: reads, writes and commands
+  (`write_file`, `bash`, `powershell`, `coder`, `spawn`, `image_generate`,
+  `image_edit`, including calls later in the same step and in codemode scripts) run
+  in the new workspace as they would in the topic's, however often the task switches.
+  What asks anywhere still asks there: Guard approvals, forced-approval tools
+  (`skill_install`, `config_set`), elevated commands and a coding agent's own
+  permission settings. A run resumed after such an approval goes on in the workspace
+  it had switched to. `tools.read_file.deny_paths`, the protected state files and the
+  agent's state folder cannot be a workspace, by path or through a symlink.
+  Approvals with the reason `workspace_switch_requires_approval: <path>`, which
+  versions before this change asked after a switch, are kept as they are after an
+  upgrade: one still pending waits for the owner's answer (or its expiry) like any
+  other, a denied one runs nothing, and an approved one resumes the run in the
+  workspace it had switched to.
 - `topic_search` finds the owner's topics by title, tags and what was said in them
   (the user's messages and the replies), most recently active first, with each
   topic's ID, title, last activity, workspace and a short excerpt.
@@ -183,10 +188,10 @@ workspace. Short work in a known workspace may run in Solo itself with `workspac
   Starting the thread there is what authorizes the workspace: it is the thread's own, as
   a topic's attached workspace is, whether or not it is Solo's, and the thread's writes
   and commands in it ask for no workspace approval (so a thread is not held, or stopped
-  by an approval's expiry, for it). This holds for that thread's tasks only, and is not
-  remembered for other workspaces. Everything else asks as in any topic: Guard approvals,
-  a coding agent's own permission settings, and a `workspace_use` in the thread to
-  another workspace, whose first write or command asks as described above.
+  by an approval's expiry, for it). A `workspace_use` in the thread to another
+  workspace asks for none either, as in any owner chat. Everything else asks as in any
+  topic: Guard approvals, forced-approval tools and a coding agent's own permission
+  settings.
 - **Cards.** Solo shows a card for each thread it started: title, workspace and state
   (running, waiting for you, done, failed, stopped), followed live while the thread
   runs; pressing Open thread opens it. When the thread's task ends, Solo gets its summary

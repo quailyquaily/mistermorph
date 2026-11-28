@@ -74,7 +74,7 @@ func (r *consoleLocalRuntime) ownerToolDeps(generation *consoleLocalRuntimeGener
 func ownerToolsPromptBlock() agent.PromptBlock {
 	return agent.PromptBlock{Content: "## Other Topics and Workspaces\n\n" +
 		"This is the owner's own Console chat. When the user refers to another conversation or to earlier work you cannot see here, find it with topic_search and read it with topic_read. " +
-		"When the task needs another project folder, see the known ones with workspace_list and switch this task to one with workspace_use: your file and shell tools then work there for the rest of the task, the topic's attached workspace does not change, and the first write or command there asks the user. " +
+		"When the task needs another project folder, see the known ones with workspace_list and switch this task to one with workspace_use: your file and shell tools then work there for the rest of the task, and the topic's attached workspace does not change. " +
 		"Find these tools with tool_search when they are not listed."}
 }
 
