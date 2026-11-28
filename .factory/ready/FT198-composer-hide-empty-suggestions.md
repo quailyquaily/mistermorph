@@ -109,3 +109,13 @@ Checks: manager independently verified protected paths unchanged; configured gof
 Not checked: manual Web (Linux host), desktop (macOS/Windows/Linux), Android, iOS and screen-reader interaction: NOT TESTED; no browser/device/runtime session was opened. Native caret movement is not exercised by the headless runner; endpoint switching not tested (topic switching covered). Per-keystroke command requests and Todo missing skills feed remain out of scope.
 
 Coder reported two out-of-scope memory writes under its own Claude project memory (item note plus MEMORY.md); no machine paths committed. No newly observed /tmp entries. Initial branch push required command-local credential.useHttpPath=true; retry succeeded. Branch is ready for review, not shipped.
+
+## factory · review · 2026-11-28 16:55
+head: 96aa4496a2d9e4ab82420f5f31672359ed6b6cc8
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD (base 31a944fb) against the request and plan; no qualifying P0/P1/P2/P3 findings. Branch merges cleanly with base; worktree and head unchanged.
+- Required gofmt, go vet ./..., and go test ./... passed. nsh check passed (installed nsh 0.6.0). Required parallel Console scripts/test.sh passed: 179 files, 0 failed, 306s; chat-scroll-anchor and settings-integrations-channels passed their isolated retries after parallel failures.
+- Supplemental node lib tests reported a failure in unchanged lib/core/solo.test.mjs (a task's thread record). Baseline reproduction was not established; not a failure of the configured required checks.
+- Manual Web/browser, desktop macOS/Windows/Linux, Android, iOS, native phone Return, and screen-reader interaction NOT TESTED. Live caret movement and endpoint switching remain unverified (topic switching covered). Skill feedback has no web status role; Android live-region announcement is configured, not manually observed.
+- No installs. Coder reports no writes outside the worktree/TMPDIR except permitted shared-cache reads; manager observed no new top-level /tmp entries. Ready for owner approval, not shipped.
