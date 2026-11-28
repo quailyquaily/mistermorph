@@ -255,8 +255,9 @@ same on every platform (see `docs/feat/feat_20261128_composer_image_paste.md`).
   given as a PNG: a Windows screenshot is a device-independent bitmap, which GPUI makes a BMP, so
   without this the Snipping Tool's screenshots could not be pasted. Decoding is bounded (16384
   pixels a side, 256 MiB of pixels); an image past that, or one that does not decode, keeps its own
-  type and the Console refuses it naming the formats it takes. The conversion runs on the UI
-  thread as the user pastes (a 4K screenshot takes a moment).
+  type and the Console refuses it naming the formats it takes. The Console checks the delivered
+  size, so a converted PNG over the 128 MiB upload budget is refused naming that limit. The
+  conversion runs on the UI thread as the user pastes (a 4K screenshot takes a moment).
 - **What GPUI does not deliver.** On macOS and on Wayland GPUI reads a clipboard's text first and
   its image only when there is no text (gpui-fast-macos `pasteboard.rs`, gpui-fast-linux
   `wayland/clipboard.rs` `read`): an image copied together with text (some browsers and office
