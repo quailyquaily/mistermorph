@@ -39,7 +39,7 @@ import {
 import { glassEnabled, glassStyle } from "../../lib/glass";
 import { isMobile } from "../../lib/shell";
 import { shortcutsEligible } from "../../lib/shortcutPolicy";
-import { COMPOSER_QUOTE_BAR_CLASS, COMPOSER_RADIUS, COMPOSER_VOICE_BAR_CLASS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
+import { COMPOSER_QUOTE_BAR_CLASS, COMPOSER_RADIUS, COMPOSER_RADIUS_CLASS, COMPOSER_VOICE_BAR_CLASS, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
 import { editQuoteLine } from "../../lib/core/chat-message-edit.js";
 import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "./ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "./ComposerMeasure";
@@ -48,6 +48,7 @@ import { t } from "./i18n";
 import { AttachSourceSheet, type AttachSource, type AttachSourceLabels } from "./AttachSourceSheet";
 import { draftFilePillClass, fileIcon } from "./filePill";
 import { draftFilePreviewable } from "./filePreview";
+import { droppedURIs } from "./fileDrop";
 
 // Around the 38-point mic, for a 44-point touch target.
 /** The gap between the composer's edge and a list beyond it (the profile picker's, the add menu's). */
@@ -155,6 +156,22 @@ export interface ChatComposerProps {
   onUploadFrom?: (source: AttachSource) => void;
   uploadSourceLabels?: AttachSourceLabels;
   onAttachFiles?: (files: File[]) => void;
+  /**
+   * Files or directories dragged in from the system's file manager were dropped on the composer
+   * (fileDrop.ts): their `file:` URLs, in the order of the drop. Set only where the host can read
+   * them (the desktop app): without it the frame listens to no drop at all. The frame is the drop
+   * target, so a drop anywhere else on the page is not the composer's.
+   */
+  onDropFiles?: (uris: string[]) => void;
+  /** What the frame says while files are dragged over it; it claims nothing about what they are. */
+  dropLabel?: string;
+  /**
+   * The workspace chosen for the next message and not sent yet (Attach Workspace, or a dropped
+   * directory): its path as shown, what it is (`label`, for screen readers and the tooltip) and
+   * the name of its remove button.
+   */
+  workspaceItem?: { path: string; label: string; removeLabel: string } | null;
+  onRemoveWorkspace?: () => void;
   onRetryFile?: (item: ComposerFileItem) => void;
   onVoice?: () => void;
   onVoiceCancel?: () => void;
@@ -222,6 +239,28 @@ export function drumOffsets(offset: number, axis: "x" | "y") {
     const value = axis === "x" ? DRUM_RADIUS * Math.sin(angle) : DRUM_RADIUS * (1 - Math.cos(angle));
     return Math.round(value * 1000) / 1000;
   });
+}
+
+/**
+ * The composer's frame while files are dragged over it: a ring on its border and one line saying
+ * that a drop lands here. Put it last inside the frame (a `relative` box with a 1pt border): it
+ * reaches out by the border's width to lie on it, and takes no pointer.
+ */
+export function ComposerDropMark(props: { label?: string }) {
+  return (
+    <View
+      accessibilityElementsHidden
+      class={`absolute items-center justify-center ${COMPOSER_RADIUS_CLASS} border-2 border-blue`}
+      style={{ left: -1, top: -1, right: -1, bottom: -1, pointerEvents: "none" }}
+      testID="chat-composer-drop-mark"
+    >
+      <If when={props.label}>
+        <View class="rounded-full border border-line-faint bg-card px-3 py-1">
+          <Text class="text-sm font-medium text-foreground">{props.label}</Text>
+        </View>
+      </If>
+    </View>
+  );
 }
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -879,6 +918,24 @@ export function ChatComposer(props: ChatComposerProps) {
     </View>
   );
 
+  // Files dragged over the frame from the file manager. The platform says when the drag enters the
+  // frame, leaves it (for another target, the rest of the page or the window; a cancelled drag
+  // leaves too) and drops; the mark shows between an enter and whichever of the others comes
+  // first. The listeners are there only with `onDropFiles`, set once: a composer without it is no
+  // drop target, and a drop over it goes to whatever listens around it.
+  const dropOver = signal(false);
+  const dropTarget = untracked(() => props.onDropFiles)
+    ? {
+        onFileDragEnter: () => dropOver.set(true),
+        onFileDragLeave: () => dropOver.set(false),
+        onFileDrop: (event: unknown) => {
+          dropOver.set(false);
+          const uris = droppedURIs(event);
+          if (uris.length) props.onDropFiles?.(uris);
+        },
+      }
+    : {};
+
   return (
     <View
       class={`gap-2 ${props.landing ? "w-full" : "pb-2.5"}`}
@@ -891,6 +948,7 @@ export function ChatComposer(props: ChatComposerProps) {
         testID={glass() ? "chat-composer-frame.glass" : "chat-composer-frame"}
         onLayout={({ bounds }) => frameHeight.set(bounds.size.height)}
         onPress={() => focus({ preserveSelection: true })}
+        {...dropTarget}
       >
         <If when={suggestionsVisible()}>
           <View role="listbox" accessibilityLabel={suggestionTitle()} class="gap-0.5 border-b border-line-faint p-1.5" testID="chat-composer-suggestions">
@@ -916,8 +974,36 @@ export function ChatComposer(props: ChatComposerProps) {
             </If>
           </View>
         </If>
-        <If when={(props.fileItems ?? []).length}>
+        <If when={(props.fileItems ?? []).length || props.workspaceItem}>
           <View class="flex-row flex-wrap items-start gap-1.5 px-2.5 pt-2.5" accessibilityLabel={fileLabels().files} testID="chat-composer-files">
+            {/* The workspace the next message will use, chosen and not yet sent: a pill before the
+                files', a cube where they have a paperclip. */}
+            <If when={props.workspaceItem}>
+              <View class={draftFilePillClass(false)} testID="chat-composer-workspace">
+                <View
+                  role="text"
+                  accessibilityLabel={`${props.workspaceItem?.label}: ${props.workspaceItem?.path}`}
+                  tooltip={<Tip text={`${props.workspaceItem?.label}: ${props.workspaceItem?.path}`} />}
+                  class="min-w-0 shrink flex-row items-center gap-1.5"
+                >
+                  <Icon name="PhCube" size={13} color="subtle" />
+                  <Text class="max-w-60 text-xs text-foreground line-clamp-1" testID="chat-composer-workspace-path">
+                    {props.workspaceItem?.path}
+                  </Text>
+                </View>
+                <Button
+                  variant="plain"
+                  size="xxs"
+                  iconOnly
+                  icon="PhXCircle"
+                  title={props.workspaceItem?.removeLabel}
+                  disabled={props.disabled}
+                  onPress={() => props.onRemoveWorkspace?.()}
+                  class="rounded-full"
+                  testID="chat-composer-workspace-remove"
+                />
+              </View>
+            </If>
             <Each of={props.fileItems ?? []} key={(item) => item.id}>
               {(item) => (
                 // A pill (filePill.ts): the file's glyph and name preview it, while it can be (an image
@@ -1098,6 +1184,11 @@ export function ChatComposer(props: ChatComposerProps) {
             </View>
           </If>
         </View>
+        {/* While files are dragged over the frame: a ring on its border and one line saying a drop
+            lands here. It takes no pointer, so the frame under it stays the target. */}
+        <If when={dropOver()}>
+          <ComposerDropMark label={props.dropLabel} />
+        </If>
         {/* While a task runs, the border beam travels the frame (design/ui-refresh.html §5). */}
         <If when={props.stopMode}>
           <BorderBeam length={96} radius={COMPOSER_RADIUS} testID="chat-composer-beam" />

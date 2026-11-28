@@ -118,6 +118,16 @@ function Composer(props: { c: ChatController; landing?: boolean; onFootRoom?: (h
         filesHint: t("chat_composer_upload_file_hint"),
       }}
       onAttachFiles={(files) => void c.uploadComposerFileList(files)}
+      // Drops from the file manager, on the desktop app only (components/chat/fileDrop.ts).
+      onDropFiles={c.composerFileDropEnabled ? (uris) => void c.dropOnComposer(uris) : undefined}
+      dropLabel={t("chat_composer_drop_hint")}
+      // The workspace chosen for the next message; an edit sends text alone, as with the files.
+      workspaceItem={
+        !c.messageEdit() && c.pendingWorkspaceDir()
+          ? { path: c.pendingWorkspaceDisplay(), label: t("chat_composer_workspace_pending"), removeLabel: t("chat_composer_workspace_remove") }
+          : null
+      }
+      onRemoveWorkspace={() => c.removePendingWorkspace()}
       onRetryFile={(item) => c.retryComposerFile(item)}
       onVoice={() => c.voice.toggle()}
       onVoiceCancel={() => c.voice.cancel()}

@@ -25,9 +25,21 @@ use crate::{
 
 /// What the host features the app may use (`hasFeature`). `voiceRecord`: the microphone records
 /// for the agent to transcribe (src/voice.rs), as the browser's does. `networkProxy`: the app's
-/// own network proxy setting (src/proxy.rs).
-pub const FEATURES: [&str; 10] =
-    ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord", "networkProxy"];
+/// own network proxy setting (src/proxy.rs). `fileDrop`: files and directories dragged in from the
+/// file manager are looked at here (`morph.file.drop`).
+pub const FEATURES: [&str; 11] = [
+    "notifications",
+    "pickDirectory",
+    "checkUpdate",
+    "restart",
+    "quit",
+    "openLog",
+    "saveFile",
+    "pickFile",
+    "voiceRecord",
+    "networkProxy",
+    "fileDrop",
+];
 
 /// Work for the main thread, where the window and GPUI's dialogs are.
 pub enum Ui {
@@ -330,6 +342,25 @@ pub fn install(host: &HostChannel, desktop: &Arc<Desktop>) {
         }
     });
 
+    // What was dropped on a view of the app (nsh's `onFileDrop` gives the `file:` URLs): the disk
+    // is read on a thread of its own. The files get ids as picked ones do; a directory stays a path.
+    let d = desktop.clone();
+    host.handle("morph.file.drop", move |call| {
+        let d = d.clone();
+        on_thread(call, move |data| {
+            let uris: Vec<String> = data
+                .get("uris")
+                .and_then(Value::as_array)
+                .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                .unwrap_or_default();
+            let dropped = crate::files::classify_drop(&uris);
+            if let crate::files::Dropped::Rejected { reason, names } = &dropped {
+                d.log.line(&format!("desktop_window drop refused: {reason} ({} of {})", names.len(), uris.len()));
+            }
+            Ok(crate::files::drop_answer(dropped, |file| d.register_file(file)))
+        });
+    });
+
     let d = desktop.clone();
     let channel = host.clone();
     host.handle("morph.file.upload", move |call| {
@@ -547,9 +578,19 @@ mod tests {
 
     #[test]
     fn features_match_the_contract() {
-        for feature in
-            ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord", "networkProxy"]
-        {
+        for feature in [
+            "notifications",
+            "pickDirectory",
+            "checkUpdate",
+            "restart",
+            "quit",
+            "openLog",
+            "saveFile",
+            "pickFile",
+            "voiceRecord",
+            "networkProxy",
+            "fileDrop",
+        ] {
             assert!(FEATURES.contains(&feature));
         }
     }

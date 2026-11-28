@@ -106,7 +106,19 @@ import {
 import { agentLinkAvatarURL, agentLinkInstanceID } from "../../lib/core/agent-link-avatar.js";
 import { pushNotice } from "../../lib/core/notices.js";
 import { createTopicRename, type TopicRenameSession } from "./topicRename";
-import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile, type PickSource } from "../../lib/platform";
+import {
+  copyText,
+  hasFocus,
+  isVisible,
+  localStore,
+  onVisibilityChange,
+  pickFiles,
+  releaseFile,
+  resolveDroppedFiles,
+  type PickedFile,
+  type PickSource,
+} from "../../lib/platform";
+import { createComposerDrop, fileDropAvailable, localDirectoryUsable } from "../../components/chat/fileDrop";
 import { currentRoute, locationOf, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { shortcutsEligible } from "../../lib/shortcutPolicy";
@@ -571,6 +583,9 @@ export function createChatController() {
   let composerLLMProfilesLoadSeq = 0;
   let composerSkillsLoadSeq = 0;
   let composerFileSequence = 0;
+  // The draft a drop from the file manager was made on: another conversation, and a send, begin a
+  // new one, and what the host answers for a drop on an earlier one is given back (dropOnComposer).
+  let composerDropGeneration = 0;
   let workspaceRequestSeq = 0;
 
   /* ---------- derived ---------- */
@@ -1565,6 +1580,8 @@ export function createChatController() {
       path: "",
       error: "",
       sourceFile: file,
+      // The chosen, not yet sent workspace this upload goes into (removePendingWorkspace).
+      pendingWorkspaceDir: String(untracked(pendingWorkspaceDir) || "").trim(),
     }));
     updateComposerFileDraft(uploadScope, (current) =>
       retryItem ? current.map((item) => (item.id === retryID ? uploadItems[0] : item)) : [...current, ...uploadItems],
@@ -1630,6 +1647,76 @@ export function createChatController() {
       await loadWorkspaceTree("", { force: true });
     }
     if (same) composer?.focus({ preserveSelection: true });
+  }
+
+  /** The workspace chosen for the next message, as the composer writes it (the host's home as `~`). */
+  const pendingWorkspaceDisplay = () => workspacePathDisplay(pendingWorkspaceDir(), workspaceHomeDir()).text;
+
+  /**
+   * Takes back the workspace chosen for the next message (Attach Workspace, a dropped directory):
+   * the conversation keeps the one it has, or none. The draft's files that were uploaded into that
+   * directory go with it: without it the message could not point at them.
+   */
+  function removePendingWorkspace() {
+    const dir = String(untracked(pendingWorkspaceDir) || "").trim();
+    if (!dir || untracked(composerDisabled)) return;
+    pendingWorkspaceDir.set("");
+    updateComposerFileDraft(untracked(composerDraftScope), (current) =>
+      current.filter((item) => item.pendingWorkspaceDir !== dir || !(item.status === "uploading" || item.dirName === "workspace_dir")),
+    );
+    composer?.focus({ preserveSelection: true });
+  }
+
+  /* ---------- drops from the file manager (components/chat/fileDrop.ts) ---------- */
+
+  const composerFileDropEnabled = fileDropAvailable();
+
+  /** Why the composer takes nothing now, or "": what closes its add button closes drops too. */
+  function composerDropBlockedMessage(): string {
+    if (untracked(messageEdit)) return t("chat_composer_drop_editing");
+    if (untracked(sending)) return t("chat_composer_drop_busy");
+    return untracked(submitBlockedMessage) || (String(untracked(submitEndpointRef) || "").trim() ? "" : t("msg_select_endpoint"));
+  }
+
+  /** Why a directory of this machine cannot be the next message's workspace here, or "". */
+  function droppedWorkspaceRefusal(): string {
+    const endpointRef = String(untracked(submitEndpointRef) || "").trim();
+    if (!localDirectoryUsable(endpointRef)) {
+      const endpoint = untracked(submitEndpoint) || untracked(selectedEndpoint);
+      return t("chat_composer_drop_workspace_remote", { name: String(endpoint?.name || "").trim() || untracked(displayAgentName) });
+    }
+    // Without topics a task takes no workspace (submitTask sends none).
+    if (!untracked(consoleTopicsEnabled)) return t("chat_composer_drop_workspace_unavailable");
+    if (untracked(composerWorkspaceAttachDisabled)) return t("chat_composer_drop_workspace_busy");
+    return "";
+  }
+
+  /**
+   * Files and directories dropped on the composer (createComposerDrop): the files become the
+   * draft's attachments through the upload every picked file takes (progress, retry, removal,
+   * sending); one directory becomes the workspace of the next message exactly as Attach Workspace
+   * chooses one (`pendingWorkspaceDir`: bound, or replacing the topic's, when the message is sent).
+   */
+  const composerDrop = createComposerDrop({
+    resolve: resolveDroppedFiles,
+    release: releaseFile,
+    draft: () => `${viewActive ? "" : "gone:"}${composerDropGeneration}:${composerFileDraftKey(untracked(composerDraftScope))}`,
+    blocked: composerDropBlockedMessage,
+    workspaceRefusal: droppedWorkspaceRefusal,
+    takeWorkspace: (dir) => {
+      // Shown in the composer at once (its workspace pill), sent with the message.
+      pendingWorkspaceDir.set(dir);
+      rememberRecentWorkspaceDir(dir);
+      composer?.focus({ preserveSelection: true });
+    },
+    takeFiles: (files) => uploadComposerFileList(files),
+    refuse: (text, type) => pushNotice({ type, text }),
+    refusalText: (key, names) => t(key, { names }),
+    failedText: (error) => errorMessage(error, t("chat_composer_drop_failed")),
+  });
+
+  async function dropOnComposer(uris: string[]) {
+    if (composerFileDropEnabled) await composerDrop(uris);
   }
 
   function retryComposerFile(item: ComposerFileItem) {
@@ -3400,6 +3487,8 @@ export function createChatController() {
     // Marks a task the chat watches, so the agent may ask its questions here.
     requestBody.trigger = CONSOLE_CHAT_TRIGGER;
 
+    // The draft goes with this send: a drop still being read was made on it, not on the next one.
+    if (!direct) composerDropGeneration += 1;
     batch(() => {
       sending.set(true);
       err.set("");
@@ -3935,6 +4024,7 @@ export function createChatController() {
   let previousScope: { endpointRef: string; topicID: string } | null = null;
   effect(() => {
     const scope = composerDraftScope();
+    composerDropGeneration += 1;
     untracked(() => {
       // Leaving the conversation ends an edit: its text stays behind, the draft comes back first.
       endMessageEdit();
@@ -4169,6 +4259,10 @@ export function createChatController() {
     loadOlderHistory,
     openComposerFilePicker,
     uploadComposerFileList,
+    composerFileDropEnabled,
+    dropOnComposer,
+    pendingWorkspaceDisplay,
+    removePendingWorkspace,
     retryComposerFile,
     removeComposerFile,
     previewComposerFile,
