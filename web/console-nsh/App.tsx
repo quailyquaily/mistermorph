@@ -1,6 +1,6 @@
 // The entry: read the host's boot data, restore the session and the language, start the router,
 // then mount the frame. Page logic lives in pages/, shared state in lib/.
-import { colorScheme, effect, keyboardFrame, mount, platform, safeArea, token, untracked, View } from "nsh";
+import { effect, keyboardFrame, mount, platform, safeArea, token, untracked, View } from "nsh";
 import "./assets/fonts/ibm-plex-sans-latin-400-normal.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-400-italic.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-500-normal.woff2";
@@ -58,8 +58,8 @@ function App() {
   // page under the app that theme's colours, and both follow a switch in Settings without a reload.
   effect(() => {
     const color = String(token("nav"));
-    const scheme = colorScheme();
-    untracked(() => setThemeColor(color, scheme));
+    const theme = themeState.theme;
+    untracked(() => setThemeColor(color, theme));
   });
   let reported = false;
   effect(() => {
@@ -88,8 +88,8 @@ async function start() {
   configureApiBase();
   startVisibilityTracking();
   localeState.hydrateLanguage();
-  // The appearance this device chose, before the first page mounts: no light frame before a dark one.
-  themeState.hydrateScheme();
+  // The theme this device chose, before the first page mounts: no light frame before a dark one.
+  themeState.hydrateTheme();
   authState.hydrate();
   endpointState.hydrateEndpointSelection();
   // The pages' last answers, read before the first page mounts so it opens with them.

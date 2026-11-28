@@ -45,7 +45,7 @@ async function openVariants(colorScheme: "light" | "dark" = "light") {
   await app.press(`id:set-${colorScheme}`);
   await app.waitUntil(() => report().scheme === colorScheme);
   // The palettes differ: the page is dark in the dark appearance.
-  expect(report().colours.background).toBe(colorScheme === "dark" ? "#0f0f0fff" : "#f3f7fbff");
+  expect(report().colours.background).toBe(colorScheme === "dark" ? "#0f141cff" : "#f3f7fbff");
   return { app, report };
 }
 

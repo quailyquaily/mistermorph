@@ -28,12 +28,13 @@ async function expectSelected(app: App, selected: Slot | null) {
   }
 }
 
-test("the selected glyph's primary is the primary buttons' own colour in both themes, not the accent", () => {
+test("the selected glyph's primary is the primary buttons' own colour in both built-in themes, and not the accent where the two differ", () => {
   const vars = (theme as { cssVars: Record<string, Record<string, string>> }).cssVars;
-  const primary: Record<string, string> = { light: "#39587b", dark: "#436a95" };
+  // Midnight (the dark palette) has one gold for both: its primary is its accent.
+  const primary: Record<string, string> = { light: "#39587b", dark: "#cfa35a" };
   for (const scheme of ["light", "dark"]) {
     expect(vars[scheme].primary.toLowerCase()).toBe(primary[scheme]);
-    expect(vars[scheme].primary.toLowerCase()).not.toBe(vars[scheme].blue.toLowerCase());
+    if (scheme === "light") expect(vars[scheme].primary.toLowerCase()).not.toBe(vars[scheme].blue.toLowerCase());
     expect(vars[scheme]["muted-foreground"]).toBeDefined();
   }
 });

@@ -278,10 +278,10 @@ test("the colour scheme is on the page: every token with its value, in the appea
   // The tints: a row per colour, its fills and borders at each step.
   for (const hue of TINT_HUES) expect(app.count(`id:uig-tint-${hue}`)).toBe(1);
   expect(app.shows("id:uig-colors-tints >> text:hover on a tint")).toBe(true);
-  // Dark is the console's own appearance: the values are the dark palette's, and the choice is kept.
+  // Dark is the console's own dark theme (Midnight): the values are the dark palette's, and the choice is kept.
   await app.press("id:uig-appearance >> text:Dark");
   await app.waitFor(`id:uig-color-primary >> text:${vars.dark.primary.toLowerCase()}`);
-  expect(app.host.calls().filter((call) => call.name === "morph.kv.set" && (call.data as any)?.key === "mistermorph.colorScheme").map((call) => (call.data as any)?.value).at(-1)).toBe("dark");
+  expect(app.host.calls().filter((call) => call.name === "morph.kv.set" && (call.data as any)?.key === "mistermorph.theme").map((call) => (call.data as any)?.value).at(-1)).toBe("midnight");
   // The filter by a token's name.
   await app.type("id:uig-filter", "blue-l");
   await app.waitFor("id:uig-color-primary", { state: "gone" });

@@ -53,7 +53,7 @@ const HAND_WRITTEN_FIELDS = {
   ],
   // This device's settings (language, notifications, the session), the same for every agent; App
   // only in a web browser (see APP_FIELD).
-  general: ["settings_language_title", "settings_appearance_title", NETWORK_PROXY_FIELD, "settings_session_title", APP_FIELD],
+  general: ["settings_language_title", "settings_theme_title", NETWORK_PROXY_FIELD, "settings_session_title", APP_FIELD],
   system: [
     "settings_logs_title",
     "settings_auto_update_card_title",

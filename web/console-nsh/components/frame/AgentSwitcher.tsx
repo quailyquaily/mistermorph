@@ -271,13 +271,13 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
       class={`h-14 flex-row items-center gap-2 ${props.compact ? "justify-center px-0" : "px-[13px]"} ${
         // Open: the hover's translucent tint, a step deeper; an opaque fill would lighten the
         // sidebar and cover its right edge, which is drawn under the switcher.
-        open() ? "bg-hover" : "hover:bg-hover-soft"
+        open() ? "bg-mainnav-hover" : "hover:bg-mainnav-hover"
       }`}
       style={{ transitionProperty: "colors", transitionDuration: 140, transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)" }}
     >
       <AgentAvatar image={triggerAvatar()} size={24} />
       <If when={!props.compact}>
-        <FadeText text={triggerName()} class="flex-1 text-xs font-semibold leading-[14.4px] text-foreground" />
+        <FadeText text={triggerName()} class="flex-1 text-xs font-semibold leading-[14.4px] text-mainnav-foreground" />
       </If>
       {/* The caret is the unfolded switcher's: folded, the avatar stands alone, open or not, whether
           or not an agent is selected. */}
@@ -292,14 +292,14 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
             transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)",
           }}
         >
-          <Icon name="PhCaretDown" size={14} color="foreground" />
+          <Icon name="PhCaretDown" size={14} color="mainnav-foreground" />
         </View>
       </If>
     </View>
   );
 
   return (
-    <View class={`h-[57px] border-b border-line-soft ${props.class ?? ""}`} testID="agent-switcher">
+    <View class={`h-[57px] border-b border-mainnav-line ${props.class ?? ""}`} testID="agent-switcher">
       <AgentPicker
         items={props.items}
         selectedValue={selectedValue()}
