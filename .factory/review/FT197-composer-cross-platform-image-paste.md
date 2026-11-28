@@ -132,3 +132,17 @@ Task-only installs: cjdk 0.5.0, maven-artifact 0.3.5, Temurin 17.0.21.1+2, andro
 NOT TESTED: real browser/user clipboard, native OS menu/keyboard/permission interactions, all physical/emulated mobile platforms, packaged-runtime/source equivalence, APK/IPA packaging, and visual UI inspection. Source/headless tests are not device acceptance. See docs/feat/feat_20261128_composer_image_paste.md for full platform matrix and native upstream limitations (including mixed clipboard text-first behaviour).
 
 Outside run directory: coder reported writing its own memory note outside the permitted run directory; this was not requested or authorized. JVM touched its pre-existing performance directory; harness output directory also recorded for owner inspection. No outside directory was deleted.
+
+## factory · 2026-11-28 16:05
+
+Concurrent owner amendments were discovered when the board was refreshed after the initial implementation. The same build was continued to implement those amendments; this section supersedes the initial build report's admission/default-limit statements, not earlier owner requirements. Round remains 1.
+
+Final head: ec3e3cd5. Additional commits: 485829c4, 01a39358, d3c8455a, e0dea9c4, ec3e3cd5.
+
+Implemented stock inbound limits of 128 MiB (134217728 bytes) per file and 129 MiB (135266304 bytes) per multipart request in runtime and Console proxy. Outbound attachment limits remain separate/unchanged. Proxy streams bodies with four process-wide active streams and retryable overload; upload-only remote forwarding timeout is five minutes, ordinary API calls remain twenty seconds. Composer accepts supported large originals before model eligibility checks, admits 256 MiB per paste, and limits active uploads to two; direct-model ineligibility blocks send while preserving attachments/text. Android read budgets match admission. Missing cache references are surfaced for re-upload. Updated required API/OpenAPI and attachment docs.
+
+Tests: manager independently reran gofmt/vet/full Go gate on final head: PASS. Coder reports nsh check and Console scripts/test.sh PASS (180 files plus Chrome 6/6), desktop cargo tests and Android JVM/compilation PASS. Exact file/request and batch boundaries covered; valid 12–19 MB/MiB and 65 MiB originals exercised through runtime/proxy with byte equality; delayed 19 MiB remote test (~31 seconds) passed. Stock Console curl upload smoke checks passed. Existing chat-attachments flaky test reproduced on base and passed retry.
+
+Remaining coverage/limitations: ALL real OS paste/menu/device/consent paths, actual deployment/ingress/provider API calls, packaged mobile runtime equivalence and APK/IPA packaging remain NOT TESTED. Native Web/desktop/iOS pre-JS full-image allocation remains outside application admission bounds. Known lower provider request budgets are documented but not dynamically enforced because provider identity is unavailable in this Console path; review must assess this gap. No claim of universal provider acceptance or real device acceptance. No deployment or ship performed.
+
+Installs unchanged: all task-only and removed at end; no new persistent installations. Outside-dir writes in amendment round: lock heartbeat and JVM performance files only, per coder; unrequested first-round personal memory note remains and was not deleted. Review should inspect scope, native resource handling, cache preflight, provider-budget gap and transport boundary/error tests.
