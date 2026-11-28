@@ -5,8 +5,9 @@
 # android`, added here when missing) and that release's nsh.aar (embedding SDK, fetched and checked
 # here when missing), Node, a JDK, curl, unzip and the Android SDK (build tools and
 # `platforms;android-35`, found through ANDROID_HOME); no NDK, no Gradle. The app's own Java (android/src: voice input's
-# recorder, the task notifications' background watcher, saving files, and nsh 0.6.0's ScrollBox with the
-# fix for scroll views inside scroll views in place of the runtime's) goes into the runtime's classes.dex
+# recorder, the task notifications' background watcher, saving files, nsh 0.6.0's ScrollBox with the
+# fix for scroll views inside scroll views and its InputBox with pasted images read within a bound, in
+# place of the runtime's) goes into the runtime's classes.dex
 # (scripts/android-host.sh).
 #
 #   scripts/build-android.sh [--out FILE] [--abi ABI]... [--format apk|aab] [--run]

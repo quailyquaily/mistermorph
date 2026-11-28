@@ -302,6 +302,20 @@ export function onNotificationOpened(listener: () => void) {
   if (!hosted || !hasFeature("backgroundTaskNotifications")) return () => {};
   return hostChannel.on("morph.notify.opened", () => listener());
 }
+/**
+ * Hears pasted images the phone app's runtime could not hand over (`morph.paste.refused`, the
+ * Android native part's patched InputBox): too large to read (one image, or the paste's images
+ * together), or unreadable (an expired grant, a
+ * failing provider). `count` of them, in the paste the user just made; nothing else of them is told.
+ */
+export function onPasteRefused(listener: (refused: { reason: "too_large" | "batch_too_large" | "unreadable"; count: number }) => void) {
+  if (!hosted) return () => {};
+  return hostChannel.on("morph.paste.refused", (data: unknown) => {
+    const reason = String((data as { reason?: unknown } | null)?.reason || "");
+    const count = Math.max(0, Math.floor(Number((data as { count?: unknown } | null)?.count) || 0));
+    if ((reason === "too_large" || reason === "batch_too_large" || reason === "unreadable") && count > 0) listener({ reason, count });
+  });
+}
 /** Hears a press on a notification this app showed: its `id`. */
 export function onNotificationPress(listener: (id: string) => void) {
   if (!hosted) return () => {};

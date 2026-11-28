@@ -6,7 +6,10 @@
 # back the keyboard room nsh 0.6.0 leaves under a dialog's fields; and ScrollBox, nsh 0.6.0's scroll
 # view with the fix for scroll views inside scroll views (ScrollClaim: a sideways drag on a wide table
 # or code block in the chat, or on the Jobs graph, is no longer cancelled by the scroll view around
-# it), which replaces the runtime's own ScrollBox classes. build-android.sh compiles it into
+# it), which replaces the runtime's own ScrollBox classes; and InputBox, nsh 0.6.0's text field with
+# pasted images read within a bound, refusals told to the console (PasteNotices,
+# `morph.paste.refused`) and, before Android 12, the menu's Paste of an image never inserting its URI
+# as text, which replaces the runtime's own InputBox classes. build-android.sh compiles it into
 # the APK's classes.dex next to the runtime's own classes; MorphApplication (named in the manifest
 # by scripts/android-manifest.mjs) attaches it to nsh's AppActivity.
 #
@@ -19,7 +22,8 @@
 #       The JVM tests (android/test) of the parts that need no Android: the recording's states,
 #       permission outcomes, cleanup and the upload; the task notifications' watcher; saving a file
 #       (the download, its failures and the cleanup after a failed save); the app's version answer; the hardware
-#       keyboard's state from the input devices; who keeps a touch among scroll views inside scroll views.
+#       keyboard's state from the input devices; who keeps a touch among scroll views inside scroll views;
+#       a pasted image's bounded read and its refusals.
 #
 # Needs a JDK (javac, jar, java); `dex` also the SDK's build tools (d8).
 set -euo pipefail
@@ -38,7 +42,7 @@ done
 # nsh's own classes that android/src replaces (com/longbridge/nsh/<name>.java, with their nested
 # classes), and the nsh release they were taken from.
 patched_nsh=0.6.0
-patched_classes=(ScrollBox)
+patched_classes=(ScrollBox InputBox)
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -115,9 +119,10 @@ case "${1:-}" in
     "${java_home_bin}java" -cp "$work/classes" com.mistermorph.console.ShellInfoTest
     "${java_home_bin}java" -cp "$work/classes" com.mistermorph.console.HardwareKeyboardTest
     "${java_home_bin}java" -cp "$work/classes" com.longbridge.nsh.ScrollClaimTest
+    "${java_home_bin}java" -cp "$work/classes" com.longbridge.nsh.PasteReadsTest
     ;;
   *)
-    sed -n '2,24p' "$0"
+    sed -n '2,28p' "$0"
     exit 1
     ;;
 esac

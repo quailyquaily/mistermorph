@@ -111,6 +111,7 @@ import {
   hasFocus,
   isVisible,
   localStore,
+  onPasteRefused,
   onVisibilityChange,
   pickFiles,
   releaseFile,
@@ -119,6 +120,8 @@ import {
   type PickSource,
 } from "../../lib/platform";
 import { createComposerDrop, fileDropAvailable, localDirectoryUsable } from "../../components/chat/fileDrop";
+import { createComposerPaste, draftImageLimitMessage, modelImageNote } from "../../components/chat/imagePaste";
+import { createUploadGate, formatLimit, missingReferenceIndexes, UPLOAD_MAX_FILE_BYTES, uploadFailure } from "../../components/chat/uploads";
 import { currentRoute, locationOf, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { shortcutsEligible } from "../../lib/shortcutPolicy";
@@ -1555,6 +1558,9 @@ export function createChatController() {
     return uploadPickedFile(endpointRef, file, fields);
   }
 
+  // At most two of the composer's uploads run at once (components/chat/uploads.ts).
+  const composerUploadGate = createUploadGate();
+
   async function uploadComposerFileList(files: (PickedFile | File)[], retryID = "") {
     // Picked files that never reach a draft go back to the host at once.
     const dropPicked = () => {
@@ -1569,20 +1575,33 @@ export function createChatController() {
     }
     const scope = untracked(composerDraftScope);
     const uploadScope = { endpointRef: String(scope.endpointRef || "").trim(), topicID: normalizeTopicID(scope.topicID) };
-    const retryItem = retryID ? untracked(composerFiles).find((item) => item.id === retryID && item.status === "failed" && item.sourceFile) : null;
+    const retryItem = retryID
+      ? untracked(composerFiles).find((item) => item.id === retryID && item.status === "failed" && item.sourceFile && item.retryable !== false)
+      : null;
     if (retryID && !retryItem) return;
     const sources = retryItem ? [retryItem.sourceFile as PickedFile | File] : files;
-    const uploadItems: ComposerFileItem[] = sources.map((file) => ({
-      id: retryItem?.id || `composer-file-${Date.now()}-${++composerFileSequence}`,
-      name: String((file as { name?: string })?.name || "").trim() || "file",
-      status: "uploading",
-      dirName: "",
-      path: "",
-      error: "",
-      sourceFile: file,
-      // The chosen, not yet sent workspace this upload goes into (removePendingWorkspace).
-      pendingWorkspaceDir: String(untracked(pendingWorkspaceDir) || "").trim(),
-    }));
+    const uploadItems: ComposerFileItem[] = sources.map((file) => {
+      const name = String((file as { name?: string })?.name || "").trim() || "file";
+      // Its size as the device knows it, then as the agent saved it: the send checks images against
+      // the model's limit (draftImageLimitMessage).
+      const sizeBytes = Number((file as { size?: number })?.size) || 0;
+      // Over the agent's budget for a file: refused here, with no upload, and no retry (the same
+      // bytes would be refused again).
+      const tooLarge = sizeBytes > UPLOAD_MAX_FILE_BYTES;
+      return {
+        id: retryItem?.id || `composer-file-${Date.now()}-${++composerFileSequence}`,
+        name,
+        status: tooLarge ? "failed" : "uploading",
+        dirName: "",
+        path: "",
+        error: tooLarge ? t("chat_composer_upload_file_too_large", { limit: formatLimit(UPLOAD_MAX_FILE_BYTES) }) : "",
+        retryable: !tooLarge,
+        sourceFile: file,
+        sizeBytes,
+        // The chosen, not yet sent workspace this upload goes into (removePendingWorkspace).
+        pendingWorkspaceDir: String(untracked(pendingWorkspaceDir) || "").trim(),
+      };
+    });
     updateComposerFileDraft(uploadScope, (current) =>
       retryItem ? current.map((item) => (item.id === retryID ? uploadItems[0] : item)) : [...current, ...uploadItems],
     );
@@ -1598,8 +1617,17 @@ export function createChatController() {
     let workspaceChanged = false;
     await Promise.all(
       uploadItems.map(async (upload, index) => {
+        if (upload.status !== "uploading") return;
         try {
-          const data = await uploadOne(endpointRef, sources[index], fields);
+          // Its turn among the composer's uploads; one removed (or sent, or of a draft gone) while it
+          // waited is not sent.
+          const waiting = Symbol("skipped");
+          const data = await composerUploadGate.run(async () => {
+            const key = composerFileDraftKey(uploadScope);
+            const still = (composerFileDrafts.get(key) || []).some((item) => item.id === upload.id && item.status === "uploading");
+            return still ? uploadOne(endpointRef, sources[index], fields) : waiting;
+          });
+          if (data === waiting) return;
           const uploaded = Array.isArray(data?.files) ? data.files[0] : null;
           const dirName = String(uploaded?.dir_name || "").trim();
           const path = String(uploaded?.path || "").trim();
@@ -1623,15 +1651,24 @@ export function createChatController() {
                     dirName,
                     path,
                     error: "",
+                    sizeBytes: Number(uploaded?.size_bytes) > 0 ? Number(uploaded.size_bytes) : item.sizeBytes,
+                    // Stored, and whether the model will be shown it (a large original is not).
+                    note: modelImageNote(
+                      String(uploaded?.name || "").trim() || item.name,
+                      Number(uploaded?.size_bytes) > 0 ? Number(uploaded.size_bytes) : item.sizeBytes,
+                      (key, values) => t(key, values),
+                    ),
                     sourceFile: localImageSource(item) ? item.sourceFile : undefined,
                   }
                 : item,
             ),
           );
         } catch (error) {
-          const message = `${errorMessage(error, t("chat_composer_upload_failed"))} ${retryHint}`;
+          // A refusal over a size is final; a network failure, a busy or slow agent may pass on a retry.
+          const failure = uploadFailure(error, (key, values) => t(key, values), errorMessage(error, t("chat_composer_upload_failed")));
+          const message = failure.retryable ? `${failure.message} ${retryHint}` : failure.message;
           updateComposerFileDraft(uploadScope, (current) =>
-            current.map((item) => (item.id === upload.id ? { ...item, status: "failed", error: message } : item)),
+            current.map((item) => (item.id === upload.id ? { ...item, status: "failed", error: message, retryable: failure.retryable } : item)),
           );
         }
       }),
@@ -1671,6 +1708,12 @@ export function createChatController() {
 
   const composerFileDropEnabled = fileDropAvailable();
 
+  /**
+   * Names the draft on screen now, for drops and pastes answered later: another conversation or
+   * agent, a sent draft or a page left give another name.
+   */
+  const composerDraftName = () => `${viewActive ? "" : "gone:"}${composerDropGeneration}:${composerFileDraftKey(untracked(composerDraftScope))}`;
+
   /** Why the composer takes nothing now, or "": what closes its add button closes drops too. */
   function composerDropBlockedMessage(): string {
     if (untracked(messageEdit)) return t("chat_composer_drop_editing");
@@ -1700,7 +1743,7 @@ export function createChatController() {
   const composerDrop = createComposerDrop({
     resolve: resolveDroppedFiles,
     release: releaseFile,
-    draft: () => `${viewActive ? "" : "gone:"}${composerDropGeneration}:${composerFileDraftKey(untracked(composerDraftScope))}`,
+    draft: composerDraftName,
     blocked: composerDropBlockedMessage,
     workspaceRefusal: droppedWorkspaceRefusal,
     takeWorkspace: (dir) => {
@@ -1718,6 +1761,43 @@ export function createChatController() {
   async function dropOnComposer(uris: string[]) {
     if (composerFileDropEnabled) await composerDrop(uris);
   }
+
+  /* ---------- images pasted into the field (components/chat/imagePaste.ts) ---------- */
+
+  /** Why the composer takes no pasted image now, or "": the add button's rule, said for a paste. */
+  function composerPasteBlockedMessage(): string {
+    if (untracked(messageEdit)) return t("chat_composer_paste_editing");
+    if (untracked(sending)) return t("chat_composer_paste_busy");
+    return untracked(submitBlockedMessage) || (String(untracked(submitEndpointRef) || "").trim() ? "" : t("msg_select_endpoint"));
+  }
+
+  /**
+   * Images pasted into the composer: checked by their bytes and the model's limits, then attached
+   * in the order of the pastes through the upload every picked file takes. A paste the composer
+   * cannot take now, or an image it refuses, says why; the draft's text and files stay as they are.
+   */
+  const composerPaste = createComposerPaste({
+    draft: composerDraftName,
+    blocked: composerPasteBlockedMessage,
+    takeFiles: (files) => void uploadComposerFileList(files),
+    refuse: (text, type) => pushNotice({ type, text }),
+    text: (key, values) => t(key, values),
+  });
+
+  function pasteOnComposer(files: File[]) {
+    return composerPaste(files);
+  }
+
+  // Images the phone app's runtime could not read, in a paste into a field (lib/platform's
+  // onPasteRefused): said while the composer has the focus, as the paste was made there.
+  cleanup(
+    onPasteRefused(({ reason, count }) => {
+      if (!composer?.focused()) return;
+      const key =
+        reason === "too_large" ? "chat_composer_paste_native_too_large" : reason === "batch_too_large" ? "chat_composer_paste_native_batch_too_large" : "chat_composer_paste_unreadable";
+      pushNotice({ type: "error", text: t(key, { count: String(count) }) });
+    }),
+  );
 
   function retryComposerFile(item: ComposerFileItem) {
     if (item?.sourceFile) void uploadComposerFileList([item.sourceFile as PickedFile | File], item.id);
@@ -3466,6 +3546,12 @@ export function createChatController() {
     const draftText = direct ? String(options.text) : String(untracked(taskInput) || "");
     const task = draftText.trim();
     if (!task || untracked(sending) || (!direct && untracked(composerFilesPending))) return false;
+    // Images the model cannot take would fail the task (or not be shown): the draft stays to fix.
+    const imageLimit = direct || untracked(messageEdit) ? "" : draftImageLimitMessage(untracked(composerFiles), (key, values) => t(key, values));
+    if (imageLimit) {
+      err.set(imageLimit);
+      return false;
+    }
     const submittedScope = untracked(composerDraftScope);
     const usesTopics = untracked(consoleTopicsEnabled);
     let accepted = false;
@@ -3571,8 +3657,31 @@ export function createChatController() {
       await pollTask(taskID, agentHistoryID, endpointRef);
       return true;
     } catch (error) {
-      const message = errorMessage(error, t("msg_load_failed"));
+      let message = errorMessage(error, t("msg_load_failed"));
       if (!accepted) {
+        // The agent no longer has an attachment (its file cache let it go): that pill says to upload
+        // it again, the draft stays.
+        const gone = direct ? [] : missingReferenceIndexes(error).map((index) => fileReferences[index]).filter(Boolean);
+        if (gone.length) {
+          const isGone = (item: ComposerFileItem) =>
+            gone.some((ref: any) => ref.path === String(item.path || "") && ref.dir_name === String(item.dirName || ""));
+          updateComposerFileDraft(submittedScope, (current) =>
+            current.map((item) =>
+              isGone(item)
+                ? {
+                    ...item,
+                    status: "failed",
+                    dirName: "",
+                    path: "",
+                    note: "",
+                    error: t(item.sourceFile ? "chat_composer_file_evicted_retry" : "chat_composer_file_evicted"),
+                    retryable: Boolean(item.sourceFile),
+                  }
+                : item,
+            ),
+          );
+          message = t("chat_composer_files_evicted");
+        }
         // A direct text was never the composer's: its sender keeps it.
         if (!direct) {
           rememberChatDraft(submittedScope.endpointRef, submittedScope.topicID, draftText);
@@ -4261,6 +4370,7 @@ export function createChatController() {
     uploadComposerFileList,
     composerFileDropEnabled,
     dropOnComposer,
+    pasteOnComposer,
     pendingWorkspaceDisplay,
     removePendingWorkspace,
     retryComposerFile,

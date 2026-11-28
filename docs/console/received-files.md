@@ -13,8 +13,9 @@ Example parameters:
 `dir_name` must be `workspace_dir` (the current task's workspace) or
 `file_cache_dir`. `path` must be relative to that directory. Parent-directory
 escapes, absolute paths, and symlinks escaping the directory are rejected.
-Files must be readable, regular, non-empty, and no larger than 64 MiB, matching
-the Console upload limit. Files that `read_file` may not read may not be sent
+Files must be readable, regular, non-empty, and no larger than 64 MiB. That is
+the budget of files the agent sends; it is not the upload limit (files a user
+attaches take up to 128 MiB each, see `docs/runtime-api.md`). Files that `read_file` may not read may not be sent
 either: `send_file` refuses paths matching `tools.read_file.deny_paths` (by
 default `config.yaml`). The tool resolves the path one component at a time,
 as the operating system does, so a link's relative target applies to the folder

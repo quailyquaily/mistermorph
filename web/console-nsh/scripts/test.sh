@@ -5,6 +5,7 @@
 #
 # Usage: scripts/test.sh [test file ...]   (default: every tests/*.test.tsx)
 #   JOBS=8 scripts/test.sh                 files at a time (default: the machine's cores)
+#   WEB_TESTS=0 scripts/test.sh            without the run in Chrome (`nsh test --target web`)
 # A failed file's output is printed, and all of it is kept in the folder named at the end.
 set -eu
 app=$(cd "$(dirname "$0")/.." && pwd)
@@ -14,6 +15,8 @@ logs=$(mktemp -d)
 all=0
 [ $# -gt 0 ] || { all=1; set -- tests/*.test.tsx; }
 started=$(date +%s)
+# Fixtures too large to commit (a 19 MiB pasted image): written once, kept for the next run.
+node scripts/make-paste-fixtures.mjs
 printf '%s\n' "$@" | LOGS="$logs" xargs -P "$jobs" -I {} sh -c '
   log="$LOGS/$(basename "$1").log"
   if nsh test --web-host tests/noHost.js "$1" >"$log" 2>&1; then
@@ -105,6 +108,22 @@ if [ "$all" -eq 1 ]; then
     echo
     echo "---- components/todo/calendar-runs.test.mjs"
     cat "$logs/calendar-runs.log"
+  fi
+fi
+# And the pasted images in a real browser (`nsh test --target web`: the installed Chrome, Edge or
+# Chromium, headless), where a paste is a ClipboardEvent the page's runtime reads. WEB_TESTS=0
+# skips it on a machine without one, and says so. (A long TMPDIR makes Chrome refuse to start: its
+# socket path is too long; a short or relative one works.)
+if [ "$all" -eq 1 ]; then
+  if [ "${WEB_TESTS:-1}" = 0 ]; then
+    echo "skip  tests/chat-image-paste-web.test.tsx in Chrome (WEB_TESTS=0)"
+  elif nsh test --target web tests/chat-image-paste-web.test.tsx >"$logs/image-paste-web.log" 2>&1; then
+    echo "ok    tests/chat-image-paste-web.test.tsx in Chrome  $(tail -n 1 "$logs/image-paste-web.log" | sed "s/^[^(]*//")"
+  else
+    failed=$((failed + 1))
+    echo
+    echo "---- tests/chat-image-paste-web.test.tsx in Chrome"
+    cat "$logs/image-paste-web.log"
   fi
 fi
 echo

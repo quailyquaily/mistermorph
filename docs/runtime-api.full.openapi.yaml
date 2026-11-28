@@ -1377,10 +1377,14 @@ paths:
       tags:
       - Files
       summary: Upload files for use in a task
-      description: '64 MiB limit for the entire multipart request. Repeat the files field. Destination
-        precedence: explicit workspace_dir, resolved topic workspace, runtime default workspace, then
-        file_cache_dir/console. Existing filenames get a unique generated name. Reuse each returned dir_name
-        and path in file_references on POST /tasks.'
+      description: 'Each file at most 128 MiB (134217728 bytes); the whole multipart request, framing and
+        fields included, at most 129 MiB (135266304 bytes), shared by all its files. A request over either
+        is refused whole with 413 (JSON error, code upload_request_too_large or upload_file_too_large,
+        limit_bytes), before its body is read when its Content-Length is over. Repeat the files field.
+        Destination precedence: explicit workspace_dir, resolved topic workspace, runtime default workspace,
+        then file_cache_dir/console. Existing filenames get a unique generated name. Reuse each returned
+        dir_name and path in file_references on POST /tasks. Runtimes before these defaults allowed 64 MiB
+        per request.'
       requestBody:
         required: true
         content:
@@ -1423,7 +1427,7 @@ paths:
         '503':
           $ref: '#/components/responses/Unavailable'
         '413':
-          $ref: '#/components/responses/TooLarge'
+          $ref: '#/components/responses/UploadTooLarge'
   /poke:
     post:
       operationId: pokeRuntime
@@ -4943,6 +4947,26 @@ components:
         text/plain:
           schema:
             type: string
+    UploadTooLarge:
+      description: The upload request, or one of its files, exceeds its byte limit.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: The refusal, with the limit in MiB and bytes.
+              code:
+                type: string
+                enum:
+                - upload_request_too_large
+                - upload_file_too_large
+              limit_bytes:
+                type: integer
+            required:
+            - error
+            - code
     InternalError:
       description: Runtime storage or internal failure.
       content:

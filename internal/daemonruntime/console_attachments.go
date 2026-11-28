@@ -55,14 +55,14 @@ func (s *ConsoleFileStore) AddAttachment(taskID, topicID, name string, source io
 			_ = root.Remove(id)
 		}
 	}()
-	size, err := io.Copy(file, io.LimitReader(source, fileUploadMaxBytes+1))
+	size, err := io.Copy(file, io.LimitReader(source, consoleAttachmentMaxBytes+1))
 	if err != nil {
 		return attachment, fmt.Errorf("read attachment: %w", err)
 	}
 	if size == 0 {
 		return attachment, fmt.Errorf("file is empty")
 	}
-	if size > fileUploadMaxBytes {
+	if size > consoleAttachmentMaxBytes {
 		return attachment, fmt.Errorf("file exceeds the 64 MiB limit")
 	}
 	contentType, err := attachmentContentType(name, file, size)

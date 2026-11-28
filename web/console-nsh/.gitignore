@@ -4,3 +4,5 @@ dist/
 # The root .gitignore's `mistermorph` (the CLI binary) would hide the Java package's directories.
 !/android/src/com/mistermorph/
 !/android/test/com/mistermorph/
+# Made by scripts/make-paste-fixtures.mjs (FT197): too large to commit.
+/tests/fixtures/paste/large/

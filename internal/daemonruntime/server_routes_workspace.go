@@ -250,11 +250,18 @@ func (routes *routeRegistration) registerWorkspaceRoutes() {
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, fileUploadMaxBytes)
+		// A declared length over the budget is refused before any of the body is read.
+		if r.ContentLength > FileUploadMaxRequestBytes {
+			w.Header().Set("Connection", "close")
+			WriteUploadRefusal(w, http.StatusRequestEntityTooLarge, UploadCodeRequestTooLarge, UploadRequestTooLargeMessage(), FileUploadMaxRequestBytes)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, FileUploadMaxRequestBytes)
+		// ParseMultipartForm removes the temporary files it made when it fails.
 		if err := r.ParseMultipartForm(fileUploadMemoryBytes); err != nil {
 			var maxBytesErr *http.MaxBytesError
 			if errors.As(err, &maxBytesErr) {
-				http.Error(w, "upload exceeds 64 MiB", http.StatusRequestEntityTooLarge)
+				WriteUploadRefusal(w, http.StatusRequestEntityTooLarge, UploadCodeRequestTooLarge, UploadRequestTooLargeMessage(), FileUploadMaxRequestBytes)
 				return
 			}
 			http.Error(w, "invalid multipart form", http.StatusBadRequest)
@@ -267,6 +274,13 @@ func (routes *routeRegistration) registerWorkspaceRoutes() {
 		if len(fileHeaders) == 0 {
 			http.Error(w, "files are required", http.StatusBadRequest)
 			return
+		}
+		// Each file on its own: a request within its budget may still hold a file over its own.
+		for _, header := range fileHeaders {
+			if header.Size > FileUploadMaxFileBytes {
+				WriteUploadRefusal(w, http.StatusRequestEntityTooLarge, UploadCodeFileTooLarge, UploadFileTooLargeMessage(header.Filename), FileUploadMaxFileBytes)
+				return
+			}
 		}
 
 		rootDir, dirName, err := resolveFilesUploadRoot(
