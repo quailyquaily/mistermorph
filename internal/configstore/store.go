@@ -541,9 +541,11 @@ func saveRows(ctx context.Context, q queryer, rows Rows, by string) error {
 		savedKey, now); err != nil {
 		return err
 	}
-	_, err = q.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, '1')
-		ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)`, revisionKey)
-	return err
+	if _, err = q.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, '1')
+		ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)`, revisionKey); err != nil {
+		return err
+	}
+	return recordProviderModels(ctx, q, current, rows, now)
 }
 
 // ---------- the import ----------

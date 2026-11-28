@@ -124,7 +124,6 @@ type server struct {
 	wechatLogins                *wechatLoginStore
 	xLogins                     *xLoginStore
 	xaiOAuth                    xaiauth.OAuthConfig
-	proLogins                   *proLoginStore
 	endpoints                   []runtimeEndpoint
 	endpointByRef               map[string]runtimeEndpoint
 	endpointStateMu             sync.RWMutex
@@ -408,7 +407,6 @@ func newServer(cfg serveConfig) (*server, error) {
 		wechatLogins:     newWeChatLoginStore(),
 		xLogins:          newXLoginStore(),
 		xaiOAuth:         xaiauth.OAuthConfig{},
-		proLogins:        newProLoginStore(),
 		endpoints:        endpoints,
 		endpointByRef:    endpointByRef,
 		localRuntime:     localRuntime,
@@ -571,10 +569,6 @@ func (s *server) handler() http.Handler {
 		register("/auth/xai/login/start", s.handleXAIAuthLoginStart)
 		register("/auth/xai/login/poll", s.handleXAIAuthLoginPoll)
 		register("/auth/xai/logout", s.handleXAIAuthLogout)
-		register("/auth/pro/status", s.handleProAuthStatus)
-		register("/auth/pro/login/start", s.handleProAuthLoginStart)
-		register("/auth/pro/login/poll", s.handleProAuthLoginPoll)
-		register("/auth/pro/logout", s.handleProAuthLogout)
 		register("/settings/agent", s.handleAgentSettings)
 		register("/settings/agent/models", s.handleAgentSettingsModels)
 		register("/settings/agent/test", s.handleAgentSettingsTest)

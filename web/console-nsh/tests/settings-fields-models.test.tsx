@@ -100,9 +100,11 @@ test("llm form: changing provider clears the endpoint and shows that provider's 
   await app.waitFor("id:inference-provider-dialog");
   await app.type("id:inference-provider-filter", "grok");
   await app.press("text:xAI Grok OAuth");
-  await app.waitUntil(() => out(app, "events").includes("model=grok-4.5"));
+  // The form says the provider changed; the page gives it that provider's model (tests/provider-model-fill.test.tsx).
+  await app.waitUntil(() => out(app, "events").includes("provider-changed=xai_oauth"));
   const events = JSON.parse(out(app, "events"));
   expect(events.slice(0, 3)).toEqual(["inference_provider=xai_oauth", "endpoint=", "api_key="]);
+  expect(events.some((event: string) => event.startsWith("model="))).toBe(false);
   // xAI OAuth signs in instead of taking a key.
   await app.waitFor("id:llm-xai-auth");
   expect(app.shows("id:llm-api_key")).toBe(false);

@@ -372,3 +372,36 @@ func TestInstalledClaudeUsage(t *testing.T) {
 	}
 	t.Log(q.Note(time.Now()))
 }
+
+func TestReadCodexModelsFromAppServer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script stand-in")
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "codex")
+	// Two pages: the second is asked for with the first's cursor. `model` is the name a request takes.
+	body := "#!/bin/sh\n[ \"$1\" = app-server ] || exit 2\nread -r a\nprintf '%s\\n' '{\"id\":1,\"result\":{}}'\nread -r b\nread -r c\n" +
+		"case \"$c\" in *model/list*) ;; *) exit 3 ;; esac\n" +
+		"case \"$c\" in *page-2*) printf '%s\\n' '{\"id\":2,\"result\":{\"data\":[{\"id\":\"c\",\"model\":\"gpt-c\"},{\"id\":\"a\",\"model\":\"gpt-a\"}],\"nextCursor\":null}}' ;; " +
+		"*) printf '%s\\n' '{\"method\":\"note\"}' '{\"id\":2,\"result\":{\"data\":[{\"id\":\"a\",\"model\":\"gpt-a\",\"isDefault\":true},{\"id\":\"gpt-b\"}],\"nextCursor\":\"page-2\"}}' ;; esac\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadCodexModels(context.Background(), script, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "gpt-a,gpt-b,gpt-c" {
+		t.Fatalf("models = %v", got)
+	}
+	if _, err := ReadCodexModels(context.Background(), "", nil); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("no executable: err = %v", err)
+	}
+	empty := filepath.Join(dir, "codex-empty")
+	if err := os.WriteFile(empty, []byte("#!/bin/sh\nread -r a\nprintf '%s\\n' '{\"id\":1,\"result\":{}}'\nread -r b\nread -r c\nprintf '%s\\n' '{\"id\":2,\"result\":{\"data\":[]}}'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadCodexModels(context.Background(), empty, nil); err == nil || !strings.Contains(err.Error(), "no models") {
+		t.Fatalf("empty list: err = %v", err)
+	}
+}

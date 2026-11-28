@@ -20,17 +20,20 @@ function readStore(storage) {
   return values;
 }
 
-// The page's own colours under the app, per theme: what the page's markup gives it before the app
-// draws (scripts/build-web.sh writes the same values), so a switch leaves the page as a reload would.
+// The page's own colours under the app, per theme (lib/core/themes.js `themePageColors`; a test
+// keeps them the same): what the page's markup gives it before the app draws (scripts/build-web.sh
+// writes the same values), so a switch leaves the page as a reload would.
 export const PAGE_COLORS = {
-  light: { background: "#eaf0f6", color: "#17182b" },
-  dark: { background: "#0f0f0f", color: "#f3f3f6" },
+  aojashin: { background: "#eaf0f6", color: "#17182b" },
+  spqr: { background: "#f4ecf2", color: "#221a20" },
+  midnight: { background: "#121822", color: "#e6e9ef" },
+  bunko: { background: "#05060b", color: "#f2f7ff" },
 };
 
-// Gives the page (html and body, under the app) the colours of `scheme`, in one style of its own
+// Gives the page (html and body, under the app) the colours of `theme`, in one style of its own
 // placed last in the head, over the ones the markup set.
-export function setPageColors(scheme, doc = document) {
-  const colors = PAGE_COLORS[scheme];
+export function setPageColors(theme, doc = document) {
+  const colors = PAGE_COLORS[theme];
   if (!colors) return;
   let style = doc.querySelector("style[data-morph-page-colors]");
   if (!style) {
@@ -631,9 +634,9 @@ export function createHost(player) {
     ],
     ["morph.title", ({ title }) => void (document.title = title)],
     // The browser's own chrome around the page follows the theme shown (lib/platform.ts).
-    ["morph.themeColor", ({ color, scheme }) => {
+    ["morph.themeColor", ({ color, theme }) => {
       setThemeColor(color);
-      setPageColors(scheme);
+      setPageColors(theme);
     }],
     ["morph.favicon", ({ url }) => favicon.show(url)],
     ["morph.language", ({ language }) => void (document.documentElement.lang = language)],

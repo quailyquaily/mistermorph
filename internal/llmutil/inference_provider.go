@@ -16,7 +16,6 @@ const (
 	InferenceProviderAnthropic                = "anthropic"
 	InferenceProviderBedrock                  = "bedrock"
 	InferenceProviderCloudflare               = "cloudflare"
-	InferenceProviderMisterMorphPro           = "mistermorph_pro"
 	InferenceProviderXAI                      = "xai"
 	InferenceProviderXAIOAuth                 = "xai_oauth"
 	InferenceProviderMeta                     = "meta"
@@ -31,21 +30,20 @@ const (
 )
 
 const (
-	DefaultOpenAIEndpoint         = "https://api.openai.com"
-	DefaultMagpieEndpoint         = "http://127.0.0.1:3425/v1"
-	DefaultCCSwitchEndpoint       = "http://127.0.0.1:15721/v1"
-	DefaultGeminiEndpoint         = "https://generativelanguage.googleapis.com"
-	DefaultAnthropicEndpoint      = "https://api.anthropic.com"
-	DefaultCloudflareEndpoint     = "https://api.cloudflare.com/client/v4"
-	DefaultMisterMorphProEndpoint = "https://router.mistermorph.com/api/v1"
-	DefaultXAIEndpoint            = "https://api.x.ai"
-	DefaultXAIOAuthEndpoint       = xaiauth.DefaultAPIBase
-	DefaultMetaEndpoint           = "https://api.ai.meta.com/v1"
-	DefaultDeepseekEndpoint       = "https://api.deepseek.com"
-	DefaultKimiEndpoint           = "https://api.moonshot.cn"
-	DefaultOpenRouterEndpoint     = "https://openrouter.ai/api/v1"
-	DefaultGroqEndpoint           = "https://api.groq.com/openai/v1"
-	DefaultSakanaEndpoint         = "https://api.sakana.ai/v1"
+	DefaultOpenAIEndpoint     = "https://api.openai.com"
+	DefaultMagpieEndpoint     = "http://127.0.0.1:3425/v1"
+	DefaultCCSwitchEndpoint   = "http://127.0.0.1:15721/v1"
+	DefaultGeminiEndpoint     = "https://generativelanguage.googleapis.com"
+	DefaultAnthropicEndpoint  = "https://api.anthropic.com"
+	DefaultCloudflareEndpoint = "https://api.cloudflare.com/client/v4"
+	DefaultXAIEndpoint        = "https://api.x.ai"
+	DefaultXAIOAuthEndpoint   = xaiauth.DefaultAPIBase
+	DefaultMetaEndpoint       = "https://api.ai.meta.com/v1"
+	DefaultDeepseekEndpoint   = "https://api.deepseek.com"
+	DefaultKimiEndpoint       = "https://api.moonshot.cn"
+	DefaultOpenRouterEndpoint = "https://openrouter.ai/api/v1"
+	DefaultGroqEndpoint       = "https://api.groq.com/openai/v1"
+	DefaultSakanaEndpoint     = "https://api.sakana.ai/v1"
 )
 
 type InferenceProviderInfo struct {
@@ -72,7 +70,6 @@ var inferenceProviderRegistry = []InferenceProviderInfo{
 	{Label: "Claude AI", Value: InferenceProviderAnthropic, Provider: "anthropic", Endpoint: DefaultAnthropicEndpoint},
 	{Label: "AWS Bedrock", Value: InferenceProviderBedrock, Provider: "bedrock"},
 	{Label: "Cloudflare", Value: InferenceProviderCloudflare, Provider: "cloudflare", Endpoint: DefaultCloudflareEndpoint},
-	{Label: "MisterMorph Pro", Value: InferenceProviderMisterMorphPro, Provider: "openai", Endpoint: DefaultMisterMorphProEndpoint},
 	{Label: "xAI", Value: InferenceProviderXAI, Provider: "xai", Endpoint: DefaultXAIEndpoint},
 	{Label: "xAI Grok OAuth", Value: InferenceProviderXAIOAuth, Provider: xaiauth.ProviderName, Endpoint: DefaultXAIOAuthEndpoint},
 	{Label: "Meta", Value: InferenceProviderMeta, Provider: "meta", Endpoint: DefaultMetaEndpoint},
@@ -192,8 +189,6 @@ func InferInferenceProvider(provider string, endpoint string) string {
 		switch endpoint {
 		case "", normalizeEndpoint(DefaultOpenAIEndpoint), normalizeEndpoint(DefaultOpenAIEndpoint + "/v1"):
 			return InferenceProviderOpenAI
-		case normalizeEndpoint(DefaultMisterMorphProEndpoint):
-			return InferenceProviderMisterMorphPro
 		case normalizeEndpoint(DefaultXAIEndpoint), normalizeEndpoint(DefaultXAIEndpoint + "/v1"):
 			return InferenceProviderXAI
 		case normalizeEndpoint(DefaultMetaEndpoint):
@@ -231,8 +226,6 @@ func normalizeInferenceProvider(value string) string {
 		return InferenceProviderAnthropicCompatible
 	case "google_gemini":
 		return InferenceProviderGemini
-	case "mistermorph", "mister_morph_pro":
-		return InferenceProviderMisterMorphPro
 	case "open_router":
 		return InferenceProviderOpenRouter
 	default:

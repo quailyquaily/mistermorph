@@ -3,7 +3,7 @@
 // saved to the route's endpoint, and where each step goes next. SetupPage.tsx draws it.
 import { batch, cleanup, computed, effect, signal, untracked } from "nsh";
 import type { Signal } from "nsh";
-import { useProAuthFlow, useXAIAuthFlow, type DeviceAuthStatus } from "../../components/settings/AuthDialogs";
+import { useXAIAuthFlow, type DeviceAuthStatus } from "../../components/settings/AuthDialogs";
 import type { AdjustedImage } from "../../components/settings/ImageUploadField";
 import type { SetupPickerItem } from "../../components/settings/SetupPickerDialog";
 import type { ConnectionBenchmark } from "../../components/settings/SetupConnectionTestDialog";
@@ -64,7 +64,6 @@ import {
   resolveSetupAPIKeyHelp,
   SETUP_PROVIDER_BEDROCK,
   SETUP_PROVIDER_CLOUDFLARE,
-  SETUP_PROVIDER_MISTERMORPH_PRO,
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_OPENAI_COMPATIBLE,
   SETUP_PROVIDER_OPTIONS,
@@ -78,6 +77,8 @@ import {
   setupProviderSupportsModelLookup,
 } from "../../lib/core/setup-contract.js";
 import { modelPickerItemsFromPayload } from "../../lib/core/setup-picker.js";
+import { modelIDsFromPayload } from "../../lib/core/provider-models.js";
+import { createProviderModelFill } from "../../components/settings/providerModelFill";
 import { findSoulPreset, SOUL_PRESETS } from "../../lib/core/soul-presets.js";
 import { endpointState } from "../../lib/stores/index.js";
 import { openExternal } from "../../lib/platform";
@@ -288,6 +289,8 @@ export function useSetup() {
   const configRevision = signal("");
   const llmEnvManaged = signal<Record<string, unknown>>({});
   const llmSecretFields = signal<Record<string, { configured?: boolean; editable?: boolean; source?: string }>>({});
+  // The model last set for each provider on this agent (its settings' `llm_last_models`).
+  const llmLastModels = signal<Record<string, string>>({});
   // The persona as loaded: which API the runtime has, and the identity.yaml text on an old one.
   const loadedPersonaRecord = signal<any>(null);
   const loadedSoulRaw = signal<string | null>(null);
@@ -332,13 +335,6 @@ export function useSetup() {
   const setPersonaField = (field: keyof PersonaForm, value: string) =>
     personaForm.update((form) => ({ ...form, [field]: value }));
 
-  const pro = useProAuthFlow({
-    getEndpointRef: routeEndpointRef,
-    request: endpointApiFetch as never,
-    async onSettingsUpdated() {
-      await loadLLMForm();
-    },
-  });
   const xai = useXAIAuthFlow({
     getEndpointRef: routeEndpointRef,
     request: endpointApiFetch as never,
@@ -437,14 +433,12 @@ export function useSetup() {
   const showCloudflareAccountField = () => providerChoice() === SETUP_PROVIDER_CLOUDFLARE;
   const showCodexOAuthFields = computed(() => providerChoice() === SETUP_PROVIDER_OPENAI_CODEX);
   const showXAIOAuthFields = computed(() => providerChoice() === SETUP_PROVIDER_XAI_OAUTH);
-  const showProOAuthFields = computed(() => providerChoice() === SETUP_PROVIDER_MISTERMORPH_PRO);
-  const providerHasAuthAction = () => showCodexOAuthFields() || showXAIOAuthFields() || showProOAuthFields();
+  const providerHasAuthAction = () => showCodexOAuthFields() || showXAIOAuthFields();
   const showBedrockFields = () => providerChoice() === SETUP_PROVIDER_BEDROCK;
   const showEndpointField = () => setupProviderSupportsCustomAPIBase(providerChoice());
   const showCredentialFields = () =>
     !showBedrockFields() &&
     !showXAIOAuthFields() &&
-    !showProOAuthFields() &&
     (showCloudflareAccountField() || setupProviderSupportsAPIKey(providerChoice()));
   const credentialFieldName = (): LLMFormField => (showCloudflareAccountField() ? "cloudflare_api_token" : "api_key");
   const credentialLabelKey = () =>
@@ -474,7 +468,10 @@ export function useSetup() {
     loading() ||
     saving() ||
     !showOpenAICompatibleHelpers() ||
-    (showProOAuthFields() ? pro.proAuthNeedsLogin() : !hasLLMFieldValue(credentialFieldName())) ||
+    // Codex: signed in with the account, or a key of its own.
+    (showCodexOAuthFields()
+      ? codexAuthNeedsLogin() && !hasLLMFieldValue("api_key")
+      : !hasLLMFieldValue(credentialFieldName())) ||
     (showCloudflareAccountField() && !hasLLMFieldValue("cloudflare_account_id"));
   const apiBasePickerItems = computed<SetupPickerItem[]>(() =>
     (OPENAI_COMPATIBLE_API_BASE_OPTIONS as { id: string; title: string; baseURL: string }[]).map((item) => ({
@@ -502,8 +499,7 @@ export function useSetup() {
 
   const authBlocked = () =>
     (showCodexOAuthFields() && !codexUsesAPIKey() && !codexAuthStatus().logged_in) ||
-    (showXAIOAuthFields() && !xai.xaiAuthReady()) ||
-    (showProOAuthFields() && !pro.proAuthStatus().logged_in);
+    (showXAIOAuthFields() && !xai.xaiAuthReady());
   const bedrockMissing = () =>
     (showBedrockFields() && !hasLLMFieldValue("bedrock_aws_key")) ||
     (showBedrockFields() && !hasLLMFieldValue("bedrock_aws_secret")) ||
@@ -517,7 +513,6 @@ export function useSetup() {
     authBlocked() ||
     (!showCodexOAuthFields() &&
       !showXAIOAuthFields() &&
-      !showProOAuthFields() &&
       !showBedrockFields() &&
       setupProviderRequiresAPIKey(providerChoice()) &&
       !hasLLMFieldValue(credentialFieldName())) ||
@@ -532,7 +527,6 @@ export function useSetup() {
     authBlocked() ||
     (!showCodexOAuthFields() &&
       !showXAIOAuthFields() &&
-      !showProOAuthFields() &&
       setupProviderRequiresAPIKey(providerChoice()) &&
       !hasLLMFieldValue(credentialFieldName())) ||
     bedrockMissing() ||
@@ -699,6 +693,7 @@ export function useSetup() {
       loadedConfigSource.set(String(data?.config_source || "defaults").trim() || "defaults");
       llmEnvManaged.set(llmEnvManagedPayload);
       llmSecretFields.set(secretFieldsPayload?.llm && typeof secretFieldsPayload.llm === "object" ? secretFieldsPayload.llm : {});
+      llmLastModels.set(data?.llm_last_models && typeof data.llm_last_models === "object" ? data.llm_last_models : {});
       if (untracked(loadedConfigSource) !== "config") {
         llmForm.set(emptyLLMForm());
         loadedLLMForm.set(null);
@@ -906,14 +901,15 @@ export function useSetup() {
       }
       if (!managed("cloudflare_account_id")) payload.cloudflare_account_id = String(form.cloudflare_account_id || "").trim();
     } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
-      if (!managed("api_key")) payload.api_key = secret("api_key");
+      // Codex signs in with the account: a key saved for it before goes.
+      if (!managed("api_key")) payload.api_key = "";
       payload.cloudflare_api_token = "";
       payload.cloudflare_account_id = "";
       payload.bedrock_aws_key = "";
       payload.bedrock_aws_secret = "";
       payload.bedrock_region = "";
       payload.bedrock_model_arn = "";
-    } else if (provider === SETUP_PROVIDER_XAI_OAUTH || provider === SETUP_PROVIDER_MISTERMORPH_PRO) {
+    } else if (provider === SETUP_PROVIDER_XAI_OAUTH) {
       clear([
         "api_key",
         "cloudflare_api_token",
@@ -964,9 +960,9 @@ export function useSetup() {
       copy("cloudflare_api_token");
       copy("cloudflare_account_id");
     } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
-      copy("api_key");
+      payload.api_key = "";
       for (const field of blank) payload[field] = "";
-    } else if (provider === SETUP_PROVIDER_XAI_OAUTH || provider === SETUP_PROVIDER_MISTERMORPH_PRO) {
+    } else if (provider === SETUP_PROVIDER_XAI_OAUTH) {
       payload.api_key = "";
       for (const field of blank) payload[field] = "";
     } else {
@@ -1145,7 +1141,8 @@ export function useSetup() {
       next.endpoint = "";
     }
     const normalizedProvider = normalizeSetupProviderChoice(nextProvider, { allowEmpty: true });
-    if (normalizedProvider === SETUP_PROVIDER_XAI_OAUTH || normalizedProvider === SETUP_PROVIDER_MISTERMORPH_PRO) {
+    // The providers that sign in with an account take no API base or key of their own.
+    if (normalizedProvider === SETUP_PROVIDER_XAI_OAUTH || normalizedProvider === SETUP_PROVIDER_OPENAI_CODEX) {
       Object.assign(next, {
         endpoint: "",
         api_key: "",
@@ -1156,12 +1153,41 @@ export function useSetup() {
         bedrock_region: "",
         bedrock_model_arn: "",
       });
-      if (normalizedProvider === SETUP_PROVIDER_XAI_OAUTH) next.model = "grok-4.5";
     } else if (normalizedProvider === SETUP_PROVIDER_BEDROCK) {
       Object.assign(next, { api_key: "", cloudflare_api_token: "", cloudflare_account_id: "" });
     }
     llmForm.set(next);
+    // Another provider: its own model, the one last set for it or its default, checked against
+    // its list where it has one.
+    if (normalizedProvider !== normalizeSetupProviderChoice(previousProvider, { allowEmpty: true })) {
+      modelFill.providerChanged("", normalizedProvider);
+    }
   }
+
+  /** What the models route takes for the form as it is: the provider and what it signs in with. */
+  function modelLookupBody() {
+    const provider = untracked(providerChoice);
+    const credential = untracked(credentialFieldName);
+    const apiKeyRaw = untracked(() => llmFieldEnvRawValue(credential));
+    return {
+      inference_provider: provider,
+      cloudflare_account_id: untracked(showCloudflareAccountField) ? untracked(() => llmFieldValue("cloudflare_account_id")) : "",
+      endpoint: setupProviderSupportsCustomAPIBase(provider) ? untracked(() => llmFieldValue("endpoint")) : "",
+      api_key: apiKeyRaw || untracked(() => llmFieldValue(credential)),
+    };
+  }
+
+  const modelFill = createProviderModelFill({
+    lastModels: llmLastModels,
+    providerTitle: (provider) => untracked(providerItems).find((item) => item.value === provider)?.title || provider,
+    canList: () => !modelLookupDisabled(),
+    listModels: async () =>
+      modelIDsFromPayload(await endpointApiFetch(routeEndpointRef(), "/settings/agent/models", { method: "POST", body: modelLookupBody() })),
+    provider: () => providerChoice(),
+    model: () => String(llmForm().model || "").trim(),
+    setModel: (_target, model) => setLLMField("model", model),
+    choose: () => void openModelPicker(),
+  });
 
   function openAPIBasePicker() {
     if (!untracked(showOpenAICompatibleHelpers) || untracked(loading) || untracked(saving)) return;
@@ -1180,19 +1206,8 @@ export function useSetup() {
       modelPickerError.set("");
       modelPickerItems.set([]);
     });
-    const provider = untracked(providerChoice);
-    const credential = untracked(credentialFieldName);
-    const apiKeyRaw = untracked(() => llmFieldEnvRawValue(credential));
     try {
-      const payload = await endpointApiFetch(routeEndpointRef(), "/settings/agent/models", {
-        method: "POST",
-        body: {
-          inference_provider: provider,
-          cloudflare_account_id: untracked(showCloudflareAccountField) ? untracked(() => llmFieldValue("cloudflare_account_id")) : "",
-          endpoint: setupProviderSupportsCustomAPIBase(provider) ? untracked(() => llmFieldValue("endpoint")) : "",
-          api_key: provider === SETUP_PROVIDER_MISTERMORPH_PRO ? "" : apiKeyRaw || untracked(() => llmFieldValue(credential)),
-        },
-      });
+      const payload = await endpointApiFetch(routeEndpointRef(), "/settings/agent/models", { method: "POST", body: modelLookupBody() });
       modelPickerItems.set(modelPickerItemsFromPayload(payload, currentLocale()));
     } catch (error) {
       modelPickerError.set(errorMessage(error, "msg_load_failed"));
@@ -1282,6 +1297,8 @@ export function useSetup() {
       file_mode_ok: status?.file_mode_ok !== false,
       file_mode_warning: typeof status?.file_mode_warning === "string" ? status.file_mode_warning : "",
     });
+    // Signed in now: the model the form took for Codex can be checked against its list.
+    modelFill.settle("");
   }
 
   async function loadCodexAuthStatus() {
@@ -1508,14 +1525,6 @@ export function useSetup() {
   });
 
   effect(() => {
-    const visible = showProOAuthFields();
-    untracked(() => {
-      if (visible) void pro.loadProAuthStatus();
-      else pro.resetProAuthFlow();
-    });
-  });
-
-  effect(() => {
     const visible = showXAIOAuthFields();
     untracked(() => {
       if (visible) void xai.loadXAIAuthStatus();
@@ -1557,7 +1566,6 @@ export function useSetup() {
     codexLoginSession,
     codexLoginVerificationURL,
     codexLoginUserCode,
-    pro,
     xai,
     // derived
     setupEndpointRef,
@@ -1577,7 +1585,6 @@ export function useSetup() {
     showCloudflareAccountField,
     showCodexOAuthFields,
     showXAIOAuthFields,
-    showProOAuthFields,
     providerHasAuthAction,
     showBedrockFields,
     showEndpointField,
@@ -1595,6 +1602,7 @@ export function useSetup() {
     codexAuthButtonTitle,
     codexLoginExpiresLabel,
     modelLookupDisabled,
+    modelFill,
     llmFieldEnvName,
     isLLMFieldEnvManaged,
     llmFieldValue,

@@ -731,3 +731,47 @@ func TestRevisionOfAFileConfig(t *testing.T) {
 		t.Fatalf("file revisions %q then %q", first, second)
 	}
 }
+
+// The model last set per provider: recorded as the config is saved, one record per provider.
+func TestLastModelsFollowWhatASaveSets(t *testing.T) {
+	path := DBConfigPath(t.TempDir())
+	ctx := context.Background()
+	save := func(doc string) {
+		t.Helper()
+		if err := WriteFileBy(path, []byte(doc), ByConsole); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := func() map[string]string {
+		t.Helper()
+		m, err := LastModels(ctx, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	save("llm:\n  inference_provider: openai\n  model: gpt-a\n  profiles:\n    side:\n      inference_provider: Anthropic\n      model: claude-a\n")
+	if m := got(); len(m) != 2 || m["openai"] != "gpt-a" || m["anthropic"] != "claude-a" {
+		t.Fatalf("first save: %v", m)
+	}
+	// A profile takes another model of a provider the default model also uses: the profile's is
+	// the newer choice, and the default's unchanged pair does not take it back.
+	save("llm:\n  inference_provider: openai\n  model: gpt-a\n  profiles:\n    side:\n      inference_provider: openai\n      model: gpt-b\n")
+	if m := got(); m["openai"] != "gpt-b" || m["anthropic"] != "claude-a" {
+		t.Fatalf("second save: %v", m)
+	}
+	save("llm:\n  inference_provider: openai\n  model: gpt-a\n  profiles:\n    side:\n      inference_provider: openai\n      model: gpt-b\n      description: same models\n")
+	if m := got(); m["openai"] != "gpt-b" {
+		t.Fatalf("a save that sets no model: %v", m)
+	}
+	// Leaving a provider keeps its record; a place without a model records nothing.
+	save("llm:\n  inference_provider: xai\n  model: \"\"\n")
+	if m := got(); m["openai"] != "gpt-b" || m["anthropic"] != "claude-a" || m["xai"] != "" {
+		t.Fatalf("after leaving: %v", m)
+	}
+	// A config kept in a file has no record.
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	if m, err := LastModels(ctx, file); err != nil || len(m) != 0 {
+		t.Fatalf("file config: %v, %v", m, err)
+	}
+}

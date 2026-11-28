@@ -13,10 +13,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/coderusage"
 	"github.com/quailyquaily/mistermorph/internal/llmbench"
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/llm"
 	uniaiapi "github.com/quailyquaily/uniai"
 )
@@ -158,6 +160,25 @@ type ModelInfo struct {
 	Created int64  `json:"created,omitempty"`
 }
 
+// FetchCodexModels lists the models of the Codex account the local Codex CLI is signed in to
+// (`codex app-server`, `model/list`), in the CLI's order: its default first. The CLI is found and
+// started as the coder tool does it, in the coder's environment.
+func FetchCodexModels(ctx context.Context, reader Reader) ([]ModelInfo, error) {
+	command, env, err := shellenv.CoderEnvFromConfig(reader).Command("codex")
+	if err != nil {
+		return nil, fmt.Errorf("listing Codex models needs the Codex CLI: %w", err)
+	}
+	ids, err := coderusage.ReadCodexModels(ctx, command, env)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]ModelInfo, 0, len(ids))
+	for _, id := range ids {
+		models = append(models, ModelInfo{ID: id})
+	}
+	return models, nil
+}
+
 // FetchModels lists the provider's models, newest first; models without a date come
 // last, in name order.
 func FetchModels(ctx context.Context, lookup ModelLookupConfig) ([]ModelInfo, error) {
@@ -179,7 +200,9 @@ func FetchModels(ctx context.Context, lookup ModelLookupConfig) ([]ModelInfo, er
 		cfg.CloudflareAPIBase = endpoint
 		cfg.CloudflareAPIToken = apiKey
 		cfg.CloudflareAccountID = lookup.CloudflareAccountID
-	case "", "openai", "openai_resp", "xai", "deepseek", "meta", "sakana":
+	// openai_codex comes here only with an API key of its own (ResolveModelLookup): then it talks
+	// to an OpenAI-format endpoint.
+	case "", "openai", "openai_resp", "openai_codex", "xai", "deepseek", "meta", "sakana":
 		modelsURL, err := NormalizeOpenAICompatibleModelsURL(endpoint)
 		if err != nil {
 			return nil, err

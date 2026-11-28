@@ -18,6 +18,7 @@ func migrations() []sqlitedb.Migration {
 		{Name: "create job runs", SQL: jobRunsSQL},
 		{Name: "give job runs their task record", SQL: jobRunTaskSQL},
 		{Name: "create workspace uses", SQL: workspaceUsesSQL},
+		{Name: "create the models last set per inference provider", SQL: providerModelsSQL},
 	}
 }
 
@@ -385,4 +386,16 @@ CREATE TABLE workspace_uses (
 	used_at       TEXT NOT NULL
 );
 CREATE INDEX workspace_uses_by_time ON workspace_uses (used_at DESC);
+`
+
+// providerModelsSQL: the model last set for each inference provider (internal/configstore records
+// it as the config is saved), so the Console can fill it in when the provider is chosen again.
+const providerModelsSQL = `
+CREATE TABLE llm_provider_models (
+	inference_provider TEXT PRIMARY KEY,
+	model              TEXT NOT NULL,
+	updated_at         TEXT NOT NULL,
+	CHECK (inference_provider <> ''),
+	CHECK (model <> '')
+);
 `

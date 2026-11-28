@@ -91,3 +91,36 @@ func TestHandlerModelsCloudflareRequiresAccount(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
+
+// The Codex account sign-in has no key: its models come from the local Codex CLI, not a models
+// address. With a key of its own the provider's endpoint is asked, as an OpenAI-format one.
+func TestHandlerModelsCodex(t *testing.T) {
+	reader := viper.New()
+	reader.Set("llm.inference_provider", "openai_codex")
+	owner := &handlerTestOwner{reader: NewReaderSnapshot(reader)}
+	cli := 0
+	handler := NewHandler(HandlerOptions{
+		Owner: owner,
+		FetchModels: func(_ context.Context, lookup ModelLookupConfig) ([]ModelInfo, error) {
+			if lookup.Provider != "openai_codex" || lookup.APIKey != "sk-own" || lookup.Endpoint != "https://codex.example/v1" || lookup.CodexCLI {
+				t.Errorf("lookup = %+v", lookup)
+			}
+			return []ModelInfo{{ID: "from-endpoint"}}, nil
+		},
+		FetchCodexModels: func(context.Context, Reader) ([]ModelInfo, error) {
+			cli++
+			return []ModelInfo{{ID: "gpt-default"}, {ID: "gpt-other"}}, nil
+		},
+	})
+	rec := httptest.NewRecorder()
+	handler.Models(rec, httptest.NewRequest(http.MethodPost, "/settings/agent/models", strings.NewReader(`{"inference_provider":"openai_codex"}`)))
+	// The CLI's order is kept: its default first.
+	if rec.Code != http.StatusOK || cli != 1 || !strings.Contains(rec.Body.String(), `"items":["gpt-default","gpt-other"]`) {
+		t.Fatalf("account: status = %d, cli = %d, body = %s", rec.Code, cli, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	handler.Models(rec, httptest.NewRequest(http.MethodPost, "/settings/agent/models", strings.NewReader(`{"inference_provider":"openai_codex","endpoint":"https://codex.example/v1","api_key":"sk-own"}`)))
+	if rec.Code != http.StatusOK || cli != 1 || !strings.Contains(rec.Body.String(), "from-endpoint") {
+		t.Fatalf("own key: status = %d, cli = %d, body = %s", rec.Code, cli, rec.Body.String())
+	}
+}

@@ -1754,15 +1754,6 @@ func applyLLMConfigFieldsUpdate(node *yaml.Node, effective LLMConfigFieldsPayloa
 			configbootstrap.SetOrDeleteMappingScalar(azureNode, "deployment", *update.AzureDeployment)
 		}
 	}
-	if strings.EqualFold(strings.TrimSpace(effective.InferenceProvider), llmutil.InferenceProviderMisterMorphPro) {
-		configbootstrap.SetOrDeleteMappingScalar(node, "provider", "")
-		configbootstrap.SetOrDeleteMappingScalar(node, "endpoint", "")
-		configbootstrap.SetOrDeleteMappingScalar(node, "api_key", "")
-		configbootstrap.DeleteMappingKey(node, "azure")
-		configbootstrap.DeleteMappingKey(node, "cloudflare")
-		configbootstrap.DeleteMappingKey(node, "bedrock")
-		return
-	}
 	switch strings.ToLower(strings.TrimSpace(effective.Provider)) {
 	case "openai_codex":
 		if update.APIKey != nil {

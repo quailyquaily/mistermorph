@@ -70,14 +70,16 @@ export function NavLink(props: {
       tooltip={props.collapsed || shortcut() ? <Tip text={props.item.title} shortcut={shortcut()} placement="right" /> : undefined}
       class={`flex-row items-center gap-2.5 ${props.mobile ? "min-h-12 px-4" : "min-h-[42px]"} ${
         props.collapsed ? "justify-center px-0" : props.mobile ? "" : "px-3.5"
-      } ${active() ? "hover:bg-transparent focus:bg-transparent" : "hover:bg-hover-soft focus:bg-hover-soft"}`}
+      } ${active() ? "hover:bg-transparent focus:bg-transparent" : props.mobile ? "hover:bg-hover-soft focus:bg-hover-soft" : "hover:bg-mainnav-hover focus:bg-mainnav-hover"}`}
       style={{ transitionProperty: "colors", transitionDuration: 160, transitionTimingFunction: "ease" }}
       hoverStyle={{ transitionDelay: 60 }}
     >
-      <Icon name={props.item.icon as IconName} size={props.mobile ? 16 : 14} color={active() ? "foreground" : "muted-foreground"} />
+      <Icon name={props.item.icon as IconName} size={props.mobile ? 16 : 14} color={props.mobile ? (active() ? "foreground" : "muted-foreground") : active() ? "mainnav-icon" : "mainnav-muted"} />
       <If when={!props.collapsed}>
         <Text
-          class={`flex-1 text-sm font-medium leading-[16.8px] ${active() ? "text-foreground" : "text-subtle"}`}
+          class={`flex-1 text-sm font-medium leading-[16.8px] ${
+            props.mobile ? (active() ? "text-foreground" : "text-subtle") : active() ? "text-mainnav-foreground" : "text-mainnav-subtle"
+          }`}
           style={{ numberOfLines: 1 }}
         >
           {props.item.title}
@@ -126,7 +128,7 @@ export function NavList(props: {
         {(item) => (
           <If
             when={!item().separator}
-            else={<View class={`h-px bg-line-soft ${props.collapsed ? "ml-2.5 my-3" : props.mobile ? "my-2" : "ml-3.5 my-3"}`} />}
+            else={<View class={`h-px ${props.mobile ? "bg-line-soft" : "bg-mainnav-line"} ${props.collapsed ? "ml-2.5 my-3" : props.mobile ? "my-2" : "ml-3.5 my-3"}`} />}
           >
             <If when={BeforeRuntime && !props.collapsed && item().pagePath === "/settings"}>
               {BeforeRuntime?.({
@@ -234,9 +236,9 @@ export function Sidebar() {
           reaches the edge and flares into it. */}
       <BandEdge
         center={edgeCenter}
-        band={{ size: NAV_ROW, color: String(token("selection")) }}
-        fill={String(token("nav"))}
-        line={String(token("line-soft"))}
+        band={{ size: NAV_ROW, color: String(token("mainnav-selection")) }}
+        fill={String(token("mainnav"))}
+        line={String(token("mainnav-line"))}
         class="absolute inset-0"
       />
       <AgentSwitcher

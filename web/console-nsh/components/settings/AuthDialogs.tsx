@@ -1,11 +1,10 @@
-// Device sign-in dialogs (Codex, xAI, Mister Morph Pro) and the Pro and xAI sign-in flows (the Vue
-// console's CodexAuthDialog, XAIAuthDialog, ProAuthDialog, DeviceAuthDialogContent,
-// useProAuthFlow and useXAIAuthFlow).
+// Device sign-in dialogs (Codex, xAI) and the xAI sign-in flow (the Vue console's CodexAuthDialog,
+// XAIAuthDialog, DeviceAuthDialogContent and useXAIAuthFlow).
 //
 // Vue to nsh: a dialog's `modelValue` is `open`, `update:modelValue` is `onOpenChange(open)`;
 // `update:setDefault` is `onSetDefaultChange(value)`; `login` / `logout` are `onLogin()` /
-// `onLogout()`. The flows return signals (`flow.proAuthBusy()`), and must be called in a component
-// body: they stop their polling when it goes.
+// `onLogout()`. The flow returns signals (`flow.xaiAuthBusy()`), and must be called in a component
+// body: it stops its polling when it goes.
 import { type Accessor, cleanup, computed, effect, type Signal, signal, Text, untracked, View } from "nsh";
 import { formatTime } from "../../lib/core/context.js";
 import { invalidateConsoleSetupReadiness } from "../../lib/core/setup.js";
@@ -16,7 +15,6 @@ import { DialogShell, InlineNotice, t } from "./DialogShell";
 import { CARD_CORNERS } from "../corners";
 
 export const CODEX_USAGE_URL = "https://chatgpt.com/codex/settings/usage";
-export const PRO_USAGE_URL = "https://router.mistermorph.com/console/usage";
 
 /** A sign-in status as the runtime reports it (`/auth/<provider>/status`). */
 export interface DeviceAuthStatus {
@@ -29,11 +27,6 @@ export interface DeviceAuthStatus {
   file_mode_warning?: string;
   /** Codex: the ChatGPT account. */
   account_id?: string;
-  /** Pro: the signed-in user. */
-  user?: { name?: string; email?: string; union_id?: string; [key: string]: unknown };
-  subscription?: string;
-  subscription_api_key_present?: boolean;
-  scope?: string;
   [key: string]: unknown;
 }
 
@@ -307,54 +300,6 @@ export function XAIAuthDialog(
   );
 }
 
-/** The Pro account's name: the user's name, email or id. */
-export function proUserLabel(status: DeviceAuthStatus | null | undefined) {
-  const user = status && typeof status.user === "object" && status.user ? status.user : {};
-  return (
-    (typeof user.name === "string" && user.name.trim()) ||
-    (typeof user.email === "string" && user.email.trim()) ||
-    (typeof user.union_id === "string" && user.union_id.trim()) ||
-    ""
-  );
-}
-
-export function ProAuthDialog(props: DeviceAuthStateProps & AuthDialogOpenProps & { onLogout?: () => void }) {
-  return (
-    <DialogShell
-      open={props.open}
-      title={t("settings_pro_auth_title")}
-      closeDisabled={props.busy}
-      onClose={() => props.onOpenChange?.(false)}
-      testID="pro-auth-dialog"
-    >
-      <DeviceAuthDialogContent
-        loading={props.loading}
-        busy={props.busy}
-        error={props.error}
-        status={props.status}
-        summary={props.summary}
-        loginSession={props.loginSession}
-        verificationURL={props.verificationURL}
-        userCode={props.userCode}
-        loginExpiresLabel={props.loginExpiresLabel}
-        accountLabel={proUserLabel(props.status)}
-        accountIntroKey="settings_pro_auth_account_intro"
-        sessionKey="settings_pro_auth_session"
-        statusReadyKey="settings_pro_auth_status_ready"
-        statusNeedsLoginKey="settings_pro_auth_status_needs_login"
-        setDefaultNoteKey="settings_pro_auth_set_default_note"
-        loginPendingKey="settings_pro_auth_login_pending"
-        loginExpiresKey="settings_codex_auth_login_expires"
-        openVerificationKey="settings_pro_auth_open_verification"
-        userCodeKey="settings_codex_auth_user_code"
-        extraActionKey="settings_pro_auth_usage"
-        extraActionURL={PRO_USAGE_URL}
-        onLogout={() => props.onLogout?.()}
-      />
-    </DialogShell>
-  );
-}
-
 /* ---------- the sign-in flows ---------- */
 
 /** How the flows reach the runtime: `endpointApiFetch` from lib/core/context.js. */
@@ -374,9 +319,9 @@ function errorText(error: unknown, fallbackKey: string) {
   return (error as Error)?.message || t(fallbackKey);
 }
 
-function normalizeStatus(payload: any, extra: boolean): DeviceAuthStatus {
+function normalizeStatus(payload: any): DeviceAuthStatus {
   const status = payload && typeof payload.status === "object" ? payload.status : payload;
-  const base: DeviceAuthStatus = {
+  return {
     logged_in: status?.logged_in === true,
     access_token_present: status?.access_token_present === true,
     refresh_token_present: status?.refresh_token_present === true,
@@ -385,31 +330,22 @@ function normalizeStatus(payload: any, extra: boolean): DeviceAuthStatus {
     file_mode_ok: status?.file_mode_ok !== false,
     file_mode_warning: typeof status?.file_mode_warning === "string" ? status.file_mode_warning : "",
   };
-  if (!extra) return base;
-  return {
-    ...base,
-    subscription_api_key_present: status?.subscription_api_key_present === true,
-    subscription: typeof status?.subscription === "string" ? status.subscription : "",
-    scope: typeof status?.scope === "string" ? status.scope : "",
-    user: status?.user && typeof status.user === "object" ? status.user : {},
-  };
 }
 
-function emptyStatus(extra: boolean) {
-  return normalizeStatus({}, extra);
+function emptyStatus() {
+  return normalizeStatus({});
 }
 
 /**
  * The shared device sign-in flow: status, start, poll every `interval_seconds` (2 s at least),
  * logout. A request for another endpoint than the current one, or overtaken by a newer one, is
- * dropped. `prefix` is the runtime's route (`/auth/pro`), `keys` the summary texts' prefix.
+ * dropped. `prefix` is the runtime's route (`/auth/xai`), `keys` the summary texts' prefix.
  */
 function useDeviceAuthFlow(
   options: AuthFlowOptions,
   config: {
     prefix: string;
     keys: string;
-    extra: boolean;
     pollBody: (sessionID: string) => unknown;
     afterLogout?: (payload: any, error: Signal<string>) => void;
     onReset?: () => void;
@@ -423,7 +359,7 @@ function useDeviceAuthFlow(
   const verificationURL = signal("");
   const userCode = signal("");
   const expiresAt = signal("");
-  const status = signal<DeviceAuthStatus>(emptyStatus(config.extra));
+  const status = signal<DeviceAuthStatus>(emptyStatus());
   let pollTimer: ReturnType<typeof setTimeout> | 0 = 0;
   let generation = 0;
   let loginEndpointRef = "";
@@ -456,7 +392,7 @@ function useDeviceAuthFlow(
 
   const currentEndpointRef = () => String(untracked(options.getEndpointRef) || "").trim();
   const isCurrent = (gen: number, endpointRef: string) => gen === generation && endpointRef === currentEndpointRef();
-  const applyStatus = (payload: any) => status.set(normalizeStatus(payload, config.extra));
+  const applyStatus = (payload: any) => status.set(normalizeStatus(payload));
 
   async function loadStatus(endpointRef = currentEndpointRef()) {
     if (untracked(loading)) return;
@@ -601,7 +537,7 @@ function useDeviceAuthFlow(
 
   function resetEndpointState() {
     resetFlow();
-    status.set(emptyStatus(config.extra));
+    status.set(emptyStatus());
   }
 
   // Closing the dialog abandons the sign-in.
@@ -642,59 +578,6 @@ function useDeviceAuthFlow(
   };
 }
 
-export interface ProAuthFlow {
-  proAuthLoading: Signal<boolean>;
-  proAuthBusy: Signal<boolean>;
-  proAuthError: Signal<string>;
-  proAuthDialogOpen: Signal<boolean>;
-  proAuthStatus: Signal<DeviceAuthStatus>;
-  proAuthSummary: Accessor<string>;
-  proAuthButtonState: Accessor<AuthButtonState>;
-  proAuthNeedsLogin: Accessor<boolean>;
-  proAuthButtonTitle: Accessor<string>;
-  proLoginSession: Signal<string>;
-  proLoginVerificationURL: Signal<string>;
-  proLoginUserCode: Signal<string>;
-  proLoginExpiresLabel: Accessor<string>;
-  loadProAuthStatus: (endpointRef?: string) => Promise<void>;
-  openProAuthDialog: () => Promise<void>;
-  pollProLogin: () => Promise<void>;
-  logoutProAuth: () => Promise<void>;
-  resetProAuthFlow: () => void;
-  resetProAuthEndpointState: () => void;
-}
-
-/** The Mister Morph Pro sign-in (useProAuthFlow): a sign-in always becomes the default. */
-export function useProAuthFlow(options: AuthFlowOptions): ProAuthFlow {
-  const flow = useDeviceAuthFlow(options, {
-    prefix: "/auth/pro",
-    keys: "settings_pro_auth",
-    extra: true,
-    pollBody: (sessionID) => ({ session_id: sessionID, set_default: true }),
-  });
-  return {
-    proAuthLoading: flow.loading,
-    proAuthBusy: flow.busy,
-    proAuthError: flow.error,
-    proAuthDialogOpen: flow.dialogOpen,
-    proAuthStatus: flow.status,
-    proAuthSummary: flow.summary,
-    proAuthButtonState: flow.buttonState,
-    proAuthNeedsLogin: flow.needsLogin,
-    proAuthButtonTitle: flow.buttonTitle,
-    proLoginSession: flow.loginSession,
-    proLoginVerificationURL: flow.verificationURL,
-    proLoginUserCode: flow.userCode,
-    proLoginExpiresLabel: flow.expiresLabel,
-    loadProAuthStatus: flow.loadStatus,
-    openProAuthDialog: flow.openDialog,
-    pollProLogin: flow.poll,
-    logoutProAuth: flow.logout,
-    resetProAuthFlow: flow.resetFlow,
-    resetProAuthEndpointState: flow.resetEndpointState,
-  };
-}
-
 export interface XAIAuthFlow {
   xaiAuthLoading: Signal<boolean>;
   xaiAuthBusy: Signal<boolean>;
@@ -727,7 +610,6 @@ export function useXAIAuthFlow(options: AuthFlowOptions): XAIAuthFlow {
   const flow = useDeviceAuthFlow(options, {
     prefix: "/auth/xai",
     keys: "settings_xai_auth",
-    extra: false,
     pollBody: (sessionID) => ({ session_id: sessionID, set_default: untracked(setDefault) }),
     afterLogout: (payload, error) => {
       if (typeof payload?.revocation_warning === "string") error.set(payload.revocation_warning);

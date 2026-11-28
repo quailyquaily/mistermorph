@@ -21,6 +21,7 @@ import { CARD_CORNERS } from "../../components/corners";
 import { createLogout } from "../../lib/logout";
 import { currentRoute } from "../../lib/router";
 import { localeState, themeState } from "../../lib/stores/index.js";
+import { themeOf } from "../../lib/core/themes.js";
 import { COLOR_SECTIONS, COLOR_TOKENS, NSH_NAMES, TINT_HUES, TINT_STEPS, type ColorSchemeName, type ColorToken } from "./colors";
 import { galleryAction, galleryActionCount, t, Wide } from "./demo";
 import { DEMOS } from "./demos";
@@ -205,7 +206,7 @@ export function UiComponentsPage() {
   const group = signal(query.group === COLORS || GALLERY_GROUPS.some((item) => item.id === query.group) ? query.group : ALL);
   // The colour scheme: a section of its own in the index, shown alone (`All` is every component),
   // its tokens by the filter.
-  const scheme = (): ColorSchemeName => (themeState.scheme === "dark" ? "dark" : "light");
+  const scheme = (): ColorSchemeName => (themeOf(themeState.theme).scheme === "dark" ? "dark" : "light");
   const colorMatches = (color: ColorToken) => {
     const want = filter().trim().toLowerCase();
     return !want || color.name.includes(want) || color.light.toLowerCase().includes(want) || color.dark.toLowerCase().includes(want);
@@ -269,17 +270,18 @@ export function UiComponentsPage() {
             <Text class="text-xl leading-[24px] tracking-[-0.4px] text-foreground" role="header" testID="uig-title">{t("uig_title")}</Text>
             <Text class="text-xs leading-[17px] text-muted-foreground">{t("uig_subtitle")}</Text>
           </View>
-          {/* The console's own appearance, as the language beside it is the console's own. */}
+          {/* The console's own theme, as the language beside it is the console's own: the two the app
+              is built with, the light one and the dark one (theme.json). */}
           <View testID="uig-appearance">
             <Tabs
               narrow
-              accessibilityLabel={t("settings_appearance_title")}
+              accessibilityLabel={t("settings_theme_title")}
               items={[
-                { id: "light", label: t("settings_appearance_light") },
-                { id: "dark", label: t("settings_appearance_dark") },
+                { id: "light", label: t("settings_theme_light") },
+                { id: "dark", label: t("settings_theme_dark") },
               ]}
               value={scheme()}
-              onChange={(id) => themeState.setScheme(id)}
+              onChange={(id) => themeState.setTheme(id === "dark" ? "midnight" : "aojashin")}
             />
           </View>
           <View class="flex-row items-center gap-2" testID="uig-language">

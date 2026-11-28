@@ -144,15 +144,12 @@ export function AgentSection(props: { s: SettingsStore }) {
           showXAIAuthAction={s.selectedEndpointIsConsole()}
           xaiAuthState={s.xaiAuth.buttonState()}
           xaiAuthTitle={s.xaiAuth.buttonTitle()}
-          showProAuthAction={s.selectedEndpointIsConsole()}
-          proAuthState={s.proAuth.buttonState()}
-          proAuthTitle={s.proAuth.buttonTitle()}
           onUpdateField={(change) => s.updateDefaultLLMField(change)}
+          onProviderChanged={(provider) => s.providerChanged("", provider)}
           onOpenApiBasePicker={() => s.openAPIBasePicker()}
           onOpenModelPicker={() => void s.openModelPicker()}
           onOpenCodexAuth={() => void s.codexAuth.openDialog()}
           onOpenXaiAuth={() => void s.xaiAuth.openDialog()}
-          onOpenProAuth={() => void s.proAuth.openDialog()}
           testID="settings-llm-form"
         />
 
@@ -352,14 +349,11 @@ export function ProfilePane(props: { s: SettingsStore; sheet?: boolean }) {
               showXAIAuthAction={s.profileUsesXAIProvider(profile())}
               xaiAuthState={s.xaiAuth.buttonState()}
               xaiAuthTitle={s.xaiAuth.buttonTitle()}
-              showProAuthAction={s.profileUsesProProvider(profile())}
-              proAuthState={s.proAuth.buttonState()}
-              proAuthTitle={s.proAuth.buttonTitle()}
               onUpdateField={(change) => s.updateProfileField(untracked(profile)._key, change)}
+              onProviderChanged={(provider) => s.providerChanged(untracked(profile)._key, provider)}
               onOpenModelPicker={() => void s.openModelPicker(untracked(profile)._key)}
               onOpenCodexAuth={() => void s.codexAuth.openDialog()}
               onOpenXaiAuth={() => void s.xaiAuth.openDialog()}
-              onOpenProAuth={() => void s.proAuth.openDialog()}
               testID="settings-profile-form"
             />
             {/* Less common settings stay folded; edits join the same draft and save bar. */}

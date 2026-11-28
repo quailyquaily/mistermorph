@@ -5,7 +5,7 @@ import { signal, Text, View } from "nsh";
 import { LOGGING_LEVEL_OPTIONS } from "../../../lib/core/config-options.js";
 import { SETUP_PROVIDER_OPTIONS } from "../../../lib/core/setup-contract.js";
 import { PokeDialog } from "../../../components/settings-page/PokeDialog";
-import { CodexAuthDialog, ProAuthDialog, XAIAuthDialog } from "../../../components/settings/AuthDialogs";
+import { CodexAuthDialog, XAIAuthDialog } from "../../../components/settings/AuthDialogs";
 import { ConfigSettingsPanel } from "../../../components/settings/ConfigSettingsPanel";
 import { DialogShell, InlineNotice as DialogInlineNotice } from "../../../components/settings/DialogShell";
 import { EnvManagedField } from "../../../components/settings/EnvManagedField";
@@ -91,10 +91,9 @@ function DialogsDemo() {
         {button("SetupConnectionTestDialog")}
         <Text class="text-xs text-muted-foreground">{t("uig_fixture_echo", { value: picked() })}</Text>
       </V>
-      <V l="CodexAuthDialog · XAIAuthDialog · ProAuthDialog" row>
+      <V l="CodexAuthDialog · XAIAuthDialog" row>
         {button("CodexAuthDialog")}
         {button("XAIAuthDialog")}
-        {button("ProAuthDialog")}
       </V>
       <DialogShell
         open={open() === "DialogShell"}
@@ -195,14 +194,6 @@ function DialogsDemo() {
         onSetDefaultChange={setDefault.set}
         onLogin={() => act("XAIAuthDialog", "login")}
         onLogout={() => act("XAIAuthDialog", "logout")}
-      />
-      <ProAuthDialog
-        open={open() === "ProAuthDialog"}
-        onOpenChange={(next) => !next && close()}
-        error={t("uig_fixture_error")}
-        status={{ logged_in: false }}
-        summary=""
-        onLogout={() => act("ProAuthDialog", "logout")}
       />
     </Col>
   );

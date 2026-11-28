@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
-	"github.com/quailyquaily/mistermorph/internal/proaccount"
 	codexProvider "github.com/quailyquaily/mistermorph/providers/codex"
 	uniaiProvider "github.com/quailyquaily/mistermorph/providers/uniai"
 	"github.com/spf13/viper"
@@ -87,33 +86,6 @@ func TestAPIKeyForProviderWithValues_CloudflareFallback(t *testing.T) {
 	values.CloudflareAPIToken = ""
 	if got := APIKeyForProviderWithValues("cloudflare", values); got != "generic-key" {
 		t.Fatalf("APIKeyForProviderWithValues() = %q, want generic-key", got)
-	}
-}
-
-func TestAPIKeyForProviderWithValues_MisterMorphProStore(t *testing.T) {
-	stateDir := t.TempDir()
-	if err := proaccount.WriteSession(stateDir, proaccount.StoredSession{
-		SubscriptionAPIKey: "store-key",
-	}); err != nil {
-		t.Fatalf("WriteSession() error = %v", err)
-	}
-
-	values := RuntimeValues{
-		InferenceProvider: InferenceProviderMisterMorphPro,
-		FileStateDir:      stateDir,
-	}
-	if got := APIKeyForProviderWithValues("openai", values); got != "store-key" {
-		t.Fatalf("APIKeyForProviderWithValues() = %q, want store-key", got)
-	}
-
-	values.APIKey = "explicit-key"
-	if got := APIKeyForProviderWithValues("openai", values); got != "store-key" {
-		t.Fatalf("APIKeyForProviderWithValues() = %q, want store-key", got)
-	}
-
-	values.FileStateDir = t.TempDir()
-	if got := APIKeyForProviderWithValues("openai", values); got != "" {
-		t.Fatalf("APIKeyForProviderWithValues() = %q, want empty without auth store", got)
 	}
 }
 
@@ -354,7 +326,7 @@ func TestNormalizeImageProviderForUniaiMapsChatOnlyOpenAIProviders(t *testing.T)
 
 func TestResolveRoute_ExplicitInferenceProviderDerivesProviderEndpoint(t *testing.T) {
 	values := RuntimeValues{
-		InferenceProvider: InferenceProviderMisterMorphPro,
+		InferenceProvider: InferenceProviderKimi,
 		Provider:          "anthropic",
 		Endpoint:          "https://wrong.example.test",
 		Model:             "carrot/gpt",
@@ -366,10 +338,10 @@ func TestResolveRoute_ExplicitInferenceProviderDerivesProviderEndpoint(t *testin
 	if route.Values.Provider != "openai" {
 		t.Fatalf("provider = %q, want openai", route.Values.Provider)
 	}
-	if route.Values.Endpoint != DefaultMisterMorphProEndpoint {
-		t.Fatalf("endpoint = %q, want %q", route.Values.Endpoint, DefaultMisterMorphProEndpoint)
+	if route.Values.Endpoint != DefaultKimiEndpoint {
+		t.Fatalf("endpoint = %q, want %q", route.Values.Endpoint, DefaultKimiEndpoint)
 	}
-	if route.ClientConfig.Provider != "openai" || route.ClientConfig.Endpoint != DefaultMisterMorphProEndpoint {
+	if route.ClientConfig.Provider != "openai" || route.ClientConfig.Endpoint != DefaultKimiEndpoint {
 		t.Fatalf("client config = %#v", route.ClientConfig)
 	}
 }
@@ -577,12 +549,6 @@ func TestResolveRoute_ProfileCanSelectXAIOAuth(t *testing.T) {
 	if route.Profile != "grok" || route.ClientConfig.Provider != "xai_oauth" ||
 		route.ClientConfig.Model != "grok-4.5" {
 		t.Fatalf("route = %+v", route)
-	}
-}
-
-func TestInferInferenceProvider_MisterMorphPro(t *testing.T) {
-	if got := InferInferenceProvider("openai", DefaultMisterMorphProEndpoint); got != InferenceProviderMisterMorphPro {
-		t.Fatalf("InferInferenceProvider(openai, router) = %q, want %q", got, InferenceProviderMisterMorphPro)
 	}
 }
 

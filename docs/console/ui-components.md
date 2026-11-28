@@ -2,7 +2,7 @@
 
 A testing page of the Console that shows its colour scheme and lists its reused UI components (the
 ones more than one area of the Console uses), for looking at them, pressing them and reading them
-in each language and in the light and dark appearance, on a desktop window and on a phone.
+in each language and in the built-in light and dark themes, on a desktop window and on a phone.
 
 - **Address:** `/__ui-components` (under the Console's base path, for example
   `http://127.0.0.1:9080/__ui-components`), beside the other underscore testing pages
@@ -22,7 +22,8 @@ in each language and in the light and dark appearance, on a desktop window and o
 
 ## What is on the page
 
-- A head with the appearance control (Light or Dark), the language control, the Logout button, a
+- A head with the theme control (Light or Dark: Aojashin or Midnight, the two palettes the app is
+  built with), the language control, the Logout button, a
   filter (by
   component name or file path, and by a colour token's name or value), the count of matching
   components, and the last local action.
@@ -37,7 +38,7 @@ in each language and in the light and dark appearance, on a desktop window and o
   danger) with its fills and borders at each step a share may take, each step with what it is for
   (`pages/ui-components/colorRules.js`; `scripts/color-steps.test.mjs` holds the sources to both
   rules). The filter shows a colour's row by its name. The
-  appearance control is the Console's own setting (`themeState.setScheme`), as the language control
+  theme control is the Console's own setting (`themeState.setTheme`), as the language control
   is: the choice is kept on the device.
 - A section index: a sidebar beside the page on a window wider than 900pt (a row per section with
   its count, drawn as the Settings page's index is), and a row of chips in the head that scrolls

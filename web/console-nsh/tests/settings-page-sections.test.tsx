@@ -258,7 +258,7 @@ test("in a web browser General ends with the App card, over HTTPS or plain HTTP,
     await app.type("id:settings-search", "App");
     await app.waitFor("id:settings-search-results");
     await app.waitFor("role:option[App]");
-    expect(app.shows("role:option[Appearance]")).toBe(true);
+    expect(app.shows("role:option[Approval timeout]")).toBe(true);
   }
 });
 
@@ -282,7 +282,7 @@ test("the desktop and phone apps have no App card in General, and search does no
     if (options?.platform === "android" && !options.width) continue;
     await app.type("id:settings-search", "App");
     await app.waitFor("id:settings-search-results");
-    await app.waitFor("role:option[Appearance]");
+    await app.waitFor("role:option[Approval timeout]");
     expect([name, app.shows("role:option[App]")]).toEqual([name, false]);
   }
 });

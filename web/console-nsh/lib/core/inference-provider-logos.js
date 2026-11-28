@@ -13,7 +13,6 @@ import openRouterLogo from "../../assets/model-vendors/openrouter.svg";
 import sakanaLogo from "../../assets/model-vendors/sakana.svg";
 import typeSafeLogo from "../../assets/model-vendors/typesafe.svg";
 import xAILogo from "../../assets/model-vendors/xai.svg";
-import misterMorphLogo from "../../assets/images/app_logo_current.svg";
 
 const INFERENCE_PROVIDER_LOGOS = {
   openai: { src: openAILogo, className: "is-openai" },
@@ -25,7 +24,6 @@ const INFERENCE_PROVIDER_LOGOS = {
   anthropic: { src: claudeLogo, className: "is-claude" },
   bedrock: { src: bedrockLogo, className: "is-bedrock" },
   cloudflare: { src: cloudflareLogo, className: "is-cloudflare" },
-  mistermorph_pro: { src: misterMorphLogo, className: "is-mistermorph" },
   xai: { src: xAILogo, className: "is-xai" },
   deepseek: { src: deepseekLogo, className: "is-deepseek" },
   kimi: { src: kimiLogo, className: "is-kimi" },

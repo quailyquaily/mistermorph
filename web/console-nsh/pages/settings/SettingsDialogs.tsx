@@ -2,7 +2,7 @@
 // pickers, a tool's schema, the connection test, the sign-in dialogs, and deleting a profile.
 import { cleanup, signal, Text, untracked, View } from "nsh";
 import { MessageDialog, TextField } from "../../components/ui";
-import { CodexAuthDialog, ProAuthDialog, XAIAuthDialog } from "../../components/settings/AuthDialogs";
+import { CodexAuthDialog, XAIAuthDialog } from "../../components/settings/AuthDialogs";
 import {
   ConfigSettingsPanel,
   type SettingsSaveEntry,
@@ -14,6 +14,7 @@ import { SetupConnectionTestDialog } from "../../components/settings/SetupConnec
 import { SetupPickerDialog } from "../../components/settings/SetupPickerDialog";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { SettingField } from "../../components/settings-page/parts";
+import { MissingModelDialog } from "../../components/settings/providerModelFill";
 import { t } from "./i18n";
 import type { SettingsStore } from "./store";
 
@@ -117,14 +118,11 @@ export function SettingsDialogs(props: { s: SettingsStore }) {
                 showXAIAuthAction={s.profileUsesXAIProvider(draft())}
                 xaiAuthState={s.xaiAuth.buttonState()}
                 xaiAuthTitle={s.xaiAuth.buttonTitle()}
-                showProAuthAction={s.profileUsesProProvider(draft())}
-                proAuthState={s.proAuth.buttonState()}
-                proAuthTitle={s.proAuth.buttonTitle()}
                 onUpdateField={(change) => s.updateProfileField(untracked(draft)._key, change)}
+                onProviderChanged={(provider) => s.providerChanged(untracked(draft)._key, provider)}
                 onOpenModelPicker={() => void s.openModelPicker(untracked(draft)._key)}
                 onOpenCodexAuth={() => void s.codexAuth.openDialog()}
                 onOpenXaiAuth={() => void s.xaiAuth.openDialog()}
-                onOpenProAuth={() => void s.proAuth.openDialog()}
               />
             </View>
           )}
@@ -235,20 +233,8 @@ export function SettingsDialogs(props: { s: SettingsStore }) {
         onLogin={() => s.xaiAuth.relogin()}
         onLogout={() => void s.xaiAuth.logout()}
       />
-      <ProAuthDialog
-        open={s.proAuth.dialogOpen()}
-        onOpenChange={(open) => s.proAuth.dialogOpen.set(open)}
-        loading={s.proAuth.loading()}
-        busy={s.proAuth.busy()}
-        error={s.proAuth.error()}
-        status={s.proAuth.status()}
-        summary={s.proAuth.summary()}
-        loginSession={s.proAuth.loginSession()}
-        verificationURL={s.proAuth.verificationURL()}
-        userCode={s.proAuth.userCode()}
-        loginExpiresLabel={s.proAuth.loginExpiresLabel()}
-        onLogout={() => void s.proAuth.logout()}
-      />
+
+      <MissingModelDialog fill={s.modelFill} />
 
       <MessageDialog
         open={s.deleteProfileDialogOpen()}

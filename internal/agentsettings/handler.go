@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/configsettings"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
@@ -164,8 +165,11 @@ type AgentSettingsUpdate struct {
 }
 
 type AgentSettingsView struct {
-	OK             bool                                 `json:"ok,omitempty"`
-	LLM            LLMSettingsPayload                   `json:"llm"`
+	OK  bool               `json:"ok,omitempty"`
+	LLM LLMSettingsPayload `json:"llm"`
+	// LLMLastModels is the model last set for each inference provider (configstore.LastModels):
+	// what the Console fills in when a provider is chosen again.
+	LLMLastModels  map[string]string                    `json:"llm_last_models,omitempty"`
 	EnvManaged     EnvManagedPayload                    `json:"env_managed,omitempty"`
 	SecretFields   SecretFieldsPayload                  `json:"secret_fields,omitempty"`
 	Skills         SkillsSettingsPayload                `json:"skills"`
@@ -199,8 +203,10 @@ type RuntimeConfigSource interface {
 }
 
 type HandlerOptions struct {
-	Owner                 Owner
-	FetchModels           func(context.Context, ModelLookupConfig) ([]ModelInfo, error)
+	Owner       Owner
+	FetchModels func(context.Context, ModelLookupConfig) ([]ModelInfo, error)
+	// FetchCodexModels lists the Codex account's models (FetchCodexModels when nil).
+	FetchCodexModels      func(context.Context, Reader) ([]ModelInfo, error)
 	ConnectionTest        func(context.Context, LLMSettingsPayload, Reader, ConnectionTestOptions) (ConnectionTestResult, error)
 	ConnectionTestOptions ConnectionTestOptions
 }
@@ -208,6 +214,7 @@ type HandlerOptions struct {
 type Handler struct {
 	owner                 Owner
 	fetchModels           func(context.Context, ModelLookupConfig) ([]ModelInfo, error)
+	fetchCodexModels      func(context.Context, Reader) ([]ModelInfo, error)
 	connectionTest        func(context.Context, LLMSettingsPayload, Reader, ConnectionTestOptions) (ConnectionTestResult, error)
 	connectionTestOptions ConnectionTestOptions
 }
@@ -217,6 +224,10 @@ func NewHandler(opts HandlerOptions) *Handler {
 	if fetchModels == nil {
 		fetchModels = FetchModels
 	}
+	fetchCodexModels := opts.FetchCodexModels
+	if fetchCodexModels == nil {
+		fetchCodexModels = FetchCodexModels
+	}
 	connectionTest := opts.ConnectionTest
 	if connectionTest == nil {
 		connectionTest = defaultHandlerConnectionTest
@@ -224,6 +235,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 	return &Handler{
 		owner:                 opts.Owner,
 		fetchModels:           fetchModels,
+		fetchCodexModels:      fetchCodexModels,
 		connectionTest:        connectionTest,
 		connectionTestOptions: opts.ConnectionTestOptions,
 	}
@@ -241,6 +253,7 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 			writeSettingsError(w, settingsErrorStatus(err), err.Error())
 			return
 		}
+		withLastModels(r.Context(), &view)
 		writeSettingsJSON(w, http.StatusOK, view)
 	case http.MethodPut:
 		current, err := h.owner.View(r.Context())
@@ -272,10 +285,23 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		view.OK = true
+		withLastModels(r.Context(), &view)
 		writeSettingsJSON(w, http.StatusOK, view)
 	default:
 		w.Header().Set("Allow", "GET, PUT")
 		writeSettingsError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// withLastModels adds the models last set per provider to a view. They are a convenience of the
+// form: a read that fails leaves them out.
+func withLastModels(ctx context.Context, view *AgentSettingsView) {
+	path := strings.TrimSpace(view.ConfigPath)
+	if path == "" {
+		return
+	}
+	if models, err := configstore.LastModels(ctx, path); err == nil && len(models) > 0 {
+		view.LLMLastModels = models
 	}
 }
 
@@ -343,7 +369,12 @@ func (h *Handler) Models(w http.ResponseWriter, r *http.Request) {
 		writeSettingsError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	models, err := h.fetchModels(r.Context(), lookup)
+	var models []ModelInfo
+	if lookup.CodexCLI {
+		models, err = h.fetchCodexModels(r.Context(), reader)
+	} else {
+		models, err = h.fetchModels(r.Context(), lookup)
+	}
 	if err != nil {
 		writeSettingsError(w, http.StatusBadGateway, err.Error())
 		return

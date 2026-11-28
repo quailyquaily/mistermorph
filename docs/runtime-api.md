@@ -372,7 +372,6 @@ runtime token when exposed there. Their availability is marked per operation.
 | `GET /settings/agent/skills`, `/settings/agent/skills/detail`, `/settings/agent/skills/store`; `POST /settings/agent/skills/remove` | [Skill management](../internal/agentsettings/skills_catalog.go), when settings are enabled. |
 | `GET /auth/codex/status`; `POST /auth/codex/refresh`, `/auth/codex/login/start`, `/auth/codex/login/poll`, `/auth/codex/logout` | Settings-enabled runtimes and Console; [auth handler](../internal/codexauth/http_handler.go). |
 | `GET /auth/xai/status`; `POST /auth/xai/login/start`, `/auth/xai/login/poll`, `/auth/xai/logout` | Console; [xAI login](../cmd/mistermorph/consolecmd/xai_auth.go). |
-| `GET /auth/pro/status`; `POST /auth/pro/login/start`, `/auth/pro/login/poll`, `/auth/pro/logout` | Console; [Pro login](../cmd/mistermorph/consolecmd/pro_auth.go). |
 | `GET, PUT /settings/console` | Console; [channel and Console settings](../cmd/mistermorph/consolecmd/console_settings.go). |
 | `GET, PUT /settings/system` | Console; [system settings](../cmd/mistermorph/consolecmd/system_settings.go). |
 | `GET /settings/tools/schemas` | Console; [tool schemas](../cmd/mistermorph/consolecmd/tool_schemas.go). |
