@@ -546,3 +546,44 @@ func TestFiveLargeUploadsEvictTheOldestAndAReferenceToItIsRefused(t *testing.T) 
 	}
 	rig.assertClean(t)
 }
+
+// Valid originals of 12-19 MB and MiB, and one past the old 64 MiB request budget, through the
+// proxy and the in-process runtime with stock settings: stored byte for byte.
+func TestProxyUploadStoresLargeValidImagesByteForByte(t *testing.T) {
+	cases := []struct {
+		name string
+		size int64
+		make func(int64) (io.Reader, error)
+	}{
+		{"photo-19MB.jpg", 19_000_000, uploadtest.JPEG},
+		{"photo-12MiB.jpg", 12 << 20, uploadtest.JPEG},
+		{"shot-12MB.png", 12_000_000, uploadtest.PNG},
+		{"shot-19MiB.png", 19 << 20, uploadtest.PNG},
+		{"pic-13MB.webp", 13_000_000, uploadtest.WebP},
+		{"pic-19MiB.webp", 19 << 20, uploadtest.WebP},
+		{"scan-65MiB.png", 65 << 20, uploadtest.PNG},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rig := newProxyRig(t)
+			content, err := tc.make(tc.size)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts := []uploadtest.Part{{Name: "topic_id", Value: "topic_a"}, {Name: tc.name, File: true, Size: tc.size, Content: content}}
+			result := postUpload(t, rig.server, parts, nil)
+			if result.code != http.StatusOK {
+				t.Fatalf("%d %s", result.code, result.raw)
+			}
+			raw, err := os.ReadFile(filepath.Join(rig.cacheDir, "console", tc.name))
+			if err != nil || int64(len(raw)) != tc.size {
+				t.Fatalf("stored %d bytes, %v", len(raw), err)
+			}
+			if sum := sha256.Sum256(raw); !bytes.Equal(sum[:], result.stream.Sums()[tc.name]) {
+				t.Fatal("stored bytes differ")
+			}
+			t.Logf("%s: file %d bytes, request %d bytes", tc.name, tc.size, uploadtest.Length(parts))
+			rig.assertClean(t)
+		})
+	}
+}
