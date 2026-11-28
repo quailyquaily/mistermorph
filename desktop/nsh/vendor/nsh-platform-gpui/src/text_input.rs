@@ -2404,13 +2404,27 @@ fn paste(surface: &Surface, view: &NshView) {
 }
 
 /// What clipboard `item` holds, for `onPaste`: `text`, its images and its
-/// local files' `file:` URLs.
+/// local files' `file:` URLs. An image is typed after the format GPUI read
+/// it as, and a BMP or TIFF is made a PNG first (`crate::paste_image`).
 fn pasted_content(text: Option<String>, item: Option<gpui::ClipboardItem>) -> nsh_core::PasteEvent {
     let mut paste = nsh_core::PasteEvent::new(text.unwrap_or_default());
     for entry in item.into_iter().flat_map(|item| item.into_entries()) {
         match entry {
             gpui::ClipboardEntry::Image(image) => {
-                paste.files.push(nsh_core::PastedFile::image(image.bytes));
+                use crate::paste_image::{ClipboardFormat as F, pasted_image};
+                let format = match image.format {
+                    gpui::ImageFormat::Png => F::Png,
+                    gpui::ImageFormat::Jpeg => F::Jpeg,
+                    gpui::ImageFormat::Webp => F::Webp,
+                    gpui::ImageFormat::Gif => F::Gif,
+                    gpui::ImageFormat::Svg => F::Svg,
+                    gpui::ImageFormat::Bmp => F::Bmp,
+                    gpui::ImageFormat::Tiff => F::Tiff,
+                    gpui::ImageFormat::Ico => F::Ico,
+                    gpui::ImageFormat::Pnm => F::Pnm,
+                };
+                let (name, mime, bytes) = pasted_image(format, image.bytes);
+                paste.files.push(nsh_core::PastedFile::new(name, mime, bytes));
             }
             gpui::ClipboardEntry::ExternalPaths(paths) => paste.uris.extend(
                 paths

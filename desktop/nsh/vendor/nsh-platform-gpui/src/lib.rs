@@ -46,6 +46,7 @@ mod keys;
 mod mount;
 mod native;
 mod navigation;
+mod paste_image;
 mod render;
 mod rt;
 mod scroll;

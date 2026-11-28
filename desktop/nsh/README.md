@@ -236,6 +236,35 @@ ureq is built with its `socks-proxy` feature (`Cargo.toml`), which also holds fo
 and image loader (the lock has one ureq): a `socks5://` proxy from the environment, ignored
 before, is now used in System default too, or the request fails.
 
+## Pasting images into the composer
+
+An image on the clipboard (a screenshot, an image copied in a browser or an image editor) pasted
+into the chat composer with Ctrl+V (Command+V), Shift+Insert, the macOS menu bar's Edit > Paste
+(the same key, sent to the focused field) or the field's right-click Paste becomes a pending
+attachment of the draft, through the same upload as picked and dropped files. The paste's text, if
+any, goes into the field as before; nothing is sent. What the Console checks and refuses is the
+same on every platform (see `docs/feat/feat_20261128_composer_image_paste.md`).
+
+- **What the app reads.** nsh reads the clipboard once, as the user pastes, with GPUI
+  (`vendor/nsh-platform-gpui/src/text_input.rs`, `paste`), and hands the field's `onPaste` the
+  images with their bytes. Paste is enabled in the right-click menu for an image-only clipboard
+  while the field listens to pastes (the composer does).
+- **Formats** (`patches/nsh-paste-images.patch`, `src/paste_image.rs` of the vendored crate). PNG,
+  JPEG, WebP and GIF go as GPUI read them, typed after GPUI's format (upstream guessed from the
+  bytes and called anything unknown, an SVG too, `image.png`). A BMP, TIFF or ICO is decoded and
+  given as a PNG: a Windows screenshot is a device-independent bitmap, which GPUI makes a BMP, so
+  without this the Snipping Tool's screenshots could not be pasted. Decoding is bounded (16384
+  pixels a side, 256 MiB of pixels); an image past that, or one that does not decode, keeps its own
+  type and the Console refuses it naming the formats it takes. The conversion runs on the UI
+  thread as the user pastes (a 4K screenshot takes a moment).
+- **What GPUI does not deliver.** On macOS and on Wayland GPUI reads a clipboard's text first and
+  its image only when there is no text (gpui-fast-macos `pasteboard.rs`, gpui-fast-linux
+  `wayland/clipboard.rs` `read`): an image copied together with text (some browsers and office
+  apps put both) pastes as its text alone, and no attachment is made. On X11 the image formats
+  come first; on Windows the clipboard's first text, image and file list are all read. GPUI reads
+  the whole image into memory before nsh sees it, so its size cannot be bounded earlier.
+- File-manager copies (`file:` URLs) are not attached by a paste; drop the files instead.
+
 ## Patches to nsh-platform-gpui
 
 `vendor/nsh-platform-gpui` is nsh-platform-gpui 0.6.0 with the patches in `patches/` applied, wired
@@ -261,6 +290,11 @@ scratch git repo, `git apply` each patch in order, and copy the result back.
   own accelerated amounts. Ctrl + wheel keeps the system's amounts so pinch-zooming keeps its
   pace (and a Ctrl + wheel scroll with nothing to zoom moves at that pace too). The scrolls
   nsh's test agent sends (`src/agent.rs`) are not scaled.
+
+- `nsh-paste-images.patch`: a pasted clipboard image is typed after the format GPUI read it as,
+  and a BMP, TIFF or ICO is converted to PNG within decode limits (`src/paste_image.rs`; see
+  "Pasting images into the composer"). Its tests also run with the app's `cargo test`
+  (`tests/paste_image.rs` includes the module).
 
 `nsh-selection-copy.patch` (the copy keys copying a selected chat bubble's text while the composer
 had the focus) was dropped with nsh 0.5.1, which solves it its own way: selecting page text with
