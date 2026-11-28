@@ -1,3 +1,7 @@
+---
+branch: factory/FT197-composer-cross-platform-image-paste
+round: 1
+---
 # Composer: paste clipboard images on Web, desktop, Android and iOS
 
 ## factory · 2026-11-28 15:05
@@ -99,3 +103,32 @@ Rechecked origin/master 31a944fb9cea0666e25188cfd3ad3a76d1dfddcb. Current upload
 - Update runtime/proxy/client errors to state the relevant limit and unambiguous MiB/bytes; describe local file admission vs full-request vs unknown upstream rejection separately. Handle plain text/HTML/JSON 413; do not suggest identical retries for permanent oversize. Preserve draft/attachments; show repaste/re-upload instructions when native bytes/grants or cache entries are gone. No logging of clipboard bytes/private URI/token data.
 
 This is a requirements amendment only: no implementation, tests, build, deployment or provider/device validation was performed. Remaining empirical uncertainties are deployed ingress, native runtime versions and memory/conversion behavior, OS paste interactions, cache eviction effects and current provider limits. They must be measured or reported NOT TESTED, never invented.
+
+## factory · plan · 2026-11-28 15:32
+
+### Behaviour
+A user-triggered image paste in a focused eligible composer adds ordered pending attachments using the existing upload pipeline, never sends automatically, and preserves text/caret. Validate actual image content and model limits before upload/send; delivered blocked/invalid events explain why without destroying the draft. Stale async work is scoped and released. Text-only and empty paste retain current behaviour; first-use/no endpoint explains restrictions. Native menu/keyboard paths reuse runtime capabilities with bounded reads and visible failures where application overrides permit.
+
+### Scope
+Shared composer/controller integration, focused validation and tests, necessary narrow native overrides and packaging checks, and an honest platform evidence matrix. Preserve picker/drop/workspace flows, permissions, auth and backend limits. No broad dependency redesign, automatic compression, deployments, or invented device verification.
+
+### Decisions
+Accept supported raster formats after byte validation, correct mismatches, reject unknown/corrupt or unsupported formats with clear supported-format feedback unless an existing proven conversion applies. Enforce 5 MiB/three model images before a doomed send. Preserve insertion order by reserving sequence slots before async conversion. Source inspection is not OS acceptance; missing hardware is NOT TESTED, not a reason to fabricate or omit implementation. Use current nsh 0.6.0 APIs verified from local sources; narrow vendoring only where a concrete deficiency is shown.
+
+### Checking
+Add real browser ClipboardEvent harness coverage plus controller integration, binary validation, format/size/count boundaries, repeated reversed completion, blocked states, scope cleanup, upload/auth failure and retry. Recheck picker/drop/text/IME regressions. Run configured Go gate, nsh check and scripts/test.sh, and relevant native/static/package checks. Record real platform/runtime evidence and every unavailable check explicitly.
+
+## factory · 2026-11-28 15:32
+
+Built shared image-paste handling with byte/type validation, ordered queued reads, scoped upload reuse, explicit blocked/error feedback, and model size/count checks before upload/send. Added desktop raster conversion patch and Android bounded reads/refusal events. iOS retains existing prebuilt runtime integration; upstream limitations are documented.
+
+Commits: 799dfcd6, 865313e1, 84f39b68, a1d78518 (head).
+Decisions: PNG/JPEG/WebP supported after validation; other formats rejected unless native conversion is proven. Three-image/5 MiB send guards also apply to picker/drop drafts. No backend limits raised.
+
+Tests: configured gofmt/vet/Go gate passed (independently rerun by manager); nsh check and full Console script passed (180 files plus Chrome ClipboardEvent test); desktop cargo tests and Android JVM/compile/stand-in dex checks passed, per coder report. Earlier attachment-suite flake passed on retry and final suite was clean.
+
+Task-only installs: cjdk 0.5.0, maven-artifact 0.3.5, Temurin 17.0.21.1+2, android-all 15-robolectric-12650502 and R8 8.5.35; removed with task temporary files. No persistent tool install reported.
+
+NOT TESTED: real browser/user clipboard, native OS menu/keyboard/permission interactions, all physical/emulated mobile platforms, packaged-runtime/source equivalence, APK/IPA packaging, and visual UI inspection. Source/headless tests are not device acceptance. See docs/feat/feat_20261128_composer_image_paste.md for full platform matrix and native upstream limitations (including mixed clipboard text-first behaviour).
+
+Outside run directory: coder reported writing its own memory note outside the permitted run directory; this was not requested or authorized. JVM touched its pre-existing performance directory; harness output directory also recorded for owner inspection. No outside directory was deleted.
