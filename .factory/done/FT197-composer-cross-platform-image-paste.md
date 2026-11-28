@@ -157,3 +157,12 @@ notes:
 - Lower provider-specific encoded/request budgets remain unenforced and can still reject otherwise eligible images. Reviewer traced this to unchanged backend 5 MiB/three-image limits, not an introduced regression; documentation discloses the gap. Review pass is not universal provider/device acceptance.
 - No installs. Test artifacts were limited to ignored worktree outputs, task temporary files and authorized lock heartbeat; Claude runtime session artifacts are maintained by the harness. No new top-level /tmp entries detected.
 - Moved review/ → ready/; not merged, tagged, deployed or shipped.
+
+
+## factory · 2026-11-28 20:00
+
+Shipped to master in merge commit e987b3b3a036416f1921f1a21c7090d03d676cac; annotated release tag v0.3.146. Atomic master/tag push succeeded. Moved ready/ → done/. No linked issue/PR to close; remote feature branch retained (clean is not configured).
+
+Checks on merged base: gofmt, go vet ./..., go test ./... passed (173 packages); nsh check passed; required Console scripts/test.sh passed (181 files, zero final failures, Chrome paste harness included). Desktop cargo test --locked --offline passed: 102 unit + 1 feature + 5 paste tests, 5 ignored. Existing system runtime libraries were used through run-local metadata/linker shims; no installs or source fixes.
+
+NOT TESTED during ship: Android compilation/packaging, iOS packaging, real OS clipboard/menu/device/consent paths, screen readers, mobile packaged-runtime equivalence, deployed ingress and live provider budgets. Headless Chrome injection is not OS acceptance. Lower provider-specific request budgets remain a documented limitation. No deployment or user-checkout changes.

@@ -119,3 +119,12 @@ notes:
 - Supplemental node lib tests reported a failure in unchanged lib/core/solo.test.mjs (a task's thread record). Baseline reproduction was not established; not a failure of the configured required checks.
 - Manual Web/browser, desktop macOS/Windows/Linux, Android, iOS, native phone Return, and screen-reader interaction NOT TESTED. Live caret movement and endpoint switching remain unverified (topic switching covered). Skill feedback has no web status role; Android live-region announcement is configured, not manually observed.
 - No installs. Coder reports no writes outside the worktree/TMPDIR except permitted shared-cache reads; manager observed no new top-level /tmp entries. Ready for owner approval, not shipped.
+
+
+## factory · 2026-11-28 20:00
+
+Shipped to master in merge commit a1e439b424c98e7cac2794b69d5621b604e6bcfe; annotated release tag v0.3.146. Atomic master/tag push succeeded. Moved ready/ → done/. No linked issue/PR to close; remote feature branch retained (clean is not configured).
+
+Checks on merged base: gofmt, go vet ./..., go test ./... passed (173 packages); nsh check passed; required Console scripts/test.sh passed (181 files, zero final failures, Chrome paste harness included). Desktop cargo test --locked --offline passed: 102 unit + 1 feature + 5 paste tests, 5 ignored. Existing system runtime libraries were used through run-local metadata/linker shims; no installs or source fixes.
+
+NOT TESTED during ship: Android compilation/packaging, iOS packaging, real OS clipboard/menu/device/consent paths, screen readers, mobile packaged-runtime equivalence, deployed ingress and live provider budgets. Headless Chrome injection is not OS acceptance. Lower provider-specific request budgets remain a documented limitation. No deployment or user-checkout changes.
